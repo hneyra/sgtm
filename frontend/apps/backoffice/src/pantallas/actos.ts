@@ -710,6 +710,29 @@ export const VOCABULARIO_UNIFORME: ReadonlySet<string> = new Set([
  * se teclea el dato que el backend exige y el manual no dibuja.
  */
 export const LA_QUE_ESCRIBE: Readonly<Record<string, string>> = {
+  /* ── Fiscalizacion (#506 F2) ───────────────────────────────────────────── */
+
+  /**
+   * El acta de inspeccion, cuya primaria nombraba **el acto de otra pantalla**.
+   *
+   * El catalogo dibuja «Guardar borrador · Cerrar acta · Generar determinación»,
+   * y la regla de FRO-03 §5 —la ultima es la primaria— hacia de «Generar
+   * determinación» el boton navy. Ese no es el acto de aqui: generar la
+   * determinacion es `POST /fiscalizacion/transferencias`, la accion de
+   * `fisc_resultados` (#52), y esta pantalla no la puede hacer ni teniendo todos
+   * sus campos. El acto de aqui registra el acta —`POST
+   * /fiscalizacion/predial/actas`— y quien lo nombra es «Cerrar acta».
+   *
+   * «Guardar borrador» no es candidata y conviene decirlo: un borrador no viaja
+   * a ningun sitio —no hay operacion que lo guarde—, asi que declararla seria
+   * pintar de navy la unica de las tres que con seguridad no escribe.
+   *
+   * La primaria sigue **apagada**: `fisc_predial` esta en {@link ACTOS_SIN_CAMPO}
+   * porque le faltan el fiscalizador y el hallazgo. Lo que esto cambia es que la
+   * franja explique el boton correcto.
+   */
+  fisc_predial: 'Cerrar acta',
+
   /* ── Coactiva (#76) ────────────────────────────────────────────────────
      Las seis que el javadoc de `pantallas/coactiva/index.ts` censo una a una. */
 

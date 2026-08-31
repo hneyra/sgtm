@@ -520,8 +520,91 @@ const resolucion_determinacion_fisc = definirConexion({
   },
 });
 
+/* ── El acta de inspeccion (`fisc_predial`, RF-051) ────────────────────── */
+
+/**
+ * De donde saca el acta los datos que **no se teclean**: su fila de la muestra
+ * (#506 F2, sobre el AC 2 de #431).
+ *
+ * `fisc_predial` declara un `POST` como su operacion, y una operacion que
+ * escribe no se pide al abrir la pantalla. Hasta aqui, por tanto, esta pantalla
+ * no pedia **nada**: sus cuatro campos de cabecera —numero de acta, programa,
+ * codigo predial y contribuyente— salian del juego del prototipo, y el area
+ * declarada contra la que se contrasta, tambien.
+ *
+ * Lo que faltaba lo puso #481: `GET /fiscalizacion/programas/{id}/muestra` acota
+ * por predio —el contrato lo dice con esas palabras, «es como el acta de
+ * inspeccion pide su propia fila»—, asi que con el programa y el predio en la
+ * direccion sale **una** fila, que es la del predio que se va a visitar.
+ *
+ * **Sin programa y sin predio no sale ninguna peticion.** No es una lectura que
+ * devuelve vacio: es una lectura que no se hace, y la pantalla lo dice —el acta
+ * todavia no cuelga de ninguna fila de la muestra—.
+ *
+ * De los ocho campos `"ro"` del catalogo, **tres se llenan y cinco no**, y los
+ * cinco tienen su motivo:
+ *
+ *   `codigoPredial`  `codRefCatastral` de la fila
+ *   `contribuyente`  `titular` de la fila
+ *   `areaConstruidaDeclaradaM`  `areaDeclarada` de la fila
+ *
+ *   `nDeActa`      el acta **todavia no existe**: se esta levantando, y su
+ *                  numero lo pone el servidor al registrarla
+ *   `programa`     `MuestraResource` publica `programaId`, no el codigo, y el
+ *                  codigo es lo que el acta imprime («PF-2026-014»). Pintar el
+ *                  identificador interno bajo un rotulo que dice «Programa»
+ *                  seria otro dato con el mismo nombre (RNF-080)
+ *   `fiscalizador` nadie lo publica, y es **una de las dos cosas** por las que
+ *                  esta pantalla no puede escribir todavia (`ACTOS_SIN_CAMPO`)
+ *   `usoDeclarado` `DeteccionDeOmisos` deja el uso en nulo por los dos lados de
+ *                  la comparacion, y `MuestraResource` lo dice de si mismo
+ *   `diferenciaM`  es **verificada menos declarada**, y lo verificado todavia no
+ *                  se ha tecleado. No es `diferenciaDeArea` de la fila, que es
+ *                  otra resta —catastral menos declarada, la de la deteccion, y
+ *                  calculada el dia del sorteo—: ponerla aqui daria un numero
+ *                  plausible bajo la cabecera de otro
+ */
+const fisc_predial = definirConexion({
+  operacion: 'fisc_programa_muestra',
+  parametros: ({ busqueda }) => ({
+    id: busqueda.get('programa') ?? '',
+    predio: busqueda.get('predio') ?? '',
+    pagina: '0',
+    // Una fila: la del predio que se visita. `predio` ya acota, y el tamano lo
+    // dice por si el filtro no llegara.
+    tamano: '1',
+  }),
+  /* **Se comprueba que la fila es la que se pidio.** El proxy de datos no filtra
+     (ADR-0010): devuelve la muestra entera venga el predio que venga, y su propio
+     javadoc lo dice. Quedarse con la primera pintaria en la cabecera del acta el
+     titular y el codigo predial **de otro predio**, que es exactamente el defecto
+     que #298 encontro en el portal —alli le ensenaba a quien tecleaba su DNI la
+     deuda de la primera persona del padron—. Aqui seria peor: el acta se levanta
+     contra el predio equivocado.
+     Contra el backend de verdad el filtro si acota, asi que esta guarda no sobra
+     ni estorba: es la que hace que las dos formas den lo mismo. */
+  leer: (cuerpo, parametros) => {
+    const filas = leerPaginado(cuerpo, 'la fila de la muestra').contenido.filter(esObjeto);
+    const pedido = parametros.predio;
+    if (pedido === undefined || pedido === '') return undefined;
+    return filas.find((fila) => texto(fila['predioId']) === pedido);
+  },
+  adaptar: (fila): DatosDePantalla => {
+    if (fila === undefined) return { fechaCalculo: hoy() };
+    return {
+      fechaCalculo: hoy(),
+      campos: {
+        codigoPredial: texto(fila['codRefCatastral']),
+        contribuyente: texto(fila['titular']),
+        areaConstruidaDeclaradaM: texto(fila['areaDeclarada']),
+      },
+    };
+  },
+});
+
 export const CONEXIONES_DE_FISCALIZACION: Readonly<Record<string, Conexion>> = {
   fisc_programa,
+  fisc_predial,
   fisc_omisos,
   fisc_estado_cuenta,
   fisc_historico,

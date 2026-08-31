@@ -3253,3 +3253,163 @@
   line-height: 1.5;
   color: var(--ink-3);
 }
+
+/* ── El acta de inspección, en cuatro pasos (#506 F2) ───────────────────── */
+
+/* El modo campo es **una sola palanca**: agranda los controles del acta y nada
+   más. No es una segunda maqueta —eso serían dos pantallas que se separan a la
+   primera corrección— sino un dato en la URL que cambia una variable. */
+.sgtm-acta {
+  --acta-control: 8px 9px;
+  --acta-texto: 13px;
+}
+
+.sgtm-acta[data-modo-campo='1'] {
+  --acta-control: 13px 12px;
+  --acta-texto: 15px;
+}
+
+.sgtm-acta[data-modo-campo='1'] .sgtm-campo__control {
+  padding: var(--acta-control);
+  font-size: var(--acta-texto);
+  /* 48 px de alto de blanco a blanco: es lo que pide un dedo de pie en la calle
+     y lo que el prototipo dibuja. */
+  min-height: 48px;
+}
+
+.sgtm-acta__modo {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+  margin: 14px 0 4px;
+}
+
+.sgtm-acta__conmutador {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  border: 1px solid var(--line-2);
+  border-radius: 999px;
+  padding: 8px 15px;
+  background: var(--bg-card);
+  color: var(--ink-3);
+  font-size: 12.5px;
+  text-decoration: none;
+}
+
+.sgtm-acta__conmutador[data-activo='1'] {
+  border-color: var(--accent);
+  background: var(--accent-soft);
+  color: var(--accent-ink);
+  font-weight: 500;
+}
+
+.sgtm-acta__modo-nota {
+  font-size: 11.5px;
+  color: var(--ink-3);
+}
+
+.sgtm-acta__riel {
+  margin: 16px 0 14px;
+}
+
+.sgtm-acta__conteo {
+  margin: 0 0 8px;
+  font-size: 11px;
+  font-weight: 500;
+  text-transform: uppercase;
+  letter-spacing: 0.12em;
+  color: var(--ink-3);
+}
+
+.sgtm-acta__pasos {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.sgtm-acta__paso {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  border: 1px solid var(--line-2);
+  border-radius: 8px;
+  padding: 9px 13px;
+  background: var(--bg-card);
+  color: var(--ink-2);
+  font-size: 12.5px;
+  text-decoration: none;
+}
+
+.sgtm-acta__paso[data-estado='actual'] {
+  border-color: var(--accent);
+  background: var(--accent-soft);
+  color: var(--accent-ink);
+  font-weight: 600;
+}
+
+/* Los pasos ya recorridos no se apagan: se puede volver a cualquiera, y el color
+   dice cuáles se han visto. */
+.sgtm-acta__paso[data-estado='hecho'] {
+  border-color: var(--accent);
+}
+
+.sgtm-acta__paso-n {
+  display: grid;
+  place-items: center;
+  flex: 0 0 auto;
+  width: 22px;
+  height: 22px;
+  border-radius: 50%;
+  background: var(--accent-soft);
+  color: var(--accent-ink);
+  font-family: var(--font-mono);
+  font-size: 11px;
+}
+
+.sgtm-acta__paso[data-estado='actual'] .sgtm-acta__paso-n {
+  background: var(--accent);
+  color: var(--accent-contraste);
+}
+
+.sgtm-acta__avance {
+  display: flex;
+  justify-content: space-between;
+  gap: 10px;
+  margin: 16px 0 4px;
+}
+
+/* La tabla de contraste. Va al papel: es lo que sostiene la determinación. */
+.sgtm-contraste__nota {
+  margin: 10px 0 0;
+  font-size: 11.5px;
+  line-height: 1.55;
+  color: var(--ink-3);
+}
+
+.sgtm-cierre__lista {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.sgtm-cierre__titulo {
+  margin: 0 0 2px;
+  font-size: 13.5px;
+  font-weight: 500;
+  color: var(--ink);
+}
+
+.sgtm-cierre__detalle {
+  margin: 0;
+  font-size: 12.5px;
+  line-height: 1.55;
+  color: var(--ink-3);
+}

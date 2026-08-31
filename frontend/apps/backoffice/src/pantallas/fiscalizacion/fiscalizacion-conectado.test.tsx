@@ -15,9 +15,14 @@ import { SIN_DATO } from '../seguridad/listado';
 const OPCIONES_CONECTADAS = await censoDeConectadas();
 
 /**
- * Fiscalizacion, conectado (#80 y #431): cinco lecturas de ocho, y por que las
- * otras tres se quedan sin conectar. Ver el javadoc de
- * `pantallas/fiscalizacion/index.ts`.
+ * Fiscalizacion, conectado (#80, #431 y #506 F2): **seis** de ocho, y por que las
+ * otras dos se quedan fuera. Ver el javadoc de `pantallas/fiscalizacion/index.ts`.
+ *
+ * La sexta es `fisc_predial`, y es de otra clase que las cinco primeras: su
+ * operacion es un `POST` y lo que lee no es su propia respuesta, es **su fila de
+ * la muestra** —de donde salen los cuatro campos `"ro"` de su cabecera y el area
+ * declarada contra la que contrasta—. Es el mismo reparto que `caja_tributaria`,
+ * que lee de `consulta_deuda`.
  */
 
 beforeEach(() => instalarProxyDeDatos({ latencia: false }));
@@ -31,11 +36,19 @@ async function esperarFilas(tabla: HTMLElement): Promise<void> {
   await waitFor(() => expect(within(tabla).queryAllByRole('row').length).toBeGreaterThan(1));
 }
 
-describe('las cinco lecturas de fiscalizacion estan conectadas', () => {
-  it('exactamente estas cinco, ni una mas', () => {
+describe('las seis lecturas de fiscalizacion estan conectadas', () => {
+  it('exactamente estas seis, ni una mas', () => {
     const deFiscalizacion = OPCIONES_CONECTADAS.filter((opcion) => opcion.startsWith('fisc_'));
     expect(deFiscalizacion.sort()).toEqual(
-      ['fisc_programa', 'fisc_omisos', 'fisc_estado_cuenta', 'fisc_historico'].sort(),
+      [
+        'fisc_programa',
+        'fisc_omisos',
+        'fisc_estado_cuenta',
+        'fisc_historico',
+        // #506 F2: no lee su propia operacion —que escribe— sino su fila de la
+        // muestra, que es de donde el acta resuelve lo que no se teclea.
+        'fisc_predial',
+      ].sort(),
     );
     // `resolucion_determinacion_fisc` no lleva el prefijo `fisc_`.
     expect(OPCIONES_CONECTADAS).toContain('resolucion_determinacion_fisc');

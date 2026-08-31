@@ -196,6 +196,9 @@ const CuadroDeValuacion = lazy(async () => ({
 const Territorio = lazy(async () => ({
   default: (await import('./catastro/Territorio')).Territorio,
 }));
+const ActaDeInspeccion = lazy(async () => ({
+  default: (await import('./fiscalizacion/ActaDeInspeccion')).ActaDeInspeccion,
+}));
 const GeneracionIndividualDeValores = lazy(async () => ({
   default: (await import('./valores/GeneracionIndividualDeValores')).GeneracionIndividualDeValores,
 }));
@@ -418,6 +421,10 @@ export const COMPONENTES_PROPIOS: Readonly<
   licencia_padron: EmisorDelPadronDeLicencias,
   sectores: Territorio,
   calles: Territorio,
+  /* El acta de inspeccion, en cuatro pasos (#506 F2). Tiene que ser un
+     componente propio: los pasos no se pueden declarar en el catalogo, y el
+     contraste declarado/verificado del paso 2 no es una seccion de campos. */
+  fisc_predial: ActaDeInspeccion,
 };
 
 function Contenido({ estructura }: { readonly estructura: Estructura }) {
