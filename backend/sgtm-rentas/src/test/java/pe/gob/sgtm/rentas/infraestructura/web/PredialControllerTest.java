@@ -1,6 +1,7 @@
 package pe.gob.sgtm.rentas.infraestructura.web;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 
 import java.time.Clock;
@@ -46,6 +47,7 @@ import pe.gob.sgtm.rentas.aplicacion.CuadroPredialParametrizado;
 import pe.gob.sgtm.rentas.aplicacion.DeterminarPredial;
 import pe.gob.sgtm.rentas.aplicacion.DeterminarPredialMasivo;
 import pe.gob.sgtm.rentas.aplicacion.PadronPredialDelEjercicio;
+import pe.gob.sgtm.rentas.aplicacion.RegistrarCorridaDeEmision;
 import pe.gob.sgtm.rentas.aplicacion.RegistrarDeterminacionPredial;
 import pe.gob.sgtm.rentas.dominio.EstadoDeDeterminacion;
 import pe.gob.sgtm.rentas.dominio.OrigenDeDeterminacion;
@@ -304,6 +306,52 @@ class PredialControllerTest {
         assertThat(asentadaSinEjercicio.getResponse().getContentAsString()).contains("ejercicio");
     }
 
+    /**
+     * <b>La corrida deja rastro, y el rastro se puede volver a leer</b> (#523).
+     *
+     * <p>Antes de esto la corrida viajaba solo en la respuesta del {@code POST}: cerrar la pestana
+     * perdia el resultado de un proceso que toca decenas de miles de cuentas, y volver a verlo
+     * exigia volver a correrlo. Lo que no se podia recomponer eran los observados —un observado es,
+     * por definicion, el que NO tiene determinacion—.
+     */
+    @Test
+    @DisplayName("la corrida deja rastro, y GET /corridas/ultima lo devuelve")
+    void laCorridaDejaRastro() throws Exception {
+        MvcResult sinCorridas =
+                mvc.perform(get("/api/v1/rentas/predial/corridas/ultima")).andReturn();
+        assertThat(sinCorridas.getResponse().getStatus())
+                .as("«todavia no se ha corrido» y «se corrio y no emitio nada» son dos cosas")
+                .isEqualTo(204);
+
+        mvc.perform(
+                        post("/api/v1/rentas/predial/calculo-masivo")
+                                .contentType(MediaType.APPLICATION_JSON)
+                                .content("{\"simulacion\":true}"))
+                .andReturn();
+
+        MvcResult ultima = mvc.perform(get("/api/v1/rentas/predial/corridas/ultima")).andReturn();
+
+        assertThat(ultima.getResponse().getStatus())
+                .as("sin el rastro escrito, la corrida murio con su respuesta")
+                .isEqualTo(200);
+        String cuerpo = ultima.getResponse().getContentAsString();
+        assertThat(cuerpo).contains("\"simulacion\":true").contains("Padrón leído");
+        assertThat(cuerpo)
+                .as("lleva el id: es con lo que la pantalla pide despues sus observados")
+                .contains("\"id\":");
+    }
+
+    @Test
+    @DisplayName("el acceso de la lectura de la corrida es el de su pantalla, con LECTURA")
+    void elAccesoDeLaLecturaDeLaCorrida() throws Exception {
+        mvc.perform(get("/api/v1/rentas/predial/corridas/ultima")).andReturn();
+
+        assertThat(comprobador.acceso).isEqualTo("predial_masivo");
+        assertThat(comprobador.privilegio)
+                .as("leer lo que hizo una corrida no es correrla: LECTURA, no EJECUCION")
+                .isEqualTo(Privilegio.LECTURA);
+    }
+
     @Test
     @DisplayName("la corrida rechaza los dos interruptores que no hace, en vez de ignorarlos")
     void laCorridaRechazaLoQueNoHace() throws Exception {
@@ -417,14 +465,20 @@ class PredialControllerTest {
                         new RegistrarDeterminacionPredial(
                                 determinaciones, lector, auditoria, RELOJ),
                         RELOJ);
+        /* El rastro de la corrida (#523) va contra un repositorio en memoria: lo que
+        esta prueba mira es el transporte, y que la corrida se escriba de verdad lo
+        mide `CorridaDeEmisionJdbcTest` contra PostgreSQL. */
+        RegistrarCorridaDeEmision rastro = new RegistrarCorridaDeEmision(new CorridasEnMemoria());
         DeterminarPredialMasivo masivo =
                 new DeterminarPredialMasivo(
                         padron,
                         individual,
                         new DirectorioDePrueba(),
                         new SinCaracteristicas(),
+                        rastro,
                         RELOJ);
-        return MockMvcBuilders.standaloneSetup(new PredialController(individual, masivo, RELOJ))
+        return MockMvcBuilders.standaloneSetup(
+                        new PredialController(individual, masivo, rastro, RELOJ))
                 .addInterceptors(new GuardiaDeAcceso(comprobador, RELOJ))
                 .setControllerAdvice(new ManejadorDeErrores())
                 .setMessageConverters(
@@ -646,6 +700,61 @@ class PredialControllerTest {
             this.acceso = acceso;
             this.privilegio = privilegio;
             return autoriza;
+        }
+    }
+
+    /** Las corridas en memoria: esta prueba mira el transporte, no la persistencia (#523). */
+    private static final class CorridasEnMemoria
+            implements pe.gob.sgtm.rentas.dominio.CorridaDeEmisionRepository {
+
+        private final java.util.List<pe.gob.sgtm.rentas.dominio.CorridaDeEmision> guardadas =
+                new java.util.ArrayList<>();
+
+        @Override
+        public pe.gob.sgtm.rentas.dominio.CorridaDeEmision guardar(
+                pe.gob.sgtm.rentas.dominio.CorridaDeEmision corrida,
+                pe.gob.sgtm.dominio.Observacion observacion) {
+            pe.gob.sgtm.rentas.dominio.CorridaDeEmision conId =
+                    new pe.gob.sgtm.rentas.dominio.CorridaDeEmision(
+                            (long) (guardadas.size() + 1),
+                            corrida.ejercicio(),
+                            corrida.alcance(),
+                            corrida.sector(),
+                            corrida.modalidad(),
+                            corrida.simulacion(),
+                            corrida.conjunto(),
+                            corrida.leidos(),
+                            corrida.determinados(),
+                            corrida.montoEmitido(),
+                            corrida.fechaCalculo(),
+                            corrida.observados());
+            guardadas.add(conId);
+            return conId;
+        }
+
+        @Override
+        public java.util.Optional<pe.gob.sgtm.rentas.dominio.CorridaDeEmision> ultimaDe(
+                pe.gob.sgtm.dominio.Ejercicio ejercicio) {
+            return guardadas.reversed().stream()
+                    .filter(corrida -> corrida.ejercicio().equals(ejercicio))
+                    .findFirst();
+        }
+
+        @Override
+        public java.util.List<pe.gob.sgtm.rentas.dominio.CorridaDeEmision> ultimas(int cuantas) {
+            return guardadas.reversed().stream().limit(cuantas).toList();
+        }
+
+        @Override
+        public pe.gob.sgtm.compartido.Pagina<pe.gob.sgtm.rentas.dominio.CorridaDeEmision.Observado>
+                observadosDe(long corridaId, pe.gob.sgtm.compartido.Paginacion paginacion) {
+            var filas =
+                    guardadas.stream()
+                            .filter(corrida -> java.util.Objects.equals(corrida.id(), corridaId))
+                            .findFirst()
+                            .map(pe.gob.sgtm.rentas.dominio.CorridaDeEmision::observados)
+                            .orElse(java.util.List.of());
+            return new pe.gob.sgtm.compartido.Pagina<>(filas, 0, 20, filas.size());
         }
     }
 }

@@ -1156,6 +1156,57 @@ const OPERACIONES_ADICIONALES = {
       `),
     },
     {
+      operationId: 'ultima_corrida_predial',
+      metodo: 'get',
+      ruta: '/api/v1/rentas/predial/corridas/ultima',
+      titulo: 'Estado de la ultima emision del ejercicio',
+      parametros: [
+        {
+          nombre: 'ejercicio',
+          descripcion: 'El ejercicio cuya ultima corrida se pide. Ausente, el del reloj.',
+        },
+      ],
+      descripcion: bloque(`
+        Lo que hizo la última corrida de emisión anual del predial (#523): sus etapas, cuántos
+        contribuyentes se leyeron, cuántos se determinaron, cuánto se emitió y **cuántos quedaron
+        observados**.
+
+        Hasta esto la corrida viajaba **sólo en la respuesta del POST que la ejecuta**: cerrar la
+        pestaña perdía el resultado de un proceso que toca decenas de miles de cuentas, y volver a
+        verlo exigía volver a correrlo. Los observados eran lo único que no se podía recomponer
+        leyendo el padrón — un observado es, por definición, el que **no** tiene determinación.
+
+        Devuelve también las **simulaciones**, y lo dice: el campo «simulacion» distingue las dos.
+        Esconderlas haría que «ver los observados antes de emitir» —que es lo que hay que hacer
+        antes de una emisión— no dejara nada que mirar después.
+
+        Sin corridas del ejercicio contesta **204**, no una cabecera de ceros: «todavía no se ha
+        corrido» y «se corrió y no emitió nada» son dos cosas distintas.
+      `),
+    },
+    {
+      operationId: 'observados_de_la_corrida',
+      metodo: 'get',
+      ruta: '/api/v1/rentas/predial/corridas/{corridaId}/observados',
+      titulo: 'Los observados de una corrida',
+      parametros: [
+        {
+          nombre: 'corridaId',
+          en: 'path',
+          requerido: true,
+          descripcion: 'La corrida, por el id que devuelve la lectura de la ultima.',
+        },
+      ],
+      descripcion: bloque(`
+        Los contribuyentes que quedaron fuera de la emisión, cada uno **con su motivo** (#523). Es
+        lo único que convierte «emitió menos de lo esperado» en una lista de cosas que arreglar.
+
+        Van aparte de la cabecera y paginados, no dentro de ella: son cientos, y una portada que
+        los trajera siempre sería la petición más pesada del sistema para una cifra que casi nadie
+        abre.
+      `),
+    },
+    {
       operationId: 'mudar_contribuyente',
       metodo: 'post',
       ruta: '/api/v1/rentas/contribuyentes/{id}/domicilios',

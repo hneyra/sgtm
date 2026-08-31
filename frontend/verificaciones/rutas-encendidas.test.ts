@@ -320,8 +320,8 @@ describe('cuanto falta para poder apagar el proxy (#400)', () => {
   );
   const pendientes = DEL_CONTRATO.filter(([, metodo, ruta]) => loQueFalta(metodo, ruta).length > 0);
 
-  it('el contrato publica 197 operaciones', () => {
-    expect(DEL_CONTRATO.length).toBe(197);
+  it('el contrato publica 199 operaciones', () => {
+    expect(DEL_CONTRATO.length).toBe(199);
   });
 
   it('encendidas: 3', () => {
@@ -338,13 +338,18 @@ describe('cuanto falta para poder apagar el proxy (#400)', () => {
     expect(listas.length).toBe(126);
   });
 
-  /* 68 desde #500: `plano_catastral` entra pendiente y no lista, aunque su lado
-     del cliente este entero —la interfaz la consume y el proxy ya la publica con
-     la forma del backend—. Lo que le falta es el controlador, y encenderla hoy
-     la mandaria a un 404. Cuando el issue del backend cierre, pasa a listas sin
-     tocar una linea de interfaz, que es la promesa de ADR-0010. */
-  it('pendientes: 68', () => {
-    expect(pendientes.length).toBe(68);
+  /* 69 desde #523: las dos lecturas de la corrida de emision nacen **pendientes**,
+     y no por descuido. El backend las sirve; lo que les falta es la mitad de
+     interfaz —que `predial_masivo` dibuje al abrir lo que hizo la ultima—, y eso
+     va en su propio PR. Aqui se cuenta lo que hay, no lo que se espera.
+
+     **70 desde #500**, y le falta lo contrario que a esas dos: `plano_catastral`
+     tiene la interfaz entera —la consume y el proxy ya la publica con la forma
+     del backend— y no tiene controlador, asi que encenderla hoy la mandaria a un
+     404. Las dos mitades de una ruta encendida se pueden echar en falta por
+     separado, y este censo las cuenta igual de pendientes. */
+  it('pendientes: 70', () => {
+    expect(pendientes.length).toBe(70);
   });
 
   it('las tres cifras cubren el contrato entero', () => {

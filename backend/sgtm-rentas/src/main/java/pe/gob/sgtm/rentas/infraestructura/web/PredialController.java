@@ -6,6 +6,9 @@ import java.util.ArrayList;
 import java.util.List;
 import org.jspecify.annotations.Nullable;
 import org.springframework.http.HttpStatus;
+import org.springframework.http.ResponseEntity;
+import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
@@ -21,10 +24,13 @@ import pe.gob.sgtm.parametros.ParametrosSellados;
 import pe.gob.sgtm.rentas.aplicacion.CuadroPredialParametrizado;
 import pe.gob.sgtm.rentas.aplicacion.DeterminarPredial;
 import pe.gob.sgtm.rentas.aplicacion.DeterminarPredialMasivo;
+import pe.gob.sgtm.rentas.aplicacion.RegistrarCorridaDeEmision;
 import pe.gob.sgtm.web.Api;
 import pe.gob.sgtm.web.CodigoDeError;
 import pe.gob.sgtm.web.FiltroDeLaConsulta;
+import pe.gob.sgtm.web.ParametrosDePaginacion;
 import pe.gob.sgtm.web.ProblemaDeNegocio;
+import pe.gob.sgtm.web.RespuestaPaginada;
 
 /**
  * La capa web de la determinacion predial (#395): {@code predial_individual} y {@code
@@ -64,15 +70,69 @@ import pe.gob.sgtm.web.ProblemaDeNegocio;
 @RequestMapping(Api.RAIZ + "/rentas/predial")
 public class PredialController {
 
+    private static final String ORDEN_DE_OBSERVADOS = "id";
+
     private final DeterminarPredial individual;
     private final DeterminarPredialMasivo masivo;
+    private final RegistrarCorridaDeEmision corridas;
     private final Clock reloj;
 
     public PredialController(
-            DeterminarPredial individual, DeterminarPredialMasivo masivo, Clock reloj) {
+            DeterminarPredial individual,
+            DeterminarPredialMasivo masivo,
+            RegistrarCorridaDeEmision corridas,
+            Clock reloj) {
         this.individual = individual;
         this.masivo = masivo;
+        this.corridas = corridas;
         this.reloj = reloj;
+    }
+
+    /**
+     * La ultima corrida de emision del ejercicio, <b>sin</b> sus observados (#523).
+     *
+     * <p>Hasta este endpoint la corrida viajaba solo en la respuesta del {@code POST} que la
+     * ejecuta: cerrar la pestana perdia el resultado de un proceso que toca decenas de miles de
+     * cuentas, y volver a verlo exigia volver a correrlo. Con esto, la pantalla del calculo masivo
+     * dibuja al abrir lo que hizo la ultima, y el panel del modulo deja de estar bloqueado (#503
+     * F6).
+     *
+     * <p><b>Devuelve tambien las simulaciones</b>, y lo dice: {@code simulacion} distingue las dos,
+     * y esconderlas haria que «ver los observados antes de emitir» —que es lo que el prototipo pide
+     * hacer— no dejara nada que mirar despues.
+     *
+     * <p>Sin corridas del ejercicio contesta <b>204</b> y no una corrida vacia de ceros: «todavia
+     * no se ha corrido» y «se corrio y no emitio nada» son dos cosas distintas, y una cabecera de
+     * ceros las dice igual.
+     */
+    @GetMapping("/corridas/ultima")
+    @RequiereAcceso(acceso = "predial_masivo", privilegio = Privilegio.LECTURA)
+    public ResponseEntity<CorridaGuardadaResource> ultimaCorrida(
+            @RequestParam(required = false) @Nullable String ejercicio) {
+        Ejercicio elEjercicio = ejercicioDeLaCorrida(ejercicio, true);
+        return corridas.ultimaDe(elEjercicio)
+                .map(corrida -> ResponseEntity.ok(CorridaGuardadaResource.de(corrida)))
+                .orElseGet(() -> ResponseEntity.noContent().build());
+    }
+
+    /**
+     * Los observados de una corrida: la lista de cosas que arreglar (#523).
+     *
+     * <p>Aparte de la cabecera y paginados, no dentro de ella. Son cientos —534 en la corrida que
+     * el prototipo dibuja— y una portada que los trajera siempre seria la peticion mas pesada del
+     * sistema para una cifra que casi nadie abre.
+     */
+    @GetMapping("/corridas/{corridaId}/observados")
+    @RequiereAcceso(acceso = "predial_masivo", privilegio = Privilegio.LECTURA)
+    public RespuestaPaginada<CorridaPredialResource.ObservadoResource> observadosDeLaCorrida(
+            @PathVariable long corridaId, ParametrosDePaginacion parametros) {
+        return RespuestaPaginada.de(
+                corridas.observadosDe(corridaId, parametros.aPaginacion(ORDEN_DE_OBSERVADOS)),
+                observado ->
+                        new CorridaPredialResource.ObservadoResource(
+                                observado.codContribuyente(),
+                                observado.nombre(),
+                                observado.motivo()));
     }
 
     /**

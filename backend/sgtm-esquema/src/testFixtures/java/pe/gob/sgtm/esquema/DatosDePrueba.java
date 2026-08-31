@@ -889,6 +889,31 @@ public final class DatosDePrueba {
                 corridaMasivaId,
                 titular,
                 valorId);
+        // #523: una corrida de emision predial con su observado. Las dos tablas llevan
+        // `municipalidad_id NOT NULL`, asi que la prueba de aislamiento les exige RLS
+        // sola —y exige ademas que A vea fila propia: sin sembrarla, «no se ve nada de
+        // B» seria cierto y no probaria nada—.
+        long corridaPredialId =
+                insertar(
+                        app,
+                        "INSERT INTO corrida_predial (municipalidad_id, ejercicio, alcance,"
+                                + " modalidad, simulacion, conjunto, leidos, determinados,"
+                                + " monto_emitido, fecha_calculo, usuario_registro,"
+                                + " fecha_registro, observacion)"
+                                + " VALUES (?, ?, 'TODOS', 'TRIMESTRAL', false, 'conjunto de"
+                                + "         prueba', 2, 1, 100.00, ?, 'prueba', now(),"
+                                + "         'corrida de emision de prueba') RETURNING id",
+                        muni,
+                        EJERCICIO,
+                        VIGENCIA);
+        ejecutar(
+                app,
+                "INSERT INTO corrida_predial_observado (municipalidad_id, corrida_id,"
+                        + " cod_contribuyente, nombre, motivo)"
+                        + " VALUES (?, ?, 'C-PRUEBA', 'OBSERVADO, DE PRUEBA',"
+                        + "         'uno de sus predios esta sin arancel')",
+                muni,
+                corridaPredialId);
         // #39: dos diligencias sobre el mismo valor. La primera no ubico el domicilio
         // -y por eso no lleva exigibilidad-; la segunda notifico. Las dos filas conviven:
         // es el reintento que la tabla tiene que admitir sin borrar el intento anterior.
