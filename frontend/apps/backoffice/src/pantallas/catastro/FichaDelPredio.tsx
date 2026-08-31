@@ -496,6 +496,12 @@ export function FichaDelPredio({ estructura }: { readonly estructura: Estructura
     escritura.fijarCampo('origen', ORIGEN_POR_OMISION);
   }
 
+  /* **Lo que la pantalla siembra sola**, y que por tanto NO es un cambio del
+     usuario (#498 F3). Sin esta lista, «Cambios sin guardar» sale encendido en
+     cuanto se abre la ficha —se comprobo: `data-sin-guardar="1"` sin tocar
+     nada—, y un aviso siempre encendido no dice nada. */
+  const SEMBRADOS = ['origen'];
+
   const estado = estadoDePantalla(consulta, falta);
 
   /* El error, el sin permiso y el no disponible son de la superficie entera, y
@@ -566,6 +572,19 @@ export function FichaDelPredio({ estructura }: { readonly estructura: Estructura
         {...(codigo === undefined ? {} : { codigo })}
         {...(datos === undefined ? {} : { datos })}
         cargando={cargando}
+        /* Si hay algo tecleado y sin mandar (#498 F3). Se **deriva** del
+           borrador de `useEscritura` en vez de guardarse aparte: con dos
+           verdades sobre lo mismo, la que se lee acaba siendo la que nadie
+           recalculo. Solo se declara cuando esta pantalla puede escribir; en
+           modo lectura no hay borrador que perder y la cabecera no habla de
+           guardar. */
+        {...(puedeEscribirAqui
+          ? {
+              sinGuardar:
+                Object.keys(escritura.borrador).some((campo) => !SEMBRADOS.includes(campo)) ||
+                escritura.observacion.trim() !== '',
+            }
+          : {})}
         opcion={estructura.id}
         busqueda={busqueda}
       />

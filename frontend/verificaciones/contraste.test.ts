@@ -298,6 +298,29 @@ describe('la vuelta al inicio se ve que se puede pulsar', () => {
  * porque es una regla de estilo —jsdom no resuelve el `:hover`, asi que una
  * prueba de componente no podria verlo—.
  */
+/**
+ * **La cabecera del registro no se va al desplazarse** (#498 F3).
+ *
+ * Es la respuesta a «no sé si guardé»: una ficha son hasta once pestañas del
+ * prototipo, y quien baja a corregir un campo perdía de vista qué predio estaba
+ * tocando y si lo suyo seguía sin mandar. Se comprueba leyendo la hoja porque
+ * jsdom no resuelve `position`, así que ninguna prueba de componente lo vería
+ * —el mismo trato que la marca del riel—.
+ */
+describe('la cabecera del registro se queda a la vista', () => {
+  const APLICACION = HOJAS[1] ?? '';
+
+  it('.sgtm-resumen es sticky, y por debajo de la cabecera de la aplicación', () => {
+    const desde = APLICACION.indexOf('.sgtm-resumen {');
+    expect(desde, '«.sgtm-resumen» no existe en la hoja').toBeGreaterThanOrEqual(0);
+    const bloque = APLICACION.slice(desde, APLICACION.indexOf('}', desde));
+    expect(bloque).toMatch(/position:\s*sticky/);
+    // Con `top: 0` se metería debajo de la cabecera de la aplicación, que
+    // también es sticky: se solaparían las dos y el código quedaría tapado.
+    expect(bloque).toMatch(/top:\s*[1-9]/);
+  });
+});
+
 describe('lo que es un enlace se ve que lo es sin mirar el color', () => {
   const APLICACION = HOJAS[1] ?? '';
 
