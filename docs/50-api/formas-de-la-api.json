@@ -2456,6 +2456,32 @@
     "totalPaginas": "entero",
     "hayMas": "booleano"
   },
+  "GET /rentas/vehiculos": {
+    "contenido": [
+      {
+        "placa": "texto",
+        "clase": "texto",
+        "marca": "texto",
+        "modelo": "texto",
+        "anioFabricacion": "entero",
+        "estado": "texto",
+        "afectoDesde": "entero",
+        "afectoHasta": "entero",
+        "contribuyenteId": "entero",
+        "codigoContribuyente": "texto",
+        "titular": "texto",
+        "deuda": {
+          "importe": "texto",
+          "actualizadoA": "fecha"
+        }
+      }
+    ],
+    "pagina": "entero",
+    "tamano": "entero",
+    "totalElementos": "entero",
+    "totalPaginas": "entero",
+    "hayMas": "booleano"
+  },
   "GET /rentas/vehiculos/{placa}": {
     "id": "entero",
     "placa": "texto",

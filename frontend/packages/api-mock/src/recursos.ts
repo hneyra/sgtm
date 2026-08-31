@@ -4080,6 +4080,11 @@ export const PAGINADOS: Readonly<Record<string, () => Paginado>> = {
   '/consultas/cuenta-corriente/{codigo}': cuentaCorriente,
   '/consultas/deuda': consultaDeuda,
   '/consultas/vehiculos': consultaVehiculos,
+  // La misma fila, bajo la ruta de Rentas (#524). El recurso es el mismo
+  // `VehiculoEncontradoResource`, asi que el proxy no lo compone dos veces:
+  // dos formas distintas de la misma lectura dirian dos cosas del mismo
+  // vehiculo, y la que se leyera en el expediente seria la que nadie compara.
+  '/rentas/vehiculos': consultaVehiculos,
   '/consultas/altas-bajas': altasBajas,
   '/consultas/pagos': pagos,
   '/consultas/predios': predios,

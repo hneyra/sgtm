@@ -760,6 +760,55 @@ const identificador = (valor: unknown): string =>
 /** Una fecha entera, como la escribe un `input[type=date]` y como la lee `LocalDate`. */
 const FECHA_ISO = /^\d{4}-\d{2}-\d{2}$/;
 
+/**
+ * **Los vehiculos de un contribuyente** (#524), que no es una opcion del catalogo.
+ *
+ * Su clave en el registro es el `operationId` y no un id de opcion, a proposito:
+ * esta lectura no tiene pantalla propia —ninguna del manual la dibuja— y existe
+ * para que el expediente del contribuyente pueda tomarla prestada bajo el
+ * permiso de «Ficha de vehiculo», que es la opcion de Rentas que si existe.
+ * `Pantalla` nunca la pide: solo consulta el registro por id de opcion.
+ *
+ * La fila es la de `VehiculoEncontradoResource` —la misma que publica
+ * `/consultas/vehiculos`— repartida en las **ocho columnas que el catalogo de
+ * `vehiculos` declara**. No se redacta ninguna: la primera es el estado, y la
+ * afectacion se lee como en Consultas —`BAJA` gana al rango— porque es el mismo
+ * dato leido dos veces y decir dos cosas distintas del mismo vehiculo es lo que
+ * este endpoint existe para no hacer.
+ */
+const vehiculos_del_contribuyente = definirConexion({
+  operacion: 'vehiculos_del_contribuyente',
+  parametros: ({ busqueda }) =>
+    parametrosDeBusqueda('vehiculos_del_contribuyente', undefined, busqueda),
+  leer: (cuerpo) => leerPaginado(cuerpo, 'los vehiculos del contribuyente'),
+  adaptar: (paginado): DatosDePantalla =>
+    datosDe(
+      tablaDe(
+        paginado,
+        (vehiculo): readonly Celda[] => [
+          { texto: texto(vehiculo['estado']) },
+          { texto: texto(vehiculo['placa']) },
+          { texto: texto(vehiculo['clase']) },
+          { texto: texto(vehiculo['marca']) },
+          { texto: texto(vehiculo['modelo']) },
+          { texto: texto(vehiculo['anioFabricacion']) },
+          { texto: texto(vehiculo['titular']) },
+          { texto: afectacionDelVehiculo(vehiculo) },
+        ],
+        'vehículos',
+      ),
+    ),
+});
+
+/** `estado === 'BAJA'` gana; si no, el rango que ya manda el recurso. Igual que en Consultas. */
+function afectacionDelVehiculo(vehiculo: Readonly<Record<string, unknown>>): string {
+  if (vehiculo['estado'] === 'BAJA') return 'BAJA';
+  const desde = vehiculo['afectoDesde'];
+  const hasta = vehiculo['afectoHasta'];
+  if (typeof desde !== 'number' || typeof hasta !== 'number') return SIN_DATO;
+  return `${desde} — ${hasta}`;
+}
+
 /** Las opciones de Rentas ya conectadas. Crece cuando crezca su backend. */
 export const CONEXIONES_DE_RENTAS: Readonly<Record<string, Conexion>> = {
   contribuyentes,
@@ -769,6 +818,7 @@ export const CONEXIONES_DE_RENTAS: Readonly<Record<string, Conexion>> = {
   beneficios,
   arbitrios,
   baja_deuda,
+  vehiculos_del_contribuyente,
 };
 
 /**
