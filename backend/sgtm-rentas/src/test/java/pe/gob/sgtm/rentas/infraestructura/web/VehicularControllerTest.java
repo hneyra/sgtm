@@ -35,6 +35,7 @@ import pe.gob.sgtm.dominio.ValorNormativo;
 import pe.gob.sgtm.parametros.IdentificadorDeConjunto;
 import pe.gob.sgtm.parametros.LectorDeParametros;
 import pe.gob.sgtm.parametros.ParametrosSellados;
+import pe.gob.sgtm.rentas.aplicacion.ConsultaDeVehiculos;
 import pe.gob.sgtm.rentas.aplicacion.RegistrarDeterminacionVehicular;
 import pe.gob.sgtm.rentas.aplicacion.ValoresReferenciales;
 import pe.gob.sgtm.rentas.dominio.CambioDePlaca;
@@ -422,7 +423,9 @@ class VehicularControllerTest {
                         lector,
                         auditoria,
                         RELOJ);
-        return MockMvcBuilders.standaloneSetup(new VehicularController(servicio, vehiculos, RELOJ))
+        return MockMvcBuilders.standaloneSetup(
+                        new VehicularController(
+                                servicio, new ConsultaDeVehiculos(vehiculos, null), RELOJ))
                 .addInterceptors(new GuardiaDeAcceso(comprobador, RELOJ))
                 .setControllerAdvice(new ManejadorDeErrores())
                 .setMessageConverters(

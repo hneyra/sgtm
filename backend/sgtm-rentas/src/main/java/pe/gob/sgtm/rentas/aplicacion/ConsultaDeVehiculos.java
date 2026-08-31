@@ -3,6 +3,7 @@ package pe.gob.sgtm.rentas.aplicacion;
 import java.time.LocalDate;
 import java.util.List;
 import java.util.Objects;
+import java.util.Optional;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import pe.gob.sgtm.compartido.Pagina;
@@ -77,6 +78,30 @@ public class ConsultaDeVehiculos {
             CriterioDeVehiculo criterio, LocalDate fecha, Paginacion paginacion) {
         Pagina<VehiculoEncontrado> pagina = repositorio.buscar(criterio, paginacion);
         return pagina.mapear(fila -> new VehiculoConDeuda(fila, deudaDe(fila.vehiculo(), fecha)));
+    }
+
+    /**
+     * Los vehiculos activos que pide el criterio, <b>sin</b> su deuda.
+     *
+     * <p>La usa el calculo vehicular para resolver sobre que vehiculos calcula, y no {@link
+     * #buscar}: ahi cada fila cuesta una consulta de deuda al libro, y el calculo no la mira.
+     */
+    @Transactional(readOnly = true)
+    public Pagina<VehiculoEncontrado> activosDe(
+            CriterioDeVehiculo criterio, Paginacion paginacion) {
+        return repositorio.buscar(criterio, paginacion);
+    }
+
+    /** El vehiculo por su placa, tal cual. Vacio si no esta en el padron vehicular. */
+    @Transactional(readOnly = true)
+    public Optional<Vehiculo> vehiculoPorPlaca(Placa placa) {
+        return repositorio.findByPlaca(placa);
+    }
+
+    /** El vehiculo por su identificador interno. */
+    @Transactional(readOnly = true)
+    public Optional<Vehiculo> vehiculoPorId(long id) {
+        return repositorio.findById(id);
     }
 
     /**

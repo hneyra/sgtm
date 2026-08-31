@@ -461,6 +461,40 @@ public final class ReglasDeArquitectura {
                                     + " eso es servir una opcion del catalogo sin autorizacion"
                                     + " (ADR-0020)");
 
+    /**
+     * <b>Ningun controlador sostiene un repositorio</b> (#486).
+     *
+     * <p>Es la regla que este proyecto no tenia y que le costo catorce rutas contestando {@code
+     * 500} en produccion, mas otras diez que el barrido de #486 no llego a ver porque solo recorre
+     * lecturas sin parametros de ruta.
+     *
+     * <p>El mecanismo: <b>ningun</b> {@code RepositoryJdbc} del sistema anota
+     * {@code @Transactional} —y no tiene por que, la transaccion es del caso de uso—, asi que un
+     * controlador que llama al repositorio corre <b>fuera de transaccion</b>. Sin transaccion no
+     * hay {@code SET LOCAL app.municipalidad_id}, y la politica RLS de casi toda tabla consulta ese
+     * parametro. La consulta no devuelve vacio: <b>revienta</b>, porque {@code
+     * current_setting('app.municipalidad_id')::bigint} sobre la cadena vacia no se puede evaluar.
+     *
+     * <p>Lo que hace al defecto invisible es que <b>ninguna familia de pruebas cruza esa
+     * frontera</b>: las de repositorio hablan con PostgreSQL desde dentro de una transaccion que
+     * abre la propia prueba, y las de capa web llegan por HTTP contra un doble que no sabe de RLS.
+     * Entre las dos queda justo el trozo que falla, y por eso hubo que descubrirlo levantando el
+     * sistema entero.
+     *
+     * <p>La regla mira <b>campos</b>, no dependencias: un controlador puede seguir nombrando el
+     * tipo del repositorio para cazar una excepcion anidada suya —{@code
+     * ConvenioRepository.CronogramaDuplicado}—, y eso no lo hace hablar con la base. Lo que no
+     * puede es <b>sostener uno</b>, porque sostenerlo es llamarlo.
+     */
+    public static final ArchRule NINGUN_CONTROLADOR_SOSTIENE_UN_REPOSITORIO =
+            ArchRuleDefinition.classes()
+                    .that(new EsControlador())
+                    .should(new SinRepositorioInyectado())
+                    .because(
+                            "ningun RepositoryJdbc es transaccional; un controlador que llama al"
+                                    + " repositorio corre sin el SET LOCAL que RLS exige y contesta 500,"
+                                    + " no una lista vacia (#486)");
+
     public static List<ArchRule> todas() {
         return List.of(
                 EL_DOMINIO_NO_CONOCE_FRAMEWORKS,
@@ -479,7 +513,8 @@ public final class ReglasDeArquitectura {
                 SOLO_LA_TRANSFERENCIA_ESCRIBE_FUERA_DE_FISCALIZACION,
                 EL_PANEL_NO_HABLA_CON_LA_BASE,
                 SOLO_EL_RECORRIDO_MUEVE_EL_CONTEXTO_EN_WEB,
-                EL_CENTINELA_DEL_CIUDADANO_SOLO_SIRVE_AL_PORTAL);
+                EL_CENTINELA_DEL_CIUDADANO_SOLO_SIRVE_AL_PORTAL,
+                NINGUN_CONTROLADOR_SOSTIENE_UN_REPOSITORIO);
     }
 
     /** Clases del sistema, sin las de prueba ni las de fixtures. */
@@ -991,6 +1026,35 @@ public final class ReglasDeArquitectura {
         public boolean test(JavaClass clase) {
             return clase.getAnnotations().stream()
                     .anyMatch(a -> ANOTACIONES.contains(a.getRawType().getName()));
+        }
+    }
+
+    /** Un controlador no sostiene un repositorio: llamarlo seria hacerlo fuera de transaccion. */
+    private static final class SinRepositorioInyectado extends ArchCondition<JavaClass> {
+
+        SinRepositorioInyectado() {
+            super("no sostener ningun repositorio como campo");
+        }
+
+        @Override
+        public void check(JavaClass clase, ConditionEvents eventos) {
+            for (com.tngtech.archunit.core.domain.JavaField campo : clase.getFields()) {
+                if (campo.getRawType().getSimpleName().endsWith("Repository")) {
+                    eventos.add(
+                            SimpleConditionEvent.violated(
+                                    campo,
+                                    "el controlador "
+                                            + clase.getSimpleName()
+                                            + " sostiene "
+                                            + campo.getRawType().getSimpleName()
+                                            + " "
+                                            + campo.getName()
+                                            + "; leerlo desde aqui corre sin transaccion, y sin"
+                                            + " SET LOCAL la politica RLS falla con «invalid input"
+                                            + " syntax for type bigint: \"\"» (#486). La consulta"
+                                            + " va en un caso de uso @Transactional"));
+                }
+            }
         }
     }
 

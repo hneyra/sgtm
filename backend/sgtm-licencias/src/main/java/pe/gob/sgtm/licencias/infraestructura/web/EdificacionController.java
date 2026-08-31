@@ -88,7 +88,6 @@ public class EdificacionController {
     private final CompletarSeccionDelFue completar;
     private final EmitirLicenciaDeEdificacion emitir;
     private final RevalidarLicenciaDeEdificacion revalidar;
-    private final MovimientoDeEdificacionRepository movimientos;
     private final Clock reloj;
 
     public EdificacionController(
@@ -97,14 +96,12 @@ public class EdificacionController {
             CompletarSeccionDelFue completar,
             EmitirLicenciaDeEdificacion emitir,
             RevalidarLicenciaDeEdificacion revalidar,
-            MovimientoDeEdificacionRepository movimientos,
             Clock reloj) {
         this.consulta = consulta;
         this.presentar = presentar;
         this.completar = completar;
         this.emitir = emitir;
         this.revalidar = revalidar;
-        this.movimientos = movimientos;
         this.reloj = reloj;
     }
 
@@ -399,7 +396,7 @@ public class EdificacionController {
                 .body(
                         ActoDeEdificacionResource.de(
                                 revalidacion,
-                                movimientos.vigenciasDe(revalidacion.original().identificador())));
+                                consulta.vigenciasDe(revalidacion.original().identificador())));
     }
 
     // ------------------------------------------------------------------

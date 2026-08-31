@@ -20,6 +20,7 @@ import org.springframework.jdbc.datasource.DriverManagerDataSource;
 import org.springframework.transaction.annotation.AnnotationTransactionAttributeSource;
 import org.springframework.transaction.interceptor.TransactionInterceptor;
 import pe.gob.sgtm.compartido.TenantContext;
+import pe.gob.sgtm.cuentacorriente.aplicacion.ConsultasDelLibro;
 import pe.gob.sgtm.cuentacorriente.infraestructura.AsientoRepositoryJdbc;
 import pe.gob.sgtm.dominio.MunicipalidadId;
 import pe.gob.sgtm.esquema.BaseDeDatosDePrueba;
@@ -27,8 +28,12 @@ import pe.gob.sgtm.plataforma.tenant.TenantTransactionManager;
 import pe.gob.sgtm.web.ParametrosDePaginacion;
 
 /**
- * Los GET de solo lectura de este contexto que no pasan por un caso de uso propio exigen
- * {@code @Transactional(readOnly = true)} en el propio controlador.
+ * Los GET de solo lectura de este contexto exigen un caso de uso {@code @Transactional(readOnly =
+ * true)} — {@link ConsultasDelLibro}—, no una anotacion en el controlador.
+ *
+ * <p>Hasta #486 la anotacion vivia en los propios controladores, que funcionaba pero dejaba el
+ * modulo con una convencion distinta de la del resto del sistema. Lo que la prueba mide no cambia:
+ * sin transaccion, la consulta falla.
  *
  * <p>Es una regresion real, no hipotetica: {@code RepositorioJdbc} no abre transaccion propia (es
  * su diseño deliberado), asi que una consulta sin una transaccion activa <b>falla</b> en la base
@@ -36,7 +41,7 @@ import pe.gob.sgtm.web.ParametrosDePaginacion;
  * las dos direcciones: sin el proxy transaccional que Spring pone alrededor de la anotacion, la
  * misma llamada que hace el controlador falla; con el, funciona.
  */
-@DisplayName("Los GET de cuentacorriente exigen @Transactional en el controlador")
+@DisplayName("Los GET de cuentacorriente exigen su caso de uso @Transactional")
 class ControladoresDeLecturaTest {
 
     private static BaseDeDatosDePrueba base;
@@ -60,14 +65,20 @@ class ControladoresDeLecturaTest {
         JdbcClient jdbc = JdbcClient.create(pool);
         AsientoRepositoryJdbc repositorio = new AsientoRepositoryJdbc(jdbc);
 
-        cuentaCorrienteSinProxy = new CuentaCorrienteController(repositorio);
-        altasBajasSinProxy = new AltasBajasController(repositorio);
-        pagosSinProxy = new ConsultaPagosController(repositorio);
-
+        // Desde #486 la transaccion no vive en el controlador sino en el caso de uso, asi que lo
+        // que se envuelve es `ConsultasDelLibro`. La prueba mide lo mismo en el sitio nuevo: sin el
+        // proxy que obedece a la anotacion, la misma consulta falla por falta de contexto.
+        ConsultasDelLibro sinTransaccion = new ConsultasDelLibro(repositorio);
         TenantTransactionManager gestor = new TenantTransactionManager(pool);
-        cuentaCorrienteConProxy = envolver(cuentaCorrienteSinProxy, gestor);
-        altasBajasConProxy = envolver(altasBajasSinProxy, gestor);
-        pagosConProxy = envolver(pagosSinProxy, gestor);
+        ConsultasDelLibro conTransaccion = envolver(sinTransaccion, gestor);
+
+        cuentaCorrienteSinProxy = new CuentaCorrienteController(sinTransaccion);
+        altasBajasSinProxy = new AltasBajasController(sinTransaccion);
+        pagosSinProxy = new ConsultaPagosController(sinTransaccion);
+
+        cuentaCorrienteConProxy = new CuentaCorrienteController(conTransaccion);
+        altasBajasConProxy = new AltasBajasController(conTransaccion);
+        pagosConProxy = new ConsultaPagosController(conTransaccion);
     }
 
     @SuppressWarnings("unchecked")

@@ -182,6 +182,20 @@ public class ConsultaDeFue {
     }
 
     /** La ficha completa de un expediente: sus secciones, su historial y su valorizacion. */
+    /**
+     * Los tramos de vigencia de una licencia de edificacion.
+     *
+     * <p>Los pide la respuesta de la revalidacion —las dos vigencias, la original y la nueva, que
+     * es el AC 4 de #48 leible desde el JSON—. Vive aqui y no en el controlador porque {@code
+     * edificacion_movimiento} tiene RLS: una consulta fuera de transaccion corre sin el {@code SET
+     * LOCAL} y revienta con «invalid input syntax for type bigint: ""» (#486).
+     */
+    @Transactional(readOnly = true)
+    public java.util.List<pe.gob.sgtm.licencias.dominio.VigenciaDeLaLicencia> vigenciasDe(
+            long licenciaId) {
+        return movimientos.vigenciasDe(licenciaId);
+    }
+
     @Transactional(readOnly = true)
     public Optional<FichaDelFue> porExpediente(String expediente, LocalDate aLaFecha) {
         return expedientes.porExpediente(expediente).map(fue -> ficha(fue, aLaFecha));

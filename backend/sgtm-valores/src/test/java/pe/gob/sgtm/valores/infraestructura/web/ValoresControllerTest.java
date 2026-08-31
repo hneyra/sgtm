@@ -26,6 +26,7 @@ import pe.gob.sgtm.cuentacorriente.ObligacionPublica;
 import pe.gob.sgtm.dominio.Dinero;
 import pe.gob.sgtm.dominio.Ejercicio;
 import pe.gob.sgtm.dominio.Observacion;
+import pe.gob.sgtm.valores.aplicacion.ConsultaDeValores;
 import pe.gob.sgtm.valores.aplicacion.IniciarCorridaMasiva;
 import pe.gob.sgtm.valores.aplicacion.PasarACoactiva;
 import pe.gob.sgtm.valores.aplicacion.PlazosParametrizados;
@@ -108,7 +109,7 @@ class ValoresControllerTest {
             MockMvcBuilders.standaloneSetup(
                             new ValoresController(
                                     registrar,
-                                    repositorio,
+                                    new ConsultaDeValores(repositorio, contribuyentes),
                                     contribuyentes,
                                     iniciarMasivo,
                                     notificar,

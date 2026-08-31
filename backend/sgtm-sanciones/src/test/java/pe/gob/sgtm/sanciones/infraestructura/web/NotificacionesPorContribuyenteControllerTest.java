@@ -17,6 +17,7 @@ import pe.gob.sgtm.compartido.Paginacion;
 import pe.gob.sgtm.dominio.Alicuota;
 import pe.gob.sgtm.dominio.Dinero;
 import pe.gob.sgtm.dominio.Observacion;
+import pe.gob.sgtm.sanciones.aplicacion.ConsultasDeSanciones;
 import pe.gob.sgtm.sanciones.dominio.CriterioDePapeleta;
 import pe.gob.sgtm.sanciones.dominio.Familia;
 import pe.gob.sgtm.sanciones.dominio.Papeleta;
@@ -32,7 +33,8 @@ class NotificacionesPorContribuyenteControllerTest {
 
     private final MockMvc mvc =
             MockMvcBuilders.standaloneSetup(
-                            new NotificacionesPorContribuyenteController(repositorio))
+                            new NotificacionesPorContribuyenteController(
+                                    new ConsultasDeSanciones(repositorio, null, null, null)))
                     .setControllerAdvice(new ManejadorDeErrores())
                     .setMessageConverters(
                             new JacksonJsonHttpMessageConverter(

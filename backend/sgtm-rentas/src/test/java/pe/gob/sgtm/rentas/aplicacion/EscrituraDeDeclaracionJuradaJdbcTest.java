@@ -159,7 +159,11 @@ class EscrituraDeDeclaracionJuradaJdbcTest {
 
         mvc =
                 MockMvcBuilders.standaloneSetup(
-                                new DeclaracionJuradaController(declaraciones, actos))
+                                new DeclaracionJuradaController(
+                                        envolver(
+                                                new ConsultasDeRentas(
+                                                        null, null, null, declaraciones)),
+                                        actos))
                         .setControllerAdvice(new ManejadorDeErrores())
                         .setMessageConverters(
                                 new JacksonJsonHttpMessageConverter(

@@ -12,6 +12,8 @@ import pe.gob.sgtm.compartido.Paginacion;
 import pe.gob.sgtm.contribuyentes.DirectorioDeContribuyentes;
 import pe.gob.sgtm.contribuyentes.ResumenDeContribuyente;
 import pe.gob.sgtm.valores.dominio.CriterioDeConsultaDeValores;
+import pe.gob.sgtm.valores.dominio.CriterioDeValor;
+import pe.gob.sgtm.valores.dominio.Valor;
 import pe.gob.sgtm.valores.dominio.ValorEnConsulta;
 import pe.gob.sgtm.valores.dominio.ValorRepository;
 
@@ -77,6 +79,36 @@ public class ConsultaDeValores {
         return pagina.mapear(
                 fila -> new FilaDeValor(fila, resumenes.get(fila.valor().contribuyenteId())));
     }
+
+    /**
+     * Los valores emitidos que pide el criterio, con el nombre de cada contribuyente resuelto.
+     *
+     * <p>Es la busqueda de la pantalla {@code valores_busqueda}, distinta de {@link #buscar}: esta
+     * lista <b>valores</b> y aquella la consulta con su situacion. Vive aqui y no en el controlador
+     * por lo mismo que todo lo demas: {@code valor} tiene RLS, y una consulta fuera de transaccion
+     * corre sin el {@code SET LOCAL} que la politica necesita —contesta {@code 500} con «invalid
+     * input syntax for type bigint: ""», no una lista vacia— (#486).
+     *
+     * <p>La resolucion de los nombres va <b>en la misma transaccion</b> que la pagina: en dos,
+     * entre una y otra cabe un alta de contribuyente, y la grilla saldria con una fila sin nombre
+     * que no lo esta por ningun motivo real.
+     */
+    @Transactional(readOnly = true)
+    public Pagina<ValorEmitido> emitidos(CriterioDeValor criterio, Paginacion paginacion) {
+        Pagina<Valor> pagina = repositorio.buscar(criterio, paginacion);
+        Map<Long, ResumenDeContribuyente> nombres =
+                padron.porIds(
+                        pagina.contenido().stream()
+                                .map(Valor::contribuyenteId)
+                                .collect(java.util.stream.Collectors.toSet()));
+        return pagina.mapear(
+                valor -> new ValorEmitido(valor, nombres.get(valor.contribuyenteId())));
+    }
+
+    /**
+     * Un valor emitido y a quien se le emitio; {@code contribuyente} nulo si el padron no lo dio.
+     */
+    public record ValorEmitido(Valor valor, @Nullable ResumenDeContribuyente contribuyente) {}
 
     /**
      * Una fila de la grilla: el valor con su situacion, y a quien se le emitio.

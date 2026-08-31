@@ -17,6 +17,7 @@ import org.springframework.test.web.servlet.setup.MockMvcBuilders;
 import pe.gob.sgtm.compartido.Pagina;
 import pe.gob.sgtm.compartido.Paginacion;
 import pe.gob.sgtm.dominio.Alicuota;
+import pe.gob.sgtm.sanciones.aplicacion.ConsultasDeSanciones;
 import pe.gob.sgtm.sanciones.dominio.CodigoInfraccion;
 import pe.gob.sgtm.sanciones.dominio.CodigoInfraccionRepository;
 import pe.gob.sgtm.sanciones.dominio.CriterioDeCodigoInfraccion;
@@ -36,7 +37,10 @@ class CodigosCuisControllerTest {
 
     private final MockMvc mvc =
             MockMvcBuilders.standaloneSetup(
-                            new CodigosCuisController(repositorioDeMentira(), RELOJ))
+                            new CodigosCuisController(
+                                    new ConsultasDeSanciones(
+                                            null, repositorioDeMentira(), null, null),
+                                    RELOJ))
                     .setControllerAdvice(new ManejadorDeErrores())
                     .setMessageConverters(
                             new JacksonJsonHttpMessageConverter(

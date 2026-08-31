@@ -10,10 +10,8 @@ import java.time.format.DateTimeParseException;
 import java.util.ArrayList;
 import java.util.Base64;
 import java.util.List;
-import java.util.Map;
 import java.util.Objects;
 import java.util.Optional;
-import java.util.stream.Collectors;
 import org.jspecify.annotations.Nullable;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
@@ -33,6 +31,7 @@ import pe.gob.sgtm.dominio.Ejercicio;
 import pe.gob.sgtm.dominio.ModalidadDeNotificacion;
 import pe.gob.sgtm.dominio.Observacion;
 import pe.gob.sgtm.dominio.ResultadoDeNotificacion;
+import pe.gob.sgtm.valores.aplicacion.ConsultaDeValores;
 import pe.gob.sgtm.valores.aplicacion.IniciarCorridaMasiva;
 import pe.gob.sgtm.valores.aplicacion.PasarACoactiva;
 import pe.gob.sgtm.valores.aplicacion.PlazosParametrizados;
@@ -46,7 +45,6 @@ import pe.gob.sgtm.valores.dominio.TipoDeMovimiento;
 import pe.gob.sgtm.valores.dominio.TipoValor;
 import pe.gob.sgtm.valores.dominio.Valor;
 import pe.gob.sgtm.valores.dominio.ValorMasivo;
-import pe.gob.sgtm.valores.dominio.ValorRepository;
 import pe.gob.sgtm.web.Api;
 import pe.gob.sgtm.web.CodigoDeError;
 import pe.gob.sgtm.web.FiltroDeLaConsulta;
@@ -74,7 +72,7 @@ public class ValoresController {
     private static final String ORDEN_POR_OMISION = "fechaEmision";
 
     private final RegistrarValor registrar;
-    private final ValorRepository repositorio;
+    private final ConsultaDeValores consulta;
     private final DirectorioDeContribuyentes contribuyentes;
     private final IniciarCorridaMasiva iniciarMasivo;
     private final RegistrarNotificacion notificar;
@@ -82,13 +80,13 @@ public class ValoresController {
 
     public ValoresController(
             RegistrarValor registrar,
-            ValorRepository repositorio,
+            ConsultaDeValores consulta,
             DirectorioDeContribuyentes contribuyentes,
             IniciarCorridaMasiva iniciarMasivo,
             RegistrarNotificacion notificar,
             PasarACoactiva pasarACoactiva) {
         this.registrar = registrar;
-        this.repositorio = repositorio;
+        this.consulta = consulta;
         this.contribuyentes = contribuyentes;
         this.iniciarMasivo = iniciarMasivo;
         this.notificar = notificar;
@@ -293,16 +291,11 @@ public class ValoresController {
                         tipoOpcionalDe(tipo),
                         ejercicioDe(ejercicio));
 
-        Pagina<Valor> pagina =
-                repositorio.buscar(criterio, paginacion.aPaginacion(ORDEN_POR_OMISION));
-        Map<Long, ResumenDeContribuyente> nombres =
-                contribuyentes.porIds(
-                        pagina.contenido().stream()
-                                .map(Valor::contribuyenteId)
-                                .collect(Collectors.toSet()));
-
+        // La pagina y los nombres, en UNA transaccion: `valor` tiene RLS, y una consulta desde
+        // el controlador corre sin el `SET LOCAL` que la politica necesita (#486).
         return RespuestaPaginada.de(
-                pagina, v -> ValorResource.de(v, nombres.get(v.contribuyenteId())));
+                consulta.emitidos(criterio, paginacion.aPaginacion(ORDEN_POR_OMISION)),
+                fila -> ValorResource.de(fila.valor(), fila.contribuyente()));
     }
 
     // ------------------------------------------------------------------

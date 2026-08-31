@@ -15,8 +15,8 @@ import org.springframework.web.bind.annotation.ResponseStatus;
 import org.springframework.web.bind.annotation.RestController;
 import pe.gob.sgtm.autorizacion.Privilegio;
 import pe.gob.sgtm.autorizacion.RequiereAcceso;
+import pe.gob.sgtm.cuentacorriente.aplicacion.ConsultasDelLibro;
 import pe.gob.sgtm.cuentacorriente.aplicacion.RegistrarMovimientoDeDeuda;
-import pe.gob.sgtm.cuentacorriente.dominio.AsientoRepository;
 import pe.gob.sgtm.cuentacorriente.dominio.ClaveDeSaldo;
 import pe.gob.sgtm.cuentacorriente.dominio.Fase;
 import pe.gob.sgtm.cuentacorriente.dominio.MovimientoDeDeuda;
@@ -68,13 +68,13 @@ import pe.gob.sgtm.web.ProblemaDeNegocio;
 public class MovimientosDeDeudaController {
 
     private final RegistrarMovimientoDeDeuda movimientos;
-    private final AsientoRepository asientos;
+    private final ConsultasDelLibro consulta;
     private final Clock reloj;
 
     public MovimientosDeDeudaController(
-            RegistrarMovimientoDeDeuda movimientos, AsientoRepository asientos, Clock reloj) {
+            RegistrarMovimientoDeDeuda movimientos, ConsultasDelLibro consulta, Clock reloj) {
         this.movimientos = movimientos;
-        this.asientos = asientos;
+        this.consulta = consulta;
         this.reloj = reloj;
     }
 
@@ -168,7 +168,7 @@ public class MovimientosDeDeudaController {
     }
 
     private long contribuyenteDe(String codigo) {
-        return asientos.contribuyentePorCodigo(codigo.strip().toUpperCase(Locale.ROOT))
+        return consulta.contribuyentePorCodigo(codigo.strip().toUpperCase(Locale.ROOT))
                 .orElseThrow(
                         () ->
                                 new ProblemaDeNegocio(

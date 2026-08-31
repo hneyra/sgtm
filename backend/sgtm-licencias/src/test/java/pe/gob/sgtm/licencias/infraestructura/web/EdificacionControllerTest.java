@@ -149,7 +149,6 @@ class EdificacionControllerTest {
                                         documentos,
                                         (RegistroDeAuditoria registro) -> {},
                                         RELOJ),
-                                movimientos,
                                 RELOJ))
                 .setControllerAdvice(new ManejadorDeErrores())
                 .setMessageConverters(

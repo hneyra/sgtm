@@ -16,6 +16,7 @@ import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.test.web.servlet.setup.MockMvcBuilders;
 import pe.gob.sgtm.compartido.Pagina;
 import pe.gob.sgtm.compartido.Paginacion;
+import pe.gob.sgtm.sanciones.aplicacion.ConsultasDeSanciones;
 import pe.gob.sgtm.sanciones.dominio.CriterioDeNotificacion;
 import pe.gob.sgtm.sanciones.dominio.NotificacionAdministrativa;
 import pe.gob.sgtm.sanciones.dominio.NotificacionAdministrativaRepository;
@@ -33,7 +34,8 @@ class NotificacionesVencidasControllerTest {
 
     private final MockMvc mvc =
             MockMvcBuilders.standaloneSetup(
-                            new NotificacionesVencidasController(repositorio, RELOJ))
+                            new NotificacionesVencidasController(
+                                    new ConsultasDeSanciones(null, null, null, repositorio), RELOJ))
                     .setControllerAdvice(new ManejadorDeErrores())
                     .setMessageConverters(
                             new JacksonJsonHttpMessageConverter(
