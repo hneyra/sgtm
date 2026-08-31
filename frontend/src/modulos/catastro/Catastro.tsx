@@ -13,6 +13,7 @@ import {
   type Depreciacion,
   type ValorUnitario,
   contarFichas,
+  fichaDelContribuyente,
   listarAranceles,
   listarDepreciacion,
   listarSectores,
@@ -30,16 +31,13 @@ import {
   BASE,
   CAPAS,
   CODIGO_YA_USADO,
-  COLS_REPORTE,
   DEFECTOS_DE_FICHA_NUEVA,
-  FILAS_REPORTE,
   GRUPOS,
   LOTE_SELECCIONADO,
   MODALIDADES,
   MODOS,
   OPCIONES,
   PESTANIAS_DE_VALORES,
-  REPORTE_META,
   SECTORES_DEL_MAPA,
   TRAMOS,
   tablasDeValores,
@@ -437,6 +435,18 @@ export default function Catastro({ dest, onDest }: PantallaProps) {
      hay endpoint de indicadores de catastro, y componer una cifra aquí a
      partir de varias sería inventarla. */
   const enPanel = dest === 'panel';
+
+  /* ── El documento: la ficha del contribuyente ────────────────
+     `GET /catastro/contribuyentes/{codigo}/ficha.pdf` SIN `formato` devuelve
+     JSON, que es con lo que se dibuja la hoja. Con `?formato=PDF|XLS|RTF`
+     devolveria el documento, y hoy contesta 500. */
+  const [codigoDeLaFicha, setCodigoDeLaFicha] = useState('');
+  const codigoReposado = useRebote(codigoDeLaFicha.trim());
+  const ficha = useRecurso(
+    (s2) => fichaDelContribuyente(codigoReposado, undefined, s2),
+    [codigoReposado],
+    dest === 'reporte' && codigoReposado !== '',
+  );
   const censoActivos = useRecurso((s2) => listarPredios({ estado: 'ACTIVO' }, { tamano: 1 }, s2), [], enPanel);
   const censoSinFicha = useRecurso((s2) => listarPredios({ fichado: false }, { tamano: 1 }, s2), [], enPanel);
   const censoDeBaja = useRecurso((s2) => listarPredios({ estado: 'DADO_DE_BAJA' }, { tamano: 1 }, s2), [], enPanel);
@@ -444,6 +454,28 @@ export default function Catastro({ dest, onDest }: PantallaProps) {
      tiene ficha y no declara. Si el perfil no lo tiene, sale «—», no un cero. */
   const censoSinConciliar = useRecurso((s2) => contarFichas({ conciliadaConRentas: 'No' }, s2), [], enPanel);
   const sectoresDelPanel = useRecurso((s2) => listarSectores(s2), [], enPanel);
+
+  /* La cabecera de la hoja: lo que el recurso publica y nada más. La
+     calificación del contribuyente no viene, así que sale «—». */
+  const metaDeLaFicha: [string, string][] = [
+    ['Contribuyente', ficha.datos?.nombre ?? SIN_DATO],
+    ['Código', ficha.datos?.codigo ?? SIN_DATO],
+    ['Documento', ficha.datos?.documento ?? SIN_DATO],
+    ['Domicilio fiscal', ficha.datos?.domicilioFiscal ?? SIN_DATO],
+    ['Unidades', ficha.datos ? String(ficha.datos.unidades.length) : SIN_DATO],
+    ['A la fecha', ficha.datos?.aLaFecha ?? SIN_DATO],
+  ];
+
+  /* Las unidades. **Ni una columna de deuda**: la hoja del artboard la lleva y
+     `FichaDelContribuyenteResource` no la publica —la deuda es de cuenta
+     corriente—, así que poner ahí una cifra sería componerla en la pantalla. */
+  const filasDeLaFicha: string[][] = (ficha.datos?.unidades ?? []).map((u) => [
+    u.codRefCatastral,
+    u.direccion,
+    u.uso,
+    `${u.condicion} · ${u.porcentaje}`,
+    u.areaTerreno,
+  ]);
 
   /* Las tres tablas de valuación del ejercicio. Devuelven una lista suelta, no
      el sobre paginado, y contestan 404 cuando el ejercicio no tiene conjunto de
@@ -2568,11 +2600,19 @@ export default function Catastro({ dest, onDest }: PantallaProps) {
         {/* ══════════ REPORTE — FICHA DEL CONTRIBUYENTE ══════════ */}
         {dest === 'reporte' && (
           <div style={{ display: 'flex', flexDirection: 'column', gap: 16, alignItems: 'center' }}>
-            <div data-noprint="1" style={{ width: '100%', maxWidth: 820, display: 'flex', gap: 8, justifyContent: 'flex-end' }}>
+            <div data-noprint="1" style={{ width: '100%', maxWidth: 820, display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
+              <input
+                value={codigoDeLaFicha}
+                onChange={(e) => setCodigoDeLaFicha(e.target.value)}
+                placeholder="Código del contribuyente"
+                aria-label="Código del contribuyente"
+                style={{ flex: 1, minWidth: 200, border: '1px solid var(--line-2)', borderRadius: 6, padding: '9px 11px', background: 'var(--bg-card)', fontFamily: 'var(--font-mono)', fontSize: 13 }}
+              />
               <button
-                onClick={() => toast('Descargaría la ficha FC-2026-004182 en PDF.')}
+                onClick={() => toast('La descarga en PDF, XLS y RTF contesta 500 hoy: el generador consulta el régimen fuera de transacción.')}
                 className="hov-linea"
-                style={{ border: '1px solid var(--line-2)', borderRadius: 6, padding: '9px 16px', background: 'var(--bg-card)', fontSize: 13, cursor: 'pointer' }}
+                style={{ border: '1px solid var(--line-2)', borderRadius: 6, padding: '9px 16px', background: 'var(--bg-card)', fontSize: 13, cursor: 'not-allowed', opacity: 0.55 }}
+                title="El backend contesta 500 en los tres formatos"
               >
                 Descargar PDF
               </button>
@@ -2591,8 +2631,8 @@ export default function Catastro({ dest, onDest }: PantallaProps) {
                   <p style={{ margin: '3px 0 0', fontSize: 11, color: 'var(--ink-3)' }}>Gerencia de Administración Tributaria — Unidad de Rentas</p>
                 </div>
                 <div style={{ textAlign: 'right', fontFamily: 'var(--font-mono)', fontSize: 11, color: 'var(--ink-3)' }}>
-                  <p style={{ margin: 0 }}>FC-2026-004182</p>
-                  <p style={{ margin: '3px 0 0' }}>31/08/2026</p>
+                  <p style={{ margin: 0 }}>{ficha.datos ? ficha.datos.codigo : SIN_DATO}</p>
+                  <p style={{ margin: '3px 0 0' }}>{ficha.datos ? ficha.datos.aLaFecha : SIN_DATO}</p>
                 </div>
               </div>
               <div style={{ borderTop: '1px solid var(--ink)', marginTop: 2, paddingTop: 26, textAlign: 'center' }}>
@@ -2610,7 +2650,7 @@ export default function Catastro({ dest, onDest }: PantallaProps) {
                   borderBottom: '1px solid var(--line)',
                 }}
               >
-                {REPORTE_META.map((mt) => (
+                {metaDeLaFicha.map((mt) => (
                   <div key={mt[0]}>
                     <p style={{ margin: '0 0 3px', fontSize: 10, textTransform: 'uppercase', letterSpacing: '.1em', color: 'var(--ink-3)' }}>{mt[0]}</p>
                     <p style={{ margin: 0, fontSize: 13, color: 'var(--ink)' }}>{mt[1].replace('{ejercicio}', pref.ejercicio)}</p>
@@ -2620,7 +2660,7 @@ export default function Catastro({ dest, onDest }: PantallaProps) {
               <table style={{ width: '100%', borderCollapse: 'collapse' }}>
                 <thead>
                   <tr>
-                    {COLS_REPORTE.map((c, i) => (
+                    {COLUMNAS_DE_LA_FICHA.map((c, i) => (
                       <th key={i} style={c[1] ? THN : TH}>
                         {c[0]}
                       </th>
@@ -2628,10 +2668,10 @@ export default function Catastro({ dest, onDest }: PantallaProps) {
                   </tr>
                 </thead>
                 <tbody>
-                  {FILAS_REPORTE.map((r, i) => (
+                  {filasDeLaFicha.map((r, i) => (
                     <tr key={i} style={{ borderTop: '1px solid var(--line)' }}>
                       {r.map((cl, j) => (
-                        <td key={j} style={j === 0 ? TD1 : COLS_REPORTE[j] && COLS_REPORTE[j][1] ? TDN : TD}>
+                        <td key={j} style={j === 0 ? TD1 : COLUMNAS_DE_LA_FICHA[j] && COLUMNAS_DE_LA_FICHA[j]![1] ? TDN : TD}>
                           {cl}
                         </td>
                       ))}
@@ -2877,3 +2917,12 @@ function filasDeValores(
     d.documentoFuente,
   ]);
 }
+
+/** Las columnas de la hoja, en la forma que `FichaDelContribuyenteResource` da. */
+const COLUMNAS_DE_LA_FICHA: readonly ColumnaDeTabla[] = [
+  ['Cod. ref. catastral', 0],
+  ['Direccion', 0],
+  ['Uso', 0],
+  ['Condicion', 0],
+  ['Area de terreno', 1],
+];

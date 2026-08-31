@@ -257,3 +257,41 @@ export function contarFichas(
 ): Promise<RespuestaPaginada<unknown>> {
   return solicitar('/catastro/fichas/conciliacion', { parametros: { ...parametros, tamano: 1 }, senal });
 }
+
+
+/**
+ * La ficha del contribuyente. Es lo que devuelve
+ * `GET /catastro/contribuyentes/{codigo}/ficha.pdf` **sin** `formato`.
+ *
+ * Que la ruta acabe en `.pdf` y conteste JSON es deliberado del backend: es el
+ * mismo recurso, y `?formato=PDF|XLS|RTF` devuelve el documento. Ese camino
+ * contesta 500 hoy —el generador consulta el regimen fuera de transaccion—, asi
+ * que la pantalla dibuja la hoja con este JSON y lo dice.
+ */
+export type FichaDelContribuyente = {
+  aLaFecha: string;
+  codigo: string;
+  nombre: string;
+  documento: string;
+  domicilioFiscal: string | null;
+  unidades: {
+    codRefCatastral: string;
+    direccion: string;
+    condicion: string;
+    porcentaje: string;
+    areaTerreno: string;
+    uso: string;
+    version: number;
+  }[];
+};
+
+export function fichaDelContribuyente(
+  codigo: string,
+  fecha?: string,
+  senal?: AbortSignal,
+): Promise<FichaDelContribuyente> {
+  return solicitar(`/catastro/contribuyentes/${encodeURIComponent(codigo)}/ficha.pdf`, {
+    parametros: { fecha },
+    senal,
+  });
+}
