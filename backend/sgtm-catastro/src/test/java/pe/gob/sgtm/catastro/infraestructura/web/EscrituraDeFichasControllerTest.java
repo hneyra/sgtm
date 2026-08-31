@@ -160,7 +160,9 @@ class EscrituraDeFichasControllerTest {
                                     reloj),
                             new ActualizacionController(actualizarCatastro, reloj),
                             new PredioController(
-                                    actualizarCatastro, envolver(new ConsultaDePredios(predios))))
+                                    actualizarCatastro,
+                                    envolver(new ConsultaDePredios(predios)),
+                                    inscribirFicha))
                     .setControllerAdvice(new ManejadorDeErrores())
                     .setMessageConverters(
                             new JacksonJsonHttpMessageConverter(

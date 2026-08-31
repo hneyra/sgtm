@@ -2,19 +2,24 @@ package pe.gob.sgtm.catastro.infraestructura.web;
 
 import java.util.Locale;
 import org.jspecify.annotations.Nullable;
+import org.springframework.dao.DuplicateKeyException;
+import org.springframework.http.HttpStatus;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
+import org.springframework.web.bind.annotation.ResponseStatus;
 import org.springframework.web.bind.annotation.RestController;
 import pe.gob.sgtm.autorizacion.Privilegio;
 import pe.gob.sgtm.autorizacion.RequiereAcceso;
 import pe.gob.sgtm.catastro.aplicacion.ActualizarCatastro;
 import pe.gob.sgtm.catastro.aplicacion.ConsultaDePredios;
+import pe.gob.sgtm.catastro.aplicacion.InscribirFicha;
 import pe.gob.sgtm.catastro.dominio.EstadoPredio;
 import pe.gob.sgtm.catastro.dominio.FiltroDePredios;
+import pe.gob.sgtm.catastro.dominio.TipoPredio;
 import pe.gob.sgtm.dominio.Observacion;
 import pe.gob.sgtm.web.Api;
 import pe.gob.sgtm.web.CodigoDeError;
@@ -23,8 +28,20 @@ import pe.gob.sgtm.web.ProblemaDeNegocio;
 import pe.gob.sgtm.web.RespuestaPaginada;
 
 /**
- * El predio como recurso propio: {@code POST /api/v1/catastro/predios/{predioId}/baja} y {@code
- * POST /api/v1/catastro/predios/{predioId}/reactivacion}.
+ * El predio como recurso propio: {@code GET/POST /api/v1/catastro/predios}, {@code POST
+ * /api/v1/catastro/predios/{predioId}/baja} y {@code POST
+ * /api/v1/catastro/predios/{predioId}/reactivacion}.
+ *
+ * <h2>El alta, que es el orden natural de ventanilla</h2>
+ *
+ * <p>Hasta #489 un predio solo podia nacer como <b>efecto secundario</b> de inscribir su ficha, o
+ * por la carga cartografica del perfil {@code batch}. El orden de ventanilla es el contrario:
+ * primero se identifica el predio —su codigo de referencia catastral, su ubicacion, su tipo— y
+ * despues se le levanta la ficha; y hasta aqui habia que inventarle una ficha para que existiera.
+ *
+ * <p>El alta <b>no resuelve nada aqui dentro</b>: el codigo se valida sin tocar la base y sector,
+ * manzana y via los resuelve {@link InscribirFicha#inscribirPredio} dentro de su transaccion, que
+ * es donde se emite el {@code SET LOCAL} que RLS exige (#486).
  *
  * <h2>Por que la baja tiene ruta y no es un campo de la actualizacion</h2>
  *
@@ -62,10 +79,13 @@ public class PredioController {
 
     private final ActualizarCatastro catastro;
     private final ConsultaDePredios consulta;
+    private final InscribirFicha inscribir;
 
-    public PredioController(ActualizarCatastro catastro, ConsultaDePredios consulta) {
+    public PredioController(
+            ActualizarCatastro catastro, ConsultaDePredios consulta, InscribirFicha inscribir) {
         this.catastro = catastro;
         this.consulta = consulta;
+        this.inscribir = inscribir;
     }
 
     /**
@@ -91,6 +111,60 @@ public class PredioController {
         return RespuestaPaginada.de(
                 consulta.buscar(filtro, paginacion.aPaginacion(ORDEN_POR_OMISION)),
                 PredioDelCatastroResource::de);
+    }
+
+    /**
+     * Da de alta un predio, <b>sin ficha</b> (RF-001).
+     *
+     * <p>{@code codRefCatastral} y {@code direccion} son obligatorios; {@code tipoPredio} sin
+     * declarar es {@code URBANO}, que es el caso de la inmensa mayoria del padron. Via, sector y
+     * manzana entran por <b>codigo</b> —lo que el tecnico tiene delante—, y una referencia que no
+     * existe es 404 nombrandola, no un predio guardado a medias.
+     *
+     * <p>Un codigo ya inscrito sale como {@code 409}. La unicidad la sostiene {@code
+     * predio_codigo_uq} —es la unica que puede—, pero su mensaje nombra la tabla y la restriccion,
+     * asi que se traduce: lo que el cliente recibe dice que el codigo esta tomado y nada mas.
+     *
+     * <p>Exige {@code REGISTRO}. La anotacion de la clase pide {@code MODIFICACION} y el {@code
+     * GET} declara la suya, {@code LECTURA}: cada verbo dice lo que exige, que es lo que #431 dejo
+     * claro que no se puede dar por heredado.
+     */
+    @PostMapping
+    @ResponseStatus(HttpStatus.CREATED)
+    @RequiereAcceso(acceso = "actualizacion_catastro", privilegio = Privilegio.REGISTRO)
+    public PredioResource inscribir(@RequestBody PeticionDeInscripcionDePredio peticion) {
+        Observacion observacion = DeclaracionDeFicha.observacionDe(peticion.observacion());
+        InscribirFicha.DatosDelPredio datos =
+                new InscribirFicha.DatosDelPredio(
+                        DeclaracionDeFicha.referenciaDe(
+                                DeclaracionDeFicha.exigir(
+                                        peticion.codRefCatastral(), "codRefCatastral")),
+                        tipoDe(peticion.tipoPredio()),
+                        DeclaracionDeFicha.exigir(peticion.direccion(), "direccion"),
+                        DeclaracionDeFicha.vacioANulo(peticion.codigoDeVia()),
+                        DeclaracionDeFicha.vacioANulo(peticion.numeroMunicipal()),
+                        DeclaracionDeFicha.vacioANulo(peticion.codigoDeSector()),
+                        DeclaracionDeFicha.vacioANulo(peticion.codigoDeManzana()),
+                        DeclaracionDeFicha.vacioANulo(peticion.lote()),
+                        DeclaracionDeFicha.vacioANulo(peticion.ubigeo()));
+        try {
+            return PredioResource.de(inscribir.inscribirPredio(datos, observacion));
+        } catch (InscribirFicha.PredioYaInscrito repetido) {
+            throw new ProblemaDeNegocio(
+                    CodigoDeError.CONFLICTO, DeclaracionDeFicha.mensajeDe(repetido));
+        } catch (InscribirFicha.ReferenciaInexistente noExiste) {
+            throw new ProblemaDeNegocio(
+                    CodigoDeError.NO_ENCONTRADO, DeclaracionDeFicha.mensajeDe(noExiste));
+        } catch (IllegalArgumentException invalido) {
+            throw new ProblemaDeNegocio(
+                    CodigoDeError.VALIDACION, DeclaracionDeFicha.mensajeDe(invalido));
+        } catch (DuplicateKeyException choque) {
+            // Ni tabla, ni restriccion, ni SQL: solo que el codigo esta tomado.
+            throw new ProblemaDeNegocio(
+                    CodigoDeError.CONFLICTO,
+                    "Ya hay un predio con ese codigo de referencia catastral en esta"
+                            + " municipalidad");
+        }
     }
 
     /** Retira el predio del padron. No lo borra. */
@@ -135,7 +209,44 @@ public class PredioController {
      */
     public record PeticionDeCambioDeEstado(@Nullable String observacion) {}
 
+    /**
+     * El cuerpo de un alta de predio. <b>Lista blanca</b>: lo que no esta aqui no entra, aunque
+     * llegue en el JSON.
+     *
+     * <p>Es {@link InscribirFicha.DatosDelPredio} en la forma que llega por HTTP, y con los
+     * <b>mismos nombres</b> que el bloque del predio de {@code PeticionDeAlta}: la pantalla que
+     * ficha y la que inscribe el predio mandan el mismo campo con el mismo nombre, o una de las dos
+     * acabaria mandando el que la otra ignora.
+     *
+     * <p>Ni {@code estado} ni {@code predioId}: el predio nace activo, y su identificador lo pone
+     * la base. Ni un dato de ficha: para eso esta {@code POST /catastro/fichas/…}.
+     */
+    public record PeticionDeInscripcionDePredio(
+            @Nullable String observacion,
+            @Nullable String codRefCatastral,
+            @Nullable String tipoPredio,
+            @Nullable String direccion,
+            @Nullable String codigoDeVia,
+            @Nullable String numeroMunicipal,
+            @Nullable String codigoDeSector,
+            @Nullable String codigoDeManzana,
+            @Nullable String lote,
+            @Nullable String ubigeo) {}
+
     // ------------------------------------------------------------------
+
+    /** Sin tipo declarado, urbano: es el caso de la inmensa mayoria del padron. */
+    private static TipoPredio tipoDe(@Nullable String texto) {
+        if (texto == null || texto.isBlank()) {
+            return TipoPredio.URBANO;
+        }
+        try {
+            return TipoPredio.valueOf(texto.strip().toUpperCase(Locale.ROOT));
+        } catch (IllegalArgumentException desconocido) {
+            throw new ProblemaDeNegocio(
+                    CodigoDeError.VALIDACION, "Tipo de predio desconocido: '" + texto + "'");
+        }
+    }
 
     private static @Nullable EstadoPredio estadoDe(@Nullable String texto) {
         if (texto == null || texto.isBlank()) {

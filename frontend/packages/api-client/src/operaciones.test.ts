@@ -31,7 +31,7 @@ const CAMPOS_DE_DINERO =
   'monto|importe|saldo|deuda|total|insoluto|interes|autovaluo|arbitrio|recargo|vuelto|recibido';
 
 describe('las operaciones generadas son las del contrato', () => {
-  it('son las 134 del manual, mas cincuenta y seis operaciones sin pantalla propia', () => {
+  it('son las 134 del manual, mas cincuenta y siete operaciones sin pantalla propia', () => {
     // Operaciones que no son opciones del catalogo y no tienen pantalla propia
     // de la que salir (generar-openapi.mjs, OPERACIONES_ADICIONALES):
     //   - `permisos_de_grupo` (#70): el GET que carga la matriz que `permisos`
@@ -177,8 +177,14 @@ describe('las operaciones generadas son las del contrato', () => {
     //     existian desde #11 y #15 y ningun controlador los publicaba: una
     //     municipalidad recien implantada no podia registrar a su primer
     //     contribuyente sino por el proceso batch de importacion.
+    //   - `inscribir_predio` (#489): el alta del predio SIN ficha, que es el orden
+    //     natural de ventanilla —primero se identifica el predio, despues se le
+    //     levanta la ficha—. Hasta aqui un predio solo nacia como efecto
+    //     secundario de `POST /catastro/fichas/…` o de la carga cartografica del
+    //     perfil `batch`, asi que registrar un lote recien numerado obligaba a
+    //     inventarle una ficha.
     // Las 134 opciones del manual siguen siendo 134.
-    expect(Object.keys(OPERACIONES)).toHaveLength(190);
+    expect(Object.keys(OPERACIONES)).toHaveLength(191);
   });
 
   it('cada una declara verbo y camino relativo a /api/v1', () => {

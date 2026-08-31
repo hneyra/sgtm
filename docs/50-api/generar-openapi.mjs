@@ -1188,6 +1188,32 @@ const OPERACIONES_ADICIONALES = {
         ' reemplaza.',
     },
     {
+      operationId: 'inscribir_predio',
+      metodo: 'post',
+      ruta: '/api/v1/catastro/predios',
+      titulo: 'Alta de predio, sin ficha',
+      descripcion: bloque(`
+        Da de alta un predio **sin levantarle ficha** (#489, RF-001), que es el orden natural de
+        ventanilla: primero se identifica el predio —su código de referencia catastral, su
+        ubicación, su tipo— y después se le levanta la ficha.
+
+        Hasta aquí un predio sólo podía nacer como **efecto secundario** de
+        \`POST /catastro/fichas/…\` —que lo crea si no existe— o por la carga cartográfica del
+        perfil \`batch\`, así que registrar un lote recién numerado obligaba a inventarle una
+        ficha. El predio entra con \`fichado=false\` en \`GET /catastro/predios\`, que es
+        justamente la cola de saneamiento.
+
+        Vía, sector y manzana entran por **código** —lo mismo que recibe la corrección del
+        predio—, y se resuelven **dentro de la transacción**: una referencia que no existe es 404
+        nombrándola, no un predio guardado a medias. Un código ya inscrito es **409**; la unicidad
+        la sostiene \`predio_codigo_uq\`.
+
+        Exige \`REGISTRO\` sobre \`actualizacion_catastro\`, y la observación del usuario es
+        obligatoria (RNF-052). Ni un importe y ni un titular: el valor sale del cuadro de valores
+        unitarios (D-02a) y la titularidad es otro acto.
+      `),
+    },
+    {
       operationId: 'listado_de_predios',
       metodo: 'get',
       ruta: '/api/v1/catastro/predios',
