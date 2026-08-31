@@ -75,20 +75,12 @@ const CENSO: readonly Capacidades[] = [
         'D.N.I.',
         'R.U.C.',
       ],
-    secciones: [
-        'Identificación',
-        'Domicilio fiscal',
-        'Edificación',
-        'Zona - Sector - Etapa',
-        'Documentos del contribuyenteNuevo · Agregar · Editar doc. · Quitar',
-        'Contactos registradosNuevo · Agregar · Editar · Quitar',
-        'Gestores del contribuyenteNuevo · Agregar · Editar · Quitar',
-        'TeléfonosNuevo · Agregar · Editar · Quitar',
-        'E-MailNuevo · Agregar · Editar · Quitar',
-        'Observaciones del registroNueva obs. · Agregar',
-        'Foto álbum personalCapturar · Cargar · Guardar · Quitar',
-        'Unidades afectas del contribuyenteSolo lectura',
-      ],
+    /* **Ninguna: el padrón es la lista** (#503). Desde que la lista y el
+       expediente no se dibujan a la vez, esta ruta —sin registro— enseña las
+       filas y su buscador, y las doce secciones esperan a que se abra un
+       contribuyente. El expediente tiene su propio censo en
+       `expediente-del-contribuyente.test.tsx`. */
+    secciones: [],
     columnas: [
         'Est.',
         'Código',
@@ -98,6 +90,10 @@ const CENSO: readonly Capacidades[] = [
         'Dirección',
         'Predios',
         'Deuda S/',
+        // La columna propia de `accionDeFila` (#503): la tabla del catálogo no
+        // declara ninguna para esto, y meter el enlace dentro de una de las suyas
+        // taparía el dato que esa columna tiene que decir.
+        'Abrir el expediente',
       ],
     // Desde #442 declara el vocabulario uniforme: «Modificar» es un modo y
     // «Guardar» no podria guardar sobre un `GET`. **«Nuevo» vuelve con #503 F7**,

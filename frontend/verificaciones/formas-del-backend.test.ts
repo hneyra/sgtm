@@ -153,7 +153,45 @@ const COMPARABLES = EN_LA_FORMA_DEL_BACKEND.filter((entrada) => {
   return { metodo, ruta: declarada.slice(metodo.length + 1), forma: FORMAS[declarada] };
 });
 
+/**
+ * Lo que el proxy publica **con la forma del backend** y el backend todavia no
+ * describe: no hay `Resource` del que sacar la forma, asi que `COMPARABLES` las
+ * descarta y **nadie las comprueba**.
+ *
+ * Sin esta lista ese descarte es mudo, que es el peor de los dos defectos que
+ * esta prueba existe para evitar: una ruta que el proxy sirve y ninguna forma
+ * respalda se ve exactamente igual que una comprobada, y al llegar el backend
+ * la pantalla se encuentra con otro recurso. Nombrarlas cuesta una linea y se
+ * ve en el diff; la lista se vacia sola cuando su issue de backend cierra.
+ */
+const TODAVIA_SIN_RESOURCE: readonly string[] = [
+  // El plano catastral (#500, ADR-0022). El contrato la declara y ningun
+  // controlador la sirve todavia, como `GET /portal/deuda`: la forma que el
+  // proxy publica aqui es la que el `Resource` tendra que tener, y hasta
+  // entonces lo unico que la sostiene es haberla escrito mirando el ADR.
+  'GET /catastro/predios/plano',
+  // Y esta la encontro esta misma guarda el dia que se escribio, sin buscarla:
+  // el listado de respaldos es un `POST` en el contrato y en el backend
+  // (`SesionController`, la lectura que viaja por POST porque lleva filtros en
+  // el cuerpo). `EN_LA_FORMA_DEL_BACKEND` lo declara con LOS DOS verbos —una vez
+  // por estar en `PAGINADOS` y otra por `PAGINADO_QUE_VIAJA_POR_POST`—, asi que
+  // afirma que el proxy publica un `GET` que ningun controlador sirve. Es
+  // inofensivo —nadie puede encender lo que el contrato no declara— y estaba
+  // mudo, que es justo lo que esta lista existe para que deje de estar.
+  'GET /seguridad/respaldos',
+];
+
 describe('el proxy publica la forma que el backend publica (#400)', () => {
+  it('las que el backend todavia no describe estan nombradas', () => {
+    const sinDescribir = EN_LA_FORMA_DEL_BACKEND.filter(
+      (entrada) =>
+        !Object.keys(FORMAS).some(
+          (operacion) => operacion.replace(/\{\w+\}/g, '{}') === entrada.replace(/\{\w+\}/g, '{}'),
+        ),
+    );
+    expect(sinDescribir.sort()).toEqual([...TODAVIA_SIN_RESOURCE].sort());
+  });
+
   it('hay formas que comparar', () => {
     // Sin esto, todo lo de abajo pasaria en verde con el archivo vacio.
     expect(Object.keys(FORMAS).length).toBeGreaterThan(150);

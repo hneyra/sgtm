@@ -17,6 +17,7 @@ import pe.gob.sgtm.dominio.Dinero;
 import pe.gob.sgtm.dominio.Ejercicio;
 import pe.gob.sgtm.dominio.Observacion;
 import pe.gob.sgtm.parametros.ParametrosSellados;
+import pe.gob.sgtm.rentas.dominio.CorridaDeEmision;
 import pe.gob.sgtm.rentas.dominio.EstadoDeDeterminacion;
 import pe.gob.sgtm.rentas.dominio.predial.DetalleDeterminacionPredio;
 import pe.gob.sgtm.rentas.dominio.predial.DeterminacionPredialCalculada;
@@ -69,6 +70,7 @@ public class DeterminarPredialMasivo {
     private final DeterminarPredial individual;
     private final DirectorioDeContribuyentes directorio;
     private final LectorDeCaracteristicas caracteristicas;
+    private final RegistrarCorridaDeEmision rastro;
     private final Clock reloj;
 
     public DeterminarPredialMasivo(
@@ -76,11 +78,13 @@ public class DeterminarPredialMasivo {
             DeterminarPredial individual,
             DirectorioDeContribuyentes directorio,
             LectorDeCaracteristicas caracteristicas,
+            RegistrarCorridaDeEmision rastro,
             Clock reloj) {
         this.padron = padron;
         this.individual = individual;
         this.directorio = directorio;
         this.caracteristicas = caracteristicas;
+        this.rastro = rastro;
         this.reloj = reloj;
     }
 
@@ -179,15 +183,49 @@ public class DeterminarPredialMasivo {
             }
         }
 
-        return new Corrida(
-                peticion.ejercicio(),
-                peticion.alcance(),
-                peticion.simulacion(),
-                conjunto,
-                determinadas.size(),
-                emitido,
-                List.copyOf(observados),
-                hoy);
+        Corrida corrida =
+                new Corrida(
+                        peticion.ejercicio(),
+                        peticion.alcance(),
+                        peticion.simulacion(),
+                        conjunto,
+                        determinadas.size(),
+                        emitido,
+                        List.copyOf(observados),
+                        hoy);
+
+        /* **Y deja rastro** (#523). Va al final, con el bucle ya terminado y sus
+        determinaciones confirmadas cada una en su transaccion: si escribir el
+        resumen falla, lo que se pierde es el resumen, no la emision. Antes de
+        esto la corrida moria con la respuesta, y con ella la lista de
+        observados —que es lo unico que NO se puede recomponer leyendo el
+        padron: un observado es, por definicion, el que no tiene
+        determinacion—. */
+        CorridaDeEmision guardada =
+                rastro.registrar(
+                        new CorridaDeEmision(
+                                null,
+                                corrida.ejercicio(),
+                                corrida.alcance(),
+                                peticion.sector(),
+                                peticion.modalidad(),
+                                corrida.simulacion(),
+                                corrida.nombreDelConjunto(),
+                                corrida.leidos(),
+                                corrida.determinados(),
+                                corrida.montoEmitido(),
+                                corrida.fechaCalculo(),
+                                corrida.observados().stream()
+                                        .map(
+                                                observado ->
+                                                        new CorridaDeEmision.Observado(
+                                                                observado.codContribuyente(),
+                                                                observado.nombre(),
+                                                                observado.motivo()))
+                                        .toList()),
+                        observacion);
+
+        return corrida.conRastro(guardada.id());
     }
 
     /**
@@ -285,7 +323,36 @@ public class DeterminarPredialMasivo {
             int determinados,
             Dinero montoEmitido,
             List<Observado> observados,
-            LocalDate fechaCalculo) {
+            LocalDate fechaCalculo,
+            @Nullable Long id) {
+
+        /**
+         * La corrida recien compuesta, todavia sin rastro en la base.
+         *
+         * <p>Existe para que anadir el identificador (#523) no obligara a tocar las pruebas que ya
+         * componian una corrida: el {@code id} es lo ultimo que se sabe de ella, y hasta que se
+         * escribe no lo tiene.
+         */
+        public Corrida(
+                Ejercicio ejercicio,
+                String alcance,
+                boolean simulacion,
+                String nombreDelConjunto,
+                int determinados,
+                Dinero montoEmitido,
+                List<Observado> observados,
+                LocalDate fechaCalculo) {
+            this(
+                    ejercicio,
+                    alcance,
+                    simulacion,
+                    nombreDelConjunto,
+                    determinados,
+                    montoEmitido,
+                    observados,
+                    fechaCalculo,
+                    null);
+        }
 
         public Corrida {
             Objects.requireNonNull(ejercicio, "La corrida necesita su ejercicio");
@@ -302,6 +369,26 @@ public class DeterminarPredialMasivo {
         /** Cuantos contribuyentes miro la corrida en total. */
         public int leidos() {
             return determinados + observados.size();
+        }
+
+        /**
+         * La misma corrida con el identificador que le dio la base (#523).
+         *
+         * <p>Viaja en la respuesta porque es con lo que la pantalla pide los observados despues:
+         * sin el, «Ver observados» no tendria a que corrida referirse y habria que volver a correr
+         * el proceso para volver a verlos.
+         */
+        public Corrida conRastro(@Nullable Long id) {
+            return new Corrida(
+                    ejercicio,
+                    alcance,
+                    simulacion,
+                    nombreDelConjunto,
+                    determinados,
+                    montoEmitido,
+                    observados,
+                    fechaCalculo,
+                    id);
         }
     }
 

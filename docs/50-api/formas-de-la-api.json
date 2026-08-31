@@ -2436,6 +2436,39 @@
     "estado": "texto",
     "djRectificaId": "entero"
   },
+  "GET /rentas/predial/corridas/ultima": {
+    "id": "entero",
+    "ejercicio": "texto",
+    "alcance": "texto",
+    "sector": "texto",
+    "simulacion": "booleano",
+    "conjunto": "texto",
+    "fechaCalculo": "texto",
+    "observados": "entero",
+    "etapas": [
+      {
+        "etapa": "texto",
+        "registros": "entero",
+        "monto": "texto",
+        "observados": "entero",
+        "estado": "texto"
+      }
+    ]
+  },
+  "GET /rentas/predial/corridas/{corridaId}/observados": {
+    "contenido": [
+      {
+        "codContribuyente": "texto",
+        "nombre": "texto",
+        "motivo": "texto"
+      }
+    ],
+    "pagina": "entero",
+    "tamano": "entero",
+    "totalElementos": "entero",
+    "totalPaginas": "entero",
+    "hayMas": "booleano"
+  },
   "GET /rentas/predios": {
     "contenido": [
       {
@@ -2448,6 +2481,32 @@
         "areaTerreno": "texto",
         "porcentajePropiedad": "texto",
         "condicion": "texto"
+      }
+    ],
+    "pagina": "entero",
+    "tamano": "entero",
+    "totalElementos": "entero",
+    "totalPaginas": "entero",
+    "hayMas": "booleano"
+  },
+  "GET /rentas/vehiculos": {
+    "contenido": [
+      {
+        "placa": "texto",
+        "clase": "texto",
+        "marca": "texto",
+        "modelo": "texto",
+        "anioFabricacion": "entero",
+        "estado": "texto",
+        "afectoDesde": "entero",
+        "afectoHasta": "entero",
+        "contribuyenteId": "entero",
+        "codigoContribuyente": "texto",
+        "titular": "texto",
+        "deuda": {
+          "importe": "texto",
+          "actualizadoA": "fecha"
+        }
       }
     ],
     "pagina": "entero",

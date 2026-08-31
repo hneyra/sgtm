@@ -589,6 +589,23 @@
   gap: 6px 16px;
 }
 
+/* La vuelta al padron desde un expediente abierto (#503). Va antes del codigo y
+   no compite con el: es navegacion, no identidad, y por eso lleva el peso del
+   texto secundario. El subrayado no es decorativo —un enlace que solo se
+   distinguiera por color no lo distingue quien no ve el color (FRO-02)—. */
+.sgtm-resumen__volver {
+  order: -1;
+  flex: 0 0 100%;
+  font-size: 12px;
+  color: var(--ink-3);
+  text-decoration: underline;
+  text-underline-offset: 2px;
+}
+
+.sgtm-resumen__volver:hover {
+  color: var(--accent-ink);
+}
+
 .sgtm-resumen__codigo {
   font-family: var(--font-mono);
   font-size: 16px;

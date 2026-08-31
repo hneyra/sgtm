@@ -818,6 +818,71 @@ const OPERACIONES_ADICIONALES = {
       ],
       paginacion: true,
     },
+    // El plano catastral (#500, ADR-0022). Cuelga de `/catastro/predios` porque
+    // el recurso es el predio, y sale de `consulta_fichas` porque **es esa misma
+    // busqueda por otro camino**: el mapa es la forma principal de encontrar un
+    // predio que el diseño promueve, «por manzana y lote, que es como la gente
+    // lo piensa». El acceso que exige es por tanto el de esta pantalla y no el
+    // de actualizar el catastro, que dejaria sin mapa a quien solo mira.
+    //
+    // NO PAGINA, y es lo unico que la distingue de toda otra lectura del
+    // sistema: un plano al que le faltan lotes se lee como un plano donde no
+    // hay lotes, asi que cuando el marco no cabe se **niega** con su cifra
+    // (ADR-0022 §2). Tampoco tiene «pagina 2» que signifique nada: no hay un
+    // orden que convierta una pagina en una porcion del territorio.
+    {
+      operationId: 'plano_catastral',
+      metodo: 'get',
+      ruta: '/api/v1/catastro/predios/plano',
+      titulo: 'Plano catastral: los lotes de un marco',
+      descripcion: literal(`
+        Los lotes que caen dentro de un marco, **con su polígono**, para dibujar el plano
+        catastral (ADR-0022). La geometría sale de \`predio.geometria\` —\`geography(MultiPolygon,
+        4326)\`, ADR-0021— serializada a GeoJSON tal cual: **ni reproyectada ni simplificada**.
+        Un vértice movido es un lindero movido, y un lindero movido no se ve.
+
+        **Se acota por marco y se niega antes que recortarse.** \`bbox\` es obligatorio. Si
+        dentro caben más lotes que \`limite\`, la respuesta es **422** diciendo cuántos hay:
+        una página con los primeros dibujaría un plano al que le faltan lotes, y eso no se
+        lee como «faltan», se lee como «ahí no hay nada». Por lo mismo no pagina.
+
+        **\`sinGeometria\` cuenta los predios del mismo marco y los mismos filtros que no
+        tienen polígono**, y la interfaz lo dice siempre, incluso cuando es cero. Sin esa
+        cifra el visor afirma algo que no sabe: hoy no hay una sola municipalidad con
+        geometría cargada, así que lo honesto es que el plano vacío diga por qué lo está
+        —la carga cartográfica de ADR-0021— y no que parezca un distrito sin predios.
+
+        Ni un importe y ni un titular, por lo mismo que \`GET /catastro/predios\`: quién es
+        el propietario se resuelve al clic, de un predio cada vez, en
+        \`/catastro/predios/{predioId}/titulares\` (ADR-0015 §2.4). Y **ninguna área**: la del
+        polígono no es la imponible, y publicarlas juntas invita a compararlas donde no se
+        decide nada.
+      `),
+      parametros: [
+        {
+          nombre: 'bbox',
+          ejemplo: '-80.71,-4.92,-80.66,-4.87',
+          descripcion:
+            'Marco en grados WGS84, `oeste,sur,este,norte`. Obligatorio: sin él la consulta' +
+            ' sería el padrón entero, que es lo que esta operación existe para no hacer',
+        },
+        {
+          nombre: 'codigoDeSector',
+          descripcion: 'Filtro «Sector» de la pantalla, por código',
+        },
+        {
+          nombre: 'codigoDeManzana',
+          descripcion: 'Filtro «Manzana» de la pantalla, por código',
+        },
+        {
+          nombre: 'limite',
+          ejemplo: '2000',
+          descripcion:
+            'Cuántos lotes se sirven como máximo. Si el marco contiene más, la respuesta es' +
+            ' 422 con la cuenta; nunca los primeros `limite`',
+        },
+      ],
+    },
   ],
   // `declaracion_jurada` declara «GET /rentas/declaraciones/{djNro}» como su
   // endpoint —consultar la DJ ya presentada—, y hasta #365 eso era todo lo que
@@ -1052,6 +1117,93 @@ const OPERACIONES_ADICIONALES = {
 
         \`domicilioFiscal\` puede ser nulo: un contribuyente recién dado de alta todavía no
         tiene ninguno, y decirlo es más honesto que devolver el último que hubo (regla 9).
+      `),
+    },
+    {
+      operationId: 'vehiculos_del_contribuyente',
+      metodo: 'get',
+      ruta: '/api/v1/rentas/vehiculos',
+      titulo: 'Vehiculos de un contribuyente',
+      parametros: [
+        {
+          nombre: 'contribuyente',
+          requerido: true,
+          descripcion:
+            'Codigo del contribuyente. OBLIGATORIO: sin el, esto seria una segunda puerta al ' +
+            'padron vehicular entero detras de un permiso mas estrecho que el de Consultas.',
+        },
+        {
+          nombre: 'fecha',
+          descripcion: 'Fecha de corte de la deuda (regla 9). Ausente, hoy.',
+        },
+      ],
+      descripcion: bloque(`
+        Los vehículos de un contribuyente, con su deuda a la fecha (#524).
+
+        **La consulta ya existía y la sirve este mismo contexto** —ConsultaVehiculosController,
+        GET /consultas/vehiculos—, pero bajo la opción del módulo **Consultas** y su permiso. El
+        expediente del contribuyente de Rentas (#503 F2) no puede tomarla prestada de ahí: las
+        conexiones de la interfaz llegan con el trozo de su módulo (#433), y quien tenga Rentas y
+        no Consultas vería un aviso de permiso ajeno dentro de su propio expediente.
+
+        Va detrás del permiso de la opción «Ficha de vehículo» —la de Rentas que ya existe— y
+        **exige el contribuyente**: sin él, quien sólo tiene ese permiso pasaría de necesitar la
+        placa para ver una ficha a poder listar el padrón vehicular entero.
+
+        La fila es la misma que publica /consultas/vehiculos: dos formas distintas de la misma
+        lectura dirían dos cosas del mismo vehículo, y la que se leyera en el expediente sería la
+        que nadie compara.
+      `),
+    },
+    {
+      operationId: 'ultima_corrida_predial',
+      metodo: 'get',
+      ruta: '/api/v1/rentas/predial/corridas/ultima',
+      titulo: 'Estado de la ultima emision del ejercicio',
+      parametros: [
+        {
+          nombre: 'ejercicio',
+          descripcion: 'El ejercicio cuya ultima corrida se pide. Ausente, el del reloj.',
+        },
+      ],
+      descripcion: bloque(`
+        Lo que hizo la última corrida de emisión anual del predial (#523): sus etapas, cuántos
+        contribuyentes se leyeron, cuántos se determinaron, cuánto se emitió y **cuántos quedaron
+        observados**.
+
+        Hasta esto la corrida viajaba **sólo en la respuesta del POST que la ejecuta**: cerrar la
+        pestaña perdía el resultado de un proceso que toca decenas de miles de cuentas, y volver a
+        verlo exigía volver a correrlo. Los observados eran lo único que no se podía recomponer
+        leyendo el padrón — un observado es, por definición, el que **no** tiene determinación.
+
+        Devuelve también las **simulaciones**, y lo dice: el campo «simulacion» distingue las dos.
+        Esconderlas haría que «ver los observados antes de emitir» —que es lo que hay que hacer
+        antes de una emisión— no dejara nada que mirar después.
+
+        Sin corridas del ejercicio contesta **204**, no una cabecera de ceros: «todavía no se ha
+        corrido» y «se corrió y no emitió nada» son dos cosas distintas.
+      `),
+    },
+    {
+      operationId: 'observados_de_la_corrida',
+      metodo: 'get',
+      ruta: '/api/v1/rentas/predial/corridas/{corridaId}/observados',
+      titulo: 'Los observados de una corrida',
+      parametros: [
+        {
+          nombre: 'corridaId',
+          en: 'path',
+          requerido: true,
+          descripcion: 'La corrida, por el id que devuelve la lectura de la ultima.',
+        },
+      ],
+      descripcion: bloque(`
+        Los contribuyentes que quedaron fuera de la emisión, cada uno **con su motivo** (#523). Es
+        lo único que convierte «emitió menos de lo esperado» en una lista de cosas que arreglar.
+
+        Van aparte de la cabecera y paginados, no dentro de ella: son cientos, y una portada que
+        los trajera siempre sería la petición más pesada del sistema para una cifra que casi nadie
+        abre.
       `),
     },
     {

@@ -42,6 +42,34 @@ export interface DestinoDeModulo {
    * ver la declarada, se cae a la primera que si (REQ-03 §5).
    */
   readonly entrada?: string;
+  /**
+   * Cuando el destino **no es un grupo del catalogo** sino una ruta del modulo:
+   * su segmento, bajo `/:modulo/`.
+   *
+   * `panel` es el primero de esta clase y no lo declara porque su ruta es la del
+   * modulo a secas. El segundo es «Mapa catastral» (#500), que no puede ser un
+   * grupo porque **no tiene ninguna de las 134 opciones dentro**: las 134 siguen
+   * siendo 134, y el visor es una ruta sin id en el catalogo y sin permiso
+   * propio, como la portada (ADR-0014 §5).
+   */
+  readonly ranura?: string;
+  /**
+   * Tras que grupo se dibuja un destino de ruta.
+   *
+   * El orden del panel es del diseño y no del catalogo: el artboard pone el mapa
+   * **entre** «Predios» y «Territorio», asi que sin esto acabaria al final, que
+   * es otro panel.
+   */
+  readonly tras?: string;
+  /**
+   * Que opcion del catalogo tiene que poder ver quien lo abre.
+   *
+   * Un destino de ruta no tiene id ni permiso propio, asi que sin esto seria la
+   * unica entrada del panel que ignora los permisos (REQ-03 §5). Nombra la
+   * opcion cuyo permiso **es** el que su lectura exige: el mapa pide el de
+   * `consulta_fichas` porque es esa misma busqueda por otro camino (ADR-0022).
+   */
+  readonly exige?: string;
   readonly nota: string;
   /** Trazos del icono de linea, viewBox 24x24. Salen del artboard. */
   readonly icono: readonly string[];

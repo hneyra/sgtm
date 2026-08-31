@@ -274,6 +274,35 @@ export const COMPOSICION_DE_RENTAS: Readonly<Record<string, ComposicionDeOpcion>
     gruposDelIndice: APARTADOS_DEL_EXPEDIENTE,
     resumen: ResumenDeContribuyente,
     /**
+     * **Se busca, se elige, y entonces se ve el expediente** (#503).
+     *
+     * La pantalla dibujaba las dos cosas a la vez —la tabla de busqueda y el
+     * expediente entero debajo, con un contribuyente abierto o sin ninguno—, y
+     * la fila **no abria nada**: el formulario de abajo no colgaba de nadie.
+     * Quien atendia veia doce secciones en blanco al lado de cuatro filas que no
+     * se podian pulsar.
+     *
+     * `accionDeFila` le da a cada fila su enlace, y el registro va en la **ruta**
+     * —no en un filtro—: es de donde `Pantalla` lo lee, y lo que hace que la
+     * pantalla sepa que hay uno abierto. Con `listaOExpediente`, abierto uno,
+     * la lista y su buscador dan paso, que es la decision de #391 §3 para la
+     * ficha del predio.
+     *
+     * La vuelta la pone `ResumenDeContribuyente`, que es el unico bloque que
+     * solo existe cuando hay registro abierto.
+     */
+    accionDeFila: {
+      opcion: 'contribuyentes',
+      etiqueta: 'Abrir el expediente',
+      // Sin parametros: lo unico que hace falta es el registro, y va en la ruta.
+      parametros: () => ({}),
+      registro: (valores) => valores['codigo'],
+      // Y el enlace se llama por la persona, no por la insignia de estado: sin
+      // esto se anunciaba «Abrir el expediente: A».
+      nombraCon: (valores) => valores['nombre'],
+    },
+    listaOExpediente: true,
+    /**
      * **La lista de predios, donde habia seis contadores en blanco** (#503 F2).
      *
      * «Unidades afectas del contribuyente» son seis campos de solo lectura
@@ -301,6 +330,28 @@ export const COMPOSICION_DE_RENTAS: Readonly<Record<string, ComposicionDeOpcion>
         seccion: 'Unidades afectas del contribuyente',
         opcion: 'predios_rentas',
         parametros: (codigo: string) => ({ codContribuyente: codigo }),
+      },
+      /**
+       * Y los vehiculos, desde #524. Antes no se podian dibujar: la unica
+       * lectura que los lista por contribuyente vivia en el modulo **Consultas**
+       * —`consulta_vehiculos`—, y prestarla de otro modulo traeria su trozo aqui
+       * y dejaria a quien tiene Rentas y no Consultas con un aviso de permiso
+       * ajeno dentro de su propio expediente.
+       *
+       * Lo que hay ahora es `GET /rentas/vehiculos`, detras del permiso de
+       * «Ficha de vehiculo» —la opcion de Rentas que ya existia— y con el
+       * contribuyente **obligatorio**: sin el seria una segunda puerta al padron
+       * vehicular entero detras de un permiso mas estrecho.
+       *
+       * `conexion` nombra la operacion porque la de la opcion es la ficha **por
+       * placa**, que no lista nada. Las columnas, el titulo y el permiso siguen
+       * siendo los de `vehiculos`: no se redacta ninguno (RNF-080).
+       */
+      {
+        seccion: 'Unidades afectas del contribuyente',
+        opcion: 'vehiculos',
+        conexion: 'vehiculos_del_contribuyente',
+        parametros: (codigo: string) => ({ contribuyente: codigo }),
       },
     ],
     altas: [

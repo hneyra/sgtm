@@ -13,30 +13,17 @@ import { OPERACIONES } from '@sgtm/api-client';
  * con sus registros y sus observados, y cuatro indicadores encima.
  *
  * La fase pide que **cada cifra salga de una operacion del contrato** (RNF-083),
- * y ahi es donde se para:
+ * y cuando se midio, de las nueve solo **una** podia: «Contribuyentes en el
+ * padron», el `totalElementos` de `GET /rentas/contribuyentes`. Las cinco etapas
+ * existian **solo como respuesta del `POST` que corre la emision**, asi que una
+ * portada que las enseñara al abrir tendria que lanzar la corrida —un proceso
+ * que toca decenas de miles de cuentas— o inventarlas.
  *
- *   las cinco etapas   existen, y **solo como respuesta del `POST` que corre la
- *                      emision**: `CorridaPredialResource.etapas` viaja en la
- *                      contestacion de `predial_masivo`. Ninguna lectura las
- *                      publica, asi que una portada que las enseñara al abrir el
- *                      modulo tendria que **lanzar la corrida** —un proceso que
- *                      toca 62 418 cuentas— o inventarlas
- *   tres indicadores   «Predial determinado», «Observados sin emision» y
- *                      «Recaudado del emitido» salen de esa misma corrida, o del
- *                      panel de recaudacion, que es una opcion de **otro modulo**
- *                      (`inicio`, `GET /indicadores/recaudacion`) y publica las
- *                      cifras de la municipalidad entera, no las de la emision
- *                      predial
- *   uno si esta        «Contribuyentes en el padron» es el `totalElementos` de
- *                      `GET /rentas/contribuyentes`
- *
- * Una portada con un numero de verdad y siete guiones no es mejor que el hub que
- * ya hay: el hub al menos lista lo que se puede hacer. Asi que el modulo se
- * queda con el generico, como los otros once, y lo que desbloquea esta fase
- * queda dicho: **una lectura que publique el resumen de la ultima corrida**.
- *
- * Estas pruebas se ponen **rojas el dia que exista**, que es el dia de releer
- * esto.
+ * **Ese era el bloqueo, y #523 lo levanto.** El contrato publica ahora
+ * `GET /rentas/predial/corridas/ultima` y sus observados, y esta prueba —que
+ * estaba escrita para ponerse roja el dia que existieran— cambio de sitio lo que
+ * mide: ya no que no haya lectura, sino que **la haya y no se pierda**. La
+ * portada del modulo es lo que queda, y sigue faltandole tres indicadores.
  */
 
 const CONTRATO = resolve(process.cwd(), '../docs/50-api/openapi/sgtm-v1.yaml');
@@ -69,15 +56,33 @@ describe('el panel del modulo de Rentas espera a una lectura que no existe', () 
    * **Las etapas viajan solo en la respuesta del `POST`.** Es lo que impide la
    * portada: una lectura de la ultima corrida seria un `GET`, y no hay ninguno.
    */
-  it('ninguna lectura del contrato publica el estado de la emision', () => {
-    const lecturas = operacionesDeLaCorrida().filter((o) => o.metodo === 'GET');
-    expect(lecturas, 'un GET de la corrida: es lo que desbloquea #503 F6').toEqual([]);
+  it('el contrato publica la lectura de la corrida, y sus observados', () => {
+    const rutas = operacionesDeLaCorrida().map((o) => `${o.metodo} ${o.ruta}`);
 
-    // Y el `POST` que sí la corre sigue ahí, para que esto no pase en verde
-    // porque el camino haya cambiado de nombre.
-    expect(operacionesDeLaCorrida().map((o) => `${o.metodo} ${o.ruta}`)).toContain(
-      'POST /rentas/predial/calculo-masivo',
+    expect(rutas, 'es lo que #523 añadió y lo que desbloquea la portada').toContain(
+      'GET /rentas/predial/corridas/ultima',
     );
+    expect(
+      rutas,
+      'y sus observados aparte: son cientos, y la cabecera no los trae',
+    ).toContain('GET /rentas/predial/corridas/{corridaId}/observados');
+
+    // Y el `POST` que la corre sigue ahí, para que esto no pase en verde porque
+    // el camino haya cambiado de nombre.
+    expect(rutas).toContain('POST /rentas/predial/calculo-masivo');
+  });
+
+  /**
+   * **Lo que a la portada le sigue faltando**, para que quede medido y no en un
+   * comentario: tres de sus cuatro indicadores no salen de este modulo.
+   * «Predial determinado», «Observados sin emision» y «Recaudado del emitido»
+   * salen de la corrida —los dos primeros ya se pueden leer— o del panel de
+   * recaudacion, que es una opcion de **otro modulo** y publica las cifras de la
+   * municipalidad entera, no las de la emision predial.
+   */
+  it('el avance de la recaudacion sigue siendo de otro modulo', async () => {
+    const { OPCIONES } = await import('../../catalogo');
+    expect(OPCIONES.find((o) => o.id === 'inicio')?.modulo.id).not.toBe('rentas-registro');
   });
 
   /**

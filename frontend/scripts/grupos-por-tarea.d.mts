@@ -71,6 +71,12 @@ export interface DestinoDeModulo {
   readonly label?: string;
   /** Que opcion abre, si no es la primera del grupo. Cae a la primera visible. */
   readonly entrada?: string;
+  /** Segmento de la ruta, cuando el destino no es un grupo del catalogo (#500). */
+  readonly ranura?: string;
+  /** Tras que grupo se dibuja un destino de ruta: el orden del panel es del diseño. */
+  readonly tras?: string;
+  /** Que opcion del catalogo tiene que poder ver quien abre un destino de ruta. */
+  readonly exige?: string;
   readonly nota: string;
   readonly icono: readonly string[];
 }
@@ -83,3 +89,16 @@ export function destinosDe(
   moduloId: string,
   tabla?: TablaDeDestinos,
 ): Readonly<Record<string, DestinoDeModulo>> | null;
+
+/**
+ * Comprueba los destinos de un modulo contra sus grupos.
+ *
+ * Falla ruidosamente: un destino que no es `panel`, ni un grupo, ni una ruta
+ * bien declarada, no se dibujaria y **nadie lo notaria** —el panel sale con una
+ * entrada menos, que es lo mismo que sale cuando el destino no se declaro—.
+ */
+export function comprobarDestinos(
+  moduloId: string,
+  bloques: readonly string[],
+  tabla?: TablaDeDestinos,
+): void;

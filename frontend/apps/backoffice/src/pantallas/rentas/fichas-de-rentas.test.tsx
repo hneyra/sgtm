@@ -23,7 +23,9 @@ import { SIN_DATO } from '../seguridad/listado';
  */
 
 const CONTRIBUYENTE = '00000025673';
-const PADRON = `/rentas-registro/contribuyentes?codigo=${CONTRIBUYENTE}`;
+/* El registro va en la **ruta**, no en el filtro: desde #503 la lista y el
+   expediente no se dibujan a la vez, y `?codigo=` es una lista de una fila. */
+const PADRON = `/rentas-registro/contribuyentes/${CONTRIBUYENTE}`;
 const VEHICULO = '/rentas-registro/vehiculos/T2G-418';
 const DECLARACION = '/rentas-registro/declaracion-jurada/000418?ano=2026';
 
@@ -213,10 +215,12 @@ describe('la cabecera-resumen dice a quien se tiene delante', () => {
   it('ninguna cifra del resumen se recompone: sale tal cual la sirvio la API', async () => {
     montarEnRuta(PADRON);
     await screen.findByRole('region', { name: 'Resumen del contribuyente' });
-    await waitFor(() => expect(document.querySelectorAll('tbody tr').length).toBeGreaterThan(0));
 
-    // La cabecera repite datos de la fila; ninguno puede llegar transformado
-    // (RNF-083). Se mira con el mismo comprobador que usan Transito y #78.
+    /* **Ya no se espera a la tabla**, y no es un recorte: desde #503 la lista y
+       el expediente no se dibujan a la vez, así que en la ruta del registro no
+       hay `tbody`. Lo que este caso mide sigue entero —la cabecera repite datos
+       de la fila, y ninguno puede llegar transformado (RNF-083)—, y las tablas
+       prestadas no entran porque su sección arranca cerrada. */
     const servidas = cifrasServidas('contribuyentes');
     for (const cifra of cifrasEnPantalla()) expect(servidas).toContain(cifra);
   });
