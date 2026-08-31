@@ -633,6 +633,30 @@ export const VOCABULARIO_UNIFORME: ReadonlySet<string> = new Set([
   'contribuyentes',
   'predios_rentas',
   'vehiculos',
+  /* **Las dos hojas de consulta de los resultados de Fiscalizacion** (#506 F1).
+     Entre las dos dibujan **siete** botones y ninguno registra un acto: su
+     operacion es un `GET` en las dos, ninguna declara escritura, y de los siete
+     rotulos cuatro son de salida —«Buscar» dos veces, «Limpiar», «Imprimir» dos
+     veces— y los otros dos, «Filtrar» y «Actualizar», no son ni salida ni acto:
+     son la misma busqueda de la barra de filtros, con otro nombre y sin nada
+     detras.
+     Con la regla puesta se caen esos dos y quedan las de salida, **sin
+     primaria**, que es lo correcto: aqui no se escribe nada. Y la franja no
+     cambia —la ultima sigue siendo «Imprimir», que `DE_SALIDA` reconoce—, asi
+     que el censo de `actos-honestos` no se mueve: las dos siguen contando como
+     `salida`.
+     **La tercera hoja, `fisc_resultados`, se queda fuera a proposito.** Su
+     ultima accion —«Emitir resoluciones de determinación»— **si** es el acto, y
+     el unico por el que un dato de fiscalizacion pasa a ser el dato oficial del
+     padron (`POST /fiscalizacion/transferencias`, #52). No declara escritura
+     todavia porque le faltan cuatro campos que su catalogo no dibuja (#431), asi
+     que esta en {@link ACTOS_SIN_CAMPO} y su boton sale apagado **con la franja
+     que los nombra**. Aplicarle esta regla lo borraria de la barra: sin boton no
+     hay `aria-describedby`, y la franja que explica que le falta no la leeria
+     nadie —RNF-082, el mismo defecto que #385 corrigio en `alcabala` y #429 en
+     las tres hojas de Transito—. */
+  'fisc_estado_cuenta',
+  'fisc_historico',
 ]);
 
 /**

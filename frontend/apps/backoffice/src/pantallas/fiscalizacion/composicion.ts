@@ -1,6 +1,43 @@
 import type { ComposicionDeOpcion } from '../composicion';
 
 /**
+ * **Los resultados de la fiscalizacion, una superficie de tres hojas** (#506 F1).
+ *
+ * `fisc_resultados`, `fisc_estado_cuenta` y `fisc_historico` son el mismo objeto
+ * —el desenlace de un proceso fiscalizador— preguntado de tres maneras: por acta,
+ * por contribuyente y por version. Y hasta hoy eran **tres pantallas con tres
+ * formas**: tabla con totales, tres secciones mas tabla, y seis pestañas mas
+ * tabla. Pasar de una a otra era volver al menu.
+ *
+ * Es el sintoma que FRO-05 §0 manda medir sobre el catalogo portado antes de
+ * unificar nada, y las tres lo dan: mismo objeto, tres formas, tres barras de
+ * busqueda —once filtros entre las tres— para acotar el mismo desenlace.
+ *
+ * **El prototipo lo dibuja exactamente asi**: un destino «Resultados» con tres
+ * pestañas —«Por acta», «Por contribuyente», «Histórico de versiones»— sobre una
+ * banda de totales. Los rotulos que se dibujan aqui **no son esos tres**: son los
+ * titulos del catalogo, sin reescribir (RNF-080), porque la pestaña lleva a esa
+ * pantalla y su nombre es su titulo.
+ *
+ * **Las tres conservan su id, su ruta y su permiso**, que es lo que separa esta
+ * composicion de una pantalla que absorbe a las otras. Aqui importa mas que en
+ * ninguna otra superficie del sistema, y el motivo es SoD-4: el fiscalizador de
+ * campo levanta actas y **no ve** `fisc_resultados`, que es desde donde se
+ * transfiere al padron. Con las pestañas en un `useState` llegaria a ella sin
+ * pasar por ningun guardia (REQ-03 §5); con enlaces, la hoja que su perfil no
+ * puede ver **no se dibuja** y el guardia de `Pantalla` vuelve a correr al
+ * entrar por la ruta.
+ *
+ * Ver `bloques/HojasDeSuperficie` para por que esto **no** saca las tres del
+ * renderizador generico: sus cuerpos ya estan bien —dos de las tres leen su
+ * recurso real desde #80— y rehacerlos a mano es como se pierde una columna.
+ */
+const RESULTADOS_DE_FISCALIZACION = {
+  titulo: 'Resultados de la fiscalización',
+  hojas: ['fisc_resultados', 'fisc_estado_cuenta', 'fisc_historico'],
+} as const;
+
+/**
  * Lo que Fiscalizacion compone alrededor de los bloques comunes (#431).
  *
  * **Cinco filtros que se dibujan y no filtran**, en dos pantallas y por dos
@@ -50,6 +87,31 @@ export const COMPOSICION_DE_FISCALIZACION: Readonly<Record<string, ComposicionDe
    *               RECLAMADO— tampoco son el estado que el backend conoce
    */
   fisc_resultados: {
+    superficie: RESULTADOS_DE_FISCALIZACION,
     filtrosBloqueados: ['programa', 'hallazgo', 'estado'],
+  },
+
+  /**
+   * La segunda hoja: el mismo desenlace, preguntado por contribuyente.
+   *
+   * Solo declara la superficie. Sus cuatro filtros **si** viajan —a diferencia
+   * de los cinco de arriba—, asi que no hay ninguno que bloquear.
+   */
+  fisc_estado_cuenta: {
+    superficie: RESULTADOS_DE_FISCALIZACION,
+  },
+
+  /**
+   * La tercera: el mismo desenlace, version a version.
+   *
+   * Sus seis pestañas del manual —«Datos Generales», «Versiones», «Estado de
+   * predios», «Documentos», «Infracciones», «Observaciones»— **se quedan**. Son
+   * del catalogo portado y las dibuja el renderizador comun; la tira de la
+   * superficie va por encima y no las sustituye. El prototipo las cambia por una
+   * linea de tiempo de versiones, y eso no se hace aqui: seis rotulos del manual
+   * no se pierden para ganar un dibujo (RNF-080).
+   */
+  fisc_historico: {
+    superficie: RESULTADOS_DE_FISCALIZACION,
   },
 };
