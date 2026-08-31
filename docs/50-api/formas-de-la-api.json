@@ -591,6 +591,17 @@
     "totalPaginas": "entero",
     "hayMas": "booleano"
   },
+  "GET /catastro/predios/{predioId}/inquilinos": [
+    {
+      "inquilinoId": "entero",
+      "predioId": "entero",
+      "contribuyenteId": "entero",
+      "uso": "texto",
+      "vigenciaDesde": "fecha",
+      "vigenciaHasta": "fecha",
+      "documentoOrigen": "texto"
+    }
+  ],
   "GET /catastro/predios/{predioId}/titulares": {
     "predioId": "entero",
     "vigenteA": "texto",
@@ -4006,6 +4017,15 @@
     "ubigeo": "texto",
     "estado": "texto"
   },
+  "POST /catastro/predios/{predioId}/inquilinos": {
+    "inquilinoId": "entero",
+    "predioId": "entero",
+    "contribuyenteId": "entero",
+    "uso": "texto",
+    "vigenciaDesde": "fecha",
+    "vigenciaHasta": "fecha",
+    "documentoOrigen": "texto"
+  },
   "POST /catastro/predios/{predioId}/reactivacion": {
     "predioId": "entero",
     "codRefCatastral": "texto",
@@ -4015,6 +4035,16 @@
     "lote": "texto",
     "ubigeo": "texto",
     "estado": "texto"
+  },
+  "POST /catastro/predios/{predioId}/titulares": {
+    "titularidadId": "entero",
+    "predioId": "entero",
+    "contribuyenteId": "entero",
+    "condicion": "texto",
+    "porcentaje": "texto",
+    "vigenciaDesde": "fecha",
+    "vigenciaHasta": "fecha",
+    "documentoOrigen": "texto"
   },
   "POST /catastro/sectores": {
     "id": "entero",
@@ -6146,6 +6176,15 @@
         "registradaEn": "texto"
       }
     ]
+  },
+  "PUT /catastro/predios/{predioId}/inquilinos/{inquilinoId}": {
+    "inquilinoId": "entero",
+    "predioId": "entero",
+    "contribuyenteId": "entero",
+    "uso": "texto",
+    "vigenciaDesde": "fecha",
+    "vigenciaHasta": "fecha",
+    "documentoOrigen": "texto"
   },
   "PUT /catastro/sectores/{codigo}": {
     "id": "entero",

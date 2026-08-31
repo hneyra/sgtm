@@ -1,9 +1,12 @@
 package pe.gob.sgtm.catastro.aplicacion;
 
+import java.time.LocalDate;
+import java.util.List;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import pe.gob.sgtm.catastro.dominio.CatastroRepository;
 import pe.gob.sgtm.catastro.dominio.FiltroDePredios;
+import pe.gob.sgtm.catastro.dominio.Inquilino;
 import pe.gob.sgtm.catastro.dominio.PredioDelCatastro;
 import pe.gob.sgtm.compartido.Pagina;
 import pe.gob.sgtm.compartido.Paginacion;
@@ -32,5 +35,21 @@ public class ConsultaDePredios {
     @Transactional(readOnly = true)
     public Pagina<PredioDelCatastro> buscar(FiltroDePredios filtro, Paginacion paginacion) {
         return catastro.predios(filtro, paginacion);
+    }
+
+    /**
+     * Quien ocupa el predio a una fecha (#490, #31).
+     *
+     * <p><b>A una fecha, no «los ultimos»</b> (regla 9): quien ocupaba el predio en marzo no es
+     * necesariamente quien lo ocupa hoy, y una determinacion de arbitrios de marzo se explica con
+     * el de marzo.
+     *
+     * <p>Existe porque terminar una ocupacion exige decir cual, y ninguna lectura publicaba ese
+     * identificador. Lleva su transaccion por lo mismo que {@link #buscar}: {@code inquilino} tiene
+     * RLS, y fuera de transaccion no hay {@code SET LOCAL} que valga.
+     */
+    @Transactional(readOnly = true)
+    public List<Inquilino> inquilinosDe(long predioId, LocalDate fecha) {
+        return catastro.inquilinosDe(predioId, fecha);
     }
 }
