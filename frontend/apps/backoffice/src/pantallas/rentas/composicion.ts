@@ -302,6 +302,28 @@ export const COMPOSICION_DE_RENTAS: Readonly<Record<string, ComposicionDeOpcion>
         opcion: 'predios_rentas',
         parametros: (codigo: string) => ({ codContribuyente: codigo }),
       },
+      /**
+       * Y los vehiculos, desde #524. Antes no se podian dibujar: la unica
+       * lectura que los lista por contribuyente vivia en el modulo **Consultas**
+       * —`consulta_vehiculos`—, y prestarla de otro modulo traeria su trozo aqui
+       * y dejaria a quien tiene Rentas y no Consultas con un aviso de permiso
+       * ajeno dentro de su propio expediente.
+       *
+       * Lo que hay ahora es `GET /rentas/vehiculos`, detras del permiso de
+       * «Ficha de vehiculo» —la opcion de Rentas que ya existia— y con el
+       * contribuyente **obligatorio**: sin el seria una segunda puerta al padron
+       * vehicular entero detras de un permiso mas estrecho.
+       *
+       * `conexion` nombra la operacion porque la de la opcion es la ficha **por
+       * placa**, que no lista nada. Las columnas, el titulo y el permiso siguen
+       * siendo los de `vehiculos`: no se redacta ninguno (RNF-080).
+       */
+      {
+        seccion: 'Unidades afectas del contribuyente',
+        opcion: 'vehiculos',
+        conexion: 'vehiculos_del_contribuyente',
+        parametros: (codigo: string) => ({ contribuyente: codigo }),
+      },
     ],
     altas: [
       {

@@ -507,8 +507,22 @@ export interface SimulacionDeLaPantalla {
 export interface TablaDeOtraOpcion {
   /** La seccion del catalogo bajo la que se dibuja, por su rotulo. */
   readonly seccion: string;
-  /** La opcion cuya tabla, operacion, permiso y titulo se toman prestados. */
+  /** La opcion cuya tabla, permiso y titulo se toman prestados. */
   readonly opcion: string;
+  /**
+   * De donde se **lee**, cuando no es la operacion de la opcion (#524).
+   *
+   * La opcion presta cuatro cosas y no siempre las cuatro son suyas: «Ficha de
+   * vehiculo» tiene la tabla, el titulo y el permiso que hacen falta, y su
+   * operacion es la ficha **por placa**, que no lista nada. La coleccion vive en
+   * otra operacion del contrato —una que no es opcion del catalogo, como
+   * `registrar_contribuyente`—, y esto es lo que deja nombrarla.
+   *
+   * Sin esto, la unica salida seria inventar una opcion del catalogo para una
+   * lectura que ninguna pantalla del manual dibuja, que es exactamente lo que
+   * ADR-0014 §5 impide.
+   */
+  readonly conexion?: string;
   /** Con que se le pregunta por el registro abierto. */
   readonly parametros: (codigo: string) => Readonly<Record<string, string>>;
 }

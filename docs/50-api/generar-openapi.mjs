@@ -1055,6 +1055,42 @@ const OPERACIONES_ADICIONALES = {
       `),
     },
     {
+      operationId: 'vehiculos_del_contribuyente',
+      metodo: 'get',
+      ruta: '/api/v1/rentas/vehiculos',
+      titulo: 'Vehiculos de un contribuyente',
+      parametros: [
+        {
+          nombre: 'contribuyente',
+          requerido: true,
+          descripcion:
+            'Codigo del contribuyente. OBLIGATORIO: sin el, esto seria una segunda puerta al ' +
+            'padron vehicular entero detras de un permiso mas estrecho que el de Consultas.',
+        },
+        {
+          nombre: 'fecha',
+          descripcion: 'Fecha de corte de la deuda (regla 9). Ausente, hoy.',
+        },
+      ],
+      descripcion: bloque(`
+        Los vehículos de un contribuyente, con su deuda a la fecha (#524).
+
+        **La consulta ya existía y la sirve este mismo contexto** —ConsultaVehiculosController,
+        GET /consultas/vehiculos—, pero bajo la opción del módulo **Consultas** y su permiso. El
+        expediente del contribuyente de Rentas (#503 F2) no puede tomarla prestada de ahí: las
+        conexiones de la interfaz llegan con el trozo de su módulo (#433), y quien tenga Rentas y
+        no Consultas vería un aviso de permiso ajeno dentro de su propio expediente.
+
+        Va detrás del permiso de la opción «Ficha de vehículo» —la de Rentas que ya existe— y
+        **exige el contribuyente**: sin él, quien sólo tiene ese permiso pasaría de necesitar la
+        placa para ver una ficha a poder listar el padrón vehicular entero.
+
+        La fila es la misma que publica /consultas/vehiculos: dos formas distintas de la misma
+        lectura dirían dos cosas del mismo vehículo, y la que se leyera en el expediente sería la
+        que nadie compara.
+      `),
+    },
+    {
       operationId: 'mudar_contribuyente',
       metodo: 'post',
       ruta: '/api/v1/rentas/contribuyentes/{id}/domicilios',
