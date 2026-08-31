@@ -3,7 +3,12 @@ import { Campo, Esqueleto } from '@sgtm/design-system';
 import type { ValorDeCampo } from '@sgtm/api-client';
 import type { SeccionDePantalla } from '../../catalogo';
 import { arrancaCerrada } from '../../catalogo';
-import { controlesDeLaSeccion, memoriaDeSeccion, resolutorDeCampo } from '../composicion';
+import {
+  controlesDeLaSeccion,
+  memoriaDeSeccion,
+  resolutorDeCampo,
+  tablasDeLaSeccion,
+} from '../composicion';
 import type { ControlDeclarado } from '../composicion';
 import { mapaEnElCampo } from '../escrituras';
 import { Icono } from '@sgtm/design-system';
@@ -17,6 +22,13 @@ import { Icono } from '@sgtm/design-system';
    cuerpo de este issue no cabian en el 0,1 KB que quedaba. */
 const MemoriaDeCalculo = lazy(async () => ({
   default: (await import('./MemoriaDeCalculo')).MemoriaDeCalculo,
+}));
+
+/* **La tabla que una seccion toma prestada de otra opcion** (#503 F2), tambien
+   perezosa y por lo mismo: la declara una de las 134, y trae consigo el lector
+   generico y la tabla. Las otras 133 no la descargan. */
+const TablaPrestada = lazy(async () => ({
+  default: (await import('./TablaPrestada')).TablaPrestada,
 }));
 
 /**
@@ -141,6 +153,9 @@ export function Formulario({
         /* Lo que esta opcion **anade** al final de esta seccion (#422). Vacio en
            133 de las 134, y entonces la rejilla es exactamente la del catalogo. */
         const anadidos = controlesDeLaSeccion(opcion, seccion.label);
+        /* Y lo que esta seccion toma **prestado de otra opcion** (#503 F2):
+           vacio en 133 de las 134. Ver `TablaDeOtraOpcion`. */
+        const prestadas = tablasDeLaSeccion(opcion, seccion.label);
         return (
           <section
             key={clave}
@@ -318,6 +333,17 @@ export function Formulario({
                 ))}
               </div>
             )}
+            {/* Las tablas prestadas van **fuera de la rejilla de campos** y
+                debajo: una tabla no es un campo, y meterla en la rejilla de dos
+                columnas la partiria por la mitad. Se dibujan aunque la seccion
+                no tenga ni un campo que ensenar, que es el caso que las trae:
+                seis contadores que el backend no publica (#503 F2). */}
+            {!cerrada &&
+              prestadas.map((prestada) => (
+                <Suspense key={`prestada|${prestada.opcion}`} fallback={<Esqueleto alto={120} />}>
+                  <TablaPrestada tabla={prestada} />
+                </Suspense>
+              ))}
           </section>
         );
       })}

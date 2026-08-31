@@ -17,6 +17,21 @@ import { fechaDeCorteDe, obligacionDeDeuda } from '../consultas';
 /**
  * Rentas · Registro, conectado hasta donde llega el backend: **once opciones de quince**.
  *
+ * ── La portada del modulo, y por que sigue siendo la generica (#503 F6) ─────
+ *
+ * El rediseño dibuja como portada el **estado de la emision**: las cinco etapas
+ * de la corrida anual y cuatro indicadores. De las nueve cifras, **una** tiene
+ * de donde salir —«Contribuyentes en el padron», que es el `totalElementos` de
+ * `contribuyentes`—; las etapas viajan **solo en la respuesta del `POST`** que
+ * corre la emision (`CorridaPredialResource.etapas`), y los otros tres
+ * indicadores salen de esa misma corrida o del panel de recaudacion, que es de
+ * otro modulo y mide la municipalidad entera.
+ *
+ * Una portada con un numero de verdad y siete guiones no es mejor que el hub
+ * generico, que al menos lista lo que se puede hacer. Lo que la desbloquea es
+ * **una lectura que publique el resumen de la ultima corrida**, y hay una prueba
+ * que se pone roja el dia que exista: `panel-del-modulo.test.ts`.
+ *
  * `contribuyentes` (#11), `vehiculos` (#26), `declaracion_jurada` (#28), `beneficios` (#27),
  * `arbitrios` (#31), `alta_deuda` (#24), `baja_deuda` (#332), `transferencia_predio` y
  * `transferencia_vehiculo` (#73) ya estaban. Se suman las **tres del predial** (#395), que

@@ -43,6 +43,8 @@ vi.mock('../composicion', () => ({
   memoriaDeSeccion: () => undefined,
   controlesDeLaSeccion: (_opcion: string, seccion: string): readonly ControlDeclarado[] =>
     [DECLARADO, DE_OTRA_SECCION].filter((control) => control.seccion === seccion),
+  // Ni ninguna tabla prestada (#503 F2): eso lo mira `rentas/tabla-prestada.test.tsx`.
+  tablasDeLaSeccion: () => [],
 }));
 
 const { Formulario } = await import('./Formulario');

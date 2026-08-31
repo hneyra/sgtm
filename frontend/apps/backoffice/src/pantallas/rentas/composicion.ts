@@ -30,6 +30,10 @@ const ResumenDeDeterminacion = lazy(async () => ({
  * seria codigo que 133 de las 134 pantallas no usan nunca. `Formulario` lo
  * dibuja dentro de un `Suspense`, igual que `Pantalla` hace con las cabeceras.
  */
+const AltaDeContribuyente = lazy(async () => ({
+  default: (await import('./altas')).AltaDeContribuyente,
+}));
+
 const ResolutorDeUnidad = lazy(async () => ({
   default: (await import('./ResolutorDeUnidad')).ResolutorDeUnidad,
 }));
@@ -81,13 +85,55 @@ const ResolutorDeValorDeTransferencia = lazy(async () => ({
  */
 
 /**
+ * **Las seis determinaciones, una superficie de seis hojas** (#503 F3).
+ *
+ * #393 les dio a las cinco de entonces **la misma anatomia** —sujeto, memoria
+ * del calculo, acto— y `DETERMINACION` la reparte desde una sola constante. Lo
+ * que no cambio es que siguen siendo seis pantallas: pasar del calculo
+ * individual a la corrida masiva del mismo ejercicio es volver al menu, y la
+ * franja de «la determinacion la hace el servidor» se lee **seis veces** como
+ * si fueran seis averias distintas en vez de una causa.
+ *
+ * La tira las une sin que ninguna pierda nada: cada hoja **conserva su id, su
+ * ruta y su permiso**, y la busqueda viaja con el enlace —que es lo que evita
+ * volver a teclear el contribuyente al pasar del predial a los arbitrios—.
+ *
+ * **Son seis y no cuatro**, que es donde este reparto se aparta de #442 A.
+ * Alcabala y espectaculos determinan un impuesto igual que las otras cuatro; lo
+ * que las distingue es que su hecho imponible es un acto suelto y no la emision
+ * anual, y eso no las hace otra cosa. La alcabala ademas sigue colgando del acto
+ * de transferencia (#503, decision 3): vive en los dos sitios.
+ *
+ * Lo que la tira **no** arregla, y conviene tenerlo escrito: ninguna de las seis
+ * escribe todavia. Tres simulan (`simula`), arbitrios es un `GET` y las dos de
+ * acto tienen su primaria apagada por un dato que no se publica. La superficie
+ * es un marco de lectura y de simulacion hasta que #445 cierre lo que le falta a
+ * #393.
+ */
+const DETERMINACIONES_DEL_EJERCICIO = {
+  titulo: 'Determinaciones',
+  hojas: [
+    'predial_individual',
+    'predial_masivo',
+    'arbitrios',
+    'vehicular_calculo',
+    'alcabala',
+    'espectaculos',
+  ],
+} as const;
+
+/**
  * El marco de una pantalla de determinacion: la banda de sujeto arriba.
  *
  * Se reparte a las cinco desde una sola constante para que anadir la sexta el
  * dia que exista sea una linea, y para que no se pueda dar el caso de cuatro
  * con banda y una sin.
  */
-const DETERMINACION = { resumen: ResumenDeDeterminacion, resumenSiempre: true } as const;
+const DETERMINACION = {
+  superficie: DETERMINACIONES_DEL_EJERCICIO,
+  resumen: ResumenDeDeterminacion,
+  resumenSiempre: true,
+} as const;
 
 /**
  * **La accion que enseña el resultado antes de escribir** (#393).
@@ -188,11 +234,84 @@ const MOVIMIENTOS_DE_DEUDA = {
   hojas: ['alta_deuda', 'baja_deuda'],
 } as const;
 
+/**
+ * **Las dos modalidades del mismo acto** (#503 F5).
+ *
+ * Transferir un predio y transferir un vehiculo son el mismo tramite sobre dos
+ * objetos: el mismo expediente, la misma fecha, las mismas dos partes y la misma
+ * consecuencia —el transferente deja de estar afecto y el adquirente empieza—.
+ * El manual las capturo como dos pantallas y el prototipo las dibuja como **una
+ * modalidad**, que es lo que la tira hace aqui.
+ *
+ * Lo que la tira **no** puede arreglar, y por eso se anota: los dos catalogos
+ * llaman de forma distinta al mismo dato —«Nº de expediente» / «Nro. de
+ * expediente», «Fecha del acto» / «Fecha de transferencia», «Partes
+ * intervinientes» / «Partes»— y el documento que sustenta el acto es texto libre
+ * en una (notaria y minuta) y un desplegable de cuatro en la otra. Dibujar el
+ * bloque **una sola vez** —que es lo que #442 B proponia— haria morir esa
+ * divergencia por construccion, y exige antes decidir cual de las dos columnas
+ * gana, porque los rotulos no se reescriben (RNF-080). La tira une las dos
+ * pantallas sin tocar ninguna; unificar sus bloques es otra cosa y no se cuela
+ * aqui.
+ */
+const TRANSFERENCIAS = {
+  titulo: 'Transferencias',
+  hojas: ['transferencia_predio', 'transferencia_vehiculo'],
+} as const;
 export const COMPOSICION_DE_RENTAS: Readonly<Record<string, ComposicionDeOpcion>> = {
+  /**
+   * El padron, con el expediente dentro y **el alta que le faltaba** (#503 F2 y F7).
+   *
+   * `altas` se declara sobre la accion que el prototipo ya dibuja —«Nuevo»— y no
+   * sobre un boton nuevo al lado: dibujar otro dejaria dos «Nuevo» en la misma
+   * barra, uno vivo y uno apagado. Y devolverla a la barra es **la consecuencia
+   * de declararla**: `VOCABULARIO_UNIFORME` (#442) retiro de las tres del padron
+   * las acciones que no podian hacer lo que prometen, y `DE_ALTA` deja pasar
+   * «Nuevo» solo si esta pantalla declara el formulario que abre.
+   */
   contribuyentes: {
     ...FICHA_CON_PESTANAS,
     gruposDelIndice: APARTADOS_DEL_EXPEDIENTE,
     resumen: ResumenDeContribuyente,
+    /**
+     * **La lista de predios, donde habia seis contadores en blanco** (#503 F2).
+     *
+     * «Unidades afectas del contribuyente» son seis campos de solo lectura
+     * —predios registrados, autovaluo acumulado, vehiculos afectos, licencias,
+     * papeletas, convenios— y `ContribuyenteResource` **no publica ninguno**:
+     * los seis salen «—». El rediseño los sustituye por la lista de verdad, y
+     * la lista ya existe: es la de `predios_rentas`, otra opcion del mismo
+     * destino, con su operacion, su tabla, su permiso y su titulo.
+     *
+     * Los seis contadores **se quedan**: son campos del manual (RNF-080) y lo
+     * que les falta es que el backend los publique, no que alguien los borre.
+     * La tabla va debajo.
+     *
+     * **Y los vehiculos no entran, que es lo que hubo que medir.** Ninguna
+     * lectura de Rentas lista los de un contribuyente: `GET
+     * /rentas/vehiculos/{placa}` pide una placa, y la que si lo hace es
+     * `consulta_vehiculos`, del modulo **Consultas**. Traerla aqui metria el
+     * trozo de Consultas en el de Rentas (#433) y, peor, dejaria a quien tiene
+     * Rentas y no Consultas con un aviso de permiso dentro de su propio
+     * expediente. Lo que lo desbloquea es backend: un `GET /rentas/vehiculos`
+     * que liste por contribuyente.
+     */
+    tablasPrestadas: [
+      {
+        seccion: 'Unidades afectas del contribuyente',
+        opcion: 'predios_rentas',
+        parametros: (codigo: string) => ({ codContribuyente: codigo }),
+      },
+    ],
+    altas: [
+      {
+        accion: 'Nuevo',
+        titulo: 'Nuevo contribuyente',
+        descripcion:
+          'Se crea la fila del padrón con lo que el alta admite. El domicilio, los contactos y los beneficios se registran después, desde su expediente.',
+        Formulario: AltaDeContribuyente,
+      },
+    ],
   },
   vehiculos: { ...FICHA_CON_PESTANAS, resumen: ResumenDeVehiculo },
   /**
@@ -288,14 +407,27 @@ export const COMPOSICION_DE_RENTAS: Readonly<Record<string, ComposicionDeOpcion>
   /**
    * Las otras cuatro determinaciones, con la misma banda (#393).
    *
-   * Solo `alcabala` declara ademas memoria de calculo, y esa asimetria es del
-   * catalogo, no una decision: es la unica de las cuatro cuya seccion es una
-   * cuenta encadenada —el mayor entre valor de transferencia y autovaluo
-   * ajustado, menos las 10 UIT inafectas, por la tasa—. «Predial — masivo» y
-   * «Cálculo vehicular» no tienen ninguna seccion de solo lectura que encadene
-   * —la del masivo son los **parametros** que se eligen antes de correr el
-   * proceso— y «Arbitrios» no tiene secciones en absoluto: su determinacion es
-   * la tabla por servicio, que ya se lee como tal.
+   * De las **seis** del destino (#503 F3), **tres** declaran memoria de calculo
+   * —`predial_individual`, `alcabala` y, desde #503 F4, `espectaculos`— y las
+   * otras tres no. **La asimetria es del catalogo y no una decision**, y desde
+   * F4 esta ademas medida: `memoria-de-las-determinaciones.test.tsx` computa de
+   * las estructuras portadas cuales tienen una seccion que encadena campos de
+   * solo lectura, y se pone rojo el dia que una gane —o pierda— la suya.
+   *
+   * Por que las tres que faltan no pueden tenerla:
+   *
+   *   `predial_masivo`     su unica seccion son los **parametros** que se
+   *                        eligen antes de correr el proceso, y de sus ocho
+   *                        campos uno solo es de solo lectura. Un campo no
+   *                        encadena nada
+   *   `vehicular_calculo`  **no tiene ni una seccion**: su catalogo es filtros,
+   *                        tabla y totales. El prototipo del rediseno le dibuja
+   *                        una memoria —el mayor entre el valor declarado y la
+   *                        tabla referencial del MEF, por la tasa, contra el
+   *                        minimo—, y portarla exigiria **inventar una seccion
+   *                        que el manual no capturo**
+   *   `arbitrios`          tampoco tiene secciones: su determinacion es la
+   *                        tabla por servicio, que ya se lee como tal
    */
   predial_masivo: simula('Simular', { simulacion: true }),
   arbitrios: DETERMINACION,
@@ -320,6 +452,7 @@ export const COMPOSICION_DE_RENTAS: Readonly<Record<string, ComposicionDeOpcion>
    * objeto del acto y su valor.
    */
   transferencia_predio: {
+    superficie: TRANSFERENCIAS,
     resolutores: {
       codigoPredial: {
         campos: ['predioId', 'valorTransferencia'],
@@ -336,6 +469,7 @@ export const COMPOSICION_DE_RENTAS: Readonly<Record<string, ComposicionDeOpcion>
    * tal cual lo dibujaba antes de declararse aqui.
    */
   transferencia_vehiculo: {
+    superficie: TRANSFERENCIAS,
     resolutores: {
       transferenteDocumento: {
         campos: ['valorTransferencia'],
@@ -363,7 +497,34 @@ export const COMPOSICION_DE_RENTAS: Readonly<Record<string, ComposicionDeOpcion>
    * **El acto sigue sin poder registrarse**, y eso no lo cambia este issue: ver
    * `pantallas/rentas/index.ts` para las dos preguntas de #432 contestadas.
    */
+  /**
+   * Espectaculos, la sexta (#503 F3 y F4).
+   *
+   * Entra en la superficie de las seis y **no** en la anatomia de las cinco:
+   * `DETERMINACION` le da a las otras la cabecera-resumen que #393 diseño para
+   * la emision del ejercicio, y espectaculos no la tuvo nunca. La tira une
+   * pantallas; no les cambia lo que dibujan.
+   *
+   * **Su memoria si es una cuenta encadenada**, y por eso la gana en F4: de los
+   * catorce campos de «Declaración del espectáculo», tres son de solo lectura y
+   * los tres son la cuenta del art. 57 —la recaudacion declarada, la tasa del
+   * tipo de espectaculo y el impuesto—. Dibujados como tres cajas con borde
+   * discontinuo entre once campos que se teclean, esa relacion no se ve en
+   * ninguna parte; declarada, la seccion se parte en dos y la rejilla se queda
+   * con lo que se escribe.
+   *
+   * **Ni una cifra se compone aqui** (RNF-083): la recaudacion declarada es
+   * entradas por precio, y esa multiplicacion **es la base imponible del art.
+   * 56** —con su minimo del 50 % cuando la entrada incluye otros servicios—, o
+   * sea una regla tributaria, que no vive en un componente de React (regla 6).
+   * Le toca al backend con la forma que #399 dejo probada para
+   * `minimoImponible`; hoy `PeticionDeEspectaculo` no tiene ni campo para las
+   * entradas vendidas (#432), asi que las tres lineas salen con «—» hasta que
+   * lo tenga. Un guion no es un cero, y la memoria no lo rellena.
+   */
   espectaculos: {
+    superficie: DETERMINACIONES_DEL_EJERCICIO,
+    memoria: { 'Declaración del espectáculo': { total: 'impuestoAPagarS' } },
     filtrosBloqueados: ['nDeExpediente', 'organizador', 'desde', 'hasta'],
   },
   baja_deuda: {

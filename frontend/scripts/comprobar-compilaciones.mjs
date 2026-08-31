@@ -224,27 +224,32 @@ const HUELLAS = [
  * verde o rojo según dónde se compile**. Quedan fases del mismo issue que caen
  * en el arranque; si al cerrarlas sobra, se baja, como hizo #424.
  *
- * **Y a 148 el 2026-08-31** (#498 F2b), que es la reagrupacion de Catastro
- * conforme al artboard: el panel deja de listar opciones y pasa a dibujar
- * **destinos** —icono, rotulo y la nota que dice de que va—.
+ * **148 desde #503 F7**, y es la misma leccion por cuarta vez. Lo que sube al
+ * arranque es el camino que abre un alta desde el shell: `?nuevo=1` deja de
+ * abrir solo el asistente guiado y abre tambien el panel lateral, mas el
+ * `accionPrimaria` de Rentas en el catalogo de navegacion. **El formulario no**:
+ * `AltaDeContribuyente` y el andamio que comparte con las tres altas de Catastro
+ * viajan en sus propios trozos, y se ven en la lista de a-peticion
+ * (`FormularioDeAlta`, `altas`).
  *
- * Lo medido: `main` esta en **146,3** y esta rama en **146,9**. Son **0,6 KB**,
- * y caen en el arranque por lo mismo que los de F2: la barra lateral **es** el
- * shell. Se reparten en los trazos de los cuatro iconos y sus notas dentro de
- * `navegacion.generado.ts`, el componente `Destino` y su bloque de estilos.
+ * Sacar del arranque el resto no es una opcion: la barra lateral vive ahi —es
+ * quien dibuja el boton— y el catalogo de navegacion tambien. Lo medido son
+ * 146,6 y CI mide ~0,3 mas, asi que **147 decidiria en verde o rojo segun donde
+ * se compile**, que es exactamente lo que #442 enseño y este archivo ya ha
+ * aprendido tres veces.
  *
- * **Lo que se intento antes de tocar el numero.** Reusar los estilos del
- * modulo del riel no vale —el riel es solo icono, sin texto ni nota— y las
- * clases equivalentes de la barra vieja (`.sgtm-nav__modulo*`) las borro F1
- * precisamente porque nada las usaba. No hay de donde reusar; lo que hay es
- * codigo nuevo para una fila nueva.
+ * **Y #498 F2b gasta 0,6 de ese margen** —no vuelve a subir el numero—: es la
+ * reagrupacion de Catastro conforme al artboard, donde el panel deja de listar
+ * opciones y pasa a dibujar **destinos** (icono, rotulo y la nota que dice de
+ * que va). Lo medido: 146,3 antes y 146,9 despues, repartidos en los trazos de
+ * los cuatro iconos y sus notas dentro de `navegacion.generado.ts`, el
+ * componente `Destino` y su bloque de estilos.
  *
- * Sacarlo del arranque no es una opcion, por lo mismo de siempre: la barra se
+ * Lo que se intento antes: reusar los estilos del modulo del riel no vale —el
+ * riel es solo icono, sin texto ni nota— y las clases equivalentes de la barra
+ * vieja (`.sgtm-nav__modulo*`) las borro #498 F1 precisamente porque nada las
+ * usaba. No habia de donde reusar. Y sacarlo del arranque tampoco: la barra se
  * dibuja en la primera pantalla y en todas.
- *
- * Se sube a 148 y no a 147,5 por la leccion de #442, que este archivo ya
- * aprendio tres veces: lo medido aqui son 146,9 y CI mide ~0,3 mas, asi que
- * 147,5 decidiria en verde o rojo segun donde se compile.
  *
  * En una municipalidad con red mala, el arranque es lo que separa «lento» de
  * «no abre».

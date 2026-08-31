@@ -39,15 +39,24 @@ const SECUNDARIA_DE_LA_BAJA = 'Previsualizar';
 /* ── Lo que dibuja `design/propuestas/rentas-superficies/Anatomia.dc.html` ──
    La tabla «Las tres que si son el mismo caso que las fichas de catastro»: lo
    que queda de cada barra despues de la regla del vocabulario uniforme. */
-const BARRAS_DEL_PADRON: readonly { readonly ruta: string; readonly quedan: readonly string[] }[] =
+const BARRAS_DEL_PADRON: readonly {
+  readonly ruta: string;
+  readonly quedan: readonly string[];
+  readonly conAlta?: true;
+}[] =
   [
-    { ruta: '/rentas-registro/contribuyentes', quedan: ['Imprimir'] },
+    /* **«Nuevo» vuelve al padrón con #503 F7**, y no es una excepción a la
+       espina: la regla siempre fue que se queda si la pantalla declara el
+       formulario que abre. Cuando se midió esto, ninguna de las tres lo
+       declaraba; ahora `contribuyentes` sí, y ese botón abre el panel de alta.
+       Sigue **sin ser la primaria**: el padrón es una consulta. */
+    { ruta: '/rentas-registro/contribuyentes', quedan: ['Nuevo', 'Imprimir'], conAlta: true },
     { ruta: '/rentas-registro/predios-rentas', quedan: ['Ver ficha catastral'] },
     { ruta: '/rentas-registro/vehiculos', quedan: ['Excel', 'Imprimir'] },
   ];
 
-/** Y los ocho botones que la regla se lleva, que es de lo que trata el artboard. */
-const LOS_QUE_NO_SON_ACTOS = ['Nuevo', 'Modificar', 'Guardar'];
+/** Y los botones que la regla se lleva, que es de lo que trata el artboard. */
+const LOS_QUE_NO_SON_ACTOS = ['Modificar', 'Guardar'];
 
 test('la superficie de los movimientos de deuda es la del artboard', async ({ page }) => {
   await page.goto('/rentas-registro/baja-deuda?codContribuyente=00000006550');
@@ -86,7 +95,7 @@ test('la superficie de los movimientos de deuda es la del artboard', async ({ pa
 });
 
 test('las tres barras del padrón son las de la espina', async ({ page }) => {
-  for (const { ruta, quedan } of BARRAS_DEL_PADRON) {
+  for (const { ruta, quedan, conAlta } of BARRAS_DEL_PADRON) {
     await page.goto(ruta);
     await page.waitForLoadState('networkidle');
 
@@ -97,9 +106,16 @@ test('las tres barras del padrón son las de la espina', async ({ page }) => {
     /* **Y ninguna es la primaria**: las tres son lecturas, asi que ninguna de
        sus acciones escribe y ninguna se dibuja navy. Es lo que el artboard
        enseña tachado. */
-    await expect(barra.locator('.sgtm-boton--primario')).toHaveCount(0);
+    /* Con alta declarada, la primaria es **el botón que la abre** —el padrón no
+       escribe, y `altaEsElActo` dice que entonces el acto es abrir el alta—; sin
+       ella, ninguna es primaria: las dos restantes son lecturas y ninguna de sus
+       acciones escribe. Es lo que el artboard enseña tachado. */
+    await expect(barra.locator('.sgtm-boton--primario')).toHaveCount(conAlta === true ? 1 : 0);
     for (const rotulo of LOS_QUE_NO_SON_ACTOS) {
       await expect(barra.getByRole('button', { name: rotulo, exact: true })).toHaveCount(0);
+    }
+    if (conAlta !== true) {
+      await expect(barra.getByRole('button', { name: 'Nuevo', exact: true })).toHaveCount(0);
     }
   }
 });

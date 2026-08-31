@@ -3,7 +3,7 @@ import { screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { desinstalarProxyDeDatos, instalarProxyDeDatos } from '@sgtm/api-mock';
 import { escribe } from '@sgtm/api-client';
-import { todasLasPantallas } from '../catalogo';
+import { OPCIONES, todasLasPantallas } from '../catalogo';
 import { montarEnRuta } from '../pruebas/montar';
 import { COMPONENTES_PROPIOS } from './Pantalla';
 import { motivoDeLaPrimaria, primariaApagada } from '../pruebas/acciones';
@@ -768,33 +768,55 @@ describe('la accion que escribe, cuando no es la ultima del catalogo', () => {
   /**
    * **Ninguna barra del vocabulario uniforme pierde un alta en silencio.**
    *
-   * `Pantalla.tsx` llama a `accionesDeLaBarra` **sin** los rotulos de las altas.
-   * Ese argumento decide si un «Nuevo» se queda en la barra o se cae, asi que no
-   * pasarlo solo es correcto para una opcion **que no tenga ninguna alta que
-   * perder**. Hay dos formas de estarlo, y las dos valen:
+   * El tercer argumento de `accionesDeLaBarra` decide si un «Nuevo» se queda en
+   * la barra o se cae: se queda **solo si la opcion declara el formulario que
+   * abre**, que es lo que #321 cerro para el catalogo vial —un boton que promete
+   * un alta que nadie puede abrir—.
    *
-   *   con componente propio   lo pasa el, desde su propia composicion. Es el caso
-   *                           de las seis de catastro
-   *   sin ninguna alta        no hay nada que pasar. Es el caso de las tres
-   *                           lecturas del padron de rentas (#442): su catalogo
-   *                           dibuja «Nuevo», ninguna declara el formulario que
-   *                           abriria, y por eso ese boton **debe** caerse — que
-   *                           es exactamente lo que #321 cerro para el catalogo
-   *                           vial
+   * Hasta #503 F7 `Pantalla.tsx` no lo pasaba, y era correcto: ninguna opcion del
+   * vocabulario uniforme dibujada por el camino comun declaraba alta —las seis de
+   * catastro tienen componente propio y las tres lecturas del padron de rentas no
+   * tenian formulario—. `contribuyentes` la declara ahora, asi que la afirmacion
+   * cambia de sitio: **lo que se vigila ya no es que no haya altas, sino que el
+   * renderizador comun las pase**.
    *
-   * Antes esto exigia componente propio a secas, que era mas estrecho que lo que
-   * de verdad protege: dejaba fuera al caso en que no hay alta ninguna. Lo que no
-   * puede pasar —y es lo que sigue vigilandose— es que una opcion con alta
-   * declarada la dibuje el renderizador comun: ahi el «Nuevo» desapareceria sin
-   * que nadie supiera por que.
+   * La prueba compone la barra dos veces con lo que cada camino le da. Si el
+   * comun dejara de pasar sus altas, la de `contribuyentes` se quedaria sin
+   * «Nuevo» y el unico sintoma seria un panel que no se abre nunca.
    */
-  it('ninguna del vocabulario uniforme pierde un alta por el camino comun', () => {
+  it('el camino comun pasa las altas que declara, y por eso el «Nuevo» se queda', async () => {
+    const pantallas = await todasLasPantallas();
     for (const opcion of VOCABULARIO_UNIFORME) {
       if (Object.hasOwn(COMPONENTES_PROPIOS, opcion)) continue;
-      expect(
-        altasDe(opcion),
-        `«${opcion}» declara un alta y la dibuja el renderizador comun, que no la pasa`,
-      ).toEqual([]);
+      const acciones = pantallas[opcion]?.acciones ?? [];
+      const declaradas = altasDe(opcion);
+      const conAltas = accionesDeLaBarra(opcion, acciones, declaradas).acciones;
+      const sinAltas = accionesDeLaBarra(opcion, acciones, []).acciones;
+
+      // Sin alta declarada los dos caminos coinciden; con ella, el «Nuevo» solo
+      // sobrevive en el que la pasa.
+      if (declaradas.length === 0) {
+        expect(conAltas, `«${opcion}» sin altas`).toEqual(sinAltas);
+        continue;
+      }
+      for (const alta of declaradas) {
+        expect(conAltas, `«${opcion}»: «${alta}» se queda cuando se pasa el alta`).toContain(alta);
+        expect(sinAltas, `«${opcion}»: «${alta}» se cae cuando no se pasa`).not.toContain(alta);
+      }
+
+      /* **Y se monta**, que es la mitad que de verdad protege: lo de arriba mide
+         la funcion, y lo que puede olvidarse es que el renderizador le pase el
+         argumento. Sin el, el boton no aparece y el unico sintoma es un panel
+         que no se abre nunca. */
+      const ruta = OPCIONES.find((o) => o.id === opcion)?.ruta ?? '';
+      const montada = montarEnRuta(ruta);
+      for (const alta of declaradas) {
+        expect(
+          await screen.findByRole('button', { name: alta }),
+          `«${opcion}»: el renderizador comun no dibuja «${alta}»`,
+        ).toBeInTheDocument();
+      }
+      montada.unmount();
     }
   });
 
