@@ -229,7 +229,7 @@ export const GRUPOS_POR_TAREA = {
      * menu.
      */
     [
-      'Predio',
+      'Predios',
       [
         'consulta_fichas',
         'ficha_urbana',
@@ -238,14 +238,8 @@ export const GRUPOS_POR_TAREA = {
         'ficha_rural',
         'actualizacion_catastro',
       ],
+      { plegado: true },
     ],
-    // El reporte sale del grupo del predio y pasa a «Documentos», que es lo que
-    // el rediseño pide (#498 F2) y lo que es: no es una pantalla del predio, es
-    // un papel del contribuyente, y se abre por el codigo de EL, no por el del
-    // predio. Un grupo de uno agrupa poco, pero aqui separa dos cosas que se
-    // abren con identificadores distintos, que es la confusion que lo tenia
-    // debajo de las fichas.
-    ['Documentos', ['ficha_contribuyente_reporte']],
     // Las dos hojas del territorio, plegadas **sin carril**: `Territorio.tsx`
     // las dibuja como pestanas de una sola superficie, asi que un carril seria
     // una segunda forma de navegar lo mismo al lado de la primera.
@@ -256,7 +250,18 @@ export const GRUPOS_POR_TAREA = {
     // menu: son las tres hojas de un cuadro. Y por eso mismo se pliegan:
     // `CuadroDeValuacion.tsx` es la superficie, y sus pestanas llevan a las
     // tres.
-    ['Valuación', ['aranceles', 'valores_unitarios', 'depreciacion'], { plegado: true }],
+    [
+      'Valores del ejercicio',
+      ['aranceles', 'valores_unitarios', 'depreciacion'],
+      { plegado: true },
+    ],
+    // El reporte sale del grupo del predio y pasa a «Documentos», que es lo que
+    // el rediseño pide (#498 F2) y lo que es: no es una pantalla del predio, es
+    // un papel del contribuyente, y se abre por el codigo de EL, no por el del
+    // predio. Un grupo de uno agrupa poco, pero aqui separa dos cosas que se
+    // abren con identificadores distintos, que es la confusion que lo tenia
+    // debajo de las fichas.
+    ['Documentos', ['ficha_contribuyente_reporte']],
   ],
   /* **Los cinco destinos del embudo** (#506 F5). Fiscalizacion no es una lista de
      pantallas: es una secuencia —se detecta, se programa, se inspecciona, se
@@ -282,11 +287,7 @@ export const GRUPOS_POR_TAREA = {
        de cualquiera a las otras dos. Sin carril, por lo mismo que el territorio:
        la superficie ya es la forma de navegar entre ellas, y un carril al lado
        seria una segunda. */
-    [
-      'Resultados',
-      ['fisc_resultados', 'fisc_estado_cuenta', 'fisc_historico'],
-      { plegado: true },
-    ],
+    ['Resultados', ['fisc_resultados', 'fisc_estado_cuenta', 'fisc_historico'], { plegado: true }],
     ['Documentos', ['resolucion_determinacion_fisc']],
   ],
   'infracciones-administrativas': [
@@ -424,6 +425,65 @@ export function asignacionPorTarea(moduloId, items, tabla = GRUPOS_POR_TAREA) {
     }
   }
   return asignacion;
+}
+
+/**
+ * **Los destinos de un modulo**: como se ensena cada grupo en el panel lateral
+ * (#498 F2b).
+ *
+ * El rediseño no dibuja una lista de opciones: dibuja **destinos**, cada uno
+ * con su icono y una nota que dice de que va. Los trazos son los del artboard
+ * —`ICO_DEST` de `Catastro.dc.html`—, no inventados aqui.
+ *
+ * `panel` no es un grupo del catalogo: es la portada del modulo, que ya existe
+ * como ruta (`/:modulo`). Se declara igual porque en el panel se dibuja como un
+ * destino mas, que es lo que el diseño hace.
+ *
+ * **Las notas no llevan cifras.** El artboard escribe «18,412 en el padrón» y
+ * «5 sectores · 2,184 vías»; aqui no, y no por prudencia: la barra lateral se
+ * dibuja en **todas** las pantallas, asi que una cifra viva ahi es una peticion
+ * por pantalla abierta. Las cifras van al panel del modulo, que es una pantalla
+ * y pide una vez. La nota dice de que va el destino, que es lo que sirve para
+ * elegir.
+ *
+ * Solo Catastro los declara: es el modulo del rediseño. Un grupo sin destino se
+ * dibuja como se dibujaba, con su rotulo y sus opciones debajo.
+ */
+export const DESTINOS = {
+  catastro: {
+    panel: {
+      label: 'Panel del módulo',
+      nota: 'Lo que te toca hoy',
+      icono: ['M3 10.6 12 3.5l9 7.1', 'M5.6 9.6V20.5h12.8V9.6'],
+    },
+    Predios: {
+      /* **Abre el padron, no la primera ficha del catalogo.** El orden dentro
+         del grupo lo pone el prototipo, y ahi la primera es la ficha urbana;
+         el destino «Predios» del artboard es la busqueda, que es por donde se
+         empieza. Si este perfil no la puede ver, se cae a la primera que si.  */
+      entrada: 'consulta_fichas',
+      nota: 'El padrón y sus fichas',
+      icono: ['M17.4 11a6.4 6.4 0 1 1-12.8 0 6.4 6.4 0 0 1 12.8 0', 'M15.8 15.8 20.6 20.6'],
+    },
+    Territorio: {
+      nota: 'Sectores, manzanas y vías',
+      icono: [
+        'M4 4.5h6.5v6.5H4z',
+        'M13.5 4.5H20v6.5h-6.5z',
+        'M4 13.5h6.5V20H4z',
+        'M13.5 13.5H20V20h-6.5z',
+      ],
+    },
+    'Valores del ejercicio': {
+      nota: 'Aranceles y depreciación',
+      icono: ['M4 19.5h16', 'M6.5 19.5V9', 'M11 19.5V5.5', 'M15.5 19.5v-7', 'M20 19.5v-11'],
+    },
+  },
+};
+
+/** Los destinos de un modulo, o `null` si no declara ninguno. */
+export function destinosDe(moduloId, tabla = DESTINOS) {
+  return tabla[moduloId] ?? null;
 }
 
 /**

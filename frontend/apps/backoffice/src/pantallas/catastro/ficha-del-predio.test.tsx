@@ -3,11 +3,7 @@ import { screen, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { desinstalarProxyDeDatos, instalarProxyDeDatos } from '@sgtm/api-mock';
 import { montarEnRuta } from '../../pruebas/montar';
-import {
-  motivoDeLaPrimaria,
-  primariaApagada,
-  primariaEncendida,
-} from '../../pruebas/acciones';
+import { motivoDeLaPrimaria, primariaApagada, primariaEncendida } from '../../pruebas/acciones';
 import { entraCon, limpiarSesion } from '../../pruebas/sesion';
 import { todasLasPantallas } from '../../catalogo';
 import { SIN_DATO } from '../seguridad/listado';
@@ -80,31 +76,48 @@ describe('el conmutador no ofrece lo que no puede abrir', () => {
    * **No sale `codUnidad`**, que es lo que pide la rural y que ni siquiera es un
    * codigo catastral: `11024-0418`, con guion.
    */
-  it('desde un predio urbano, la rural sale apagada y dice por qué', async () => {
+  /**
+   * **La modalidad que no se abre con este código lleva a su propia búsqueda**
+   * (#498 F2b). Antes se apagaba, y con ella `ficha_rural` no la alcanzaba
+   * ninguna superficie del módulo — que es lo que impedía plegar el grupo del
+   * predio como el diseño lo agrupa.
+   *
+   * El enlace **no lleva el código**, porque de él no se deriva el `codUnidad`:
+   * lleva a la pantalla de esa modalidad sin registro, que es donde se teclea
+   * el identificador con el que sí se abre. Es lo que el motivo ya decía en
+   * prosa, ahora en un clic.
+   */
+  it('desde un predio urbano, la rural lleva a su búsqueda y dice por qué', async () => {
     montarEnRuta(URBANA);
     const region = await screen.findByRole('region', { name: 'Ficha del predio' });
 
-    const rural = within(region).getByLabelText('Ficha catastral rural');
-    expect(rural).toHaveAttribute('aria-disabled', 'true');
-    expect(rural).not.toHaveAttribute('href');
+    const rural = within(region).getByLabelText(/Ficha catastral rural/);
+    // Enlace, y **sin el código**: con él sería un 404.
+    expect(rural).toHaveAttribute('href', '/catastro/ficha-rural');
+    expect(rural).not.toHaveAttribute('aria-disabled');
+    expect(rural).toHaveAttribute('data-otro-codigo', '1');
 
-    // Las otras dos si se ofrecen, y son enlaces de verdad.
+    // Las otras dos se ofrecen con el código, que sí sirve para pedirlas.
     expect(within(region).getByLabelText('Ficha catastral económica')).toHaveAttribute('href');
     expect(within(region).getByLabelText('Ficha de bienes comunes')).toHaveAttribute('href');
 
     expect(within(region).getByRole('status')).toHaveTextContent(/unidad catastral/);
   });
 
-  it('y desde una unidad rural, las otras tres salen apagadas', async () => {
+  it('y desde una unidad rural, las otras tres llevan a la suya, sin el código', async () => {
     montarEnRuta(RURAL);
     const region = await screen.findByRole('region', { name: 'Ficha del predio' });
 
-    for (const nombre of [
-      'Ficha catastral urbana individual',
-      'Ficha catastral económica',
-      'Ficha de bienes comunes',
-    ]) {
-      expect(within(region).getByLabelText(nombre)).toHaveAttribute('aria-disabled', 'true');
+    for (const [nombre, ruta] of [
+      ['Ficha catastral urbana individual', '/catastro/ficha-urbana'],
+      ['Ficha catastral económica', '/catastro/ficha-economica'],
+      ['Ficha de bienes comunes', '/catastro/ficha-bienes'],
+    ] as const) {
+      const chip = within(region).getByLabelText(new RegExp(nombre));
+      // Sin el código: «11024-0418» no es un código de referencia catastral y
+      // con él no se encontraría ningún predio.
+      expect(chip).toHaveAttribute('href', ruta);
+      expect(chip).toHaveAttribute('data-otro-codigo', '1');
     }
     expect(within(region).getByLabelText('Ficha catastral rural')).toHaveAttribute(
       'aria-current',
@@ -208,9 +221,7 @@ describe('la pestana de Valorizacion dice donde vive la actualizacion', () => {
     await screen.findByRole('tab', { name: 'Valorización' });
 
     expect(screen.queryByText(AVISO)).not.toBeInTheDocument();
-    expect(
-      screen.getByText('Guardar reemplaza la lista completa de pisos'),
-    ).toBeInTheDocument();
+    expect(screen.getByText('Guardar reemplaza la lista completa de pisos')).toBeInTheDocument();
   });
 
   /**

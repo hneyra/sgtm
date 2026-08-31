@@ -1,9 +1,9 @@
 import { Link, NavLink, useLocation, useNavigate } from 'react-router-dom';
-import { Icono } from '@sgtm/design-system';
-import { bloquesDe, rutaDeOpcion } from '../catalogo';
+import { Icono, IconoDeModulo } from '@sgtm/design-system';
+import { bloquesDe, rutaDeModulo, rutaDeOpcion } from '../catalogo';
 import { NUEVO } from '../pantallas/busqueda';
 import { useCatalogoVisible } from './sesion/useCatalogoVisible';
-import type { BloqueDeNavegacion, ModuloDelCatalogo } from '../catalogo';
+import type { BloqueDeNavegacion, DestinoDeModulo, ModuloDelCatalogo } from '../catalogo';
 import { usePreferencias } from './preferencias';
 import { RielDeModulos } from './RielDeModulos';
 
@@ -143,9 +143,13 @@ export function BarraLateral({
         )}
 
         <div className="sgtm-nav__buscador">
-          <button type="button" onClick={onAbrirPaleta}>
+          {/* «Buscar» a secas, como el artboard: con «Buscar en el sistema» el
+              rotulo y el `Ctrl K` no caben en 246 px y partia en dos lineas.
+              El nombre accesible **no se acorta** —va en `aria-label`—, porque
+              es el que dice que se busca en todo el sistema y no solo aqui. */}
+          <button type="button" onClick={onAbrirPaleta} aria-label="Buscar en el sistema">
             <Icono nombre="lupa" tamano={15} />
-            <span>Buscar en el sistema</span>
+            <span>Buscar</span>
             <kbd>Ctrl K</kbd>
           </button>
         </div>
@@ -181,6 +185,25 @@ export function BarraLateral({
           </nav>
         ) : (
           <nav className="sgtm-nav__lista" aria-label={`Opciones de ${abierto.label}`}>
+            {/* **El destino de la portada** (#498 F2b): el diseño lo dibuja como
+                uno mas, arriba del todo. No es una opcion del catalogo —no
+                tiene id ni permiso propio (ADR-0014 §5)—: es la ruta del
+                modulo, que ya existe.
+
+                **Y no se dibuja si el modulo no tiene ninguna opcion visible**
+                (REQ-03 §5). Sin esa guarda seria la unica entrada del panel
+                que ignora los permisos: quien no puede ver nada de Catastro
+                veria igualmente su portada, y de paso el panel dejaria de
+                estar vacio —que es lo que dice que aqui no hay nada—. */}
+            {abierto.destinos?.['panel'] !== undefined && abierto.opciones.length > 0 && (
+              <Destino
+                destino={abierto.destinos['panel']}
+                etiqueta={abierto.destinos['panel'].label ?? 'Panel del módulo'}
+                a={rutaDeModulo(abierto)}
+                exacta
+                onNavegar={onNavegar}
+              />
+            )}
             {bloquesDe(abierto).map((bloque) => {
               // Las opciones de un bloque plegado no se listan: son **una**
               // entrada que abre su superficie (ADR-0014 §5). Que esa superficie
@@ -193,6 +216,9 @@ export function BarraLateral({
                     key={bloque.label}
                     modulo={abierto}
                     bloque={bloque}
+                    {...(abierto.destinos?.[bloque.label] === undefined
+                      ? {}
+                      : { destino: abierto.destinos[bloque.label] })}
                     onNavegar={onNavegar}
                   />
                 );
@@ -243,17 +269,74 @@ export function BarraLateral({
  * por `useCatalogoVisible`, asi que un usuario sin permiso sobre ninguna de
  * ellas no ve la entrada (REQ-03 §5).
  */
+/**
+ * Un destino del panel (#498 F2b): icono, rotulo y la nota que dice de que va.
+ *
+ * Es la fila que el rediseño dibuja en vez de una lista de opciones. El icono
+ * sale del catalogo —los trazos del artboard— y no de una tabla escrita aqui.
+ *
+ * `exacta` distingue los dos casos de «se esta dentro»: la portada del modulo
+ * lo esta solo en su propia ruta, y un grupo plegado lo esta en cualquiera de
+ * sus opciones. Ninguno de los dos marca `aria-current="page"` salvo la
+ * portada, que si es la pagina cuando lo esta.
+ */
+function Destino({
+  destino,
+  etiqueta,
+  a,
+  dentro,
+  conteo,
+  exacta = false,
+  onNavegar,
+}: {
+  readonly destino: DestinoDeModulo;
+  readonly etiqueta: string;
+  readonly a: string;
+  readonly dentro?: boolean;
+  readonly conteo?: number;
+  readonly exacta?: boolean;
+  readonly onNavegar: () => void;
+}) {
+  const { pathname } = useLocation();
+  const activo = exacta ? pathname === a : dentro === true;
+
+  return (
+    <Link
+      to={a}
+      className="sgtm-nav__destino"
+      data-dentro={activo ? '1' : '0'}
+      {...(exacta && activo ? { 'aria-current': 'page' as const } : {})}
+      onClick={onNavegar}
+    >
+      <span className="sgtm-nav__destino-icono" aria-hidden="true">
+        <IconoDeModulo trazos={destino.icono} tamano={15} />
+      </span>
+      <span className="sgtm-nav__destino-texto">
+        <span className="sgtm-nav__destino-etiqueta">{etiqueta}</span>
+        <span className="sgtm-nav__destino-nota">{destino.nota}</span>
+      </span>
+      {conteo !== undefined && <span className="sgtm-nav__bloque-conteo">{conteo}</span>}
+    </Link>
+  );
+}
+
 function EntradaPlegada({
   modulo,
   bloque,
+  destino,
   onNavegar,
 }: {
   readonly modulo: ModuloDelCatalogo;
   readonly bloque: BloqueDeNavegacion;
+  readonly destino?: DestinoDeModulo;
   readonly onNavegar: () => void;
 }) {
   const { pathname } = useLocation();
-  const primera = bloque.opciones[0];
+  /* La que el destino declara, si este perfil puede verla; si no, la primera
+     que si —que es lo que hacia antes—. `bloque.opciones` ya viene filtrado por
+     permiso, asi que buscar aqui es buscar entre las visibles. */
+  const declarada = bloque.opciones.find((o) => o.id === destino?.entrada);
+  const primera = declarada ?? bloque.opciones[0];
   if (primera === undefined) return null;
 
   // Se esta dentro si la ruta abierta es la de **alguna** de sus opciones.
@@ -261,10 +344,26 @@ function EntradaPlegada({
   // nunca es la abierta, y decir «esta es la pagina» seria mentir. Quien si lo
   // lleva es la hoja del carril, o la pestana activa de la superficie.
   const dentro = bloque.opciones.some((opcion) => pathname === rutaDeOpcion(modulo, opcion));
+  const a = rutaDeOpcion(modulo, primera);
+
+  // Con destino declarado se dibuja como el rediseño lo pide: icono y nota. Sin
+  // el, como se dibujaba —los otros once modulos no lo declaran todavia—.
+  if (destino !== undefined) {
+    return (
+      <Destino
+        destino={destino}
+        etiqueta={destino.label ?? bloque.label}
+        a={a}
+        dentro={dentro}
+        conteo={bloque.opciones.length}
+        onNavegar={onNavegar}
+      />
+    );
+  }
 
   return (
     <Link
-      to={rutaDeOpcion(modulo, primera)}
+      to={a}
       className="sgtm-nav__opcion sgtm-nav__plegado"
       data-dentro={dentro ? '1' : '0'}
       onClick={onNavegar}
