@@ -181,6 +181,10 @@ export const MODULOS: readonly ModuloDelCatalogo[] = [
       "Movimientos de deuda",
       "Documentos"
     ],
+    "accionPrimaria": {
+      "opcion": "contribuyentes",
+      "label": "Registrar contribuyente"
+    },
     "opciones": [
       {
         "id": "contribuyentes",

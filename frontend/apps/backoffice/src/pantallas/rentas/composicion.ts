@@ -30,6 +30,10 @@ const ResumenDeDeterminacion = lazy(async () => ({
  * seria codigo que 133 de las 134 pantallas no usan nunca. `Formulario` lo
  * dibuja dentro de un `Suspense`, igual que `Pantalla` hace con las cabeceras.
  */
+const AltaDeContribuyente = lazy(async () => ({
+  default: (await import('./altas')).AltaDeContribuyente,
+}));
+
 const ResolutorDeUnidad = lazy(async () => ({
   default: (await import('./ResolutorDeUnidad')).ResolutorDeUnidad,
 }));
@@ -255,10 +259,29 @@ const TRANSFERENCIAS = {
   hojas: ['transferencia_predio', 'transferencia_vehiculo'],
 } as const;
 export const COMPOSICION_DE_RENTAS: Readonly<Record<string, ComposicionDeOpcion>> = {
+  /**
+   * El padron, con el expediente dentro y **el alta que le faltaba** (#503 F2 y F7).
+   *
+   * `altas` se declara sobre la accion que el prototipo ya dibuja —«Nuevo»— y no
+   * sobre un boton nuevo al lado: dibujar otro dejaria dos «Nuevo» en la misma
+   * barra, uno vivo y uno apagado. Y devolverla a la barra es **la consecuencia
+   * de declararla**: `VOCABULARIO_UNIFORME` (#442) retiro de las tres del padron
+   * las acciones que no podian hacer lo que prometen, y `DE_ALTA` deja pasar
+   * «Nuevo» solo si esta pantalla declara el formulario que abre.
+   */
   contribuyentes: {
     ...FICHA_CON_PESTANAS,
     gruposDelIndice: APARTADOS_DEL_EXPEDIENTE,
     resumen: ResumenDeContribuyente,
+    altas: [
+      {
+        accion: 'Nuevo',
+        titulo: 'Nuevo contribuyente',
+        descripcion:
+          'Se crea la fila del padrón con lo que el alta admite. El domicilio, los contactos y los beneficios se registran después, desde su expediente.',
+        Formulario: AltaDeContribuyente,
+      },
+    ],
   },
   vehiculos: { ...FICHA_CON_PESTANAS, resumen: ResumenDeVehiculo },
   /**

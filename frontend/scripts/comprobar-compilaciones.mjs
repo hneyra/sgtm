@@ -224,12 +224,26 @@ const HUELLAS = [
  * verde o rojo según dónde se compile**. Quedan fases del mismo issue que caen
  * en el arranque; si al cerrarlas sobra, se baja, como hizo #424.
  *
+ * **148 desde #503 F7**, y es la misma leccion por cuarta vez. Lo que sube al
+ * arranque es el camino que abre un alta desde el shell: `?nuevo=1` deja de
+ * abrir solo el asistente guiado y abre tambien el panel lateral, mas el
+ * `accionPrimaria` de Rentas en el catalogo de navegacion. **El formulario no**:
+ * `AltaDeContribuyente` y el andamio que comparte con las tres altas de Catastro
+ * viajan en sus propios trozos, y se ven en la lista de a-peticion
+ * (`FormularioDeAlta`, `altas`).
+ *
+ * Sacar del arranque el resto no es una opcion: la barra lateral vive ahi —es
+ * quien dibuja el boton— y el catalogo de navegacion tambien. Lo medido son
+ * 146,6 y CI mide ~0,3 mas, asi que **147 decidiria en verde o rojo segun donde
+ * se compile**, que es exactamente lo que #442 enseño y este archivo ya ha
+ * aprendido tres veces.
+ *
  * En una municipalidad con red mala, el arranque es lo que separa «lento» de
  * «no abre».
  */
 const PRESUPUESTO = {
   /** Lo que hay que descargar para ver la primera pantalla: JS de arranque y CSS. */
-  arranque: 147,
+  arranque: 148,
   /** Lo que cuesta entrar en un modulo: su trozo del catalogo. */
   modulo: 11,
   /**
