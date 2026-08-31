@@ -1314,10 +1314,17 @@ const ESCRITURAS: Readonly<Record<string, EscrituraDeclarada>> = {
    *
    * `nDeExpediente` y `notaria` no viajan: `PeticionDeTransferenciaPredio` no tiene ningún
    * campo para ellos. `documentoOrigen` sale de «Nº de minuta / escritura», que es el
-   * documento con que se registra el acto. `generaAlcabala` tampoco viaja: es una casilla y
-   * `CampoDelCuerpo` no tiene una forma de mandar un booleano real —enviarlo como texto
-   * («si»/«») fallaría contra un campo `Boolean`—; `afectaAlcabala` queda sin marcar, que es
-   * el valor por omisión que el propio controlador ya aplica cuando el campo no llega.
+   * documento con que se registra el acto.
+   *
+   * **`generaAlcabala` sí viaja desde #503 F5, y antes no.** La razón por la que no lo hacía
+   * —«`CampoDelCuerpo` no tiene una forma de mandar un booleano real»— dejó de ser cierta
+   * cuando #445 B1 añadió `booleano` para `recalculaYaEmitidos`, y el comentario que lo
+   * explicaba se quedó atrás. Mientras tanto la casilla se dibujaba, quien atiende la
+   * marcaba y `afectaAlcabala` llegaba **siempre sin marcar**: el controlador aplica su
+   * valor por omisión cuando el campo no llega, así que toda transferencia quedaba
+   * registrada como que no genera alcabala. No hay ningún síntoma —se registra, responde 201
+   * y la casilla se ve marcada en la pantalla que se acaba de enviar—, y lo que se pierde es
+   * el hecho que dispara la liquidación del impuesto.
    */
   transferencia_predio: {
     campos: {
@@ -1329,6 +1336,7 @@ const ESCRITURAS: Readonly<Record<string, EscrituraDeclarada>> = {
       adquirenteDocumento: { campo: 'codAdquiriente' },
       predioId: { campo: 'predioId', entero: true },
       valorTransferencia: { campo: 'valorTransferencia', importe: true },
+      generaAlcabala: { campo: 'afectaAlcabala', booleano: true },
     },
     exigir: (borrador) => faltaEnLaTransferenciaDePredio(borrador),
     nota: true,

@@ -198,11 +198,52 @@ describe('transferencia de predio: el predio y el valor los llena el resolutor',
       documentoOrigen: 'EP-2218-2026',
       observacion: 'Compraventa registrada con minuta EP-2218-2026.',
     });
-    // Ni el código catastral tecleado —el backend no lo sabe leer—, ni
-    // `afectaAlcabala`: la casilla no viaja (`CampoDelCuerpo` no manda
-    // booleanos), y el controlador ya trata su ausencia como «no marcada».
+    // Ni el código catastral tecleado: el backend no lo sabe leer. Y sin marcar
+    // la casilla, `afectaAlcabala` **no viaja** —que es lo que un `@Nullable
+    // Boolean` lee como «no»— en vez de viajar como `false`.
     expect(JSON.stringify(cuerpo)).not.toContain(CODIGO);
     expect(cuerpo).not.toHaveProperty('afectaAlcabala');
+  });
+
+  /**
+   * **La casilla que decide si se liquida la alcabala** (#503 F5).
+   *
+   * Se dibujaba, quien atiende la marcaba y no viajaba: `PeticionDeTransferenciaPredio`
+   * recibía siempre `afectaAlcabala` sin marcar, así que toda transferencia quedaba
+   * registrada como que **no** genera alcabala. Ningún síntoma lo delataba —201, la
+   * transferencia registrada y la casilla marcada en la pantalla que se acaba de enviar—,
+   * y lo que se perdía es el hecho que dispara la liquidación del impuesto.
+   *
+   * La razón por la que no viajaba —«`CampoDelCuerpo` no sabe mandar un booleano»— dejó de
+   * ser cierta cuando #445 B1 añadió `booleano` para `recalculaYaEmitidos`; lo que quedó
+   * fue el comentario.
+   */
+  it('marcada, «Genera alcabala» viaja como booleano de verdad', async () => {
+    const usuario = userEvent.setup();
+    montarEnRuta(RUTA);
+    seEspiaElActo();
+    await elegirElPredio(usuario);
+
+    await usuario.type(screen.getByLabelText('Valor de transferencia (S/)'), '95000.00');
+    await usuario.selectOptions(screen.getByLabelText('Tipo de acto'), 'COMPRA-VENTA');
+    await usuario.type(screen.getByLabelText('Fecha del acto'), '2026-07-18');
+    await usuario.type(screen.getByLabelText('Nº de minuta / escritura'), 'EP-2218-2026');
+    await usuario.type(screen.getByLabelText('% transferido'), '100.00');
+    await usuario.type(screen.getByLabelText('Transferente — documento'), '44218937');
+    await usuario.type(screen.getByLabelText('Adquirente — documento'), '02718844');
+    await usuario.click(screen.getByLabelText('Genera alcabala'));
+    await usuario.type(await observacion(), 'Compraventa que genera alcabala.');
+
+    const primaria = await screen.findByRole('button', { name: 'Registrar transferencia' });
+    await waitFor(() => primariaEncendida(primaria));
+    await usuario.click(primaria);
+    await usuario.click(await screen.findByRole('button', { name: /^Confirmar/ }));
+
+    await waitFor(() => expect(escrituras).toHaveLength(1));
+    const cuerpo = JSON.parse(escrituras[0]?.cuerpo ?? '{}') as Record<string, unknown>;
+    // `true`, no `'si'`: un interruptor que viaja como cadena es un interruptor
+    // que un día deja de encenderse sin que nada lo diga.
+    expect(cuerpo['afectaAlcabala']).toBe(true);
   });
 });
 
@@ -269,5 +310,35 @@ describe('transferencia de vehículo: solo el valor, sin identificador que resol
     expect(cuerpo).not.toHaveProperty('codTransferente');
     expect(cuerpo).not.toHaveProperty('vehiculoId');
     expect(cuerpo).not.toHaveProperty('afectaAlcabala');
+  });
+});
+
+/**
+ * **Las dos modalidades del mismo acto** (#503 F5).
+ *
+ * Transferir un predio y transferir un vehiculo son el mismo tramite sobre dos
+ * objetos: el mismo expediente, la misma fecha, las mismas dos partes y la misma
+ * consecuencia. El manual las capturo como dos pantallas; el prototipo las
+ * dibuja como una modalidad, y la tira es esa modalidad **sin que ninguna
+ * pierda su id, su ruta ni su permiso**.
+ */
+describe('las dos transferencias, una superficie', () => {
+  it('las dos declaran la misma tira, con el titulo del catalogo en cada pestana', async () => {
+    montarEnRuta('/rentas-registro/transferencia-predio');
+    const tira = await screen.findByRole('tablist', { name: 'Hojas de Transferencias' });
+    expect(
+      within(tira)
+        .getAllByRole('tab')
+        .map((pestana) => pestana.textContent),
+    ).toEqual(['Transferencia de predio', 'Transferencia de vehículo']);
+  });
+
+  it('y se dibuja igual entrando por la otra', async () => {
+    montarEnRuta('/rentas-registro/transferencia-vehiculo');
+    const tira = await screen.findByRole('tablist', { name: 'Hojas de Transferencias' });
+    expect(within(tira).getByRole('tab', { name: 'Transferencia de predio' })).toHaveAttribute(
+      'href',
+      '/rentas-registro/transferencia-predio',
+    );
   });
 });
