@@ -95,6 +95,10 @@ const PETICIONES_DIRECTAS: Readonly<Record<string, string>> = {
      compone (#297). */
   consulta_vehiculos: 'apps/backoffice/src/pantallas/inicio/InicioDeAtencion.tsx',
   consulta_unificada: 'apps/backoffice/src/pantallas/atencion/FichaDeAtencion.tsx',
+  /* El mapa catastral (#500, ADR-0022). No sale de ninguna pantalla del
+     catalogo: el visor es una ruta del modulo, y su lectura la pide el modelo
+     del plano. */
+  plano_catastral: 'apps/backoffice/src/pantallas/catastro/plano.ts',
   /* El resolutor de la unidad del alta de deuda (#331). */
   vehiculos: 'apps/backoffice/src/pantallas/rentas/ResolutorDeUnidad.tsx',
   /* Seguridad: la matriz de permisos de un grupo (#70) y el historico de
@@ -158,6 +162,23 @@ const ESCRITURAS_ARMADAS_A_MANO: Readonly<Record<string, string>> = {
 /* Las conexiones llegan con el trozo de su modulo desde #433: hay que censar los
    doce —sin registrarlos— antes de preguntar por ninguna. */
 const APORTES = await censoDeAportes();
+
+/**
+ * Las operaciones que **algun controlador del backend publica**, derivadas por el
+ * propio backend (`FormasDeLaApiTest` → `docs/50-api/formas-de-la-api.json`).
+ *
+ * Se lee aqui arriba y no solo en su `describe` porque decide tambien lo
+ * anterior: una operacion que la interfaz consume y ningun controlador sirve
+ * **no esta lista para encender**, por bien que este el lado del cliente.
+ * Encenderla la manda a un 404.
+ */
+const PUBLICADAS_POR_EL_BACKEND = new Set(
+  Object.keys(
+    JSON.parse(
+      readFileSync(resolve(process.cwd(), '../docs/50-api/formas-de-la-api.json'), 'utf8'),
+    ) as Readonly<Record<string, unknown>>,
+  ).filter((clave) => clave !== '_'),
+);
 
 /**
  * Las operaciones **cuya respuesta la interfaz lee**, y por que puerta la lee.
@@ -224,6 +245,11 @@ function loQueFalta(metodo: string, ruta: string): readonly string[] {
     ];
   }
   const faltas: string[] = [];
+  if (!PUBLICADAS_POR_EL_BACKEND.has(`${metodo} ${ruta}`)) {
+    faltas.push(
+      `ningun controlador del backend sirve «${operacion}»: el contrato la declara y «docs/50-api/formas-de-la-api.json» no la trae. Encenderla la manda a un 404, y el sintoma —la pantalla vacia— es el mismo que el de una forma equivocada.`,
+    );
+  }
   if (!CONSUMIDAS.has(operacion)) {
     faltas.push(
       `ninguna pantalla declara como consumir «${operacion}»: no tiene conexion, ni adaptacion, ni escritura, ni lectura por POST, ni peticion directa declarada. El camino comun no cuenta —pide la forma que el backend no sirve—.`,
@@ -294,8 +320,8 @@ describe('cuanto falta para poder apagar el proxy (#400)', () => {
   );
   const pendientes = DEL_CONTRATO.filter(([, metodo, ruta]) => loQueFalta(metodo, ruta).length > 0);
 
-  it('el contrato publica 195 operaciones', () => {
-    expect(DEL_CONTRATO.length).toBe(195);
+  it('el contrato publica 196 operaciones', () => {
+    expect(DEL_CONTRATO.length).toBe(196);
   });
 
   it('encendidas: 3', () => {
@@ -309,8 +335,13 @@ describe('cuanto falta para poder apagar el proxy (#400)', () => {
     expect(listas.length).toBe(125);
   });
 
-  it('pendientes: 67', () => {
-    expect(pendientes.length).toBe(67);
+  /* 68 desde #500: `plano_catastral` entra pendiente y no lista, aunque su lado
+     del cliente este entero —la interfaz la consume y el proxy ya la publica con
+     la forma del backend—. Lo que le falta es el controlador, y encenderla hoy
+     la mandaria a un 404. Cuando el issue del backend cierre, pasa a listas sin
+     tocar una linea de interfaz, que es la promesa de ADR-0010. */
+  it('pendientes: 68', () => {
+    expect(pendientes.length).toBe(68);
   });
 
   it('las tres cifras cubren el contrato entero', () => {
@@ -367,21 +398,31 @@ describe('cuanto falta para poder apagar el proxy (#400)', () => {
  */
 const SIN_CONTROLADOR_Y_DECIDIDA_ASI: readonly string[] = ['GET /portal/deuda'];
 
-describe('lo que ningun controlador sirve esta nombrado (#400)', () => {
-  const publicadas = new Set(
-    Object.keys(
-      JSON.parse(
-        readFileSync(resolve(process.cwd(), '../docs/50-api/formas-de-la-api.json'), 'utf8'),
-      ) as Readonly<Record<string, unknown>>,
-    ).filter((clave) => clave !== '_'),
-  );
+/**
+ * Y las que ningun controlador sirve **todavia**, que es otra cosa.
+ *
+ * La de arriba esta decidida en contra; estas estan pendientes, con su issue
+ * abierto, y la lista se vacia cuando cierra. Se separan porque el remedio no es
+ * el mismo: aquella hay que decidirla, estas hay que escribirlas.
+ */
+const SIN_CONTROLADOR_TODAVIA: readonly string[] = [
+  // El plano catastral (#500, ADR-0022). El contrato la declara y la interfaz
+  // la consume ya contra el proxy, que la publica con la forma que el
+  // `Resource` tendra. Lo que falta es el backend: la consulta PostGIS acotada
+  // por marco, su caso de uso transaccional —sin `SET LOCAL` no hay RLS, #486—
+  // y su controlador.
+  'GET /catastro/predios/plano',
+];
 
+describe('lo que ningun controlador sirve esta nombrado (#400)', () => {
   it('el backend publica todas las operaciones del contrato menos las nombradas', () => {
     const sinControlador = DEL_CONTRATO.filter(
-      ([, metodo, ruta]) => !publicadas.has(`${metodo} ${ruta}`),
+      ([, metodo, ruta]) => !PUBLICADAS_POR_EL_BACKEND.has(`${metodo} ${ruta}`),
     ).map(([, metodo, ruta]) => `${metodo} ${ruta}`);
 
-    expect(sinControlador.sort()).toEqual([...SIN_CONTROLADOR_Y_DECIDIDA_ASI].sort());
+    expect(sinControlador.sort()).toEqual(
+      [...SIN_CONTROLADOR_Y_DECIDIDA_ASI, ...SIN_CONTROLADOR_TODAVIA].sort(),
+    );
   });
 
   it('y mientras siga ahi, el proxy no se puede apagar del todo', () => {
