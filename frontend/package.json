@@ -1,57 +1,25 @@
 {
   "name": "sgtm-frontend",
   "private": true,
-  "type": "module",
   "version": "0.1.0",
-  "description": "SGTM — interfaz web: 12 módulos, 134 opciones del manual",
-  "workspaces": [
-    "apps/*",
-    "packages/*"
-  ],
-  "engines": {
-    "node": ">=22"
-  },
+  "type": "module",
   "scripts": {
-    "dev": "yarn workspace @sgtm/backoffice dev",
-    "dev:portal": "yarn workspace @sgtm/portal dev",
-    "build": "yarn build:backoffice && yarn build:portal",
-    "build:backoffice": "yarn workspace @sgtm/backoffice build",
-    "build:portal": "yarn workspace @sgtm/portal build",
-    "preview": "yarn workspace @sgtm/backoffice preview",
-    "preview:portal": "yarn workspace @sgtm/portal preview",
-    "test": "vitest run",
-    "test:watch": "vitest",
-    "lint": "eslint .",
-    "format": "prettier --write .",
-    "typecheck": "tsc --build --force",
-    "verificar": "yarn comprobar-operaciones && yarn lint && yarn typecheck && yarn test",
-    "portar-catalogo": "node scripts/portar-catalogo.mjs",
-    "generar-operaciones": "node scripts/generar-operaciones.mjs",
-    "comprobar-operaciones": "node scripts/generar-operaciones.mjs --comprobar",
-    "comprobar-compilaciones": "node scripts/comprobar-compilaciones.mjs",
-    "e2e": "playwright test"
+    "dev": "vite",
+    "build": "tsc -b && vite build",
+    "preview": "vite preview",
+    "verificar": "tsc -b --noEmit",
+    "mirar": "node verificaciones/mirar.mjs"
+  },
+  "dependencies": {
+    "react": "^19.1.0",
+    "react-dom": "^19.1.0"
   },
   "devDependencies": {
-    "@eslint/js": "^9.39.0",
-    "@playwright/test": "^1.62.1",
-    "@testing-library/dom": "^10.4.0",
-    "@testing-library/jest-dom": "^6.9.0",
-    "@testing-library/react": "^16.3.0",
-    "@testing-library/user-event": "^14.6.1",
-    "@types/leaflet": "^1.9.12",
-    "@types/node": "^22.15.0",
-    "@types/react": "^19.2.0",
-    "@types/react-dom": "^19.2.0",
-    "@vitejs/plugin-react": "^5.0.0",
-    "eslint": "^9.39.0",
-    "eslint-plugin-jsx-a11y": "^6.10.2",
-    "eslint-plugin-react-hooks": "^5.2.0",
-    "globals": "^16.0.0",
-    "jsdom": "^26.1.0",
-    "prettier": "^3.6.0",
-    "typescript": "^5.9.0",
-    "typescript-eslint": "^8.46.0",
-    "vite": "^7.1.0",
-    "vitest": "^3.2.0"
+    "@types/react": "^19.1.0",
+    "@types/react-dom": "^19.1.0",
+    "@vitejs/plugin-react": "^4.3.4",
+    "playwright-core": "^1.62.1",
+    "typescript": "~5.7.3",
+    "vite": "^6.0.11"
   }
 }
