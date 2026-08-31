@@ -354,14 +354,27 @@ export const COMPOSICION_DE_RENTAS: Readonly<Record<string, ComposicionDeOpcion>
   /**
    * Las otras cuatro determinaciones, con la misma banda (#393).
    *
-   * Solo `alcabala` declara ademas memoria de calculo, y esa asimetria es del
-   * catalogo, no una decision: es la unica de las cuatro cuya seccion es una
-   * cuenta encadenada —el mayor entre valor de transferencia y autovaluo
-   * ajustado, menos las 10 UIT inafectas, por la tasa—. «Predial — masivo» y
-   * «Cálculo vehicular» no tienen ninguna seccion de solo lectura que encadene
-   * —la del masivo son los **parametros** que se eligen antes de correr el
-   * proceso— y «Arbitrios» no tiene secciones en absoluto: su determinacion es
-   * la tabla por servicio, que ya se lee como tal.
+   * De las **seis** del destino (#503 F3), **tres** declaran memoria de calculo
+   * —`predial_individual`, `alcabala` y, desde #503 F4, `espectaculos`— y las
+   * otras tres no. **La asimetria es del catalogo y no una decision**, y desde
+   * F4 esta ademas medida: `memoria-de-las-determinaciones.test.tsx` computa de
+   * las estructuras portadas cuales tienen una seccion que encadena campos de
+   * solo lectura, y se pone rojo el dia que una gane —o pierda— la suya.
+   *
+   * Por que las tres que faltan no pueden tenerla:
+   *
+   *   `predial_masivo`     su unica seccion son los **parametros** que se
+   *                        eligen antes de correr el proceso, y de sus ocho
+   *                        campos uno solo es de solo lectura. Un campo no
+   *                        encadena nada
+   *   `vehicular_calculo`  **no tiene ni una seccion**: su catalogo es filtros,
+   *                        tabla y totales. El prototipo del rediseno le dibuja
+   *                        una memoria —el mayor entre el valor declarado y la
+   *                        tabla referencial del MEF, por la tasa, contra el
+   *                        minimo—, y portarla exigiria **inventar una seccion
+   *                        que el manual no capturo**
+   *   `arbitrios`          tampoco tiene secciones: su determinacion es la
+   *                        tabla por servicio, que ya se lee como tal
    */
   predial_masivo: simula('Simular', { simulacion: true }),
   arbitrios: DETERMINACION,
@@ -431,12 +444,34 @@ export const COMPOSICION_DE_RENTAS: Readonly<Record<string, ComposicionDeOpcion>
    * **El acto sigue sin poder registrarse**, y eso no lo cambia este issue: ver
    * `pantallas/rentas/index.ts` para las dos preguntas de #432 contestadas.
    */
+  /**
+   * Espectaculos, la sexta (#503 F3 y F4).
+   *
+   * Entra en la superficie de las seis y **no** en la anatomia de las cinco:
+   * `DETERMINACION` le da a las otras la cabecera-resumen que #393 diseño para
+   * la emision del ejercicio, y espectaculos no la tuvo nunca. La tira une
+   * pantallas; no les cambia lo que dibujan.
+   *
+   * **Su memoria si es una cuenta encadenada**, y por eso la gana en F4: de los
+   * catorce campos de «Declaración del espectáculo», tres son de solo lectura y
+   * los tres son la cuenta del art. 57 —la recaudacion declarada, la tasa del
+   * tipo de espectaculo y el impuesto—. Dibujados como tres cajas con borde
+   * discontinuo entre once campos que se teclean, esa relacion no se ve en
+   * ninguna parte; declarada, la seccion se parte en dos y la rejilla se queda
+   * con lo que se escribe.
+   *
+   * **Ni una cifra se compone aqui** (RNF-083): la recaudacion declarada es
+   * entradas por precio, y esa multiplicacion **es la base imponible del art.
+   * 56** —con su minimo del 50 % cuando la entrada incluye otros servicios—, o
+   * sea una regla tributaria, que no vive en un componente de React (regla 6).
+   * Le toca al backend con la forma que #399 dejo probada para
+   * `minimoImponible`; hoy `PeticionDeEspectaculo` no tiene ni campo para las
+   * entradas vendidas (#432), asi que las tres lineas salen con «—» hasta que
+   * lo tenga. Un guion no es un cero, y la memoria no lo rellena.
+   */
   espectaculos: {
-    /* Entra en la superficie de las seis (#503 F3) y **no** en la anatomia de
-       las cinco: `DETERMINACION` le da a las otras la cabecera-resumen que #393
-       diseño para la emision del ejercicio, y espectaculos no la tuvo nunca. La
-       tira une pantallas; no les cambia lo que dibujan. */
     superficie: DETERMINACIONES_DEL_EJERCICIO,
+    memoria: { 'Declaración del espectáculo': { total: 'impuestoAPagarS' } },
     filtrosBloqueados: ['nDeExpediente', 'organizador', 'desde', 'hasta'],
   },
   baja_deuda: {
