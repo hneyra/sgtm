@@ -5,9 +5,9 @@ React 19 sobre Vite, TypeScript. **Implementa el rediseño de
 opciones del manual— resueltos como cuatro a seis *destinos* por módulo sobre un mismo
 shell.
 
-**Aquí no hay backend.** Todos los datos son de muestra y viven en `src/datos/`. No hay
-un solo `fetch`: lo que en el sistema real escribiría, aquí enseña un aviso con el
-mismo texto que el artboard.
+**Casi todo es maqueta.** Los datos de muestra viven en `src/datos/` y lo que escribiría
+enseña un aviso con el texto del artboard. La excepción es **Catastro · Predios**, que
+lee y escribe contra el backend de verdad — ver más abajo.
 
 ```bash
 yarn install
@@ -20,8 +20,10 @@ yarn mirar      # recorre las 65 pantallas en Chromium y guarda una captura de
                 # una pantalla sin conectar: en silencio)
 ```
 
-`yarn mirar` necesita la vista previa levantada; si no está en el 5180, se le dice
-con `SGTM_BASE=http://localhost:5181 yarn mirar`.
+`yarn mirar` necesita la vista previa levantada; si no está en el 5180, se le dice con
+`SGTM_BASE=http://localhost:5181 yarn mirar`. Con `SGTM_TOKEN=…` recorre las pantallas
+conectadas leyendo del backend; sin él, el backend contesta 401 y lo que se comprueba es
+que la pantalla lo diga bien — que también hay que verlo.
 
 ## Cómo está armado
 
@@ -93,6 +95,120 @@ Se corrige al final de `colors.css`, con las dos caras a la vez —el relleno de
 insignia se oscurece y el texto se aclara—, de modo que cada par sigue valiendo dentro de
 la insignia (7,80:1 el más bajo) y además se lee sobre la tarjeta (8,63:1 el más bajo).
 Las cifras están medidas, no estimadas.
+
+## Predios, conectado
+
+`Catastro · Predios` es el primer submódulo que habla con el backend. Todo lo demás
+sigue siendo maqueta.
+
+```
+src/api/cliente.ts      La única puerta por la que salen las peticiones. Ningún
+                        `fetch` suelto en ninguna pantalla. Traduce el RFC 9457 del
+                        backend a un `ErrorDeApi` con su `codigo` estable.
+src/api/catastro.ts     Los tipos, campo por campo, de los `record` del backend, y
+                        las cinco operaciones que sirve `PredioController`.
+src/api/useRecurso.ts   Una lectura con sus cuatro estados. Cancela la anterior,
+                        descarta la que vuelve tarde y distingue cancelar de fallar.
+```
+
+| Qué | Contra qué |
+|---|---|
+| El padrón, con paginación | `GET /catastro/predios` |
+| Buscar por código | el filtro `codRefCatastral`, que acota por **prefijo** |
+| Filtrar por sector, estado y ficha | `codigoDeSector` · `estado` · `fichado` |
+| El desplegable de sectores | `GET /catastro/sectores` |
+| El titular, al abrir el predio | `GET /catastro/predios/{id}/titulares` |
+| Inscribir un predio | `POST /catastro/predios` |
+| Retirarlo del padrón y devolverlo | `POST …/{id}/baja` · `POST …/{id}/reactivacion` |
+
+En desarrollo no hay CORS que configurar: `vite.config.ts` proxea `/api` al backend, así
+que el navegador habla con su propio origen. Se apunta a otro sitio con
+`VITE_SGTM_BACKEND`.
+
+Mientras no exista la puerta de sesión, el token sale de `VITE_SGTM_TOKEN` o de
+`localStorage['sgtm.token']`; cuando la haya, cambia una sola función —`token()` en
+`cliente.ts`—. **Caduca a los 15 minutos y no se renueva solo**: al vencer, la pantalla
+dice «La sesión no vale» y no ofrece reintentar, porque reintentar no lo arregla.
+
+### Desplegado con el resto del sistema
+
+`despliegue/compose.yaml` construye este directorio como el servicio **`interfaz`** y lo
+publica en `${SGTM_PUERTO_INTERFAZ:-8081}`.
+
+```bash
+cd despliegue
+docker compose up -d --build interfaz     # reconstruye solo la interfaz
+docker compose logs -f interfaz
+```
+
+Si `docker ps` da «permission denied» sobre `/var/run/docker.sock` y `getent group docker`
+te lista igualmente, es que la sesión arrancó **antes** de que te añadieran al grupo: la
+pertenencia se resuelve al iniciar sesión. Sin cerrarla, `sg docker -c "…"` corre un
+comando con el grupo aplicado.
+
+`Dockerfile` compila con Vite y sirve el resultado con nginx sin root; `nginx.conf`
+reenvía `/api/v1` a `aplicacion:8080` **por la red del compose**. Ese reenvío no es
+comodidad: el backend **no tiene ninguna configuración de CORS** —un preflight desde otro
+origen sale 401 sin una sola cabecera `Access-Control-*`—, así que servir la API desde el
+mismo origen es lo único que hace que la interfaz la alcance.
+
+`VITE_SGTM_API` es un argumento de **construcción**: Vite la resuelve al compilar, no al
+arrancar, y cambiarla exige reconstruir la imagen. Por eso vale `/api/v1` y nunca una URL
+absoluta —un dominio horneado en el paquete sobrevive a cualquier cambio de configuración
+y las dos mitades acaban apuntando a sitios distintos, en verde y sin síntoma—.
+
+**Ningún token se hornea en la imagen.** `VITE_SGTM_TOKEN` es para una vista previa local;
+meterlo en la imagen dejaría una credencial dentro de un artefacto que se publica.
+
+### La puerta de sesión
+
+Fuera de `localhost`, entrar sin sesión manda al **formulario de Keycloak**: código de
+autorización con PKCE (S256) contra el cliente `sgtm-backoffice`, que el realm ya declara
+como público con flujo estándar.
+
+```
+src/api/sesion.ts    entrar() · canjearSiVuelve() · reintentarLaSesion() · salir()
+```
+
+Tres decisiones que explican el resto:
+
+**Rutas relativas, nunca un dominio.** Keycloak se sirve bajo `/kc` del mismo origen, así
+que el realm por omisión es `/kc/realms/sgtm`. Un dominio escrito ahí quedaría horneado en
+el paquete —Vite resuelve `import.meta.env` al compilar— y, como la misma imagen se
+despliega en varios sitios, las dos mitades acabarían apuntando a servidores distintos, en
+verde y sin un solo síntoma.
+
+**El 401 vuelve a la puerta en vez de guardar un token de refresco.** Un refresco es una
+credencial de vida larga en `localStorage`; pedir otro código no lo es. Con la sesión de
+Keycloak viva el navegador va y vuelve **sin enseñar nada** —comprobado: token caducado,
+ningún formulario, de vuelta en el mismo destino con token nuevo—, y si no lo está, sale el
+formulario, que es lo que tiene que salir. Una guarda de diez segundos impide el bucle
+cuando el canje funciona y la API sigue negando: en vez de rebotar sin fin, se para y la
+pantalla dice qué pasa.
+
+**El canje ocurre antes de montar React.** Limpia la URL y restituye el destino: hacerlo en
+un efecto significaría montar dos veces, y la primera con `?code=` en la barra, así que
+quien pidió `#/catastro/predios` acabaría en Inicio.
+
+En `localhost` no hay puerta —el puerto de la vista previa no está entre las URIs de
+retorno del cliente, y el rebote acabaría en «Invalid parameter: redirect_uri»—: ahí sigue
+la caja para pegar un token a mano.
+
+### Lo que la conexión NO hace, y por qué se dice en pantalla
+
+**No hay columna de titular en la lista.** El backend no la publica a propósito
+(ADR-0015 §2.4): publicarla convertiría «quien puede listar predios» en «quien puede
+cosechar la correlación predio→persona de toda la municipalidad». Se resuelve al abrir
+el predio, de uno en uno y dejando su rastro en la bitácora. La tabla lo dice en su pie.
+
+**El uso, las áreas y el autovalúo salen «—».** Son datos de la **ficha**, que la sirve
+otra superficie (`/catastro/fichas/…`) y no está conectada. Poner ahí la cifra del
+prototipo le inventaría a ese predio un autovalúo que no tiene, y es indistinguible de
+uno correcto en cuanto sale de la pantalla. Una franja lo explica sobre la ficha.
+
+**Manzana, lote, uso y conciliación no filtran.** El endpoint no los acota. Salen en la
+tabla y el bloque de filtros dice dónde se buscan de verdad, en vez de dibujar
+desplegables que se teclean y no hacen nada.
 
 ## Portar un artboard
 

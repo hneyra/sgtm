@@ -3,6 +3,8 @@ import { Icono } from '../ds/Icono';
 import { ICONOS, ICO } from '../ds/iconos';
 import { MODULOS, moduloDe, type Modulo } from './modulos';
 import { EJERCICIOS, usarPreferencias } from './preferencias';
+import { hayPuerta, salir } from '../api/sesion';
+import { personaDeLaSesion } from './persona';
 
 /**
  * El shell común de los doce módulos: riel de 68 px con los módulos, panel de
@@ -33,6 +35,7 @@ export function Shell({
   titulo,
   contexto,
   tarjeta,
+  notasDeDestino,
   paleta,
   children,
 }: {
@@ -46,10 +49,20 @@ export function Shell({
    *  de acción: el turno de caja abierto, la cartera del ejecutor, el aviso de
    *  aprobación automática. Va aquí y no en el cuerpo porque es del panel. */
   tarjeta?: ReactNode;
+  /**
+   * La nota de un destino, cuando el módulo sabe la de verdad.
+   *
+   * `modulos.ts` la trae del artboard —«18,412 en el padrón»—, y eso vale
+   * mientras la pantalla enseñe el juego de datos. En cuanto un destino lee del
+   * backend, esa cifra queda contradicha por la que sale a su lado, así que el
+   * módulo la sustituye por la que acaba de contar.
+   */
+  notasDeDestino?: Record<string, string>;
   paleta?: EntradaDePaleta[];
   children: ReactNode;
 }) {
   const m: Modulo = moduloDe(modulo);
+  const persona = personaDeLaSesion(m.sesion);
   const { pref, fijar, toast, ir } = usarPreferencias();
   const [navOpen, setNavOpen] = useState(false);
   const [pal, setPal] = useState(false);
@@ -307,7 +320,9 @@ export function Shell({
                 </span>
                 <span style={{ flex: 1, minWidth: 0 }}>
                   <span style={{ display: 'block', fontSize: 13.5 }}>{d.label}</span>
-                  <span style={{ display: 'block', fontSize: 10.5, color: 'var(--ink-4)', marginTop: 1 }}>{d.nota}</span>
+                  <span style={{ display: 'block', fontSize: 10.5, color: 'var(--ink-4)', marginTop: 1 }}>
+                    {notasDeDestino?.[d.k] ?? d.nota}
+                  </span>
                 </span>
                 {d.pastilla && (
                   <span
@@ -543,12 +558,37 @@ export function Shell({
                 fontWeight: 600,
               }}
             >
-              {m.sesion.iniciales}
+              {persona.iniciales}
             </span>
             <span style={{ lineHeight: 1.25 }}>
-              <span style={{ display: 'block', fontSize: 12, fontWeight: 500 }}>{m.sesion.nombre}</span>
-              <span style={{ display: 'block', fontSize: 10, color: 'var(--ink-3)' }}>{m.sesion.rol}</span>
+              <span style={{ display: 'block', fontSize: 12, fontWeight: 500 }}>{persona.nombre}</span>
+              <span style={{ display: 'block', fontSize: 10, color: 'var(--ink-3)' }}>{persona.rol}</span>
             </span>
+            {/* Solo donde hay puerta: en la vista previa local no hay sesión de
+                la que salir, y un botón que no lleva a ninguna parte es peor que
+                no tenerlo. */}
+            {hayPuerta() && (
+              <button
+                onClick={salir}
+                aria-label="Cerrar la sesión"
+                title="Cerrar la sesión"
+                className="hov-linea-4"
+                style={{
+                  width: 30,
+                  height: 30,
+                  display: 'grid',
+                  placeItems: 'center',
+                  border: '1px solid var(--line-2)',
+                  borderRadius: 7,
+                  background: 'var(--bg-card)',
+                  cursor: 'pointer',
+                  flex: '0 0 auto',
+                  marginLeft: 3,
+                }}
+              >
+                <Icono d={['M15 17l5-5-5-5', 'M20 12H9', 'M12 20H6.5A1.5 1.5 0 0 1 5 18.5v-13A1.5 1.5 0 0 1 6.5 4H12']} tam={15} />
+              </button>
+            )}
           </div>
         </header>
 
@@ -746,3 +786,4 @@ export function Shell({
     </div>
   );
 }
+

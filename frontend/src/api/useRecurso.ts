@@ -1,5 +1,6 @@
-import { useCallback, useEffect, useRef, useState } from 'react';
-import { ErrorDeApi } from './cliente';
+import { useCallback, useEffect, useRef, useState, useSyncExternalStore } from 'react';
+import { alCambiarLaSesion, ErrorDeApi, sesionActual } from './cliente';
+import { reintentarLaSesion } from './sesion';
 
 /**
  * Una lectura del backend, con los cuatro estados que la pantalla ya dibuja:
@@ -35,6 +36,9 @@ export function useRecurso<T>(
   const [cargando, setCargando] = useState(activo);
   const [error, setError] = useState<ErrorDeApi | null>(null);
   const [intento, setIntento] = useState(0);
+  /* Cambiar de credencial vuelve a pedirlo todo: una lectura que se quedó con
+     un 401 no se arregla sola cuando la sesión pasa a valer. */
+  const sesion = useSyncExternalStore(alCambiarLaSesion, sesionActual, sesionActual);
 
   /* La función cambia en cada render —cierra sobre los filtros— así que no
      puede ser una llave del efecto: lo que decide es `llaves`. */
@@ -63,6 +67,11 @@ export function useRecurso<T>(
       .catch((fallo: unknown) => {
         if (!vigente) return;
         if (fallo instanceof DOMException && fallo.name === 'AbortError') return;
+        /* Un token que dejó de valer no es un error que enseñar: se vuelve a la
+           puerta. Con la sesión de Keycloak viva, el navegador va y vuelve sin
+           enseñar nada. Si no hay puerta —local, u origen no seguro— sigue el
+           camino de siempre y la pantalla lo dice. */
+        if (fallo instanceof ErrorDeApi && fallo.codigo === 'NO_AUTENTICADO' && reintentarLaSesion()) return;
         setError(
           fallo instanceof ErrorDeApi
             ? fallo
@@ -77,7 +86,7 @@ export function useRecurso<T>(
       control.abort();
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [...llaves, activo, intento]);
+  }, [...llaves, activo, intento, sesion]);
 
   const reintentar = useCallback(() => setIntento((n) => n + 1), []);
   return { datos, cargando, error, reintentar };

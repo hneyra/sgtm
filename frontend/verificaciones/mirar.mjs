@@ -33,7 +33,13 @@ const alto = Number(process.argv.find((a) => a.startsWith('--alto='))?.slice(7) 
 
 await mkdir(SALIDA, { recursive: true });
 const navegador = await chromium.launch();
-const pagina = await navegador.newPage({ viewport: { width: 1440, height: alto } });
+const contexto = await navegador.newContext({ viewport: { width: 1440, height: alto } });
+
+/* Con token, las pantallas conectadas leen del backend; sin él contestan 401 y
+   se comprueba que lo dicen bien, que también hay que verlo. */
+const TOKEN = process.env.SGTM_TOKEN;
+if (TOKEN) await contexto.addInitScript((t) => localStorage.setItem('sgtm.token', t), TOKEN);
+const pagina = await contexto.newPage();
 
 const fallos = [];
 let vistas = 0;
@@ -47,7 +53,11 @@ for (const m of MODULOS) {
   ];
   for (const d of paradas.length ? paradas : ['panel']) {
     const errores = [];
-    const oyeConsola = (msg) => msg.type() === 'error' && errores.push(msg.text());
+    /* Que el backend NIEGUE una petición no es que la interfaz esté rota: es
+       una respuesta, y la pantalla tiene que saber dibujarla. Lo que sí se
+       cuenta es cualquier otro error de consola. */
+    const esRespuestaDelApi = (t) => /Failed to load resource/.test(t) && /40[13]|404|409|422|500/.test(t);
+    const oyeConsola = (msg) => msg.type() === 'error' && !esRespuestaDelApi(msg.text()) && errores.push(msg.text());
     const oyePagina = (e) => errores.push('PAGEERROR: ' + e.message);
     pagina.on('console', oyeConsola);
     pagina.on('pageerror', oyePagina);

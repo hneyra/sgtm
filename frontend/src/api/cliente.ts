@@ -66,6 +66,44 @@ export function token(): string | null {
   }
 }
 
+/**
+ * Guarda el token para las siguientes peticiones, o lo borra con `null`.
+ *
+ * Es provisional y se sabe: existe porque todavia no hay puerta de sesion, y la
+ * imagen que se despliega no puede pedir uno por su cuenta. Cuando la puerta
+ * exista, esto y {@link token} se van juntos.
+ */
+export function fijarToken(valor: string | null): void {
+  try {
+    if (valor === null) localStorage.removeItem('sgtm.token');
+    else localStorage.setItem('sgtm.token', valor);
+  } catch {
+    /* Ventana privada: no se puede guardar, y no es motivo para reventar. */
+  }
+  sesion++;
+  oyentes.forEach((f) => f());
+}
+
+/**
+ * Cuántas veces ha cambiado la credencial.
+ *
+ * Sirve de llave a las lecturas: al dar un token, **todas** vuelven a pedirse,
+ * no solo la que estaba mirándose. Sin esto, al pegar el token la tabla se
+ * llenaba y el desplegable de sectores se quedaba con su 401, ofreciendo la
+ * caja de texto de reserva con una sesión que ya funcionaba.
+ */
+let sesion = 0;
+const oyentes = new Set<() => void>();
+
+export function sesionActual(): number {
+  return sesion;
+}
+
+export function alCambiarLaSesion(f: () => void): () => void {
+  oyentes.add(f);
+  return () => oyentes.delete(f);
+}
+
 export type Opciones = {
   metodo?: 'GET' | 'POST' | 'PUT' | 'PATCH';
   /** Los parámetros de consulta. Los `undefined`, `null` y `''` no viajan. */
@@ -109,6 +147,20 @@ export async function solicitar<T>(ruta: string, opciones: Opciones = {}): Promi
   const datos: unknown = texto ? intentarLeer(texto) : null;
 
   if (!respuesta.ok) throw errorDe(respuesta.status, datos);
+
+  /* Un 200 cuyo cuerpo no es JSON no es una respuesta vacía: es otra cosa
+     contestando. Pasa con un proxy mal configurado, que devuelve el `index.html`
+     de la propia interfaz con 200, y también con un portal cautivo. Sin esta
+     guarda, `datos` queda en `null`, la pantalla no tiene ni datos ni error y se
+     dibuja **en blanco**: el peor de los tres desenlaces, porque no hay nada que
+     leer ni nada que reintentar. */
+  if (texto !== '' && datos === null) {
+    throw new ErrorDeApi(
+      'SIN_RESPUESTA',
+      'El servidor contestó algo que no es la API. Revisa a dónde apunta el reenvío de /api.',
+      respuesta.status,
+    );
+  }
   return datos as T;
 }
 

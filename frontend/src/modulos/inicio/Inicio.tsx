@@ -3,6 +3,8 @@ import { Icono } from '../../ds/Icono';
 import { ICONOS, ICO } from '../../ds/iconos';
 import { Insignia, tonoDe, type Tono } from '../../ds/componentes';
 import { MODULOS, moduloDe } from '../../shell/modulos';
+import { personaDeLaSesion } from '../../shell/persona';
+import { hayPuerta, salir } from '../../api/sesion';
 import { EJERCICIOS, soles, usarPreferencias } from '../../shell/preferencias';
 import { AVANCE, DEUDA, PAGOS, PARADO, UNIDADES } from '../../datos/inicio';
 
@@ -54,8 +56,13 @@ export default function Inicio() {
 
   const paradoTotal = PARADO.reduce((a, p) => a + p[5], 0);
 
+  /* La sesión de verdad es la del personal. La del contribuyente NO se sustituye:
+     el ciudadano entra por otro realm —`sgtm-ciudadano`, con su propio emisor
+     (ADR-0020)— y aquí es una demostración de la otra cara del mismo Inicio, no
+     alguien que haya entrado. Poner ahí la cuenta del funcionario diría que el
+     contribuyente es él. */
   const sesion = esMuni
-    ? { iniciales: 'JC', nombre: 'J. Cárdenas Vega', rol: 'Cajero · Caja C-3' }
+    ? personaDeLaSesion({ iniciales: 'JC', nombre: 'J. Cárdenas Vega', rol: 'Cajero · Caja C-3' })
     : { iniciales: 'MC', nombre: 'María E. Castillo', rol: 'DNI 44218937' };
 
   return (
@@ -433,6 +440,31 @@ export default function Inicio() {
               <span style={{ display: 'block', fontSize: 12, fontWeight: 500 }}>{sesion.nombre}</span>
               <span style={{ display: 'block', fontSize: 10, color: 'var(--ink-3)' }}>{sesion.rol}</span>
             </span>
+            {/* Inicio es donde se aterriza, así que también es desde donde hay que
+                poder salir: sin esto habría que entrar en un módulo para cerrar
+                sesión. Solo en la cara del personal, que es la que tiene una. */}
+            {esMuni && hayPuerta() && (
+              <button
+                onClick={salir}
+                aria-label="Cerrar la sesión"
+                title="Cerrar la sesión"
+                className="hov-linea-4"
+                style={{
+                  width: 30,
+                  height: 30,
+                  display: 'grid',
+                  placeItems: 'center',
+                  border: '1px solid var(--line-2)',
+                  borderRadius: 7,
+                  background: 'var(--bg-card)',
+                  cursor: 'pointer',
+                  flex: '0 0 auto',
+                  marginLeft: 3,
+                }}
+              >
+                <Icono d={['M15 17l5-5-5-5', 'M20 12H9', 'M12 20H6.5A1.5 1.5 0 0 1 5 18.5v-13A1.5 1.5 0 0 1 6.5 4H12']} tam={15} />
+              </button>
+            )}
           </div>
         </header>
 

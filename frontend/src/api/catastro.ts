@@ -137,3 +137,33 @@ export function reactivar(predioId: number, observacion: string): Promise<Predio
     cuerpo: { observacion },
   });
 }
+
+
+/**
+ * Un sector del catastro. Es `SectorResource`.
+ *
+ * Los tres conteos son opcionales porque el listado los trae y el alta no: un
+ * `null` ahí significa «no se contó», no «cero».
+ */
+export type Sector = {
+  id: number;
+  codigo: string;
+  nombre: string;
+  zona: string | null;
+  activo: boolean;
+  manzanas: number | null;
+  predios: number | null;
+  lotes: number | null;
+};
+
+/**
+ * Los sectores, para el filtro del padrón.
+ *
+ * **Exige otro acceso que el padrón** —`sectores`, no `actualizacion_catastro`—,
+ * así que puede contestar 403 a quien sí puede listar predios. Quien la llame
+ * tiene que saber caer de pie: es lo que hace la pantalla, que cambia el
+ * desplegable por una caja de texto en vez de quedarse sin filtro.
+ */
+export function listarSectores(senal?: AbortSignal): Promise<RespuestaPaginada<Sector>> {
+  return solicitar('/catastro/sectores', { parametros: { tamano: 200 }, senal });
+}

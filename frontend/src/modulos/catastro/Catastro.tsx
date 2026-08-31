@@ -5,9 +5,19 @@ import { Shell, type EntradaDePaleta } from '../../shell/Shell';
 import { moduloDe } from '../../shell/modulos';
 import { usarPreferencias } from '../../shell/preferencias';
 import type { PantallaProps } from '../../App';
-import { listarPredios, titularesDelPredio, type EstadoDePredio, type PredioDelCatastro } from '../../api/catastro';
+import {
+  darDeBaja,
+  inscribirPredio,
+  listarPredios,
+  reactivar,
+  listarSectores,
+  titularesDelPredio,
+  type EstadoDePredio,
+  type PredioDelCatastro,
+} from '../../api/catastro';
 import { useRebote, useRecurso } from '../../api/useRecurso';
-import { ErrorDeApi } from '../../api/cliente';
+import { ErrorDeApi, fijarToken } from '../../api/cliente';
+import { cuentaActual, hayPuerta } from '../../api/sesion';
 import {
   BASE,
   CAPAS,
@@ -184,6 +194,11 @@ export default function Catastro({ dest, onDest }: PantallaProps) {
   /* `alta` es la ficha nueva; dentro de `predios`, un código abierto es la
      ficha de un predio existente. Los dos son la misma pantalla. */
   const [predio, setPredio] = useState<string | null>(null);
+  /* La fila que se abrió, guardada. No se busca en `filas`: al abrir un predio
+     la consulta del padrón se apaga —no hay listado que enseñar— y con ella se
+     iría la fila, de modo que la ficha volvería a los datos del prototipo sin
+     que nada lo dijera. */
+  const [abierto, setAbierto] = useState<PredioDelCatastro | null>(null);
   /* `modoInicial` es una prop del artboard —«Una página» por omisión—; aquí es
      estado del módulo y lo escribe el conmutador de la ficha. */
   const [modoElegido, setModo] = useState<'pagina' | 'pasos'>('pagina');
@@ -198,6 +213,22 @@ export default function Catastro({ dest, onDest }: PantallaProps) {
   const [fEstado, setFEstado] = useState<'' | EstadoDePredio>('');
   const [fFichado, setFFichado] = useState('');
   const [pagina, setPagina] = useState(0);
+  /* El tamaño del padrón, recordado: al abrir un predio la consulta se apaga y
+     sin esto la nota del panel volvería a la cifra del prototipo. */
+  const [totalDelPadron, setTotalDelPadron] = useState<number | null>(null);
+  /* El alta escribe, así que exige observación (RNF-052): sin ella el backend
+     rechaza y, sobre todo, la modificación quedaría sin motivo en la bitácora. */
+  const [observacion, setObservacion] = useState('');
+  const [inscribiendo, setInscribiendo] = useState(false);
+  const [fallo, setFallo] = useState<ErrorDeApi | null>(null);
+  /* La baja y la reactivación: su propia observación, porque no es la del alta
+     y confundirlas dejaría en la bitácora el motivo de otro acto. */
+  const [motivoDeEstado, setMotivoDeEstado] = useState('');
+  const [cambiandoEstado, setCambiandoEstado] = useState(false);
+  /* Provisional, y se dice en pantalla: mientras no haya puerta de sesion, esta
+     es la unica forma de dar un token a la interfaz desplegada sin abrir las
+     herramientas del navegador. */
+  const [tokenPegado, setTokenPegado] = useState('');
   const [valTab, setValTab] = useState(0);
   const [sectorAbierto, setSectorAbierto] = useState('01');
   const [capas, setCapas] = useState<Record<string, boolean>>({
@@ -276,11 +307,13 @@ export default function Catastro({ dest, onDest }: PantallaProps) {
       return;
     }
     setPredio(null);
+    setAbierto(null);
     onDest(k);
   };
 
-  const abrirPredio = (codigo: string) => {
+  const abrirPredio = (fila: PredioDelCatastro | null, codigo: string) => {
     setPredio(codigo);
+    setAbierto(fila);
     setPaso(0);
     setSucio(false);
     onDest('predios');
@@ -291,7 +324,7 @@ export default function Catastro({ dest, onDest }: PantallaProps) {
   const paleta: EntradaDePaleta[] = OPCIONES.map((o) => ({
     label: o[0],
     nota: 'Catastro',
-    ir: () => (o[1] === 'predio' ? abrirPredio('01-1042-0004') : irA(o[1])),
+    ir: () => (o[1] === 'predio' ? abrirPredio(null, '01-1042-0004') : irA(o[1])),
   }));
 
   /* ── Las secciones de la ficha ───────────────────────────────── */
@@ -349,14 +382,17 @@ export default function Catastro({ dest, onDest }: PantallaProps) {
   /* Una sola verdad para «se puede registrar»: la usan el panel de cierre, la
      nota del pie y el botón primario. */
   const pendientesTotal = secciones.reduce((a, x) => a + x.faltan, 0);
-  const puedeRegistrar = codigoListo && !codigoDuplicado && pendientesTotal === 0;
+  const puedeRegistrar =
+    codigoListo && !codigoDuplicado && pendientesTotal === 0 && observacion.trim() !== '' && !inscribiendo;
   const motivoBloqueo = codigoDuplicado
     ? 'El código ya está en uso: no se puede registrar.'
     : !codigoListo
       ? 'Falta completar los ocho tramos del código: es la identidad de la ficha.'
       : pendientesTotal > 0
         ? 'Quedan ' + pendientesTotal + ' datos obligatorios sin llenar.'
-        : '';
+        : observacion.trim() === ''
+          ? 'Falta la observación: toda inscripción se guarda con el motivo de quien la hace.'
+          : '';
 
   /* ── El padrón, contra `GET /api/v1/catastro/predios` ───────── */
 
@@ -386,19 +422,25 @@ export default function Catastro({ dest, onDest }: PantallaProps) {
     dest === 'predios' && predio === null,
   );
 
+  /* Los sectores del filtro. Se piden una vez y no dependen de la búsqueda. */
+  const sectores = useRecurso((senal) => listarSectores(senal), [], dest === 'predios' && predio === null);
+
   const filas = padron.datos?.contenido ?? [];
   const cargando = padron.cargando;
   const caido = padron.error !== null;
   const sinResultados = !cargando && !caido && padron.datos !== null && filas.length === 0;
   const hayResultados = !cargando && !caido && filas.length > 0;
   const filtrosPuestos = [criterio, fSector, fEstado, fFichado].filter((x) => x !== '').length;
+
+  useEffect(() => {
+    if (padron.datos && filtrosPuestos === 0) setTotalDelPadron(padron.datos.totalElementos);
+  }, [padron.datos, filtrosPuestos]);
   const reintentar = padron.reintentar;
 
   /* El titular no viene en la fila: se resuelve de uno en uno al abrir el
      predio, que es lo que el backend decide para que «quien puede listar
      predios» no sea «quien puede cosechar predio→persona de toda la
      municipalidad». */
-  const abierto = filas.find((f) => f.codRefCatastral === predio) ?? null;
   const titulares = useRecurso(
     (senal) => titularesDelPredio(abierto!.predioId, undefined, senal),
     [abierto?.predioId],
@@ -437,15 +479,16 @@ export default function Catastro({ dest, onDest }: PantallaProps) {
 
   /* ── Ruta y contexto ────────────────────────────────────────── */
   const etiquetaDelDestino = m.destinos.find((x) => x.k === dest)?.label ?? 'Documentos';
+  const codigoDelPredio = abierto?.codRefCatastral ?? String(d.predial);
   const miga = esPredio
-    ? ['Catastro', 'Predios', esNuevo ? 'Ficha nueva' : String(d.predial)]
+    ? ['Catastro', 'Predios', esNuevo ? 'Ficha nueva' : codigoDelPredio]
     : dest === 'reporte'
       ? ['Catastro', 'Documentos']
       : ['Catastro', etiquetaDelDestino];
   const titulo = esPredio
     ? esNuevo
       ? 'Registrar predio'
-      : 'Predio ' + String(d.predial)
+      : 'Predio ' + codigoDelPredio
     : dest === 'reporte'
       ? 'Ficha del contribuyente'
       : etiquetaDelDestino;
@@ -462,7 +505,7 @@ export default function Catastro({ dest, onDest }: PantallaProps) {
         }
       : {
           volver: { label: 'Padrón', onClick: () => irA('predios') },
-          codigo: abierto?.codRefCatastral ?? String(d.predial),
+          codigo: codigoDelPredio,
           /* El titular no venía en la fila: lo resuelve su propia petición, y
              mientras llega se dice que se está resolviendo en vez de dejar el
              hueco —un hueco se lee como «no tiene titular»—. */
@@ -487,6 +530,90 @@ export default function Catastro({ dest, onDest }: PantallaProps) {
         }
     : undefined;
 
+  /**
+   * Inscribe el predio contra `POST /api/v1/catastro/predios`.
+   *
+   * Manda **solo los campos que el endpoint declara**: el código, la dirección,
+   * el tipo y la ubicación por código. Los demás datos de la ficha no viajan
+   * —los sirve `/catastro/fichas/…`, que es otra operación—, y por eso el panel
+   * de cierre lo dice antes de pulsar en vez de descubrirse después.
+   */
+  const inscribir = async () => {
+    setInscribiendo(true);
+    setFallo(null);
+    try {
+      const creado = await inscribirPredio({
+        observacion: observacion.trim(),
+        codRefCatastral: codigoCompleto,
+        direccion: txt('calle'),
+        numeroMunicipal: txt('numMun') || undefined,
+        codigoDeSector: tramosVal[1] || undefined,
+        codigoDeManzana: tramosVal[2] || undefined,
+        lote: tramosVal[3] || undefined,
+        ubigeo: tramosVal[0] || undefined,
+      });
+      setSucio(false);
+      setModo('pagina');
+      setObservacion('');
+      /* Se abre con lo que el servidor devolvió, no con lo tecleado: si el
+         backend normalizó algo, lo que se ve es lo que quedó escrito. */
+      abrirPredio(
+        {
+          predioId: creado.predioId,
+          codRefCatastral: creado.codRefCatastral,
+          tipo: creado.tipo,
+          direccion: creado.direccion,
+          numeroMunicipal: creado.numeroMunicipal,
+          codigoDeVia: null,
+          via: null,
+          codigoDeSector: tramosVal[1] || null,
+          codigoDeManzana: tramosVal[2] || null,
+          lote: creado.lote,
+          ubigeo: creado.ubigeo,
+          estado: creado.estado,
+          fichado: false,
+        },
+        creado.codRefCatastral,
+      );
+      toast('Predio ' + creado.codRefCatastral + ' inscrito. Todavía sin ficha.');
+    } catch (error) {
+      const e = error instanceof ErrorDeApi ? error : new ErrorDeApi('ERROR_INTERNO', 'No se pudo inscribir el predio', 0);
+      setFallo(e);
+      toast(e.mensaje);
+    } finally {
+      setInscribiendo(false);
+    }
+  };
+
+  /**
+   * Retira el predio del padrón, o lo devuelve.
+   *
+   * Son dos rutas y dos privilegios distintos —la baja exige `ELIMINACION` y la
+   * reactivación `MODIFICACION`—, porque no son el mismo riesgo: retirar un
+   * predio lo saca de toda emisión futura y devolverlo solo lo restituye.
+   *
+   * Ninguna de las dos borra nada (regla 4): la ficha, la titularidad y las
+   * determinaciones que se apoyaron en el predio quedan como estaban.
+   */
+  const cambiarEstado = async () => {
+    if (!abierto || motivoDeEstado.trim() === '') return;
+    const daDeBaja = abierto.estado === 'ACTIVO';
+    setCambiandoEstado(true);
+    try {
+      const r = daDeBaja
+        ? await darDeBaja(abierto.predioId, motivoDeEstado.trim())
+        : await reactivar(abierto.predioId, motivoDeEstado.trim());
+      setAbierto({ ...abierto, estado: r.estado });
+      setMotivoDeEstado('');
+      toast(daDeBaja ? 'Predio retirado del padrón. No se ha borrado nada.' : 'Predio devuelto al padrón.');
+    } catch (error) {
+      const e = error instanceof ErrorDeApi ? error : new ErrorDeApi('ERROR_INTERNO', 'No se pudo cambiar el estado', 0);
+      toast(e.mensaje);
+    } finally {
+      setCambiandoEstado(false);
+    }
+  };
+
   /* ── El paso siguiente del asistente ─────────────────────────── */
   const pasoAdelante = () => {
     const ultimo = paso >= secciones.length - 1;
@@ -495,11 +622,7 @@ export default function Catastro({ dest, onDest }: PantallaProps) {
         toast(motivoBloqueo);
         return;
       }
-      setSucio(false);
-      setModo('pagina');
-      setPredio(codigoCompleto);
-      onDest('predios');
-      toast('Ficha ' + codigoCompleto + ' registrada. Versión 1 desde hoy.');
+      void inscribir();
       return;
     }
     if (ultimo) {
@@ -731,21 +854,56 @@ export default function Catastro({ dest, onDest }: PantallaProps) {
     </div>
   );
 
+  /**
+   * La franja del predio.
+   *
+   * Con un predio abierto desde el padrón conectado, las tres primeras celdas
+   * son del backend y las tres últimas salen «—»: el uso, las áreas y el
+   * autovalúo son datos de la FICHA, que la sirve otra superficie
+   * (`/catastro/fichas/…`) y no está conectada. Poner ahí la cifra del
+   * prototipo sería inventarle a este predio un autovalúo que no tiene, y es
+   * indistinguible de uno correcto en cuanto sale de la pantalla.
+   */
   const resumen: { etiqueta: string; valor: ReactNode }[] = esNuevo
     ? []
-    : [
-        { etiqueta: 'Código catastral', valor: String(d.predial) },
-        { etiqueta: 'Titular', valor: 'Villegas Prado, Rosa' },
-        { etiqueta: 'Uso', valor: txt('uso') },
-        { etiqueta: 'Área de terreno', valor: txt('terFis') + ' m²' },
-        { etiqueta: 'Área construida', valor: txt('consFis') + ' m²' },
-        { etiqueta: 'Autovalúo ' + pref.ejercicio, valor: 'S/ 240,347.50' },
-      ];
+    : abierto
+      ? [
+          { etiqueta: 'Código catastral', valor: abierto.codRefCatastral },
+          { etiqueta: 'Titular', valor: textoDeTitulares(titulares.cargando, titulares.error, titulares.datos) },
+          { etiqueta: 'Tipo', valor: rotuloDeTipo(abierto.tipo) },
+          { etiqueta: 'Uso', valor: SIN_DATO },
+          { etiqueta: 'Área de terreno', valor: SIN_DATO },
+          { etiqueta: 'Autovalúo ' + pref.ejercicio, valor: SIN_DATO },
+        ]
+      : [
+          { etiqueta: 'Código catastral', valor: String(d.predial) },
+          { etiqueta: 'Titular', valor: 'Villegas Prado, Rosa' },
+          { etiqueta: 'Uso', valor: txt('uso') },
+          { etiqueta: 'Área de terreno', valor: txt('terFis') + ' m²' },
+          { etiqueta: 'Área construida', valor: txt('consFis') + ' m²' },
+          { etiqueta: 'Autovalúo ' + pref.ejercicio, valor: 'S/ 240,347.50' },
+        ];
 
   const haySiguiente = esPredio && !esNuevo && txt('areaVer') === '';
 
   return (
-    <Shell modulo="catastro" dest={dest} onDest={irA} miga={miga} titulo={titulo} contexto={contexto} paleta={paleta}>
+    <Shell
+      modulo="catastro"
+      dest={dest}
+      onDest={irA}
+      miga={miga}
+      titulo={titulo}
+      contexto={contexto}
+      /* «Predios» ya no dice la cifra del prototipo: dice la que acaba de
+         contar el backend, que es la que se ve a su lado en la tabla. */
+      /* Solo con el padrón sin filtrar: con un filtro puesto, `totalElementos`
+         es lo que devuelve la búsqueda, y «6 en el padrón» al lado de un filtro
+         se lee como el tamaño del padrón entero. */
+      notasDeDestino={
+        totalDelPadron === null ? undefined : { predios: totalDelPadron.toLocaleString('es-PE') + ' en el padrón' }
+      }
+      paleta={paleta}
+    >
       <div style={{ maxWidth: 1240, margin: '0 auto', display: 'flex', flexDirection: 'column', gap: 18 }}>
         {/* ══════════ PANEL DEL MÓDULO ══════════ */}
         {dest === 'panel' && (
@@ -863,14 +1021,32 @@ export default function Catastro({ dest, onDest }: PantallaProps) {
                     <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit,minmax(184px,1fr))', gap: '14px 16px' }}>
                       <label style={{ display: 'flex', flexDirection: 'column', gap: 5, minWidth: 0 }}>
                         <span style={{ fontSize: 11.5, fontWeight: 500, color: 'var(--ink-3)' }}>Sector</span>
-                        <select value={fSector} onChange={(e) => setFSector(e.target.value)} style={SELECT_FILTRO}>
-                          <option value="">Todos</option>
-                          {SECTORES.map((x) => (
-                            <option key={x[0]} value={x[0]}>
-                              {x[0]} — {x[1]}
-                            </option>
-                          ))}
-                        </select>
+                        {/* El listado de sectores exige su propio acceso, así que
+                            puede negarse a quien sí puede ver el padrón. Cuando eso
+                            pasa no se pierde el filtro: se teclea el código. */}
+                        {sectores.error ? (
+                          <input
+                            value={fSector}
+                            onChange={(e) => setFSector(e.target.value)}
+                            placeholder="01"
+                            style={SELECT_FILTRO}
+                          />
+                        ) : (
+                          <select
+                            value={fSector}
+                            onChange={(e) => setFSector(e.target.value)}
+                            disabled={sectores.cargando}
+                            style={SELECT_FILTRO}
+                          >
+                            <option value="">Todos</option>
+                            {(sectores.datos?.contenido ?? []).map((x) => (
+                              <option key={x.codigo} value={x.codigo}>
+                                {x.codigo} — {x.nombre}
+                                {x.predios !== null && ` (${x.predios})`}
+                              </option>
+                            ))}
+                          </select>
+                        )}
                       </label>
                       <label style={{ display: 'flex', flexDirection: 'column', gap: 5, minWidth: 0 }}>
                         <span style={{ fontSize: 11.5, fontWeight: 500, color: 'var(--ink-3)' }}>Estado del predio</span>
@@ -962,6 +1138,62 @@ export default function Catastro({ dest, onDest }: PantallaProps) {
                     </>
                   )}
                 </div>
+                {/* Todavía no hay puerta de sesión: la interfaz no sabe pedir un
+                    token, así que se le da. Aparece SOLO ante un 401 —quien tiene
+                    sesión válida no lo ve nunca— y se va el día que exista la
+                    puerta, junto con `token()` y `fijarToken()`. */}
+                {padron.error?.codigo === 'NO_AUTENTICADO' && !hayPuerta() && (
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: 6, marginTop: 10, width: 'min(560px, 100%)' }}>
+                    <label style={{ fontSize: 11.5, color: 'var(--ink-3)', textAlign: 'left' }}>
+                      Aquí no hay puerta de sesión —es la vista previa local—, así que pega un token del emisor:
+                    </label>
+                    <div style={{ display: 'flex', gap: 8 }}>
+                      <input
+                        value={tokenPegado}
+                        onChange={(e) => setTokenPegado(e.target.value)}
+                        placeholder="eyJhbGciOi…"
+                        spellCheck={false}
+                        style={{
+                          flex: 1,
+                          minWidth: 0,
+                          border: '1px solid var(--line-2)',
+                          borderRadius: 6,
+                          padding: '8px 11px',
+                          background: 'var(--bg-card)',
+                          fontFamily: 'var(--font-mono)',
+                          fontSize: 12,
+                        }}
+                      />
+                      <button
+                        onClick={() => {
+                          fijarToken(tokenPegado.trim() || null);
+                          setTokenPegado('');
+                          reintentar();
+                        }}
+                        disabled={tokenPegado.trim() === ''}
+                        className={tokenPegado.trim() === '' ? undefined : 'hov-acento-2'}
+                        style={{
+                          border: 0,
+                          borderRadius: 6,
+                          padding: '8px 17px',
+                          background: 'var(--accent)',
+                          color: 'var(--accent-contraste)',
+                          fontSize: 12.5,
+                          fontWeight: 500,
+                          cursor: tokenPegado.trim() === '' ? 'not-allowed' : 'pointer',
+                          opacity: tokenPegado.trim() === '' ? 0.55 : 1,
+                          whiteSpace: 'nowrap',
+                        }}
+                      >
+                        Usar este token
+                      </button>
+                    </div>
+                    <p style={{ margin: 0, fontSize: 11, color: 'var(--ink-4)', textAlign: 'left', textWrap: 'pretty' }}>
+                      Queda en el almacenamiento de este navegador y caduca solo. No se guarda en ningún sitio más.
+                    </p>
+                  </div>
+                )}
+
                 <div style={{ display: 'flex', gap: 8, marginTop: 5 }}>
                   {/* La referencia se dicta por teléfono a quien la investiga, así
                       que se copia. Sin incidencia no hay nada que copiar: el fallo
@@ -1014,7 +1246,7 @@ export default function Catastro({ dest, onDest }: PantallaProps) {
                       {filas.map((r) => (
                         <tr
                           key={r.predioId}
-                          onClick={() => abrirPredio(r.codRefCatastral)}
+                          onClick={() => abrirPredio(r, r.codRefCatastral)}
                           className="hov-acento"
                           style={{ borderTop: '1px solid var(--line)', cursor: 'pointer' }}
                         >
@@ -1209,6 +1441,86 @@ export default function Catastro({ dest, onDest }: PantallaProps) {
               </>
             )}
 
+            {/* De dónde sale cada cosa, dicho donde se lee. Sin esta franja, los
+                123 campos de abajo se leen como los de ESTE predio, y no lo son:
+                el padrón está conectado y la ficha no. */}
+            {abierto && (
+              <div
+                role="note"
+                style={{
+                  display: 'flex',
+                  gap: 11,
+                  padding: '12px 14px',
+                  borderRadius: 8,
+                  background: 'var(--warn-bg)',
+                  color: 'var(--warn-fg)',
+                  border: '1px solid color-mix(in srgb, var(--warn-fg) 22%, transparent)',
+                }}
+              >
+                <Icono d={ICO.aviso} tam={16} grosor={1.8} style={{ flex: '0 0 auto', marginTop: 1 }} />
+                <span style={{ flex: 1, minWidth: 0, fontSize: 12.5, lineHeight: 1.55, textWrap: 'pretty' }}>
+                  <strong style={{ display: 'block', fontWeight: 600, marginBottom: 2 }}>
+                    De este predio, el sistema conoce su identidad; su ficha todavía no.
+                  </strong>
+                  El código, la ubicación, el tipo, el estado y el titular salen del padrón —
+                  <span style={{ fontFamily: 'var(--font-mono)' }}>GET /catastro/predios</span>—. El uso, las áreas, la valuación y todo
+                  lo que se teclea más abajo son datos de la ficha catastral, que la sirve otra operación (
+                  <span style={{ fontFamily: 'var(--font-mono)' }}>/catastro/fichas/…</span>) y aún no está conectada: lo que se ve en esos
+                  campos es el ejemplo del prototipo, no lo declarado para{' '}
+                  <span style={{ fontFamily: 'var(--font-mono)' }}>{abierto.codRefCatastral}</span>.
+                </span>
+              </div>
+            )}
+
+            {/* El único acto que cambia si el predio está o no en el padrón. No lo
+                dibuja el manual —es posterior—, así que lleva su propio rótulo y
+                dice qué hace y qué no. */}
+            {abierto && (
+              <section style={TARJETA}>
+                <div style={{ padding: '14px 16px', borderBottom: '1px solid var(--line)' }}>
+                  <p style={{ margin: 0, fontFamily: 'var(--font-serif)', fontSize: 16, fontWeight: 600 }}>Estado en el padrón</p>
+                  <p style={{ margin: '3px 0 0', fontSize: 12.5, lineHeight: 1.5, color: 'var(--ink-3)', maxWidth: '76ch', textWrap: 'pretty' }}>
+                    {abierto.estado === 'ACTIVO'
+                      ? 'Dar de baja retira el predio del padrón: deja de entrar en toda emisión futura. No borra su ficha, ni su titularidad, ni las determinaciones que ya se apoyaron en él, y tiene vuelta.'
+                      : 'Este predio está retirado del padrón. Devolverlo lo restituye a las emisiones futuras; lo emitido mientras estuvo de baja no cambia.'}
+                  </p>
+                </div>
+                <div style={{ display: 'flex', alignItems: 'flex-end', gap: 12, flexWrap: 'wrap', padding: '14px 16px' }}>
+                  <label style={{ flex: 1, minWidth: 260 }}>
+                    <span style={{ display: 'block', fontSize: 11.5, fontWeight: 500, color: 'var(--ink-3)', marginBottom: 5 }}>
+                      Observación · obligatoria
+                    </span>
+                    <input
+                      value={motivoDeEstado}
+                      onChange={(e) => setMotivoDeEstado(e.target.value)}
+                      placeholder={abierto.estado === 'ACTIVO' ? 'Por qué se retira, y con qué documento' : 'Por qué se devuelve al padrón'}
+                      style={{ width: '100%', border: '1px solid var(--line-2)', borderRadius: 6, padding: '9px 11px', background: 'var(--bg-card)', fontSize: 13.5 }}
+                    />
+                  </label>
+                  <button
+                    onClick={() => void cambiarEstado()}
+                    disabled={motivoDeEstado.trim() === '' || cambiandoEstado}
+                    title={motivoDeEstado.trim() === '' ? 'Falta la observación: sin motivo no se guarda' : undefined}
+                    className={motivoDeEstado.trim() === '' ? undefined : 'hov-linea'}
+                    style={{
+                      border: `1px solid ${abierto.estado === 'ACTIVO' ? 'var(--bad-fg)' : 'var(--line-2)'}`,
+                      borderRadius: 6,
+                      padding: '9px 18px',
+                      background: abierto.estado === 'ACTIVO' ? 'var(--bad-bg)' : 'var(--bg-card)',
+                      color: abierto.estado === 'ACTIVO' ? 'var(--bad-fg)' : 'var(--ink)',
+                      fontSize: 13,
+                      fontWeight: 500,
+                      cursor: motivoDeEstado.trim() === '' ? 'not-allowed' : 'pointer',
+                      opacity: motivoDeEstado.trim() === '' || cambiandoEstado ? 0.55 : 1,
+                      whiteSpace: 'nowrap',
+                    }}
+                  >
+                    {abierto.estado === 'ACTIVO' ? 'Dar de baja del padrón' : 'Devolver al padrón'}
+                  </button>
+                </div>
+              </section>
+            )}
+
             <section style={TARJETA}>
               <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit,minmax(150px,1fr))', gap: 0, background: 'var(--bg-card)' }}>
                 {resumen.map((r) => (
@@ -1217,7 +1529,9 @@ export default function Catastro({ dest, onDest }: PantallaProps) {
                     style={{ background: 'var(--bg-card)', padding: '14px 16px', borderLeft: '1px solid var(--line)', borderTop: '1px solid var(--line)', margin: '-1px 0 0 -1px' }}
                   >
                     <p style={{ margin: '0 0 5px', fontSize: 10, fontWeight: 500, textTransform: 'uppercase', letterSpacing: '.11em', color: 'var(--ink-3)' }}>{r.etiqueta}</p>
-                    <p style={{ margin: 0, fontFamily: 'var(--font-mono)', fontSize: 15, color: 'var(--ink)' }}>{r.valor}</p>
+                    <p style={{ margin: 0, fontFamily: 'var(--font-mono)', fontSize: 15, color: 'var(--ink)', overflowWrap: 'anywhere' }}>
+                      {r.valor}
+                    </p>
                   </div>
                 ))}
               </div>
@@ -1456,15 +1770,18 @@ export default function Catastro({ dest, onDest }: PantallaProps) {
                     <div style={{ padding: '14px 16px', borderBottom: '1px solid var(--line)' }}>
                       <p style={{ margin: 0, fontFamily: 'var(--font-serif)', fontSize: 16, fontWeight: 600 }}>Lo que se va a registrar</p>
                       <p style={{ margin: '3px 0 0', fontSize: 12.5, lineHeight: 1.5, color: 'var(--ink-3)', maxWidth: '76ch', textWrap: 'pretty' }}>
-                        Una ficha registrada entra en el padrón y desde ese momento genera obligación predial. Antes de crearla, esto es lo
-                        que va a quedar escrito.
+                        Al pulsar se inscribe <strong>el predio</strong>: su código, su dirección y su ubicación. Su ficha catastral se
+                        levanta después, y hasta entonces el predio está en el padrón sin nada con qué valorizarse. Antes de crearlo, esto
+                        es lo que va a quedar escrito.
                       </p>
                     </div>
                     {[
                       {
-                        titulo: 'Se crea la ficha ' + (codigoListo ? codigoCompleto : 'sin código'),
-                        detalle: codigoListo ? 'Queda como versión 1 y entra en el padrón catastral.' : 'Falta completar los ocho tramos del código.',
-                        valor: codigoListo ? 'v1' : '—',
+                        titulo: 'Se inscribe el predio ' + (codigoListo ? codigoCompleto : 'sin código'),
+                        detalle: codigoListo
+                          ? 'Entra en el padrón catastral, activo y sin ficha.'
+                          : 'Falta completar los ocho tramos del código.',
+                        valor: codigoListo ? 'Alta' : '—',
                         ok: codigoListo,
                       },
                       {
@@ -1481,7 +1798,14 @@ export default function Catastro({ dest, onDest }: PantallaProps) {
                       },
                       {
                         titulo: 'Queda pendiente de conciliar con Rentas',
-                        detalle: 'La ficha existe en catastro; que genere deuda depende de la conciliación, que se hace desde Rentas.',
+                        detalle: 'El predio existe en catastro; que genere deuda depende de la conciliación, que se hace desde Rentas.',
+                        valor: 'Después',
+                        ok: false,
+                      },
+                      {
+                        titulo: 'La ficha catastral no se crea aquí',
+                        detalle:
+                          'Lo tecleado en los pasos anteriores describe la ficha, y la ficha la levanta otra operación. De este formulario solo viajan el código, la dirección y la ubicación.',
                         valor: 'Después',
                         ok: false,
                       },
@@ -1517,6 +1841,51 @@ export default function Catastro({ dest, onDest }: PantallaProps) {
                         <span style={{ fontFamily: 'var(--font-mono)', fontSize: 12.5, color: 'var(--ink-2)', flex: '0 0 auto', whiteSpace: 'nowrap' }}>{l.valor}</span>
                       </div>
                     ))}
+                    <div style={{ padding: '14px 16px', borderBottom: '1px solid var(--line)' }}>
+                      <label style={{ display: 'block' }}>
+                        <span style={{ display: 'block', fontSize: 11.5, fontWeight: 500, color: 'var(--ink-3)', marginBottom: 5 }}>
+                          Observación · obligatoria
+                        </span>
+                        <textarea
+                          value={observacion}
+                          onChange={(e) => setObservacion(e.target.value)}
+                          rows={2}
+                          placeholder="Por qué se inscribe este predio y con qué documento"
+                          style={{
+                            width: '100%',
+                            border: '1px solid var(--line-2)',
+                            borderRadius: 6,
+                            padding: '9px 11px',
+                            background: 'var(--bg-card)',
+                            fontSize: 13.5,
+                            resize: 'vertical',
+                          }}
+                        />
+                      </label>
+                      <p style={{ margin: '5px 0 0', fontSize: 11.5, color: 'var(--ink-4)', textWrap: 'pretty' }}>
+                        Queda en la bitácora junto a quién lo hizo y cuándo. Sin ella no se guarda.
+                      </p>
+                    </div>
+
+                    {/* El fallo del servidor, dicho donde se pulsó. Un 409 es lo
+                        corriente aquí: alguien ya inscribió ese código. */}
+                    {fallo && (
+                      <p
+                        style={{
+                          margin: 0,
+                          padding: '11px 16px',
+                          borderBottom: '1px solid var(--line)',
+                          background: 'var(--bad-bg)',
+                          color: 'var(--bad-fg)',
+                          fontSize: 12.5,
+                          lineHeight: 1.5,
+                          textWrap: 'pretty',
+                        }}
+                      >
+                        No se inscribió: {fallo.mensaje}
+                      </p>
+                    )}
+
                     <p
                       style={{
                         margin: 0,
@@ -1780,7 +2149,7 @@ export default function Catastro({ dest, onDest }: PantallaProps) {
                   </div>
                   <div style={{ display: 'flex', gap: 8, padding: '12px 14px 14px' }}>
                     <button
-                      onClick={() => abrirPredio(String(BASE.predial))}
+                      onClick={() => abrirPredio(null, String(BASE.predial))}
                       className="hov-acento-2"
                       style={{ flex: 1, border: 0, borderRadius: 6, padding: '9px 14px', background: 'var(--accent)', color: '#fff', fontSize: 12.5, fontWeight: 500, cursor: 'pointer' }}
                     >
@@ -2100,6 +2469,9 @@ export default function Catastro({ dest, onDest }: PantallaProps) {
 
 /* ══════════ Lo que el backend contesta, dicho en castellano ══════════ */
 
+/** Lo que se escribe donde no hay dato. Una raya, nunca un cero ni un blanco. */
+const SIN_DATO = '—';
+
 const SELECT_FILTRO: CSSProperties = {
   width: '100%',
   border: '1px solid var(--line-2)',
@@ -2125,18 +2497,24 @@ function rotuloDeTipo(tipo: string): string {
  * no se arregla reintentando y una red caída sí.
  */
 function tituloDelFallo(error: ErrorDeApi | null): string {
+  const cuenta = cuentaActual();
   switch (error?.codigo) {
     case 'NO_AUTENTICADO':
       return 'La sesión no vale';
     case 'SIN_PRIVILEGIO':
-      return 'Tu perfil no puede ver el padrón';
+      /* Nombra la cuenta: sin ella, «tu perfil no puede» obliga a averiguar con
+         cuál se entró, y el caso corriente es haber entrado con otra. */
+      return cuenta === null ? 'Esta sesión no puede ver el padrón' : `La cuenta «${cuenta}» no puede ver el padrón`;
     case 'SIN_MUNICIPALIDAD':
       return 'La sesión no dice de qué municipalidad es';
     case 'VALIDACION':
     case 'ORDEN_NO_ADMITIDO':
       return 'El servidor no admite esa búsqueda';
     case 'SIN_RESPUESTA':
-      return 'No se pudo contactar con el servidor';
+      /* Con estado, algo contestó: lo que falla es QUÉ contestó, no que no
+         hubiera nadie. Decir «no contestó» al lado de un 200 se lee como que la
+         pantalla no sabe lo que dice. */
+      return error.estado === 0 ? 'No se pudo contactar con el servidor' : 'El servidor contestó otra cosa';
     default:
       return 'No se pudo consultar el padrón';
   }
@@ -2147,14 +2525,19 @@ function explicacionDelFallo(error: ErrorDeApi | null): string {
     case 'NO_AUTENTICADO':
       return 'Vuelve a entrar: el token caducó o no es de este emisor.';
     case 'SIN_PRIVILEGIO':
-      return 'Hace falta el acceso «actualizacion_catastro» con privilegio de lectura. Lo concede Seguridad.';
+      return (
+        'Hace falta el acceso «actualizacion_catastro» con privilegio de lectura. Que Keycloak la deje entrar no basta: ' +
+        'la cuenta tiene que estar además dada de alta en esta municipalidad, y el permiso lo concede Seguridad.'
+      );
     case 'SIN_MUNICIPALIDAD':
       return 'No hay valor por omisión: sin municipalidad en el token no hay padrón que consultar.';
     case 'VALIDACION':
     case 'ORDEN_NO_ADMITIDO':
       return error?.mensaje ?? 'Revisa los filtros.';
     case 'SIN_RESPUESTA':
-      return 'El servidor no contestó. Puede estar apagado o no alcanzable desde aquí.';
+      return error.estado === 0
+        ? 'El servidor no contestó. Puede estar apagado o no alcanzable desde aquí.'
+        : error.mensaje;
     default:
       return 'La consulta falló en el servidor.';
   }
