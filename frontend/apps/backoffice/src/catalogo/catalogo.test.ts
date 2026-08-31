@@ -87,23 +87,26 @@ const GRUPOS_POR_TAREA_ESPERADOS: Readonly<
       ],
     ], // plegado en centro de reportes (ADR-0014 §5)
   ],
+  // Los cinco destinos de #503 F1, que son las superficies del modulo y no
+  // familias de tributos. Los cuatro movimientos respecto de #393 —beneficios
+  // al padron, la DJ a Documentos, la deuda a su propio destino y alcabala con
+  // las determinaciones— estan razonados en `grupos-por-tarea.mjs`.
   'rentas-registro': [
-    ['Padrón', ['contribuyentes', 'predios_rentas', 'vehiculos']],
+    ['Contribuyentes', ['beneficios', 'contribuyentes', 'predios_rentas', 'vehiculos']],
     [
-      'Determinación',
+      'Determinaciones',
       [
+        'alcabala',
         'arbitrios',
-        'declaracion_jurada',
+        'espectaculos',
         'predial_individual',
         'predial_masivo',
         'vehicular_calculo',
       ],
     ],
-    [
-      'Actos y transferencias',
-      ['alcabala', 'espectaculos', 'transferencia_predio', 'transferencia_vehiculo'],
-    ],
-    ['Beneficios y ajustes', ['alta_deuda', 'baja_deuda', 'beneficios']],
+    ['Transferencias', ['transferencia_predio', 'transferencia_vehiculo']],
+    ['Movimientos de deuda', ['alta_deuda', 'baja_deuda']],
+    ['Documentos', ['declaracion_jurada']],
   ],
   valores: [
     ['Emisión', ['valores_individual', 'valores_masivo']],
