@@ -67,6 +67,83 @@ public class ManejadorDeErrores {
     }
 
     /**
+     * La peticion no se puede leer: falta un parametro obligatorio, uno no admite el valor que
+     * llego, o el cuerpo no es JSON valido.
+     *
+     * <p><b>Hasta #486 esto era un 500 con identificador de incidencia.</b> Spring lanza estas tres
+     * excepciones <i>antes</i> de entrar al controlador, ninguna la cazaba nadie, y caian en el
+     * {@code @ExceptionHandler(Exception.class)} de mas abajo. Tres consecuencias, y la tercera es
+     * la peor:
+     *
+     * <ul>
+     *   <li>el estado miente: un {@code 500} le dice al cliente «el servidor se rompio» cuando lo
+     *       que pasa es que su peticion esta mal, y un cliente que reintenta un 500 reintenta para
+     *       siempre;
+     *   <li>el mensaje no dice que arreglar —«No se pudo completar la operacion»—, asi que quien
+     *       integra tiene que adivinar cual de sus quince parametros es el que sobra;
+     *   <li>y cada una <b>escribe una incidencia en el registro con nivel ERROR</b>. Un cliente
+     *       tecleando mal ensucia el registro de errores del servidor, que es exactamente lo que el
+     *       javadoc de {@link #rutaNoEncontrada} explica que no debe pasar. Con eso, el registro de
+     *       incidencias deja de servir para encontrar defectos reales.
+     * </ul>
+     *
+     * <p>Sale {@code 422} y no {@code 400} porque es el que el contrato declara en las 195
+     * operaciones —{@code ErrorDeValidacion}— y porque el catalogo ya tiene ese significado. Lo que
+     * importa del criterio es que sea <b>el mismo en todas</b>, no cual de los dos.
+     *
+     * <p>El mensaje nombra el parametro y, si lo hubo, el valor recibido: los dos vienen del propio
+     * cliente, asi que devolverlos no revela nada del esquema. El del cuerpo ilegible es
+     * <b>fijo</b>: el de Jackson nombra clases y campos de Java, y eso no sale de aqui.
+     */
+    @ExceptionHandler({
+        org.springframework.web.bind.MissingServletRequestParameterException.class,
+        org.springframework.web.method.annotation.MethodArgumentTypeMismatchException.class,
+        org.springframework.validation.BindException.class,
+        org.springframework.http.converter.HttpMessageNotReadableException.class
+    })
+    public ResponseEntity<ProblemDetail> peticionQueNoSePuedeLeer(Exception error) {
+        return respuesta(CodigoDeError.VALIDACION, motivoDe(error), List.of());
+    }
+
+    /** El motivo, escrito para quien integra y sin una sola palabra del esquema. */
+    private static String motivoDe(Exception error) {
+        if (error
+                instanceof
+                org.springframework.web.bind.MissingServletRequestParameterException falta) {
+            return "Falta el parametro obligatorio '" + falta.getParameterName() + "'";
+        }
+        if (error
+                instanceof
+                org.springframework.web.method.annotation.MethodArgumentTypeMismatchException
+                        noCuadra) {
+            Object valor = noCuadra.getValue();
+            return "El parametro '"
+                    + noCuadra.getName()
+                    + "' no admite el valor '"
+                    + (valor == null ? "" : valor)
+                    + "'";
+        }
+        // Cuando el valor malo viene dentro de un objeto que Spring compone —la paginacion, sin
+        // ir mas lejos—, no llega como desajuste de tipo sino envuelto en un BindException. Lo
+        // descubrio la propia prueba: el caso `?pagina=abc` seguia en 500 con las otras tres ya
+        // arregladas, y el registro decia «Validation failed for argument [0]».
+        if (error instanceof org.springframework.validation.BindException enlace) {
+            org.springframework.validation.FieldError campo = enlace.getFieldError();
+            if (campo != null) {
+                Object valor = campo.getRejectedValue();
+                return "El parametro '"
+                        + campo.getField()
+                        + "' no admite el valor '"
+                        + (valor == null ? "" : valor)
+                        + "'";
+            }
+            return "Alguno de los parametros no admite el valor recibido";
+        }
+        // El mensaje de Jackson nombra la clase y el campo de Java que esperaba. No sale.
+        return "El cuerpo de la peticion no se puede leer: no es JSON valido";
+    }
+
+    /**
      * Todo lo que venga del acceso a datos.
      *
      * <p>Aqui esta la razon de ser de la clase: el mensaje de PostgreSQL <b>no</b> sale. Se
