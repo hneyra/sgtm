@@ -251,12 +251,24 @@ const HUELLAS = [
  * usaba. No habia de donde reusar. Y sacarlo del arranque tampoco: la barra se
  * dibuja en la primera pantalla y en todas.
  *
+ * **149 desde #503**, y por quinta vez la misma leccion. Lo que sube al arranque
+ * es que la lista y el expediente dejen de dibujarse a la vez: dos derivaciones
+ * en `Pantalla` —quien tiene registro abierto y quien no— y la composicion de la
+ * ruta de la fila, mas el nombre accesible del enlace en `TablaDePantalla`. Las
+ * tres viven en el arranque porque la tabla y el renderizador los dibujan las
+ * 134 pantallas.
+ *
+ * Lo medido son 147,4 y CI mide ~0,3 mas, asi que **148 dejaria 0,3 KB de
+ * margen**: cualquier cambio que aterrice al lado lo vuelca, y entonces el rojo
+ * no seria de quien lo causo. Subirlo es una decision que se explica en el PR,
+ * como las cuatro anteriores.
+ *
  * En una municipalidad con red mala, el arranque es lo que separa «lento» de
  * «no abre».
  */
 const PRESUPUESTO = {
   /** Lo que hay que descargar para ver la primera pantalla: JS de arranque y CSS. */
-  arranque: 148,
+  arranque: 149,
   /** Lo que cuesta entrar en un modulo: su trozo del catalogo. */
   modulo: 11,
   /**

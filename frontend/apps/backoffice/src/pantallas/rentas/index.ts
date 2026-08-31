@@ -388,6 +388,15 @@ const contribuyentes = definirConexion({
           ];
         },
         'contribuyentes',
+        /* El codigo **crudo**, para que la fila pueda abrir su expediente
+           (#503). No sale del texto dibujado: ese es de presentacion, y la
+           celda del codigo podria dejar de serlo el dia que alguien la
+           formatee. Es la misma razon por la que la seleccion de #332 no se
+           lleva lo que se pinto. */
+        (contribuyente) => ({
+          codigo: texto(contribuyente['codigo']),
+          nombre: texto(contribuyente['nombreRazonSocial']),
+        }),
       ),
     ),
 });
