@@ -504,6 +504,36 @@ export interface ComposicionDeOpcion {
     readonly hojas: readonly string[];
   };
   /**
+   * **Lo que se hace CON una fila de la tabla**: abrir otra pantalla del
+   * catalogo llevandose lo que identifica esa fila (#506 F3).
+   *
+   * El caso que lo trajo es la muestra de un programa de fiscalizacion: cada
+   * fila es un predio que hay que ir a visitar, y el acta que se levanta alli es
+   * **otra opcion**, con su ruta y su permiso. Sin esto, ir de una a otra era
+   * volver al menu y teclear a mano un identificador que la fila ya tiene — y
+   * que no se dibuja en ninguna columna, porque un identificador interno bajo el
+   * rotulo «Predio» seria otro dato con el mismo nombre.
+   *
+   * **Se declara por opcion y no se cablea en la tabla**, por lo mismo que
+   * `TablaDePantalla` no convierte su primera celda en un enlace: de las quince
+   * pantallas que abren un registro y traen tabla, la primera columna es ese
+   * registro en **una**. Que busqueda abre que ficha lo decide cada modulo.
+   *
+   * `opcion` es el destino, y de el salen **la ruta y el permiso**: una fila
+   * cuyo destino este perfil no puede ver no dibuja enlace (REQ-03 §5).
+   * `parametros` los compone de los valores **crudos** de la fila
+   * (`DatosDeTabla.valores`), nunca del texto que se pinto (#332); devolver
+   * `undefined` es «esta fila no puede abrirlo», y entonces la celda queda vacia.
+   */
+  readonly accionDeFila?: {
+    readonly opcion: string;
+    /** Lo que hace el acto al llegar, no como se llama la pantalla (#498 F2). */
+    readonly etiqueta: string;
+    readonly parametros: (
+      valores: Readonly<Record<string, string>>,
+    ) => Readonly<Record<string, string>> | undefined;
+  };
+  /**
    * El bloque de busqueda, para una opcion cuyo catalogo **no declara `filtros`**.
    *
    * El hueco que cierra: `caja_tributaria` es un `POST` —`ContenidoConectado`

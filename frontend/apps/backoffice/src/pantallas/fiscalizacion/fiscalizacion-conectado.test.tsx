@@ -334,7 +334,25 @@ describe('las tres actas nombran los datos que de verdad les faltan (#431)', () 
     expect(ACTOS_SIN_CAMPO['fisc_vehicular']?.campos).toContain('fiscalizador');
   });
 
-  it('y el programa dice además que ninguno de sus tres botones lo registra', () => {
-    expect(ACTOS_SIN_CAMPO['fisc_programa']?.porque).toMatch(/ninguno de los tres botones/i);
+  /**
+   * **El motivo del programa decía de más, y se corrigió en #506 F3.**
+   *
+   * Terminaba con «generar la muestra, asignar fiscalizador y aprobar son actos
+   * que el sistema todavía no hace». De los tres, el primero dejó de ser cierto
+   * con #481: `POST /fiscalizacion/programas/{id}/muestra` sortea la muestra y su
+   * cuerpo es sólo la observación.
+   *
+   * Lo que se sigue diciendo —y es lo que la franja tiene que explicar— es que
+   * **ninguno de los tres registra un programa**, que es el acto de esta
+   * pantalla. Lo que impide «Generar muestra» es otra cosa: `escrituras.ts` ata
+   * la escritura a la operación de la propia opción, y ésa es distinta. Es un
+   * hueco de mecanismo, no de dato.
+   */
+  it('y el programa dice que ninguno de sus tres botones lo REGISTRA, sin decir de más', () => {
+    const porque = ACTOS_SIN_CAMPO['fisc_programa']?.porque ?? '';
+    expect(porque).toMatch(/ninguno registra un programa/i);
+    // Y ya no afirma que generar la muestra sea un acto que el sistema no hace.
+    expect(porque).not.toMatch(/actos que el sistema todavía no hace/i);
+    expect(porque).toMatch(/«Generar muestra» sí existe/i);
   });
 });

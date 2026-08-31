@@ -452,10 +452,30 @@ export const ACTOS_SIN_CAMPO: Readonly<Record<string, ActoSinCampo>> = {
    * omitian el `fiscalizador` —`ActaPredialController` y `ActaVehicularController`
    * lo pasan por `exigir`, y el catalogo de la predial lo dibuja `"ro"`—.
    */
+  /**
+   * El programa, cuyo acto propio sigue sin poder registrarse — **pero no por lo
+   * que aqui se decia** (#506 F3).
+   *
+   * Hasta hoy este motivo terminaba diciendo que «generar la muestra, asignar
+   * fiscalizador y aprobar son actos que el sistema todavia no hace». De los
+   * tres, **el primero dejo de ser cierto con #481**: `POST
+   * /fiscalizacion/programas/{id}/muestra` sortea la muestra, y su cuerpo es solo
+   * la observacion, asi que es un acto declarable entero.
+   *
+   * Lo que hoy lo impide no es el backend sino el mecanismo: `escrituras.ts` ata
+   * la escritura a **la operacion de la propia opcion**, y la de `fisc_programa`
+   * es `POST /fiscalizacion/programas`, que es otra cosa —registra el programa—.
+   * Una pantalla con dos actos de dos operaciones distintas no se puede declarar
+   * todavia, y ese hueco es de mecanismo y no de dato: no se arregla anadiendo
+   * campos aqui.
+   *
+   * El motivo que se lee en ventanilla dice lo que le falta al acto **de esta
+   * pantalla**, que es lo que la franja explica, y no se mete en el otro.
+   */
   fisc_programa: {
     dato: 'el código y la descripción del programa',
     porque:
-      'Sin ellos el programa no se puede registrar: el backend los exige, y la única sección de esta pantalla dibuja el número de programa de solo lectura y ningún campo de descripción — el catálogo capturó el resultado de generar un programa, no el formulario que lo crea. Y ninguno de los tres botones registra un programa: generar la muestra, asignar fiscalizador y aprobar son actos que el sistema todavía no hace.',
+      'Sin ellos el programa no se puede registrar: el backend los exige, y la única sección de esta pantalla dibuja el número de programa de solo lectura y ningún campo de descripción — el catálogo capturó el resultado de generar un programa, no el formulario que lo crea. De los tres botones, ninguno registra un programa: «Asignar fiscalizador» y «Aprobar programa» son transiciones que el sistema no tiene, y «Generar muestra» sí existe pero es otra operación, con su propio acto.',
     campos: ['codigo', 'descripcion'],
   },
   fisc_predial: {

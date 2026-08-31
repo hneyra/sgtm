@@ -201,12 +201,35 @@ const HUELLAS = [
  * predio (F3) y los cinco estados (F6) son las dos del shell—; si al cerrarlas
  * sobra, se baja, como hizo #424.
  *
+ * **Y a 147 el 2026-08-31** (#506 F2 y F3), por lo mismo y con la misma cuenta.
+ *
+ * Lo medido: `main` con la F1 de Fiscalización dentro sigue en **144,9** —esa
+ * fase no costó nada: es una declaración, y viaja en el trozo de su módulo—. F2
+ * lo deja en **145,3** y F3 en **145,7**, y los dos sitios donde cae son
+ * arranque por diseño:
+ *
+ *   F2   la hoja de estilos del acta —los cuatro pasos, el modo campo y el
+ *        contraste—. El componente **no**: entra por `lazy()` y viaja en su
+ *        propio trozo, que es lo que se ve en la lista de a-petición
+ *   F3   `accionDeFila` en `TablaDePantalla`, que es del arranque porque la
+ *        tabla la dibujan las 134 pantallas, más su declaración en `Pantalla`
+ *
+ * **Sacar cualquiera de los dos del arranque no es una opción**, y por el mismo
+ * motivo que el botón de F2 de #498: la tabla se dibuja en casi todas las
+ * pantallas y su hoja de estilos es global. Un `lazy()` ahí es un hueco
+ * parpadeando dentro de la tabla a cambio de tres décimas.
+ *
+ * Se sube a 147 y no a 146 por la lección de #442, que este archivo ya aprendió
+ * tres veces: lo medido son 145,7 y CI mide ~0,3 más, así que **146 decidiría en
+ * verde o rojo según dónde se compile**. Quedan fases del mismo issue que caen
+ * en el arranque; si al cerrarlas sobra, se baja, como hizo #424.
+ *
  * En una municipalidad con red mala, el arranque es lo que separa «lento» de
  * «no abre».
  */
 const PRESUPUESTO = {
   /** Lo que hay que descargar para ver la primera pantalla: JS de arranque y CSS. */
-  arranque: 146,
+  arranque: 147,
   /** Lo que cuesta entrar en un modulo: su trozo del catalogo. */
   modulo: 11,
   /**

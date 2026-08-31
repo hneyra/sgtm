@@ -7,6 +7,7 @@ import { descriptorDe, escribe } from '@sgtm/api-client';
 import type { ValorDeCampo } from '@sgtm/api-client';
 import {
   esHojaDelCentro,
+  opcionPorId,
   opcionPorRuta,
   pantallasDelModulo,
   seccionesApiladas,
@@ -608,6 +609,30 @@ function Bloques({
   // -resumen, indice de secciones, control propio de un filtro y el acto que
   // vive en otra pantalla. Vacio para 130 de las 134, y entonces no cambia nada.
   const composicion = composicionDe(estructura.id);
+
+  /* Lo que se hace **con** una fila (#506 F3): un enlace a otra pantalla del
+     catalogo. La guarda de permiso va aqui y no en la tabla, que no conoce el
+     catalogo: una fila cuyo destino este perfil no puede ver no dibuja enlace,
+     porque seria ofrecer un enlace a un aviso de «no tienes permiso»
+     (REQ-03 §5). Y la ruta sale de la opcion destino, no de una cadena escrita
+     a mano: asi un cambio de ranura no deja el enlace apuntando a un 404. */
+  const declaradaDeFila = composicion.accionDeFila;
+  const destinoDeFila =
+    declaradaDeFila === undefined ? undefined : opcionPorId(declaradaDeFila.opcion);
+  const accionDeFila =
+    declaradaDeFila === undefined ||
+    destinoDeFila === undefined ||
+    !catalogo.puedeVer(declaradaDeFila.opcion)
+      ? undefined
+      : {
+          etiqueta: declaradaDeFila.etiqueta,
+          rutaDe: (valores: Readonly<Record<string, string>> | undefined) => {
+            if (valores === undefined) return undefined;
+            const parametros = declaradaDeFila.parametros(valores);
+            if (parametros === undefined) return undefined;
+            return `${destinoDeFila.ruta}?${new URLSearchParams(parametros).toString()}`;
+          },
+        };
   /* Una opcion que **compone su propio acto** no tiene impedimento que contar:
      el alta se abre en un panel, el flujo guiado sustituye la pantalla o la
      primaria es el enlace a la opcion que si escribe. En «Calles» y «Sectores»
@@ -1041,6 +1066,7 @@ function Bloques({
         <TablaDePantalla
           estructura={estructura.tabla}
           opcion={estructura.id}
+          {...(accionDeFila === undefined ? {} : { accionDeFila })}
           datos={datos?.tabla}
           cargando={cargando}
           {...(indexaLaTabla ? { ancla: ANCLA_DE_LA_TABLA } : {})}
