@@ -9,10 +9,10 @@ import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 import pe.gob.sgtm.autorizacion.Privilegio;
 import pe.gob.sgtm.autorizacion.RequiereAcceso;
+import pe.gob.sgtm.sanciones.aplicacion.ConsultasDeSanciones;
 import pe.gob.sgtm.sanciones.dominio.CriterioDePapeleta;
 import pe.gob.sgtm.sanciones.dominio.EstadoDePapeleta;
 import pe.gob.sgtm.sanciones.dominio.Familia;
-import pe.gob.sgtm.sanciones.dominio.PapeletaRepository;
 import pe.gob.sgtm.web.Api;
 import pe.gob.sgtm.web.CodigoDeError;
 import pe.gob.sgtm.web.ParametrosDePaginacion;
@@ -32,10 +32,10 @@ public class PapeletasController {
 
     private static final String ORDEN_POR_OMISION = "fechaInfraccion";
 
-    private final PapeletaRepository repositorio;
+    private final ConsultasDeSanciones consulta;
 
-    public PapeletasController(PapeletaRepository repositorio) {
-        this.repositorio = repositorio;
+    public PapeletasController(ConsultasDeSanciones consulta) {
+        this.consulta = consulta;
     }
 
     @GetMapping
@@ -63,7 +63,7 @@ public class PapeletasController {
                         false);
 
         return RespuestaPaginada.de(
-                repositorio.buscar(criterio, paginacion.aPaginacion(ORDEN_POR_OMISION)),
+                consulta.papeletas(criterio, paginacion.aPaginacion(ORDEN_POR_OMISION)),
                 PapeletaResource::de);
     }
 

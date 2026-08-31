@@ -17,10 +17,10 @@ import pe.gob.sgtm.autorizacion.RequiereAcceso;
 import pe.gob.sgtm.dominio.Dinero;
 import pe.gob.sgtm.dominio.Observacion;
 import pe.gob.sgtm.dominio.Placa;
+import pe.gob.sgtm.rentas.aplicacion.ConsultaDeVehiculos;
+import pe.gob.sgtm.rentas.aplicacion.ConsultasDeRentas;
 import pe.gob.sgtm.rentas.aplicacion.RegistrarTransferencia;
-import pe.gob.sgtm.rentas.dominio.TransferenciaRepository;
 import pe.gob.sgtm.rentas.dominio.Vehiculo;
-import pe.gob.sgtm.rentas.dominio.VehiculoRepository;
 import pe.gob.sgtm.web.Api;
 import pe.gob.sgtm.web.CodigoDeError;
 import pe.gob.sgtm.web.ProblemaDeNegocio;
@@ -39,16 +39,16 @@ import pe.gob.sgtm.web.ProblemaDeNegocio;
 public class TransferenciaVehiculoController {
 
     private final RegistrarTransferencia transferencias;
-    private final TransferenciaRepository transferenciaRepositorio;
-    private final VehiculoRepository vehiculos;
+    private final ConsultasDeRentas consultas;
+    private final ConsultaDeVehiculos consultaDeVehiculos;
 
     public TransferenciaVehiculoController(
             RegistrarTransferencia transferencias,
-            TransferenciaRepository transferenciaRepositorio,
-            VehiculoRepository vehiculos) {
+            ConsultasDeRentas consultas,
+            ConsultaDeVehiculos consultaDeVehiculos) {
         this.transferencias = transferencias;
-        this.transferenciaRepositorio = transferenciaRepositorio;
-        this.vehiculos = vehiculos;
+        this.consultas = consultas;
+        this.consultaDeVehiculos = consultaDeVehiculos;
     }
 
     @PostMapping
@@ -84,8 +84,8 @@ public class TransferenciaVehiculoController {
             throw new ProblemaDeNegocio(CodigoDeError.VALIDACION, mensajeDe(invalida));
         }
         Vehiculo encontrado =
-                vehiculos
-                        .findByPlaca(placa)
+                consultaDeVehiculos
+                        .vehiculoPorPlaca(placa)
                         .orElseThrow(
                                 () ->
                                         new ProblemaDeNegocio(
@@ -96,7 +96,7 @@ public class TransferenciaVehiculoController {
     }
 
     private long contribuyenteDe(@Nullable String codigo) {
-        return transferenciaRepositorio
+        return consultas
                 .contribuyentePorCodigo(exigir(codigo, "codAdquiriente").toUpperCase(Locale.ROOT))
                 .orElseThrow(
                         () ->

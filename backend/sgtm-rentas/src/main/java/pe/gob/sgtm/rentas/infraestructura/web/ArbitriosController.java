@@ -10,8 +10,8 @@ import org.springframework.web.bind.annotation.RestController;
 import pe.gob.sgtm.autorizacion.Privilegio;
 import pe.gob.sgtm.autorizacion.RequiereAcceso;
 import pe.gob.sgtm.dominio.Ejercicio;
+import pe.gob.sgtm.rentas.aplicacion.ConsultasDeRentas;
 import pe.gob.sgtm.rentas.dominio.arbitrios.CriterioDeArbitrio;
-import pe.gob.sgtm.rentas.dominio.arbitrios.CuotaDeArbitrioRepository;
 import pe.gob.sgtm.web.Api;
 import pe.gob.sgtm.web.ParametrosDePaginacion;
 import pe.gob.sgtm.web.RespuestaPaginada;
@@ -30,11 +30,11 @@ public class ArbitriosController {
 
     private static final String ORDEN_POR_OMISION = "fechaCalculo";
 
-    private final CuotaDeArbitrioRepository repositorio;
+    private final ConsultasDeRentas consulta;
     private final Clock reloj;
 
-    public ArbitriosController(CuotaDeArbitrioRepository repositorio, Clock reloj) {
-        this.repositorio = repositorio;
+    public ArbitriosController(ConsultasDeRentas consulta, Clock reloj) {
+        this.consulta = consulta;
         this.reloj = reloj;
     }
 
@@ -47,7 +47,7 @@ public class ArbitriosController {
         CriterioDeArbitrio criterio = new CriterioDeArbitrio(ejercicioDe(anio), codigoPredial);
 
         return RespuestaPaginada.de(
-                repositorio.buscar(criterio, paginacion.aPaginacion(ORDEN_POR_OMISION)),
+                consulta.arbitrios(criterio, paginacion.aPaginacion(ORDEN_POR_OMISION)),
                 ArbitrioResource::de);
     }
 

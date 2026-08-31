@@ -20,12 +20,12 @@ import pe.gob.sgtm.dominio.Ejercicio;
 import pe.gob.sgtm.dominio.Observacion;
 import pe.gob.sgtm.dominio.Placa;
 import pe.gob.sgtm.parametros.ParametrosSellados;
+import pe.gob.sgtm.rentas.aplicacion.ConsultaDeVehiculos;
 import pe.gob.sgtm.rentas.aplicacion.RegistrarDeterminacionVehicular;
 import pe.gob.sgtm.rentas.dominio.CriterioDeVehiculo;
 import pe.gob.sgtm.rentas.dominio.EstadoVehiculo;
 import pe.gob.sgtm.rentas.dominio.Vehiculo;
 import pe.gob.sgtm.rentas.dominio.VehiculoEncontrado;
-import pe.gob.sgtm.rentas.dominio.VehiculoRepository;
 import pe.gob.sgtm.web.Api;
 import pe.gob.sgtm.web.CodigoDeError;
 import pe.gob.sgtm.web.FiltroDeLaConsulta;
@@ -103,13 +103,15 @@ public class VehicularController {
                     + " (#399)";
 
     private final RegistrarDeterminacionVehicular servicio;
-    private final VehiculoRepository vehiculos;
+    private final ConsultaDeVehiculos consultaDeVehiculos;
     private final Clock reloj;
 
     public VehicularController(
-            RegistrarDeterminacionVehicular servicio, VehiculoRepository vehiculos, Clock reloj) {
+            RegistrarDeterminacionVehicular servicio,
+            ConsultaDeVehiculos consultaDeVehiculos,
+            Clock reloj) {
         this.servicio = servicio;
-        this.vehiculos = vehiculos;
+        this.consultaDeVehiculos = consultaDeVehiculos;
         this.reloj = reloj;
     }
 
@@ -177,8 +179,8 @@ public class VehicularController {
         Long vehiculoId = objetivo.vehiculoId();
         if (vehiculoId != null) {
             return List.of(
-                    vehiculos
-                            .findById(vehiculoId)
+                    consultaDeVehiculos
+                            .vehiculoPorId(vehiculoId)
                             .orElseThrow(
                                     () ->
                                             new ProblemaDeNegocio(
@@ -189,8 +191,8 @@ public class VehicularController {
         String placa = objetivo.placa();
         if (placa != null) {
             return List.of(
-                    vehiculos
-                            .findByPlaca(Placa.de(placa))
+                    consultaDeVehiculos
+                            .vehiculoPorPlaca(Placa.de(placa))
                             .orElseThrow(
                                     () ->
                                             new ProblemaDeNegocio(
@@ -204,7 +206,7 @@ public class VehicularController {
             CriterioDeVehiculo criterio =
                     new CriterioDeVehiculo(null, null, codContribuyente, EstadoVehiculo.ACTIVO);
             Pagina<VehiculoEncontrado> pagina =
-                    vehiculos.buscar(
+                    consultaDeVehiculos.activosDe(
                             criterio,
                             Paginacion.de(0, Paginacion.TAMANO_MAXIMO, ORDEN_POR_OMISION));
             if (pagina.contenido().isEmpty()) {

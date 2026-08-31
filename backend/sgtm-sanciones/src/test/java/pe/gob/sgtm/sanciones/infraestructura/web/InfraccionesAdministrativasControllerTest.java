@@ -18,6 +18,7 @@ import pe.gob.sgtm.compartido.Pagina;
 import pe.gob.sgtm.compartido.Paginacion;
 import pe.gob.sgtm.dominio.Alicuota;
 import pe.gob.sgtm.dominio.Dinero;
+import pe.gob.sgtm.sanciones.aplicacion.ConsultasDeSanciones;
 import pe.gob.sgtm.sanciones.dominio.CriterioDelProcedimiento;
 import pe.gob.sgtm.sanciones.dominio.EstadoDePapeleta;
 import pe.gob.sgtm.sanciones.dominio.FaseDelProcedimiento;
@@ -46,7 +47,8 @@ class InfraccionesAdministrativasControllerTest {
 
     private final MockMvc mvc =
             MockMvcBuilders.standaloneSetup(
-                            new InfraccionesAdministrativasController(repositorio, RELOJ))
+                            new InfraccionesAdministrativasController(
+                                    new ConsultasDeSanciones(null, null, repositorio, null), RELOJ))
                     .setControllerAdvice(new ManejadorDeErrores())
                     .setMessageConverters(
                             new JacksonJsonHttpMessageConverter(

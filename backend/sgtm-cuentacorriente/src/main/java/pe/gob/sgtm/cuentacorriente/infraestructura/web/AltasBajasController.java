@@ -9,7 +9,7 @@ import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 import pe.gob.sgtm.autorizacion.Privilegio;
 import pe.gob.sgtm.autorizacion.RequiereAcceso;
-import pe.gob.sgtm.cuentacorriente.dominio.AsientoRepository;
+import pe.gob.sgtm.cuentacorriente.aplicacion.ConsultasDelLibro;
 import pe.gob.sgtm.cuentacorriente.dominio.CriterioDeAltasBajas;
 import pe.gob.sgtm.cuentacorriente.dominio.SentidoDelMovimiento;
 import pe.gob.sgtm.dominio.Ejercicio;
@@ -41,10 +41,10 @@ public class AltasBajasController {
     /** Cronologico, como se lee cualquier movimiento de cuenta corriente. */
     private static final String ORDEN_POR_OMISION = "fecha_valor";
 
-    private final AsientoRepository repositorio;
+    private final ConsultasDelLibro consulta;
 
-    public AltasBajasController(AsientoRepository repositorio) {
-        this.repositorio = repositorio;
+    public AltasBajasController(ConsultasDelLibro consulta) {
+        this.consulta = consulta;
     }
 
     /**
@@ -67,7 +67,7 @@ public class AltasBajasController {
                         codigoCont, ejercicioDe(ano), tributo, sentidoDe(altaBaja));
 
         return RespuestaPaginada.de(
-                repositorio.altasYBajas(criterio, paginacion.aPaginacion(ORDEN_POR_OMISION)),
+                consulta.altasYBajas(criterio, paginacion.aPaginacion(ORDEN_POR_OMISION)),
                 AsientoResource::de);
     }
 

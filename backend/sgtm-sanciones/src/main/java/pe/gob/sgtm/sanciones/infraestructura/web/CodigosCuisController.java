@@ -9,7 +9,7 @@ import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 import pe.gob.sgtm.autorizacion.Privilegio;
 import pe.gob.sgtm.autorizacion.RequiereAcceso;
-import pe.gob.sgtm.sanciones.dominio.CodigoInfraccionRepository;
+import pe.gob.sgtm.sanciones.aplicacion.ConsultasDeSanciones;
 import pe.gob.sgtm.sanciones.dominio.CriterioDeCodigoInfraccion;
 import pe.gob.sgtm.sanciones.dominio.Familia;
 import pe.gob.sgtm.web.Api;
@@ -30,11 +30,11 @@ public class CodigosCuisController {
 
     private static final String ORDEN_POR_OMISION = "codigo";
 
-    private final CodigoInfraccionRepository repositorio;
+    private final ConsultasDeSanciones consulta;
     private final Clock reloj;
 
-    public CodigosCuisController(CodigoInfraccionRepository repositorio, Clock reloj) {
-        this.repositorio = repositorio;
+    public CodigosCuisController(ConsultasDeSanciones consulta, Clock reloj) {
+        this.consulta = consulta;
         this.reloj = reloj;
     }
 
@@ -50,7 +50,7 @@ public class CodigosCuisController {
                         Familia.ADMINISTRATIVA, codigo, materia, fechaDe(fecha));
 
         return RespuestaPaginada.de(
-                repositorio.buscar(criterio, paginacion.aPaginacion(ORDEN_POR_OMISION)),
+                consulta.codigos(criterio, paginacion.aPaginacion(ORDEN_POR_OMISION)),
                 CodigoInfraccionResource::de);
     }
 

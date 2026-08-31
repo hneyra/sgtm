@@ -20,6 +20,7 @@ import org.springframework.test.web.servlet.MvcResult;
 import org.springframework.test.web.servlet.setup.MockMvcBuilders;
 import pe.gob.sgtm.compartido.Pagina;
 import pe.gob.sgtm.compartido.Paginacion;
+import pe.gob.sgtm.cuentacorriente.aplicacion.ConsultasDelLibro;
 import pe.gob.sgtm.cuentacorriente.aplicacion.RegistrarMovimientoDeDeuda;
 import pe.gob.sgtm.cuentacorriente.dominio.Asiento;
 import pe.gob.sgtm.cuentacorriente.dominio.AsientoRepository;
@@ -67,7 +68,8 @@ class MovimientosDeDeudaControllerTest {
 
     private final MockMvc mvc =
             MockMvcBuilders.standaloneSetup(
-                            new MovimientosDeDeudaController(movimientos, asientos, RELOJ))
+                            new MovimientosDeDeudaController(
+                                    movimientos, new ConsultasDelLibro(asientos), RELOJ))
                     .setControllerAdvice(new ManejadorDeErrores())
                     .setMessageConverters(
                             new JacksonJsonHttpMessageConverter(

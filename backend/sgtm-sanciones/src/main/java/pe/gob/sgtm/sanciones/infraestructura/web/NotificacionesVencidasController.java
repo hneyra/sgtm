@@ -9,8 +9,8 @@ import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 import pe.gob.sgtm.autorizacion.Privilegio;
 import pe.gob.sgtm.autorizacion.RequiereAcceso;
+import pe.gob.sgtm.sanciones.aplicacion.ConsultasDeSanciones;
 import pe.gob.sgtm.sanciones.dominio.CriterioDeNotificacion;
-import pe.gob.sgtm.sanciones.dominio.NotificacionAdministrativaRepository;
 import pe.gob.sgtm.web.Api;
 import pe.gob.sgtm.web.ParametrosDePaginacion;
 import pe.gob.sgtm.web.RespuestaPaginada;
@@ -33,12 +33,11 @@ public class NotificacionesVencidasController {
 
     private static final String ORDEN_POR_OMISION = "fecha";
 
-    private final NotificacionAdministrativaRepository repositorio;
+    private final ConsultasDeSanciones consulta;
     private final Clock reloj;
 
-    public NotificacionesVencidasController(
-            NotificacionAdministrativaRepository repositorio, Clock reloj) {
-        this.repositorio = repositorio;
+    public NotificacionesVencidasController(ConsultasDeSanciones consulta, Clock reloj) {
+        this.consulta = consulta;
         this.reloj = reloj;
     }
 
@@ -60,7 +59,8 @@ public class NotificacionesVencidasController {
                         conPapeletaDe(conPapeleta));
 
         return RespuestaPaginada.de(
-                repositorio.buscarVencidas(criterio, paginacion.aPaginacion(ORDEN_POR_OMISION)),
+                consulta.notificacionesVencidas(
+                        criterio, paginacion.aPaginacion(ORDEN_POR_OMISION)),
                 NotificacionAdministrativaResource::de);
     }
 

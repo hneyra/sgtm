@@ -19,9 +19,9 @@ import pe.gob.sgtm.autorizacion.RequiereAcceso;
 import pe.gob.sgtm.dominio.Ejercicio;
 import pe.gob.sgtm.dominio.Observacion;
 import pe.gob.sgtm.parametros.LectorDeParametros;
+import pe.gob.sgtm.rentas.aplicacion.ConsultasDeRentas;
 import pe.gob.sgtm.rentas.aplicacion.RegistrarDeclaracionJurada;
 import pe.gob.sgtm.rentas.dominio.DeclaracionJurada;
-import pe.gob.sgtm.rentas.dominio.DeclaracionJuradaRepository;
 import pe.gob.sgtm.rentas.dominio.TipoDeDeclaracion;
 import pe.gob.sgtm.web.Api;
 import pe.gob.sgtm.web.CodigoDeError;
@@ -54,12 +54,12 @@ import pe.gob.sgtm.web.ProblemaDeNegocio;
 @RequiereAcceso(acceso = "declaracion_jurada", privilegio = Privilegio.LECTURA)
 public class DeclaracionJuradaController {
 
-    private final DeclaracionJuradaRepository repositorio;
+    private final ConsultasDeRentas consultas;
     private final RegistrarDeclaracionJurada actos;
 
     public DeclaracionJuradaController(
-            DeclaracionJuradaRepository repositorio, RegistrarDeclaracionJurada actos) {
-        this.repositorio = repositorio;
+            ConsultasDeRentas consultas, RegistrarDeclaracionJurada actos) {
+        this.consultas = consultas;
         this.actos = actos;
     }
 
@@ -74,8 +74,8 @@ public class DeclaracionJuradaController {
     @GetMapping("/{djNro}")
     @Transactional(readOnly = true)
     public DeclaracionJuradaResource obtener(@PathVariable String djNro, @RequestParam String ano) {
-        return repositorio
-                .porNumero(djNro, ejercicioDe(ano))
+        return consultas
+                .declaracionPorNumero(djNro, ejercicioDe(ano))
                 .map(DeclaracionJuradaResource::de)
                 .orElseThrow(
                         () ->

@@ -10,7 +10,7 @@ import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 import pe.gob.sgtm.autorizacion.Privilegio;
 import pe.gob.sgtm.autorizacion.RequiereAcceso;
-import pe.gob.sgtm.cuentacorriente.dominio.AsientoRepository;
+import pe.gob.sgtm.cuentacorriente.aplicacion.ConsultasDelLibro;
 import pe.gob.sgtm.cuentacorriente.dominio.CriterioDePagos;
 import pe.gob.sgtm.web.Api;
 import pe.gob.sgtm.web.ParametrosDePaginacion;
@@ -38,10 +38,10 @@ public class ConsultaPagosController {
     /** Cronologico, como se lee cualquier movimiento de cuenta corriente. */
     private static final String ORDEN_POR_OMISION = "fecha_valor";
 
-    private final AsientoRepository repositorio;
+    private final ConsultasDelLibro consulta;
 
-    public ConsultaPagosController(AsientoRepository repositorio) {
-        this.repositorio = repositorio;
+    public ConsultaPagosController(ConsultasDelLibro consulta) {
+        this.consulta = consulta;
     }
 
     /**
@@ -62,7 +62,7 @@ public class ConsultaPagosController {
                         codContribuyente, fechaDe("desde", desde), fechaDe("hasta", hasta));
 
         return RespuestaPaginada.de(
-                repositorio.pagos(criterio, parametros.aPaginacion(ORDEN_POR_OMISION)),
+                consulta.pagos(criterio, parametros.aPaginacion(ORDEN_POR_OMISION)),
                 AsientoResource::de);
     }
 

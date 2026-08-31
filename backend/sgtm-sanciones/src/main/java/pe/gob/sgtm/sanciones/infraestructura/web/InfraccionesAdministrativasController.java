@@ -9,9 +9,9 @@ import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 import pe.gob.sgtm.autorizacion.Privilegio;
 import pe.gob.sgtm.autorizacion.RequiereAcceso;
+import pe.gob.sgtm.sanciones.aplicacion.ConsultasDeSanciones;
 import pe.gob.sgtm.sanciones.dominio.CriterioDelProcedimiento;
 import pe.gob.sgtm.sanciones.dominio.FaseDelProcedimiento;
-import pe.gob.sgtm.sanciones.dominio.ProcedimientoSancionadorRepository;
 import pe.gob.sgtm.web.Api;
 import pe.gob.sgtm.web.ParametrosDePaginacion;
 import pe.gob.sgtm.web.RespuestaPaginada;
@@ -56,12 +56,11 @@ public class InfraccionesAdministrativasController {
 
     private static final String ORDEN_POR_OMISION = "fechaInfraccion";
 
-    private final ProcedimientoSancionadorRepository repositorio;
+    private final ConsultasDeSanciones consulta;
     private final Clock reloj;
 
-    public InfraccionesAdministrativasController(
-            ProcedimientoSancionadorRepository repositorio, Clock reloj) {
-        this.repositorio = repositorio;
+    public InfraccionesAdministrativasController(ConsultasDeSanciones consulta, Clock reloj) {
+        this.consulta = consulta;
         this.reloj = reloj;
     }
 
@@ -92,7 +91,7 @@ public class InfraccionesAdministrativasController {
                         LocalDate.now(reloj));
 
         return RespuestaPaginada.de(
-                repositorio.buscar(criterio, paginacion.aPaginacion(ORDEN_POR_OMISION)),
+                consulta.procedimientos(criterio, paginacion.aPaginacion(ORDEN_POR_OMISION)),
                 ProcedimientoSancionadorResource::de);
     }
 }

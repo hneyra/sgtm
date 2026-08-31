@@ -23,7 +23,7 @@ import pe.gob.sgtm.compartido.Paginacion;
 import pe.gob.sgtm.cuentacorriente.ConsultaDeDeudaPublica;
 import pe.gob.sgtm.cuentacorriente.ObligacionPublica;
 import pe.gob.sgtm.dominio.Dinero;
-import pe.gob.sgtm.rentas.dominio.TransferenciaRepository;
+import pe.gob.sgtm.rentas.aplicacion.ConsultasDeRentas;
 import pe.gob.sgtm.web.Api;
 import pe.gob.sgtm.web.ImporteActualizado;
 import pe.gob.sgtm.web.ParametrosDePaginacion;
@@ -58,17 +58,17 @@ public class ConsultaPrediosController {
     private final ConsultaDeDeudaPublica deuda;
     // Solo para contribuyentePorCodigo: vive en TransferenciaRepository por el mismo motivo que en
     // AsientoRepository, y no hace falta un repositorio nuevo para el mismo cruce por SQL.
-    private final TransferenciaRepository contribuyentes;
+    private final ConsultasDeRentas consulta;
     private final Clock reloj;
 
     public ConsultaPrediosController(
             PrediosDelContribuyente predios,
             ConsultaDeDeudaPublica deuda,
-            TransferenciaRepository contribuyentes,
+            ConsultasDeRentas consulta,
             Clock reloj) {
         this.predios = predios;
         this.deuda = deuda;
-        this.contribuyentes = contribuyentes;
+        this.consulta = consulta;
         this.reloj = reloj;
     }
 
@@ -85,8 +85,7 @@ public class ConsultaPrediosController {
 
         Paginacion paginacion = parametros.aPaginacion(ORDEN_POR_OMISION);
         Optional<Long> contribuyenteId =
-                contribuyentes.contribuyentePorCodigo(
-                        contribuyente.strip().toUpperCase(Locale.ROOT));
+                consulta.contribuyentePorCodigo(contribuyente.strip().toUpperCase(Locale.ROOT));
         if (contribuyenteId.isEmpty()) {
             return RespuestaPaginada.de(Pagina.vacia(paginacion));
         }

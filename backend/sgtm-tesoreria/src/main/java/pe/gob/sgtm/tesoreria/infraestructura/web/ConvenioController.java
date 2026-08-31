@@ -112,7 +112,6 @@ public class ConvenioController {
     private final RegistrarPreconvenio registrar;
     private final CerrarConvenio cerrar;
     private final ConsultaDeConvenios consulta;
-    private final ConvenioRepository convenios;
     private final DirectorioDeContribuyentes contribuyentes;
     private final Clock reloj;
 
@@ -120,13 +119,11 @@ public class ConvenioController {
             RegistrarPreconvenio registrar,
             CerrarConvenio cerrar,
             ConsultaDeConvenios consulta,
-            ConvenioRepository convenios,
             DirectorioDeContribuyentes contribuyentes,
             Clock reloj) {
         this.registrar = registrar;
         this.cerrar = cerrar;
         this.consulta = consulta;
-        this.convenios = convenios;
         this.contribuyentes = contribuyentes;
         this.reloj = reloj;
     }

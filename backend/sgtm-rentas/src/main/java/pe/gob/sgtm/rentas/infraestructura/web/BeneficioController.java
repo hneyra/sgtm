@@ -9,7 +9,7 @@ import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 import pe.gob.sgtm.autorizacion.Privilegio;
 import pe.gob.sgtm.autorizacion.RequiereAcceso;
-import pe.gob.sgtm.rentas.dominio.BeneficioRepository;
+import pe.gob.sgtm.rentas.aplicacion.ConsultasDeRentas;
 import pe.gob.sgtm.rentas.dominio.CriterioDeBeneficio;
 import pe.gob.sgtm.web.Api;
 import pe.gob.sgtm.web.ParametrosDePaginacion;
@@ -29,11 +29,11 @@ public class BeneficioController {
     private static final String ORDEN_POR_OMISION = "vigencia_desde";
     private static final String ESTADO_VIGENTE = "VIGENTE";
 
-    private final BeneficioRepository repositorio;
+    private final ConsultasDeRentas consulta;
     private final Clock reloj;
 
-    public BeneficioController(BeneficioRepository repositorio, Clock reloj) {
-        this.repositorio = repositorio;
+    public BeneficioController(ConsultasDeRentas consulta, Clock reloj) {
+        this.consulta = consulta;
         this.reloj = reloj;
     }
 
@@ -48,7 +48,7 @@ public class BeneficioController {
                 new CriterioDeBeneficio(contribuyente, tipo, vigentesA(estado));
 
         return RespuestaPaginada.de(
-                repositorio.buscar(criterio, paginacion.aPaginacion(ORDEN_POR_OMISION)),
+                consulta.beneficios(criterio, paginacion.aPaginacion(ORDEN_POR_OMISION)),
                 BeneficioResource::de);
     }
 

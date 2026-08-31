@@ -15,8 +15,8 @@ import pe.gob.sgtm.autorizacion.RequiereAcceso;
 import pe.gob.sgtm.dominio.Dinero;
 import pe.gob.sgtm.dominio.Observacion;
 import pe.gob.sgtm.dominio.Porcentaje;
+import pe.gob.sgtm.rentas.aplicacion.ConsultasDeRentas;
 import pe.gob.sgtm.rentas.aplicacion.RegistrarTransferencia;
-import pe.gob.sgtm.rentas.dominio.TransferenciaRepository;
 import pe.gob.sgtm.web.Api;
 import pe.gob.sgtm.web.CodigoDeError;
 import pe.gob.sgtm.web.ProblemaDeNegocio;
@@ -37,12 +37,12 @@ import pe.gob.sgtm.web.ProblemaDeNegocio;
 public class TransferenciaPredioController {
 
     private final RegistrarTransferencia transferencias;
-    private final TransferenciaRepository repositorio;
+    private final ConsultasDeRentas consultas;
 
     public TransferenciaPredioController(
-            RegistrarTransferencia transferencias, TransferenciaRepository repositorio) {
+            RegistrarTransferencia transferencias, ConsultasDeRentas consultas) {
         this.transferencias = transferencias;
-        this.repositorio = repositorio;
+        this.consultas = consultas;
     }
 
     @PostMapping
@@ -76,7 +76,7 @@ public class TransferenciaPredioController {
     // ------------------------------------------------------------------
 
     private long contribuyenteDe(@Nullable String codigo, String campo) {
-        return repositorio
+        return consultas
                 .contribuyentePorCodigo(exigir(codigo, campo).toUpperCase(java.util.Locale.ROOT))
                 .orElseThrow(
                         () ->

@@ -18,6 +18,7 @@ import pe.gob.sgtm.compartido.Pagina;
 import pe.gob.sgtm.compartido.Paginacion;
 import pe.gob.sgtm.dominio.Dinero;
 import pe.gob.sgtm.dominio.Ejercicio;
+import pe.gob.sgtm.rentas.aplicacion.ConsultasDeRentas;
 import pe.gob.sgtm.rentas.dominio.arbitrios.CriterioDeArbitrio;
 import pe.gob.sgtm.rentas.dominio.arbitrios.CuotaDeArbitrio;
 import pe.gob.sgtm.rentas.dominio.arbitrios.CuotaDeArbitrioRepository;
@@ -40,7 +41,9 @@ class ArbitriosControllerTest {
     private final RepositorioDeMentira repositorio = new RepositorioDeMentira();
 
     private final MockMvc mvc =
-            MockMvcBuilders.standaloneSetup(new ArbitriosController(repositorio, RELOJ))
+            MockMvcBuilders.standaloneSetup(
+                            new ArbitriosController(
+                                    new ConsultasDeRentas(repositorio, null, null, null), RELOJ))
                     .setControllerAdvice(new ManejadorDeErrores())
                     .setMessageConverters(
                             new JacksonJsonHttpMessageConverter(
