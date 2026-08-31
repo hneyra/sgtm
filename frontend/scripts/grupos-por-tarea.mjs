@@ -466,6 +466,18 @@ export const ACCION_PRIMARIA = {
      El camino de verdad al acta es el enlace de la fila de la muestra (#506 F3),
      que llega con los dos identificadores puestos. Un modulo sin accion primaria
      no dibuja boton, que es lo que hacen hoy los otros diez. */
+  // «Registrar contribuyente» y no «Nuevo»: el rotulo dice lo que el acto hace, y
+  // «Nuevo» a secas —que es como el manual rotula el boton de la barra— no dice
+  // nuevo QUE. Cuelga de `contribuyentes` porque el padron es la unica pantalla
+  // del modulo desde la que se ve si esa persona ya esta inscrita, que es lo
+  // primero que hay que mirar antes de darla de alta (#503 F7).
+  //
+  // **Y el destino abre algo de verdad**: `?nuevo=1` abre el asistente guiado
+  // cuando lo hay —Catastro— y el panel lateral cuando no —Rentas—. Declarar una
+  // opcion sin ninguna de las dos dibujaria un boton que lleva a la pantalla y no
+  // abre nada, que es lo mismo que Fiscalizacion acaba de rechazar aqui arriba
+  // por otro motivo.
+  'rentas-registro': { opcion: 'contribuyentes', label: 'Registrar contribuyente' },
 };
 
 /** La accion primaria de un modulo, o `null` si no declara ninguna. */

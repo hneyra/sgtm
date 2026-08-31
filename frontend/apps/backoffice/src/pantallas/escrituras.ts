@@ -1140,6 +1140,31 @@ const resultadoCoactivoDe = (texto: string): string | undefined =>
   RESULTADO_COACTIVO_DEL_BACKEND[texto];
 
 /**
+ * **El vocabulario del tipo de persona**: el manual escribe cuatro etiquetas y
+ * `TipoPersona` declara cuatro constantes, y no son la misma cadena.
+ *
+ * `ContribuyenteController` normaliza a mayusculas y compara con `valueOf`, asi
+ * que «JURÍDICA» no es `JURIDICA` —la tilde— y «SUCESIÓN INDIVISA» no es
+ * `SUCESION_INDIVISA` —la tilde y el espacio—. La diferencia es de escritura,
+ * no de significado: las cuatro se corresponden una a una, y por eso esto es
+ * una transliteracion y no la clase de traduccion que #427 se nego a hacer
+ * —alli «ACTIVA» se PARECIA a VIGENTE y parecerse no es serlo—.
+ *
+ * Un valor que no este aqui devuelve `undefined` y **no viaja**, en vez de
+ * mandar el texto del prototipo y dejar que el backend conteste con un mensaje
+ * que no explica nada.
+ */
+const TIPO_DE_PERSONA_DEL_BACKEND: Readonly<Record<string, string>> = {
+  NATURAL: 'NATURAL',
+  'JURÍDICA': 'JURIDICA',
+  'SUCESIÓN INDIVISA': 'SUCESION_INDIVISA',
+  'SOCIEDAD CONYUGAL': 'SOCIEDAD_CONYUGAL',
+};
+
+const tipoDePersonaDe = (texto: string): string | undefined =>
+  TIPO_DE_PERSONA_DEL_BACKEND[texto.trim().toUpperCase()];
+
+/**
  * La opcion del desplegable de encargados que **no elige a nadie**.
  *
  * El prototipo la ofrece en «Auxiliar» y en «Ejecutor», y para el auxiliar es
@@ -1562,6 +1587,35 @@ const ESCRITURAS: Readonly<Record<string, EscrituraDeclarada>> = {
     campos: {
       tipoDeMovimiento: { campo: 'tipoDeMovimiento' },
       fechaDelMovimiento: { campo: 'fechaDelMovimiento' },
+    },
+  },
+
+  /**
+   * Alta de contribuyente (`POST /rentas/contribuyentes`, #488; declarada en #503 F7).
+   *
+   * Cinco campos obligatorios y uno opcional, que son los que
+   * `ContribuyenteController.PeticionDeContribuyente` admite de un alta. **No están los 56
+   * de la ficha del manual**, y no es un recorte de esta declaración: el `POST` acepta ocho
+   * campos y el resto del expediente se escribe por sus propias operaciones —`PUT
+   * /contribuyentes/{id}`, `POST .../domicilios`, `.../contactos`, `.../responsables`—.
+   * Dar de alta es crear la fila; completarla es abrirla.
+   *
+   * `activo` **no se declara**, por lo mismo que en `registrar_sector`: un contribuyente
+   * nace activo, y darlo de alta ya inactivo sería un alta y una baja en un solo acto.
+   *
+   * Y **no están la fecha de nacimiento, el estado civil ni el cónyuge**, que el manual sí
+   * dibuja: el propio controlador los deja fuera de su lista blanca a propósito —«un campo
+   * que se puede escribir y nunca se puede leer de vuelta es una trampa: quien lo teclea no
+   * tiene forma de comprobar que entró bien»—.
+   */
+  registrar_contribuyente: {
+    campos: {
+      codigo: { campo: 'codigo' },
+      tipoDocumento: { campo: 'tipoDocumento' },
+      numeroDocumento: { campo: 'numeroDocumento' },
+      tipoPersona: { campo: 'tipoPersona', valor: tipoDePersonaDe },
+      nombreRazonSocial: { campo: 'nombreRazonSocial' },
+      condicionEspecial: { campo: 'condicionEspecial' },
     },
   },
 

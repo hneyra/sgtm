@@ -99,12 +99,21 @@ const CENSO: readonly Capacidades[] = [
         'Predios',
         'Deuda S/',
       ],
-    // Desde #442 declara el vocabulario uniforme: «Nuevo» no abre ningun alta,
-    // «Modificar» es un modo y «Guardar» no podria guardar sobre un `GET`.
-    acciones: ['Imprimir'],
-    primaria: null,
-    // Y sin franja: lo unico que le queda es imprimir, que es de salida, asi que
-    // no hay ningun acto que explicar.
+    // Desde #442 declara el vocabulario uniforme: «Modificar» es un modo y
+    // «Guardar» no podria guardar sobre un `GET`. **«Nuevo» vuelve con #503 F7**,
+    // y no por una excepcion: la regla siempre fue que se queda si la pantalla
+    // declara el formulario que abre, y hasta ahora ninguna lo declaraba. Sigue
+    // sin ser la primaria —abrir un alta no es el acto de esta pantalla, que es
+    // de consulta— y por eso va como secundaria.
+    acciones: ['Nuevo', 'Imprimir'],
+    // **Y «Nuevo» es la primaria**, aunque no sea la ultima. No es una excepcion
+    // nueva: `altaEsElActo` de `BarraDeAcciones` ya decia que cuando la pantalla
+    // no escribe y una de sus acciones abre un alta, esa es el acto —si no,
+    // quedarian dos primarias y una apagada—. El padron es una consulta, y lo
+    // unico que actua sobre el es dar de alta.
+    primaria: 'Nuevo',
+    // Y sin franja: lo que le queda es abrir un alta y imprimir, y ninguna de
+    // las dos guarda sobre esta pantalla.
     causa: null,
   },
   {

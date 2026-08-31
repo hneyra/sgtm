@@ -542,7 +542,7 @@ function Bloques({
      recargar la perdia, el enlace no la llevaba, y —lo que la hizo cambiar— el
      boton «Registrar predio» del panel lateral no tenia como abrirla: vive en
      el shell, fuera de esta pantalla. */
-  const flujoAbierto = busqueda.get(NUEVO) === '1';
+  const nuevoEnLaUrl = busqueda.get(NUEVO) === '1';
   const fijarFlujoAbierto = (abierto: boolean): void =>
     fijarBusqueda(conCambio(busqueda, { [NUEVO]: abierto ? '1' : undefined }), { replace: true });
   const navegar = useNavigate();
@@ -654,13 +654,29 @@ function Bloques({
      coactiva, y su motivo se leeria de un `title` sobre un boton apagado, que no
      llega ni al teclado ni al lector (RNF-082).
 
-     **Sin los rotulos de las altas, y no por descuido**: ese argumento solo lo
-     lee la rama del vocabulario uniforme, que recompone la barra entera, y
-     ninguna de las opciones que la declaran se dibuja aqui —las seis tienen
-     componente propio—. Pasarlo seria codigo que nunca se ejecuta; lo que
-     sostiene la afirmacion es la prueba que exige que las seis esten en
-     {@link COMPONENTES_PROPIOS}, y por eso esa lista se exporta. */
-  const barra = accionesDeLaBarra(estructura.id, estructura.acciones ?? []);
+     **Con los rotulos de las altas desde #503 F7**, y antes sin ellos. Ese
+     argumento solo lo lee la rama del vocabulario uniforme, y mientras ninguna
+     opcion de esa lista dibujada por el camino comun declaro un alta, pasarlo
+     era codigo que nunca se ejecutaba. `contribuyentes` la declara ahora —su
+     «Nuevo» estaba dibujado y muerto, y `VOCABULARIO_UNIFORME` lo retiraba con
+     razon mientras no hubiera formulario detras—, asi que sin esto el boton
+     desapareceria **igual que antes** y sin que nada lo dijera: el alta seria
+     inalcanzable y la unica pista, un panel que no se abre nunca. */
+  /* **`?nuevo=1` abre el alta que esta pantalla tenga**, y son dos formas
+     distintas: el asistente guiado de Catastro —que sustituye a la pantalla— o
+     el panel lateral. El parametro lo pone el boton de la accion primaria del
+     modulo (#498 F2), que vive en el shell y no sabe cual de las dos hay
+     detras; si solo abriera el asistente, el mismo boton funcionaria en
+     Catastro y no haria nada en Rentas, **sin decirlo**. Se abre el primero
+     declarado porque un modulo declara una accion primaria, no dos. */
+  const flujoAbierto = nuevoEnLaUrl && composicion.flujo !== undefined;
+  const altaPorLaUrl = nuevoEnLaUrl && composicion.flujo === undefined && (composicion.altas ?? []).length > 0;
+
+  const barra = accionesDeLaBarra(
+    estructura.id,
+    estructura.acciones ?? [],
+    (composicion.altas ?? []).map((alta) => alta.accion),
+  );
   // Por que la primaria no puede guardar todavia, cuando no puede (#332). Se
   // pregunta **solo con el privilegio que el acto exige**: sin el, lo que apaga
   // la accion es el permiso, y contar que la pantalla no guarda seria contestar
@@ -1250,11 +1266,19 @@ function Bloques({
         />
       )}
 
-      {altaAbierta !== null && puedeRegistrarAqui && (
+      {/* El panel se abre por el boton de la barra —`altaAbierta`— o por
+          `?nuevo=1`, que es como lo abre la accion primaria del modulo desde el
+          shell. Cerrarlo tiene que limpiar las dos: con solo `fijarAltaAbierta`,
+          el parametro seguiria en la URL y el panel se volveria a abrir en el
+          siguiente dibujo. */}
+      {(altaAbierta !== null || altaPorLaUrl) && puedeRegistrarAqui && (
         <PanelDeAlta
           composicion={composicion}
-          abierta={altaAbierta}
-          onCerrar={() => fijarAltaAbierta(null)}
+          abierta={altaAbierta ?? { indice: 0 }}
+          onCerrar={() => {
+            fijarAltaAbierta(null);
+            if (nuevoEnLaUrl) fijarFlujoAbierto(false);
+          }}
         />
       )}
     </>
