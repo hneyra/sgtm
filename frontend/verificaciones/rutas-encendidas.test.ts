@@ -294,8 +294,8 @@ describe('cuanto falta para poder apagar el proxy (#400)', () => {
   );
   const pendientes = DEL_CONTRATO.filter(([, metodo, ruta]) => loQueFalta(metodo, ruta).length > 0);
 
-  it('el contrato publica 196 operaciones', () => {
-    expect(DEL_CONTRATO.length).toBe(196);
+  it('el contrato publica 198 operaciones', () => {
+    expect(DEL_CONTRATO.length).toBe(198);
   });
 
   it('encendidas: 3', () => {
@@ -312,8 +312,12 @@ describe('cuanto falta para poder apagar el proxy (#400)', () => {
     expect(listas.length).toBe(126);
   });
 
-  it('pendientes: 67', () => {
-    expect(pendientes.length).toBe(67);
+  /* 69 desde #523: las dos lecturas de la corrida de emision nacen **pendientes**,
+     y no por descuido. El backend las sirve; lo que les falta es la mitad de
+     interfaz —que `predial_masivo` dibuje al abrir lo que hizo la ultima—, y eso
+     va en su propio PR. Aqui se cuenta lo que hay, no lo que se espera. */
+  it('pendientes: 69', () => {
+    expect(pendientes.length).toBe(69);
   });
 
   it('las tres cifras cubren el contrato entero', () => {

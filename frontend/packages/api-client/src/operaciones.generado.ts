@@ -2,7 +2,7 @@
  * Origen: docs/50-api/openapi/sgtm-v1.yaml (el contrato).
  * Regenerar con: yarn generar-operaciones
  *
- * Las 196 operaciones del contrato como tipos: verbo, ruta, parametros y —cuando
+ * Las 198 operaciones del contrato como tipos: verbo, ruta, parametros y —cuando
  * el contrato ya describe el recurso— cuerpo y respuesta.
  *
  * El contrato manda, y manda en las dos direcciones: si el yaml cambia y esto
@@ -28,7 +28,7 @@ export interface DescriptorDeOperacion {
  * Cuerpo que el contrato declara como objeto y todavia no describe.
  *
  * No es comodidad ni pereza de tipado: es lo que el yaml dice hoy. El contrato
- * fija verbo, ruta y parametros de las 196 operaciones, y **el esquema de cada
+ * fija verbo, ruta y parametros de las 198 operaciones, y **el esquema de cada
  * recurso se escribe cuando su backend existe**, en el issue del modulo que lo
  * sirve. Cuando eso pase, esta forma la sustituye la de verdad y el codigo
  * escrito contra la anterior deja de compilar, que es justo lo que se busca.
@@ -38,11 +38,11 @@ export interface CuerpoSinEsquema {
 }
 
 /**
- * Las 196 operaciones del contrato, por su `operationId`.
+ * Las 198 operaciones del contrato, por su `operationId`.
  *
  * Es la unica lista de rutas del frontend: la que construye la URL, la que dice
  * que parametros admite cada operacion y la que un dia dira cuales sirve ya el
- * backend. Ninguna de las 196 recibe la municipalidad — sale del token, y el
+ * backend. Ninguna de las 198 recibe la municipalidad — sale del token, y el
  * generador falla si el contrato intentara declararla (regla 2, ADR-0005).
  */
 export const OPERACIONES = {
@@ -339,6 +339,20 @@ export const OPERACIONES = {
     ruta: '/rentas/vehiculos',
     parametrosDeRuta: [],
     parametrosDeConsulta: ['contribuyente', 'fecha'],
+  },
+  /** Estado de la ultima emision del ejercicio — `GET /rentas/predial/corridas/ultima` */
+  ultima_corrida_predial: {
+    metodo: 'GET',
+    ruta: '/rentas/predial/corridas/ultima',
+    parametrosDeRuta: [],
+    parametrosDeConsulta: ['ejercicio'],
+  },
+  /** Los observados de una corrida — `GET /rentas/predial/corridas/{corridaId}/observados` */
+  observados_de_la_corrida: {
+    metodo: 'GET',
+    ruta: '/rentas/predial/corridas/{corridaId}/observados',
+    parametrosDeRuta: ['corridaId'],
+    parametrosDeConsulta: [],
   },
   /** Mudanza: cierra el domicilio anterior y abre el nuevo — `POST /rentas/contribuyentes/{id}/domicilios` */
   mudar_contribuyente: {
@@ -1420,7 +1434,7 @@ export const OPERACIONES = {
   },
 } as const satisfies Readonly<Record<string, DescriptorDeOperacion>>;
 
-/** El `operationId` de una de las 196 operaciones. */
+/** El `operationId` de una de las 198 operaciones. */
 export type IdDeOperacion = keyof typeof OPERACIONES;
 
 /**
@@ -1681,6 +1695,14 @@ export interface ParametrosPorOperacion {
   readonly vehiculos_del_contribuyente: {
     readonly contribuyente?: string;
     readonly fecha?: string;
+  };
+  /** `GET /rentas/predial/corridas/ultima` */
+  readonly ultima_corrida_predial: {
+    readonly ejercicio?: string;
+  };
+  /** `GET /rentas/predial/corridas/{corridaId}/observados` */
+  readonly observados_de_la_corrida: {
+    readonly corridaId: string;
   };
   /** `POST /rentas/contribuyentes/{id}/domicilios` */
   readonly mudar_contribuyente: {
@@ -2826,6 +2848,8 @@ export interface CuerpoPorOperacion {
   readonly modificar_contribuyente: CuerpoSinEsquema;
   readonly ficha_del_contribuyente: undefined;
   readonly vehiculos_del_contribuyente: undefined;
+  readonly ultima_corrida_predial: undefined;
+  readonly observados_de_la_corrida: undefined;
   readonly mudar_contribuyente: CuerpoSinEsquema;
   readonly registrar_contacto: CuerpoSinEsquema;
   readonly modificar_contacto: CuerpoSinEsquema;
@@ -3026,6 +3050,8 @@ export interface RespuestaPorOperacion {
   readonly modificar_contribuyente: CuerpoSinEsquema;
   readonly ficha_del_contribuyente: CuerpoSinEsquema;
   readonly vehiculos_del_contribuyente: CuerpoSinEsquema;
+  readonly ultima_corrida_predial: CuerpoSinEsquema;
+  readonly observados_de_la_corrida: CuerpoSinEsquema;
   readonly mudar_contribuyente: CuerpoSinEsquema;
   readonly registrar_contacto: CuerpoSinEsquema;
   readonly modificar_contacto: CuerpoSinEsquema;
