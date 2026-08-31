@@ -45,6 +45,9 @@ test('la hoja cabe en una A4, conserva las firmas y no imprime la interfaz', asy
     await expect(marcados.nth(i)).toBeHidden();
   }
   await expect(page.locator('.sgtm-nav')).toBeHidden();
+  // El riel tambien: son 68 px de acento a sangre, y en papel serian una
+  // franja de tinta al borde de la hoja (RNF-084).
+  await expect(page.locator('.sgtm-modulos')).toBeHidden();
   // Los botones de la hoja son el caso que importa: estan **dentro** del
   // documento, y sin la regla se imprimirian junto a las firmas.
   await expect(page.locator('.sgtm-hoja__botones')).toBeHidden();
