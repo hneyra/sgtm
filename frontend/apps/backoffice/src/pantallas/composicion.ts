@@ -481,6 +481,19 @@ export interface SimulacionDeLaPantalla {
   readonly cuerpo?: Readonly<Record<string, string | boolean | number>>;
 }
 
+/**
+ * Un grupo del indice: un rotulo y las pestanas del catalogo que caen en el.
+ *
+ * `titulo` es el rotulo de la pestana cuando el grupo tiene una sola —y
+ * entonces no se reescribe nada—, y un nombre nuevo cuando une varias. Ver
+ * `ComposicionDeOpcion.gruposDelIndice`.
+ */
+export interface GrupoDelIndice {
+  readonly titulo: string;
+  /** Rotulos de pestana del catalogo, en el orden en que se dibujan. */
+  readonly pestanas: readonly string[];
+}
+
 export interface ComposicionDeOpcion {
   /**
    * **La superficie de la que esta opcion es una hoja** (#442).
@@ -585,6 +598,35 @@ export interface ComposicionDeOpcion {
    *                           mismas secciones del manual, en su orden
    */
   readonly indice?: true | 'en-vez-de-pestanas';
+  /**
+   * Los grupos del indice, para una pantalla cuyo indice **sustituye** a las
+   * pestanas.
+   *
+   * `'en-vez-de-pestanas'` apila las secciones de todas las pestanas en una
+   * pagina, y en el padron de contribuyentes eso son **doce** entradas de
+   * indice: nueve pestanas que declaran doce secciones. Doce entradas no son un
+   * indice, son la misma lista de antes sin la barra. El rediseno pide cinco
+   * (#503 F2), y la forma de llegar a cinco **sin reescribir un solo rotulo**
+   * es agrupar por la unidad que el manual ya tiene encima de la seccion: la
+   * pestana.
+   *
+   * Por eso se declara en **pestanas y no en secciones**. Un grupo que nombrara
+   * secciones tendria que ponerle nombre al conjunto, y ese nombre seria un
+   * rotulo inventado por cada grupo (RNF-080). Nombrando pestanas, el grupo de
+   * una sola **es** su pestana y lleva su rotulo literal; solo los que unen
+   * varias necesitan nombre, y entonces el nombre nace de una decision escrita
+   * en vez de por descuido.
+   *
+   * Lo que **no** cambia: la pagina sigue dibujando las doce secciones con su
+   * rotulo del manual y en su orden. Lo que se agrupa es la navegacion, que es
+   * lo mismo que hacen los grupos por tarea con las opciones del menu.
+   *
+   * La guarda vive en `expediente-del-contribuyente.test.tsx`: cada pestana de
+   * la pantalla cae en **exactamente un** grupo. Sin ella, una pestana que el
+   * porte anadiera se quedaria fuera del indice y sus secciones serian
+   * inalcanzables salvo rodando la pagina.
+   */
+  readonly gruposDelIndice?: readonly GrupoDelIndice[];
   /**
    * La **tabla** de la pantalla entra en el indice, como su primera entrada.
    *

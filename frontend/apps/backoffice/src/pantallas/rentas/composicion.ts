@@ -129,6 +129,47 @@ const simula = (accion: string, cuerpo?: Readonly<Record<string, boolean>>) =>
 const FICHA_CON_PESTANAS = { indice: 'en-vez-de-pestanas' } as const;
 
 /**
+ * **Los cinco apartados del expediente del contribuyente** (#503 F2).
+ *
+ * `'en-vez-de-pestanas'` (#330) apilo las secciones de las nueve pestanas en una
+ * sola pagina, y eso dejo el indice en **doce** entradas: nueve pestanas que
+ * declaran doce secciones. Doce entradas no son un indice, son la misma lista de
+ * antes sin la barra. El rediseno pide cinco, y a cinco se llega **sin
+ * reescribir un solo rotulo**, agrupando por la unidad que el manual ya tiene
+ * encima de la seccion: la pestana.
+ *
+ * Cuatro de los cinco grupos llevan **el rotulo literal de su pestana**. Solo
+ * dos pestanas se unen bajo un nombre nuevo, y son las dos que el prototipo une:
+ *
+ *   `Documentos y contacto`   une «Documentos», «Contactos», «Gestores» y
+ *                             «Teléfonos - EMail»: cuatro pestanas para los
+ *                             cuatro sitios donde se apunta como localizar a la
+ *                             misma persona
+ *   `Observaciones y fotos`   une «Observaciones» y «Fotos»
+ *
+ * **Y el segundo no se llama como en el prototipo, a proposito.** El canvas lo
+ * rotula «Observaciones y bitácora» y lo describe como «quién tocó qué y
+ * cuándo»; ahi debajo no hay ninguna bitacora —son «Observaciones del registro»
+ * (3 campos) y «Foto álbum personal» (2)—, y prometer un registro de auditoria
+ * que la pantalla no ensena es inventar una capacidad. La bitacora existe, pero
+ * vive en Seguridad y se lee por otra opcion con otro permiso.
+ *
+ * Lo que **no** cambia: la pagina sigue dibujando las doce secciones con su
+ * rotulo del manual y en su orden. Lo agrupado es la navegacion, igual que los
+ * grupos por tarea agrupan las opciones del menu sin renombrar ninguna.
+ */
+const APARTADOS_DEL_EXPEDIENTE = [
+  { titulo: 'Identificación del Contribuyente', pestanas: ['Identificación del Contribuyente'] },
+  { titulo: 'Domicilio Fiscal', pestanas: ['Domicilio Fiscal'] },
+  {
+    titulo: 'Documentos y contacto',
+    pestanas: ['Documentos', 'Contactos', 'Gestores', 'Teléfonos - EMail'],
+  },
+  { titulo: 'Predios y vehículos', pestanas: ['Predios y vehículos'] },
+  { titulo: 'Observaciones y fotos', pestanas: ['Observaciones', 'Fotos'] },
+] as const;
+
+/**
  * **Los movimientos de deuda, una superficie de dos hojas** (#442 C).
  *
  * `alta_deuda` y `baja_deuda` tocan el mismo objeto —una obligacion de la cuenta
@@ -148,7 +189,11 @@ const MOVIMIENTOS_DE_DEUDA = {
 } as const;
 
 export const COMPOSICION_DE_RENTAS: Readonly<Record<string, ComposicionDeOpcion>> = {
-  contribuyentes: { ...FICHA_CON_PESTANAS, resumen: ResumenDeContribuyente },
+  contribuyentes: {
+    ...FICHA_CON_PESTANAS,
+    gruposDelIndice: APARTADOS_DEL_EXPEDIENTE,
+    resumen: ResumenDeContribuyente,
+  },
   vehiculos: { ...FICHA_CON_PESTANAS, resumen: ResumenDeVehiculo },
   /**
    * La declaracion jurada lleva resumen y **no** indice, y esa asimetria es

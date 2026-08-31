@@ -223,27 +223,36 @@ describe('la cabecera-resumen dice a quien se tiene delante', () => {
 });
 
 describe('el indice sustituye a las pestanas, y solo donde se declara', () => {
-  it('el padron apila sus nueve pestanas en una pagina que el indice recorre', async () => {
+  /**
+   * **Lo que este caso protege es que no se pierda ninguna seccion**, y desde
+   * #503 F2 eso ya no se mide en el indice: el indice del padron agrupa sus
+   * nueve pestanas en cinco apartados, y quien comprueba ese agrupamiento
+   * —y que ninguna pestana se quede fuera de el— es
+   * `expediente-del-contribuyente.test.tsx`.
+   *
+   * Aqui se sigue midiendo lo de #330, que es lo que no cambio: la barra de
+   * pestanas desaparece y **las doce secciones se dibujan en una sola pagina**,
+   * con su rotulo del manual (RNF-080). Se mira la pagina y no el indice
+   * porque es la pagina la que las tiene.
+   */
+  it('el padron apila sus nueve pestanas en una pagina, con las doce secciones', async () => {
     montarEnRuta(PADRON);
-    const indice = await screen.findByRole('navigation', { name: 'Secciones de la pantalla' });
+    await screen.findByRole('navigation', { name: 'Secciones de la pantalla' });
 
     // La barra de pestanas deja de dibujarse: era navegacion, y el indice hace
     // la misma navegacion desplazando en vez de recargar.
     expect(screen.queryAllByRole('tab')).toHaveLength(0);
 
-    // Y estan **todas** las secciones de las nueve pestanas, con el rotulo del
-    // manual: el indice agrupa, no renombra (RNF-080).
-    const entradas = within(indice)
-      .getAllByRole('button')
-      .map((boton) => boton.textContent);
-    expect(entradas).toContain('Identificación');
-    // De la pestana 2, que antes exigia un clic para saber si existia.
-    expect(entradas).toContain('Domicilio fiscal');
-    // Y de la novena.
-    expect(entradas).toContain('Unidades afectas del contribuyente');
-    // Doce secciones mas la salida hacia la barra de acciones (#332).
-    expect(entradas.length).toBe(13);
-    expect(entradas[entradas.length - 1]).toBe('Ir a las acciones');
+    const cabeceras = document.querySelectorAll('.sgtm-seccion__cabecera');
+    const rotulos = [...cabeceras].map((nodo) => nodo.textContent ?? '');
+    // De la pestana 1, de la 2 y de la novena: las tres que antes exigian un
+    // clic cada una para saber si el dato existia.
+    expect(rotulos.some((rotulo) => rotulo.includes('Identificación'))).toBe(true);
+    expect(rotulos.some((rotulo) => rotulo.includes('Domicilio fiscal'))).toBe(true);
+    expect(rotulos.some((rotulo) => rotulo.includes('Unidades afectas del contribuyente'))).toBe(
+      true,
+    );
+    expect(cabeceras.length, 'las doce secciones de las nueve pestanas').toBe(12);
   });
 
   it('la ficha de vehiculo hace lo mismo con sus seis', async () => {
