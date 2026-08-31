@@ -302,12 +302,15 @@ describe('cuanto falta para poder apagar el proxy (#400)', () => {
     expect(YA_SERVIDAS.length).toBe(3);
   });
 
-  it('listas para encender: 124', () => {
-    expect(listas.length).toBe(124);
+  /* 125 desde #503 F7: `registrar_contribuyente` deja de estar pendiente al
+     declarar su lista blanca en `escrituras.ts`. Es el alta del padron de
+     Rentas, que hasta ahora no tenia formulario que la mandara. */
+  it('listas para encender: 125', () => {
+    expect(listas.length).toBe(125);
   });
 
-  it('pendientes: 68', () => {
-    expect(pendientes.length).toBe(68);
+  it('pendientes: 67', () => {
+    expect(pendientes.length).toBe(67);
   });
 
   it('las tres cifras cubren el contrato entero', () => {
