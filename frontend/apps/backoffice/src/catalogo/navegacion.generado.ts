@@ -313,17 +313,21 @@ export const MODULOS: readonly ModuloDelCatalogo[] = [
       "M9.6 13.2l2 2 3.4-4"
     ],
     "bloques": [
-      "Campaña",
-      "Fiscalización",
+      "Detección",
+      "Programas",
+      "Actas de inspección",
       "Resultados",
       "Documentos"
+    ],
+    "bloquesPlegados": [
+      "Resultados"
     ],
     "opciones": [
       {
         "id": "fisc_programa",
         "label": "Programación",
         "ranura": "fisc-programa",
-        "bloque": "Campaña",
+        "bloque": "Programas",
         "title": "Programación de fiscalización",
         "resumen": "Selección de la muestra a inspeccionar por sector y criterio de riesgo, con el fiscalizador asignado y el plazo del programa."
       },
@@ -331,7 +335,7 @@ export const MODULOS: readonly ModuloDelCatalogo[] = [
         "id": "fisc_predial",
         "label": "Fiscalización predial",
         "ranura": "fisc-predial",
-        "bloque": "Fiscalización",
+        "bloque": "Actas de inspección",
         "title": "Fiscalización predial — acta de inspección",
         "resumen": "Formulario de campo optimizado para tablet. Contrasta lo verificado con lo declarado y determina si corresponde emitir resolución de determinación."
       },
@@ -339,7 +343,7 @@ export const MODULOS: readonly ModuloDelCatalogo[] = [
         "id": "fisc_vehicular",
         "label": "Fiscalización vehicular",
         "ranura": "fisc-vehicular",
-        "bloque": "Fiscalización",
+        "bloque": "Detección",
         "title": "Fiscalización vehicular",
         "resumen": "Cruce del padrón vehicular con la información registral y de SUNAT para detectar vehículos afectos no declarados o con valor subvaluado."
       },
@@ -355,7 +359,7 @@ export const MODULOS: readonly ModuloDelCatalogo[] = [
         "id": "fisc_omisos",
         "label": "Omisos y subvaluadores",
         "ranura": "fisc-omisos",
-        "bloque": "Campaña",
+        "bloque": "Detección",
         "title": "Omisos y subvaluadores",
         "resumen": "Contribuyentes con predio en catastro pero sin declaración en rentas, y declaraciones cuyo autovalúo está por debajo del valor catastral verificado."
       },
