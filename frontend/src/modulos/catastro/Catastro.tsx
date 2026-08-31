@@ -9,7 +9,13 @@ import {
   darDeBaja,
   inscribirPredio,
   listarPredios,
+  type Arancel,
+  type Depreciacion,
+  type ValorUnitario,
+  listarAranceles,
+  listarDepreciacion,
   listarSectores,
+  listarValoresUnitarios,
   listarVias,
   reactivar,
   titularesDelPredio,
@@ -427,6 +433,14 @@ export default function Catastro({ dest, onDest }: PantallaProps) {
     dest === 'territorio' || (dest === 'predios' && predio === null),
   );
 
+  /* Las tres tablas de valuación del ejercicio. Devuelven una lista suelta, no
+     el sobre paginado, y contestan 404 cuando el ejercicio no tiene conjunto de
+     parámetros sellado —que es el estado de hoy (D-02a)—. */
+  const anio = Number(pref.ejercicio);
+  const aranceles = useRecurso((s2) => listarAranceles(anio, s2), [anio], dest === 'valores' && valTab === 0);
+  const unitarios = useRecurso((s2) => listarValoresUnitarios(anio, s2), [anio], dest === 'valores' && valTab === 1);
+  const deprec = useRecurso((s2) => listarDepreciacion(anio, s2), [anio], dest === 'valores' && valTab === 2);
+
   /* El catálogo vial. `ViaController` no acota por sector —una vía es del
      ubigeo, no de un sector—, así que se trae entero y paginado. */
   const [paginaVias, setPaginaVias] = useState(0);
@@ -485,8 +499,17 @@ export default function Catastro({ dest, onDest }: PantallaProps) {
     return { manzanas, lotes, etiquetas, vias };
   }, []);
 
+  /* La pestaña activa, con su lectura. `tablasDeValores` sigue dando los
+     rótulos y la prosa del artboard; las filas ya no salen de ahí. */
   const tablas = tablasDeValores(pref.ejercicio);
   const vAct = tablas[valTab];
+  const lecturaDeValores = [aranceles, unitarios, deprec][valTab]!;
+  /* «Sellada» no se afirma: se deduce de que el backend haya contestado. Un 404
+     de estas tres rutas dice literalmente que el ejercicio NO tiene conjunto
+     sellado, y el artboard lo daba por sellado siempre. */
+  const conjuntoSinSellar =
+    lecturaDeValores.error?.codigo === 'NO_ENCONTRADO' &&
+    /conjunto de parametros sellado|conjunto de parámetros sellado/i.test(lecturaDeValores.error.mensaje);
 
   /* ── Ruta y contexto ────────────────────────────────────────── */
   const etiquetaDelDestino = m.destinos.find((x) => x.k === dest)?.label ?? 'Documentos';
@@ -2392,21 +2415,52 @@ export default function Catastro({ dest, onDest }: PantallaProps) {
                   </button>
                 );
               })}
-              <span style={{ marginLeft: 'auto', display: 'flex', alignItems: 'center', gap: 7, fontSize: 11.5, color: 'var(--ok-fg)', background: 'var(--ok-bg)', borderRadius: 999, padding: '4px 11px' }}>
-                <Icono d={['M5 12.5l4.5 4.5L19 7']} tam={12} grosor={2.4} />
-                Sellada para {pref.ejercicio}
-              </span>
+              {lecturaDeValores.cargando ? (
+                <span style={{ marginLeft: 'auto', fontSize: 11.5, color: 'var(--ink-3)' }}>Consultando…</span>
+              ) : conjuntoSinSellar ? (
+                <span style={{ marginLeft: 'auto', display: 'flex', alignItems: 'center', gap: 7, fontSize: 11.5, color: 'var(--warn-fg)', background: 'var(--warn-bg)', borderRadius: 999, padding: '4px 11px' }}>
+                  <Icono d={ICO.aviso} tam={12} grosor={2.2} />
+                  Sin sellar para {pref.ejercicio}
+                </span>
+              ) : lecturaDeValores.datos ? (
+                <span style={{ marginLeft: 'auto', display: 'flex', alignItems: 'center', gap: 7, fontSize: 11.5, color: 'var(--ok-fg)', background: 'var(--ok-bg)', borderRadius: 999, padding: '4px 11px' }}>
+                  <Icono d={['M5 12.5l4.5 4.5L19 7']} tam={12} grosor={2.4} />
+                  Sellada para {pref.ejercicio}
+                </span>
+              ) : null}
             </div>
 
             <section style={TARJETA}>
               <div style={{ ...CABECERA_SECCION, flexWrap: 'wrap' }}>
                 <h2 style={H2}>{vAct.titulo}</h2>
-                <span style={META}>{vAct.conteo}</span>
-                <button onClick={() => toast('Importaría la tabla del año ' + pref.ejercicio + '.')} className="hov-linea" style={BOTON_LINEA}>
-                  Importar tabla del año
-                </button>
+                <span style={META}>
+                  {lecturaDeValores.cargando ? '…' : `${filasDeValores(valTab, aranceles.datos, unitarios.datos, deprec.datos).length} filas`}
+                </span>
               </div>
-              <TablaDelArtboard cols={vAct.cols} filas={vAct.filas} min="660px" />
+              {conjuntoSinSellar ? (
+                /* Lo que el backend contesta, dicho entero: el cuadro no está
+                   vacío, es que el ejercicio no tiene con qué valorizar. */
+                <div style={{ display: 'flex', gap: 11, padding: '16px', background: 'var(--warn-bg)', color: 'var(--warn-fg)' }}>
+                  <Icono d={ICO.aviso} tam={17} grosor={1.8} style={{ flex: '0 0 auto', marginTop: 1 }} />
+                  <span style={{ flex: 1, minWidth: 0, fontSize: 12.5, lineHeight: 1.55, textWrap: 'pretty' }}>
+                    <strong style={{ display: 'block', fontWeight: 600, marginBottom: 2 }}>
+                      El ejercicio {pref.ejercicio} no tiene un conjunto de parámetros sellado.
+                    </strong>
+                    {lecturaDeValores.error?.mensaje} Sin él estas tres tablas no existen para el ejercicio, y ningún autovalúo que se
+                    calcule con ellas sería reproducible.
+                  </span>
+                </div>
+              ) : lecturaDeValores.error ? (
+                <p style={{ margin: 0, padding: '16px', fontSize: 12.5, lineHeight: 1.5, color: 'var(--error-texto)', textWrap: 'pretty' }}>
+                  No se pudo leer la tabla: {lecturaDeValores.error.mensaje}
+                </p>
+              ) : (
+                <TablaDelArtboard
+                  cols={COLUMNAS_DE_VALORES[valTab]!}
+                  filas={filasDeValores(valTab, aranceles.datos, unitarios.datos, deprec.datos)}
+                  min="660px"
+                />
+              )}
               <p style={PIE}>{vAct.nota}</p>
             </section>
           </div>
@@ -2672,4 +2726,55 @@ function textoDeTitulares(
   return datos.titulares
     .map((t) => (t.nombre ?? 'Titular fuera del padrón') + (datos.titulares.length > 1 ? ` (${t.porcentaje} %)` : ''))
     .join(' · ');
+}
+
+/**
+ * Las columnas de cada cuadro, en la forma que el backend LO DEVUELVE.
+ *
+ * El artboard dibuja la depreciacion pivotada —una fila por antiguedad y una
+ * columna por estado de conservacion, para un (uso, material) dado— y el
+ * backend devuelve una fila por combinacion. Se usan las del backend: una
+ * cabecera que promete «Muy bueno %» sobre una columna que trae el material es
+ * peor que una cabecera sosa sobre el dato correcto. El pivote es trabajo de
+ * interfaz y necesita ademas elegir uso y material; queda anotado.
+ */
+const COLUMNAS_DE_VALORES: readonly ColumnaDeTabla[][] = [
+  [['Via', 0], ['Tramo', 0], ['Valor S/ m²', 1], ['Documento fuente', 0]],
+  [['Partida', 0], ['Categoria', 0], ['Anio de construccion', 0], ['Valor S/ m²', 1], ['Documento fuente', 0]],
+  [['Uso', 0], ['Material', 0], ['Estado', 0], ['Antiguedad', 0], ['Depreciacion %', 1], ['Documento fuente', 0]],
+];
+
+/**
+ * Las filas de la tabla activa, en el orden de columnas que el artboard fija.
+ *
+ * El importe y el porcentaje llegan como TEXTO del backend y salen como texto:
+ * convertirlos a `number` para volver a formatearlos es la forma de perder un
+ * decimal en el camino (RNF-055).
+ */
+function filasDeValores(
+  pestania: number,
+  aranceles: Arancel[] | null,
+  unitarios: ValorUnitario[] | null,
+  deprec: Depreciacion[] | null,
+): string[][] {
+  if (pestania === 0) {
+    return (aranceles ?? []).map((a) => [String(a.viaId), a.tramo ?? SIN_DATO, a.valorM2, a.documentoFuente]);
+  }
+  if (pestania === 1) {
+    return (unitarios ?? []).map((v) => [
+      v.partida,
+      v.categoria,
+      `${v.anioConstruccionDesde}${v.anioConstruccionHasta === null ? ' en adelante' : ' – ' + v.anioConstruccionHasta}`,
+      v.valorM2,
+      v.documentoFuente,
+    ]);
+  }
+  return (deprec ?? []).map((d) => [
+    d.uso,
+    d.material,
+    d.estadoConservacion,
+    d.antiguedadHasta === null ? 'sin tope' : `hasta ${d.antiguedadHasta}`,
+    d.porcentaje,
+    d.documentoFuente,
+  ]);
 }

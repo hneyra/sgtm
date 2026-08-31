@@ -189,3 +189,53 @@ export type Via = {
 export function listarVias(paginacion: Paginacion, senal?: AbortSignal): Promise<RespuestaPaginada<Via>> {
   return solicitar('/catastro/vias', { parametros: { ...paginacion }, senal });
 }
+
+
+/* ══════════ Las tres tablas con que se valoriza un predio ══════════
+   Devuelven una LISTA suelta, no el sobre paginado: son cuadros completos de un
+   ejercicio, no un padron que se recorra. Y las tres contestan 404 cuando el
+   ejercicio no tiene conjunto de parametros sellado, que es lo que pasa hoy
+   (D-02a): no es un fallo, es el estado del sistema. */
+
+/** Es `ArancelResource`. El importe llega como texto (RNF-055). */
+export type Arancel = {
+  id: number;
+  viaId: number;
+  tramo: string | null;
+  valorM2: string;
+  documentoFuente: string;
+};
+
+/** Es `ValorUnitarioResource`. */
+export type ValorUnitario = {
+  id: number;
+  partida: string;
+  categoria: string;
+  anioConstruccionDesde: number;
+  anioConstruccionHasta: number | null;
+  valorM2: string;
+  documentoFuente: string;
+};
+
+/** Es `DepreciacionResource`. */
+export type Depreciacion = {
+  id: number;
+  uso: string;
+  material: string;
+  estadoConservacion: string;
+  antiguedadHasta: number | null;
+  porcentaje: string;
+  documentoFuente: string;
+};
+
+export function listarAranceles(anio: number, senal?: AbortSignal): Promise<Arancel[]> {
+  return solicitar('/catastro/tablas/aranceles', { parametros: { anio }, senal });
+}
+
+export function listarValoresUnitarios(anio: number, senal?: AbortSignal): Promise<ValorUnitario[]> {
+  return solicitar('/catastro/tablas/valores-unitarios', { parametros: { anio }, senal });
+}
+
+export function listarDepreciacion(anio: number, senal?: AbortSignal): Promise<Depreciacion[]> {
+  return solicitar('/catastro/tablas/depreciacion', { parametros: { anio }, senal });
+}
