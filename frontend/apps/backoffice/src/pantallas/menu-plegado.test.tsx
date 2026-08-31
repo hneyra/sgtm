@@ -154,6 +154,10 @@ describe('la tabla decide que se pliega, y si lleva carril', () => {
     expect(CATASTRO.centroDeReportes).toBeUndefined();
     expect(bloquesDe(CATASTRO).map((b) => [b.label, b.plegado, b.carril])).toEqual([
       ['Predio', false, false],
+      // «Documentos» es de #498 F2: el reporte del contribuyente sale del grupo
+      // del predio porque no se abre con el codigo del predio, sino con el de
+      // la persona. Un grupo de uno, y separa dos identificadores distintos.
+      ['Documentos', false, false],
       ['Territorio', true, false],
       ['Valuación', true, false],
     ]);
@@ -179,14 +183,17 @@ describe('la tabla decide que se pliega, y si lleva carril', () => {
 
 describe('el menu de Catastro pasa de doce entradas a nueve', () => {
   /**
-   * Nueve y no tres, y **es la decision de §5**: «Predio» no se pliega porque
-   * `ficha_contribuyente_reporte` se abre por el codigo del CONTRIBUYENTE y
-   * ninguna superficie de Catastro tiene ese codigo —`FichaResource` no lo
-   * publica y `FichaEncontradaResource` publica el nombre del titular, que es
-   * lo que #322 ya decidio que no funda un enlace—. Plegarlo esconderia esa
-   * opcion detras de una entrada que no lleva a ella.
+   * Nueve y no tres, y la razon **cambio con #498 F2**: el reporte se fue a su
+   * propio grupo, asi que ya no es el que impide plegar «Predio». Lo que lo
+   * impide ahora es `ficha_rural`, y se midio en vez de suponerse: montada la
+   * ficha urbana con el predio de muestra, lo que enlaza son urbana, economica,
+   * bienes y la actualizacion —cuatro de seis—, porque `Conmutador` dibuja la
+   * rural apagada a proposito (`derivaDe = catastral && una !== 'rural'`): del
+   * codigo de referencia no sale `codUnidad`, y ofrecerla seria un enlace a un
+   * 404. La cuenta de entradas no se mueve —seis y una donde habia siete—, pero
+   * lo que cada una agrupa si.
    */
-  it('siete opciones de «Predio», mas «Territorio» y «Valuación» plegadas', async () => {
+  it('seis de «Predio» y una de «Documentos», mas «Territorio» y «Valuación» plegadas', async () => {
     montarEnRuta('/catastro/consulta-fichas');
     await screen.findByRole('heading', { level: 1 });
 

@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
-import { screen, within } from '@testing-library/react';
+import { screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { desinstalarProxyDeDatos, instalarProxyDeDatos } from '@sgtm/api-mock';
 import { MODULOS, OPCIONES } from '../../catalogo';
@@ -127,6 +127,53 @@ describe('el privilegio de la barra es el que exige el verbo de su operacion', (
     expect(
       await screen.findByRole('region', { name: 'Observación del usuario' }),
     ).toBeInTheDocument();
+  });
+});
+
+/**
+ * **La accion primaria del panel exige `registro`, no `lectura`** (#498 F2).
+ *
+ * El boton «Registrar predio» lleva a `ficha_urbana?nuevo=1`, y el asistente
+ * solo se abre con privilegio de registro —lo comprueba `Pantalla` y tambien
+ * `FichaDelPredio`—. Sin esta guarda, quien solo consulta ve un boton grande y
+ * destacado que le deja en la pantalla sin que pase nada: el panel prometeria
+ * un acto que la pantalla le va a negar.
+ *
+ * Se descubrio midiendo: quitar la guarda de `puedeRegistrar` dejaba las 24
+ * pruebas de permisos y del shell en verde.
+ */
+describe('el botón de la acción primaria pide registro, no lectura', () => {
+  it('quien sólo consulta el padrón no lo ve', async () => {
+    entraCon({ ficha_urbana: ['lectura'], consulta_fichas: ['lectura'] });
+    montarEnRuta('/catastro/consulta-fichas');
+    await screen.findByRole('heading', { level: 1 });
+
+    /* **Se espera a que el panel tenga sus opciones, no a que exista.** El
+       landmark se dibuja antes de que la matriz de permisos llegue, y hasta
+       entonces el panel esta vacio: afirmar ahi que el boton no esta pasaba en
+       verde sin ejercitar nada —se comprobo quitando la guarda de
+       `puedeRegistrar`, y las quince seguian verdes—. */
+    const menu = screen.getByRole('navigation', { name: 'Opciones de Catastro' });
+    await waitFor(() => {
+      expect(
+        within(menu).getByRole('link', { name: 'Ficha urbana individual' }),
+      ).toBeInTheDocument();
+    });
+    // Con las opciones ya dibujadas, que el boton no este significa algo.
+    expect(screen.queryByRole('link', { name: 'Registrar predio' })).not.toBeInTheDocument();
+  });
+
+  it('quien puede registrar sí, y con el alta guiada en el destino', async () => {
+    entraCon({ ficha_urbana: ['lectura', 'registro'], consulta_fichas: ['lectura'] });
+    montarEnRuta('/catastro/consulta-fichas');
+    await screen.findByRole('heading', { level: 1 });
+
+    await waitFor(() => {
+      expect(screen.getByRole('link', { name: 'Registrar predio' })).toHaveAttribute(
+        'href',
+        '/catastro/ficha-urbana?nuevo=1',
+      );
+    });
   });
 });
 

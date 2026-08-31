@@ -44,3 +44,21 @@ export function nombresDeLosGrupos(moduloId: string, tabla?: TablaDeGrupos): rea
 export function bloquesPlegadosDe(moduloId: string, tabla?: TablaDeGrupos): readonly string[];
 
 export function centroDeReportesDe(moduloId: string, tabla?: TablaDeGrupos): string | null;
+
+/**
+ * La accion primaria de un modulo: el acto con el que se empieza a trabajar en
+ * el. `opcion` la abre —con su id y su permiso— y `label` la rotula.
+ */
+export interface AccionPrimaria {
+  readonly opcion: string;
+  readonly label: string;
+}
+
+export type TablaDeAccionesPrimarias = Readonly<Record<string, AccionPrimaria>>;
+
+export const ACCION_PRIMARIA: TablaDeAccionesPrimarias;
+
+export function accionPrimariaDe(
+  moduloId: string,
+  tabla?: TablaDeAccionesPrimarias,
+): AccionPrimaria | null;

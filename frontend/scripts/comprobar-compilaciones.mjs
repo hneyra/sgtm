@@ -173,12 +173,40 @@ const HUELLAS = [
  * escritura los necesita enteros y sincronos—. Quedan 1,0 KB de los 2,4 que este
  * numero traia: la via B de arriba sigue siendo lo que decide si sobra o falta.
  *
+ * **Y a 146 el 2026-08-31** (#498 F2), con el margen que #426 dejo ya gastado.
+ *
+ * Lo medido: `main` con F1 dentro esta en **144,9**, y F2 lo deja en **145,1**.
+ * Son **0,2 KB**, y los tres sitios donde caen son arranque por diseno, no por
+ * descuido: la barra lateral **es** el shell.
+ *
+ *   `accionPrimaria` en `navegacion.generado.ts`   el dato del boton
+ *   el boton y su calculo en `BarraLateral.tsx`    incluida la guarda de permiso
+ *   `NUEVO` en `busqueda.ts` y `mas` en `Icono`    dos constantes
+ *
+ * **Lo que se intento antes de tocar este numero, y lo que dio.** El boton se
+ * escribio primero con CSS propio —seis declaraciones—, y se sustituyo por
+ * `.sgtm-boton--primario` del design system, que ya las tenia todas. Es la
+ * correccion correcta por si sola —repetir `--accent-contraste` a mano es como
+ * se pierde el tema oscuro— y **no movio la decima**: 145,1 antes y despues. El
+ * peso no esta en el CSS.
+ *
+ * Sacar el boton del arranque **no es una opcion**: vive en la barra lateral,
+ * que se dibuja en la primera pantalla y en todas. Un `lazy()` ahi es un hueco
+ * parpadeando en el sitio mas visible del shell a cambio de dos decimas.
+ *
+ * Se sube a 146 y no a 145,5 por la leccion de #442, que este archivo ya
+ * aprendio dos veces: lo medido aqui son 145,1 y CI mide ~0,3 mas, asi que
+ * 145,5 decidiria en verde o rojo segun donde se compile. Y porque quedan
+ * fases del mismo issue que caen en el arranque —la barra de contexto del
+ * predio (F3) y los cinco estados (F6) son las dos del shell—; si al cerrarlas
+ * sobra, se baja, como hizo #424.
+ *
  * En una municipalidad con red mala, el arranque es lo que separa «lento» de
  * «no abre».
  */
 const PRESUPUESTO = {
   /** Lo que hay que descargar para ver la primera pantalla: JS de arranque y CSS. */
-  arranque: 145,
+  arranque: 146,
   /** Lo que cuesta entrar en un modulo: su trozo del catalogo. */
   modulo: 11,
   /**

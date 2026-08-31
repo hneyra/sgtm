@@ -1,6 +1,7 @@
 import { Link, NavLink, useLocation, useNavigate } from 'react-router-dom';
 import { Icono } from '@sgtm/design-system';
 import { bloquesDe, rutaDeOpcion } from '../catalogo';
+import { NUEVO } from '../pantallas/busqueda';
 import { useCatalogoVisible } from './sesion/useCatalogoVisible';
 import type { BloqueDeNavegacion, ModuloDelCatalogo } from '../catalogo';
 import { usePreferencias } from './preferencias';
@@ -74,6 +75,24 @@ export function BarraLateral({
           opciones: [],
         });
 
+  /* La accion primaria del modulo abierto, si la declara y si este perfil
+     puede registrar en su opcion. `catalogo.modulos` ya viene filtrado por
+     permiso, pero **ver no es registrar**: se comprueba `puedeRegistrar`, que
+     es el mismo privilegio que `Pantalla` exige para abrir el asistente. */
+  const declarada = abierto?.accionPrimaria;
+  const opcionDeLaPrimaria =
+    declarada === undefined ? undefined : abierto?.opciones.find((o) => o.id === declarada.opcion);
+  const primaria =
+    declarada === undefined ||
+    opcionDeLaPrimaria === undefined ||
+    abierto === null ||
+    !catalogo.puedeRegistrar(declarada.opcion)
+      ? null
+      : {
+          label: declarada.label,
+          destino: `${rutaDeOpcion(abierto, opcionDeLaPrimaria)}?${NUEVO}=1`,
+        };
+
   return (
     <>
       <RielDeModulos
@@ -97,6 +116,31 @@ export function BarraLateral({
             {preferencias.entidad}
           </p>
         </div>
+
+        {/* La accion primaria del modulo, encima de sus destinos (#498 F2).
+
+            Sale del catalogo —`accionPrimaria`— y no de la composicion del
+            modulo, que llega en su propio trozo (#433): leerla de alli traeria
+            ese trozo al arranque de los doce.
+
+            **Se dibuja solo si este perfil puede registrar ahi** (REQ-03 §5).
+            Dar de alta exige `registro` y no cualquier escritura, asi que quien
+            solo consulta no ve un boton que le llevaria a una pantalla donde el
+            asistente no se abre. Y lleva `?nuevo=1` porque el alta guiada vive
+            desde ahora en la URL: sin eso, el boton solo podria dejar al
+            usuario en la pantalla y que la abriera el mismo. */}
+        {primaria !== null && (
+          <div className="sgtm-nav__primaria">
+            <Link
+              className="sgtm-boton sgtm-boton--primario"
+              to={primaria.destino}
+              onClick={onNavegar}
+            >
+              <Icono nombre="mas" tamano={15} />
+              {primaria.label}
+            </Link>
+          </div>
+        )}
 
         <div className="sgtm-nav__buscador">
           <button type="button" onClick={onAbrirPaleta}>

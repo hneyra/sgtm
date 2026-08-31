@@ -127,12 +127,15 @@ const GRUPOS_POR_TAREA_ESPERADOS: Readonly<
         'actualizacion_catastro',
         'consulta_fichas',
         'ficha_bienes',
-        'ficha_contribuyente_reporte',
         'ficha_economica',
         'ficha_rural',
         'ficha_urbana',
       ],
     ],
+    // #498 F2: el reporte del contribuyente no es una pantalla del predio. Se
+    // abre por el codigo de LA PERSONA y no por el del predio, y esa diferencia
+    // —dos identificadores en el mismo grupo— es la que lo tenia mal puesto.
+    ['Documentos', ['ficha_contribuyente_reporte']],
     ['Territorio', ['calles', 'sectores']],
     ['Valuación', ['aranceles', 'depreciacion', 'valores_unitarios']],
   ],

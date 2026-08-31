@@ -11,7 +11,7 @@ import { composicionDe, filtrosDe } from '../composicion';
 import { useDatosDeOperacion } from '../useDatosDeOperacion';
 import { NO_DISPONIBLE, SIN_PERMISO, estadoDePantalla, textoDeError } from '../estados';
 import { avisoDe } from '../prosa';
-import { PAGINA, conCambio, leerBusqueda } from '../busqueda';
+import { NUEVO, PAGINA, conCambio, leerBusqueda } from '../busqueda';
 import { useEscritura } from '../escritura';
 import { accionesDeLaBarra } from '../actos';
 import { useFocoEnLaAccion } from '../foco';
@@ -264,23 +264,24 @@ const ARBITRIOS: Referencia = { opcion: URBANA, label: 'Datos para el cálculo d
  * modalidades: es la unica que las declara, y son las mismas para un predio
  * urbano, uno rural o una edificacion en propiedad exclusiva y comun.
  */
-const COMUNES: Readonly<Record<'identificacion' | 'ubicacion' | 'titularidad', readonly Referencia[]>> =
-  {
-    identificacion: [
-      { opcion: URBANA, label: 'Ficha catastral urbana individual' },
-      { opcion: URBANA, label: 'Información complementaria' },
-      { opcion: URBANA, label: 'Notas de la ficha' },
-    ],
-    ubicacion: [
-      { opcion: URBANA, label: 'Ubicación del predio catastral' },
-      { opcion: URBANA, label: 'Localización' },
-    ],
-    titularidad: [
-      { opcion: URBANA, label: 'Características de la titularidad' },
-      { opcion: URBANA, label: 'Titulares registrados' },
-      { opcion: URBANA, label: 'Ocupantes no propietarios' },
-    ],
-  };
+const COMUNES: Readonly<
+  Record<'identificacion' | 'ubicacion' | 'titularidad', readonly Referencia[]>
+> = {
+  identificacion: [
+    { opcion: URBANA, label: 'Ficha catastral urbana individual' },
+    { opcion: URBANA, label: 'Información complementaria' },
+    { opcion: URBANA, label: 'Notas de la ficha' },
+  ],
+  ubicacion: [
+    { opcion: URBANA, label: 'Ubicación del predio catastral' },
+    { opcion: URBANA, label: 'Localización' },
+  ],
+  titularidad: [
+    { opcion: URBANA, label: 'Características de la titularidad' },
+    { opcion: URBANA, label: 'Titulares registrados' },
+    { opcion: URBANA, label: 'Ocupantes no propietarios' },
+  ],
+};
 
 /**
  * Valorizacion, la pestana que **si** cambia con la modalidad.
@@ -426,9 +427,20 @@ export function FichaDelPredio({ estructura }: { readonly estructura: Estructura
 
   const { consulta, falta } = useDatosDeOperacion(conexionDeLaFicha(opcionQueLee));
 
-  const [pestana, fijarPestana] = useState<Pestana>(PESTANA_INICIAL[estructura.id] ?? 'identificacion');
+  const [pestana, fijarPestana] = useState<Pestana>(
+    PESTANA_INICIAL[estructura.id] ?? 'identificacion',
+  );
   const [cerradas, fijarCerradas] = useState<Readonly<Record<string, boolean>>>({});
-  const [flujoAbierto, fijarFlujoAbierto] = useState(false);
+  /* El alta guiada abierta vive en la URL y no aqui (#498 F2), igual que en el
+     renderizador comun. **Hay dos copias de este estado a proposito** —esta
+     pantalla sustituye al renderizador para las cinco opciones del predio—, y
+     esa es justo la razon por la que hubo que cambiar las dos: el boton
+     «Registrar predio» del panel apunta a `ficha_urbana`, que se dibuja aqui.
+     Cambiar solo la del renderizador dejaba el boton llevando a la pantalla con
+     `?nuevo=1` en la barra de direcciones y el asistente sin abrir. */
+  const flujoAbierto = busqueda.get(NUEVO) === '1';
+  const fijarFlujoAbierto = (abierto: boolean): void =>
+    fijarBusqueda(conCambio(busqueda, { [NUEVO]: abierto ? '1' : undefined }), { replace: true });
   const [sembrada, fijarSembrada] = useState(false);
 
   const composicion = composicionDe(estructura.id);
@@ -536,7 +548,9 @@ export function FichaDelPredio({ estructura }: { readonly estructura: Estructura
   );
 
   const secciones = seccionesDeLaPestana(modalidad, pestana, pantallas.data ?? {});
-  const tablaDeLaPestana = enValorizacion ? tablaDeLaModalidad(modalidad, pantallas.data ?? {}) : undefined;
+  const tablaDeLaPestana = enValorizacion
+    ? tablaDeLaModalidad(modalidad, pantallas.data ?? {})
+    : undefined;
   const totales = enValorizacion && modalidad === 'bienes' ? estructura.totales : undefined;
   const anclaDe = (indice: number): string => `sgtm-seccion-${pestana}-${indice}`;
 

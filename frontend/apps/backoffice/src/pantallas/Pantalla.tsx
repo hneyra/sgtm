@@ -15,13 +15,14 @@ import {
 import type { EstructuraDePantalla } from '../catalogo';
 import { CentroDeReportes } from './CentroDeReportes';
 import {
-  conOrden,
+  NUEVO,
+  PAGINA,
   conCambio,
+  conOrden,
   leerBusqueda,
   operacionDe,
   parametrosDeBusqueda,
   registroQueFalta,
-  PAGINA,
 } from './busqueda';
 import { NO_DISPONIBLE, SIN_PERMISO, estadoDePantalla, textoDeError } from './estados';
 import { useCatalogoVisible } from '../app/sesion/useCatalogoVisible';
@@ -518,7 +519,6 @@ function Bloques({
   // El alta abierta en panel, si hay alguna: cual, y de que fila cuelga. Una
   // sola a la vez —dos paneles encima del otro no se pueden operar—.
   const [altaAbierta, fijarAltaAbierta] = useState<AltaAbierta | null>(null);
-  const [flujoAbierto, fijarFlujoAbierto] = useState(false);
   /* Que filas de la tabla estan elegidas, cuando la opcion declara seleccion
      (#332). Se guardan **las claves de las filas**, no sus indices.
 
@@ -529,6 +529,13 @@ function Bloques({
      `codContribuyente` de la busqueda anterior sin que nada lo dijera. */
   const [elegidas, fijarElegidas] = useState<ReadonlySet<string>>(new Set());
   const [busqueda, fijarBusqueda] = useSearchParams();
+  /* El alta guiada abierta vive en la URL y no aqui (#498 F2). Con `useState`
+     recargar la perdia, el enlace no la llevaba, y —lo que la hizo cambiar— el
+     boton «Registrar predio» del panel lateral no tenia como abrirla: vive en
+     el shell, fuera de esta pantalla. */
+  const flujoAbierto = busqueda.get(NUEVO) === '1';
+  const fijarFlujoAbierto = (abierto: boolean): void =>
+    fijarBusqueda(conCambio(busqueda, { [NUEVO]: abierto ? '1' : undefined }), { replace: true });
   const navegar = useNavigate();
   const catalogo = useCatalogoVisible();
   const { moduloId = '', ranura = '', codigo } = useParams();

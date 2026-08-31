@@ -54,6 +54,7 @@ export const MODULOS: readonly ModuloDelCatalogo[] = [
     ],
     "bloques": [
       "Predio",
+      "Documentos",
       "Territorio",
       "Valuación"
     ],
@@ -61,6 +62,10 @@ export const MODULOS: readonly ModuloDelCatalogo[] = [
       "Territorio",
       "Valuación"
     ],
+    "accionPrimaria": {
+      "opcion": "ficha_urbana",
+      "label": "Registrar predio"
+    },
     "opciones": [
       {
         "id": "ficha_urbana",
@@ -114,7 +119,7 @@ export const MODULOS: readonly ModuloDelCatalogo[] = [
         "id": "ficha_contribuyente_reporte",
         "label": "Reporte de ficha del contribuyente",
         "ranura": "ficha-contribuyente-reporte",
-        "bloque": "Predio",
+        "bloque": "Documentos",
         "title": "Reporte de ficha del contribuyente",
         "resumen": "Ficha impresa del contribuyente: identificación, domicilio fiscal, documentos, contactos y unidades afectas."
       },
