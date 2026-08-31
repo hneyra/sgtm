@@ -81,13 +81,55 @@ const ResolutorDeValorDeTransferencia = lazy(async () => ({
  */
 
 /**
+ * **Las seis determinaciones, una superficie de seis hojas** (#503 F3).
+ *
+ * #393 les dio a las cinco de entonces **la misma anatomia** —sujeto, memoria
+ * del calculo, acto— y `DETERMINACION` la reparte desde una sola constante. Lo
+ * que no cambio es que siguen siendo seis pantallas: pasar del calculo
+ * individual a la corrida masiva del mismo ejercicio es volver al menu, y la
+ * franja de «la determinacion la hace el servidor» se lee **seis veces** como
+ * si fueran seis averias distintas en vez de una causa.
+ *
+ * La tira las une sin que ninguna pierda nada: cada hoja **conserva su id, su
+ * ruta y su permiso**, y la busqueda viaja con el enlace —que es lo que evita
+ * volver a teclear el contribuyente al pasar del predial a los arbitrios—.
+ *
+ * **Son seis y no cuatro**, que es donde este reparto se aparta de #442 A.
+ * Alcabala y espectaculos determinan un impuesto igual que las otras cuatro; lo
+ * que las distingue es que su hecho imponible es un acto suelto y no la emision
+ * anual, y eso no las hace otra cosa. La alcabala ademas sigue colgando del acto
+ * de transferencia (#503, decision 3): vive en los dos sitios.
+ *
+ * Lo que la tira **no** arregla, y conviene tenerlo escrito: ninguna de las seis
+ * escribe todavia. Tres simulan (`simula`), arbitrios es un `GET` y las dos de
+ * acto tienen su primaria apagada por un dato que no se publica. La superficie
+ * es un marco de lectura y de simulacion hasta que #445 cierre lo que le falta a
+ * #393.
+ */
+const DETERMINACIONES_DEL_EJERCICIO = {
+  titulo: 'Determinaciones',
+  hojas: [
+    'predial_individual',
+    'predial_masivo',
+    'arbitrios',
+    'vehicular_calculo',
+    'alcabala',
+    'espectaculos',
+  ],
+} as const;
+
+/**
  * El marco de una pantalla de determinacion: la banda de sujeto arriba.
  *
  * Se reparte a las cinco desde una sola constante para que anadir la sexta el
  * dia que exista sea una linea, y para que no se pueda dar el caso de cuatro
  * con banda y una sin.
  */
-const DETERMINACION = { resumen: ResumenDeDeterminacion, resumenSiempre: true } as const;
+const DETERMINACION = {
+  superficie: DETERMINACIONES_DEL_EJERCICIO,
+  resumen: ResumenDeDeterminacion,
+  resumenSiempre: true,
+} as const;
 
 /**
  * **La accion que enseña el resultado antes de escribir** (#393).
@@ -187,7 +229,6 @@ const MOVIMIENTOS_DE_DEUDA = {
   titulo: 'Movimientos de deuda',
   hojas: ['alta_deuda', 'baja_deuda'],
 } as const;
-
 export const COMPOSICION_DE_RENTAS: Readonly<Record<string, ComposicionDeOpcion>> = {
   contribuyentes: {
     ...FICHA_CON_PESTANAS,
@@ -364,6 +405,11 @@ export const COMPOSICION_DE_RENTAS: Readonly<Record<string, ComposicionDeOpcion>
    * `pantallas/rentas/index.ts` para las dos preguntas de #432 contestadas.
    */
   espectaculos: {
+    /* Entra en la superficie de las seis (#503 F3) y **no** en la anatomia de
+       las cinco: `DETERMINACION` le da a las otras la cabecera-resumen que #393
+       diseño para la emision del ejercicio, y espectaculos no la tuvo nunca. La
+       tira une pantallas; no les cambia lo que dibujan. */
+    superficie: DETERMINACIONES_DEL_EJERCICIO,
     filtrosBloqueados: ['nDeExpediente', 'organizador', 'desde', 'hasta'],
   },
   baja_deuda: {
