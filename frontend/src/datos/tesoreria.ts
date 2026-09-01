@@ -1,129 +1,117 @@
-/* Datos de muestra de Tesorería, copiados literalmente del artboard
-   `Tesoreria.dc.html`. Nada de esto viaja a ningún backend: es la maqueta.
-   El acrónimo del rediseño era `MPS` (Sullana); aquí la entidad es la
-   Municipalidad Distrital de Catacaos, así que en los números es `MDC`. */
+/**
+ * Lo que queda del artboard `Tesoreria.dc.html` cuando el módulo lee del backend.
+ *
+ * <h2>Lo que se fue, y por qué</h2>
+ *
+ * Las cinco deudas, los cuatro conceptos del TUPA, los cuatro convenios, los tres
+ * recibos, las cinco filas de avance, las seis de por área, los cuatro KPI y el
+ * contribuyente de la barra de contexto **eran datos de muestra**, y todos tienen
+ * ahora una lectura de verdad que los contradice o una razón escrita en pantalla
+ * para no dibujarlos. Dejar la cifra del prototipo al lado de la del backend es
+ * indistinguible de un dato correcto en cuanto sale de la pantalla.
+ *
+ * De `MEDIOS` y `ARQUEO_INICIAL` se fue además el vocabulario: el prototipo
+ * declara «efectivo», «tarjeta de débito o crédito», «depósito en cuenta» y «pago
+ * en línea», y `FormaDePago` (V3) declara EFECTIVO, CHEQUE, DEPOSITO, TARJETA y
+ * TRANSFERENCIA. No coinciden en número ni en nombre: «pago en línea» no está en
+ * el enumerado y el cheque no tiene casilla en el prototipo, de modo que un turno
+ * con un cheque saldría descuadrado sin que el cajero pudiera decir nada.
+ *
+ * <h2>Lo que se queda</h2>
+ *
+ * Los rótulos que el manual escribe y el backend acepta como texto libre —los
+ * motivos de una anulación, quién la autoriza— y los enumerados del dominio,
+ * escritos letra por letra como los declara Java.
+ */
 
-export type Deuda = {
-  anio: string;
-  unidad: string;
-  cuota: string;
-  tributo: string;
-  fase: string;
-  insoluto: number;
-  reajuste: number;
-  interes: number;
-  gastos: number;
-};
-
-/** Las cinco deudas del contribuyente, con sus cuatro componentes. El total a
- *  cobrar se compone de lo marcado: no es una cifra escrita. */
-export const DEUDAS: Deuda[] = [
-  { anio: '2026', unidad: '02-014-D-14-01', cuota: '1', tributo: 'IMPUESTO PREDIAL', fase: 'Ordinaria', insoluto: 147.98, reajuste: 0, interes: 0, gastos: 0 },
-  { anio: '2026', unidad: '02-014-D-14-01', cuota: '2', tributo: 'IMPUESTO PREDIAL', fase: 'Ordinaria', insoluto: 146.86, reajuste: 2.14, interes: 4.82, gastos: 0 },
-  { anio: '2026', unidad: '02-014-D-14-01', cuota: '1-12', tributo: 'ARBITRIOS', fase: 'Ordinaria', insoluto: 486.0, reajuste: 7.2, interes: 18.44, gastos: 0 },
-  { anio: '2025', unidad: '02-014-D-14-01', cuota: '3', tributo: 'IMPUESTO PREDIAL', fase: 'Valor emitido', insoluto: 144.2, reajuste: 8.6, interes: 31.18, gastos: 12.0 },
-  { anio: '2024', unidad: 'T2G-418', cuota: '1', tributo: 'PATRIMONIO VEHICULAR', fase: 'Coactiva', insoluto: 614.0, reajuste: 48.2, interes: 182.44, gastos: 96.0 },
+/**
+ * Las cinco formas de pago de `FormaDePago` (V3, `recibo_forma_pago_check`).
+ *
+ * El rótulo es para leerlo; lo que viaja es la clave. Ninguna se traduce por
+ * parecido: «pago en línea» del prototipo no es `TRANSFERENCIA` —podría ser
+ * tarjeta— y adivinarlo pondría el dinero del turno en la fila equivocada del
+ * arqueo.
+ */
+export const FORMAS_DE_PAGO: readonly [string, string][] = [
+  ['EFECTIVO', 'Efectivo'],
+  ['CHEQUE', 'Cheque'],
+  ['DEPOSITO', 'Depósito en cuenta'],
+  ['TARJETA', 'Tarjeta de débito o crédito'],
+  ['TRANSFERENCIA', 'Transferencia'],
 ];
 
-export type Tasa = { partida: string; concepto: string; area: string; cant: number; precio: number };
-
-/** Los conceptos del TUPA: no son deuda de la cuenta corriente, se cobran en
- *  el acto y el recibo es el comprobante del trámite. */
-export const TASAS: Tasa[] = [
-  { partida: '1.3.2.5.2.2', concepto: 'INSPECCIÓN OCULAR', area: 'Fiscalización', cant: 1, precio: 88.4 },
-  { partida: '1.3.2.10.1.99', concepto: 'CONSTANCIA DE NO ADEUDO', area: 'Rentas', cant: 1, precio: 18.0 },
-  { partida: '1.3.2.10.1.99', concepto: 'COPIA CERTIFICADA DE FICHA', area: 'Catastro', cant: 2, precio: 12.0 },
-  { partida: '1.3.2.9.1.6', concepto: 'DERECHO DE ANUNCIO Y PROPAGANDA', area: 'Comercialización', cant: 1, precio: 412.0 },
+/**
+ * Las clases de cobranza que la caja **escribe hoy**, de las cinco que
+ * `TipoDePago` declara.
+ *
+ * `A_CUENTA` y `CUOTA_CONVENIO` existen en el enumerado y el caso de uso las
+ * rechaza con `TipoDePagoNoImplementado`: las dos son pagos parciales, y qué
+ * parte de la deuda extingue un pago parcial es una **regla de imputación**
+ * normativa (TUO del Código Tributario, art. 31) que no está transcrita ni
+ * firmada. Ofrecerlas dejaría al cajero eligiendo una opción que contesta 422.
+ *
+ * `TASA` no está aquí porque no se elige: la pone la caja de tasas.
+ */
+export const TIPOS_DE_COBRANZA: readonly [string, string][] = [
+  ['NORMAL', 'Cobranza normal'],
+  ['PRECONVENIO', 'Cuota inicial de un convenio'],
 ];
 
-export type ClaveDeMedio = 'efectivo' | 'tarjeta' | 'deposito' | 'linea';
-export type Medio = { k: ClaveDeMedio; label: string; sistema: number };
+/** Los nueve rótulos de «Forma de pago» del prototipo que no llegan a viajar. */
+export const COBRANZAS_DEL_PROTOTIPO_SIN_BACKEND =
+  'A cuenta, sólo gastos, beneficio total o parcial del año, adelanto de convenio, contado total y prescripción';
 
-/** Lo que el sistema registró en el turno, por medio de pago. El arqueo compara
- *  contra esto y la diferencia se calcula, no se declara. */
-export const MEDIOS: Medio[] = [
-  { k: 'efectivo', label: 'Efectivo', sistema: 12418.4 },
-  { k: 'tarjeta', label: 'Tarjeta de débito o crédito', sistema: 4120.0 },
-  { k: 'deposito', label: 'Depósito en cuenta', sistema: 8940.6 },
-  { k: 'linea', label: 'Pago en línea', sistema: 2214.3 },
+/** Los cinco estados de `EstadoDeConvenio`. Ni «Cumplido» ni «En riesgo». */
+export const ESTADOS_DE_CONVENIO: readonly [string, string][] = [
+  ['PRECONVENIO', 'Preconvenio'],
+  ['VIGENTE', 'Vigente'],
+  ['ANULADO', 'Anulado'],
+  ['QUEBRADO', 'Quebrado'],
+  ['REFORMULADO', 'Reformulado'],
 ];
 
-/** Lo que el arqueo trae declarado al abrir la pantalla. El pago en línea no
- *  cuadra a propósito: el arqueo tiene que enseñar la diferencia. */
-export const ARQUEO_INICIAL: Record<ClaveDeMedio, string> = {
-  efectivo: '12418.40',
-  tarjeta: '4120.00',
-  deposito: '8940.60',
-  linea: '2100.00',
-};
-
-/** Nº convenio · contribuyente · fecha · deuda acogida · cuotas · pagadas ·
- *  vencidas · saldo · estado. */
-export type FilaDeConvenio = [string, string, string, string, string, string, string, string, string];
-
-export const CONVENIOS: FilaDeConvenio[] = [
-  ['CONV-2026-00412', 'CASTILLO PASCUALA, MARÍA E.', '12/08/2026', '262.16', '6', '1', '0', '231.03', 'Vigente'],
-  ['CONV-2026-00388', 'DÍAZ MADRID, JULIO CÉSAR', '04/06/2026', '9,412.15', '12', '2', '2', '7,844.10', 'En riesgo'],
-  ['CONV-2025-00944', 'REYES CHUNGA, PEDRO', '18/09/2025', '3,180.00', '6', '6', '0', '0.00', 'Cumplido'],
-  ['CONV-2025-00812', 'INVERSIONES DEL NORTE SAC', '02/04/2025', '18,412.00', '24', '3', '5', '16,102.40', 'Quebrado'],
+/** Los dos de `TipoDeConvenio`. */
+export const TIPOS_DE_CONVENIO: readonly [string, string][] = [
+  ['ORDINARIO', 'Ordinario'],
+  ['COACTIVO', 'Coactivo'],
 ];
 
-export const ESTADOS_DE_CONVENIO = ['Todos', 'Vigente', 'En riesgo', 'Cumplido', 'Quebrado'];
-
-export type Recibo = {
-  numero: string;
-  fecha: string;
-  hora: string;
-  contribuyente: string;
-  concepto: string;
-  importe: string;
-  dup: string;
-  estado: string;
-  medio: string;
-};
-
-export const RECIBOS: Recibo[] = [
-  { numero: '0003-0041182', fecha: '12/08/2026', hora: '09:14', contribuyente: 'CASTILLO PASCUALA, MARÍA ELENA', concepto: 'Impuesto predial cuotas 1 y 2', importe: '301.80', dup: '1', estado: 'Emitido', medio: 'EFECTIVO' },
-  { numero: '0003-0041183', fecha: '12/08/2026', hora: '09:22', contribuyente: 'QUIROGA RAMOS, ELEODORO', concepto: 'Arbitrios 2026', importe: '437.40', dup: '0', estado: 'Emitido', medio: 'TARJETA' },
-  { numero: '0003-0041184', fecha: '12/08/2026', hora: '09:41', contribuyente: 'DÍAZ MADRID, JULIO CÉSAR', concepto: 'Impuesto de alcabala — expediente 2026-0918', importe: '1,245.00', dup: '0', estado: 'Anulado', medio: 'DEPÓSITO EN CUENTA' },
+/** Los cinco de `TipoDeGarantia`. El backend admite el rótulo con espacios. */
+export const TIPOS_DE_GARANTIA: readonly string[] = [
+  'NO REQUIERE',
+  'CARTA FIANZA',
+  'HIPOTECA',
+  'AVAL',
+  'PRENDA',
 ];
 
-/** Tributo · emitido · recaudado · saldo · % de avance. Las tres cifras van
- *  ya formateadas porque el artboard las escribe así: son de un reporte. */
-export type FilaDeAvance = [string, string, string, string, number];
-
-export const AVANCE: FilaDeAvance[] = [
-  ['IMPUESTO PREDIAL', '9,418,204.60', '8,420,118.40', '998,086.20', 89.4],
-  ['ARBITRIOS MUNICIPALES', '5,884,110.20', '5,112,440.80', '771,669.40', 86.9],
-  ['PATRIMONIO VEHICULAR', '2,884,000.00', '1,882,400.00', '1,001,600.00', 65.3],
-  ['ALCABALA', '1,420,880.00', '1,420,880.00', '0.00', 100.0],
-  ['MULTAS Y PAPELETAS', '4,118,200.00', '1,588,412.00', '2,529,788.00', 38.6],
+/**
+ * Los motivos de anulación que el manual dibuja.
+ *
+ * `PeticionDeAnulacion.motivo` es texto libre —es el sustento del acto, y se
+ * imprime en el duplicado—, así que estos seis son sugerencias de verdad y no una
+ * traducción de ningún enumerado.
+ */
+export const MOTIVOS_DE_ANULACION: readonly string[] = [
+  'ERROR EN EL CONCEPTO COBRADO',
+  'ERROR EN EL IMPORTE',
+  'ERROR EN EL CONTRIBUYENTE',
+  'PAGO DUPLICADO',
+  'DESISTIMIENTO DEL ADMINISTRADO',
+  'FALLA DE IMPRESIÓN',
 ];
 
-/** Partida · concepto · área generadora · recaudado. */
-export type FilaDeArea = [string, string, string, string];
-
-export const POR_AREA: FilaDeArea[] = [
-  ['1.1.2.1.1.1', 'IMPUESTO PREDIAL', 'UNIDAD DE RENTAS', '8,420,118.40'],
-  ['1.3.3.9.2.23', 'LIMPIEZA PÚBLICA', 'UNIDAD DE RENTAS', '2,884,116.20'],
-  ['1.3.3.9.2.27', 'PARQUES Y JARDINES', 'UNIDAD DE RENTAS', '1,182,440.60'],
-  ['1.3.3.9.2.24', 'SERENAZGO', 'UNIDAD DE RENTAS', '1,045,884.00'],
-  ['1.1.5.3.1.99', 'OTRAS MULTAS', 'SUBGERENCIA DE FISCALIZACIÓN TRIBUTARIA', '412,844.00'],
-  ['1.3.2.5.2.2', 'INSPECCIÓN OCULAR', 'SUBGERENCIA DE FISCALIZACIÓN TRIBUTARIA', '88,412.00'],
+/** Quién autoriza, tal como el manual lo escribe. También texto libre. */
+export const AUTORIZANTES: readonly string[] = [
+  'RESPONSABLE DE TESORERÍA',
+  'GERENTE DE ADMINISTRACIÓN TRIBUTARIA',
 ];
 
-/** Las cuatro cifras del panel del turno. Van literales: el artboard no las
- *  deriva de ninguna tabla. */
-export const KPIS: { valor: string; etiqueta: string; nota: string }[] = [
-  { valor: '148', etiqueta: 'Recibos emitidos hoy', nota: 'Uno cada 2 minutos y 14 segundos de turno.' },
-  { valor: '3', etiqueta: 'Recibos anulados', nota: 'Solo se pueden anular mientras la caja siga abierta.' },
-  { valor: '77.6 %', etiqueta: 'Avance del ejercicio', nota: 'S/ 18.42 M recaudados de S/ 23.73 M emitidos.' },
-  { valor: '141', etiqueta: 'Convenios en riesgo', nota: 'Con una cuota vencida. A la segunda se quiebran.' },
-];
-
-/** Las diez opciones del manual que el módulo resume, y el destino de cada
- *  una. Es lo que alimenta la paleta de comandos. */
-export const OPCIONES: [string, string][] = [
+/**
+ * Las diez opciones del manual que el módulo resume, y el destino de cada una.
+ * Es lo que alimenta la paleta de comandos.
+ */
+export const OPCIONES: readonly [string, string][] = [
   ['Caja tributaria', 'cobrar'],
   ['Caja de tasas', 'cobrar'],
   ['Fraccionamiento', 'convenios'],
@@ -135,15 +123,3 @@ export const OPCIONES: [string, string][] = [
   ['Avance de recaudación', 'recaudacion'],
   ['Recaudación por área', 'recaudacion'],
 ];
-
-/** El sujeto que la barra de contexto enseña en «Cobrar» y en «Convenios». */
-export const CONTRIBUYENTE = {
-  codigo: '00000003541',
-  nombre: 'CASTILLO PASCUALA, MARÍA ELENA',
-  documento: 'DNI 44218937',
-  direccion: 'CALLE LAMA 482',
-};
-
-/** La deuda que el simulador de fraccionamiento acoge, y el interés mensual
- *  del convenio. */
-export const FRACCIONAMIENTO = { deuda: 262.16, tasaMes: 0.008, gastoPorCuota: 1.0, convenio: 'CONV-2026-00412' };
