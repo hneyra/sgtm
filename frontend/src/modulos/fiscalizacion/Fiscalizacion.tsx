@@ -1414,6 +1414,12 @@ export default function Fiscalizacion({ dest, onDest }: PantallaProps) {
                     key={p.label}
                     onClick={() => setPaso(i)}
                     aria-label={`Ir al paso ${i + 1}: ${p.label}`}
+                    /* El paso abierto se DECLARA. Se distinguia solo por el
+                       color, que es una barrera para quien no lo percibe y
+                       ademas deja al arnes contando el paso activo como un
+                       boton inerte: pulsarlo no hace nada, y tiene razon en no
+                       hacerlo. */
+                    aria-current={i === pasoIdx ? 'step' : undefined}
                     style={{ flex: 1, height: grande ? 9 : 6, border: 0, borderRadius: 999, cursor: 'pointer', background: i <= pasoIdx ? 'var(--accent)' : 'var(--accent-soft)' }}
                   />
                 ))}
@@ -1423,6 +1429,7 @@ export default function Fiscalizacion({ dest, onDest }: PantallaProps) {
                   <button
                     key={p.label}
                     onClick={() => setPaso(i)}
+                    aria-current={i === pasoIdx ? 'step' : undefined}
                     style={{
                       border: 0,
                       background: 'transparent',
@@ -1591,9 +1598,16 @@ export default function Fiscalizacion({ dest, onDest }: PantallaProps) {
                   ? 'Cerrar el acta es el punto sin retorno del procedimiento.'
                   : 'Lo del paso se guarda al continuar, también sin señal.'}
               </p>
+              {/* Decia «Borrador guardado en el dispositivo» y no guardaba en
+                  ninguna parte, que es el acto deshonesto de esta revision en
+                  su forma mas barata: un aviso de exito sin nada detras. Y aqui
+                  no basta con implementarlo, porque el acta entera no se puede
+                  mandar todavia (#546): un borrador de algo que no tiene a
+                  donde ir es papel guardado que nadie va a recoger. */}
               <button
-                className="hov-linea"
-                style={{ border: '1px solid var(--line-2)', borderRadius: 6, padding: grande ? '13px 20px' : '10px 18px', background: 'var(--bg-card)', fontSize: 13, cursor: 'pointer' }}
+                disabled
+                title="El acta todavía no se puede enviar, así que no hay borrador que guardar: la operación de registro pide nueve campos y esta pantalla dibuja veintitrés (#546)."
+                style={{ border: '1px solid var(--line-2)', borderRadius: 6, padding: grande ? '13px 20px' : '10px 18px', background: 'var(--bg-card)', fontSize: 13, cursor: 'not-allowed', opacity: 0.5 }}
               >
                 Guardar borrador
               </button>
@@ -2070,12 +2084,9 @@ export default function Fiscalizacion({ dest, onDest }: PantallaProps) {
               Descartar
             </button>
             <button
-              onClick={() => {
-                setSucio(false);
-                toast('Borrador guardado en el dispositivo.');
-              }}
-              className="hov-acento-2"
-              style={{ border: 0, borderRadius: 6, padding: '10px 22px', background: 'var(--accent)', color: '#fff', fontSize: 13.5, fontWeight: 500, cursor: 'pointer' }}
+              disabled
+              title="El acta todavía no se puede enviar, así que no hay borrador que guardar (#546)."
+              style={{ border: 0, borderRadius: 6, padding: '10px 22px', background: 'var(--accent)', color: '#fff', fontSize: 13.5, fontWeight: 500, cursor: 'not-allowed', opacity: 0.5 }}
             >
               Guardar borrador
             </button>
