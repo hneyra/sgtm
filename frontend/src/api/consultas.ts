@@ -244,6 +244,21 @@ export function prediosDelContribuyente(
 
 /** Un vehículo con su deuda. Es `VehiculoEncontradoResource`. */
 export type VehiculoEncontrado = {
+  /**
+   * El identificador interno, que es lo que `ClaveDeSaldo` compara (#554).
+   *
+   * No estaba, y ése era el issue entero: `PeticionDeMovimiento` identifica la
+   * unidad de una obligación con `predioId`/`vehiculoId` —nunca con la placa—,
+   * y `ClaveDeSaldo` los compara por **igualdad exacta**, así que una obligación
+   * con vehículo y una sin él son dos distintas. Sin este campo, un alta sobre
+   * una placa o se mandaba sin unidad —y caía sobre otra obligación del mismo
+   * contribuyente, invisible desde la ficha del vehículo— o no se mandaba. La
+   * pantalla hacía lo segundo.
+   *
+   * `PredioDelCatastroResource` publica su `predioId` desde siempre; éste es el
+   * mismo identificador para el otro padrón, no un dato nuevo.
+   */
+  vehiculoId: number;
   placa: string;
   clase: string;
   marca: string;

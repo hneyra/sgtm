@@ -1078,7 +1078,7 @@ export const CAMPOS_DEL_ALTA: CampoDef[] = [
     l: 'Unidad (predio / placa)',
     t: 'text',
     ayuda:
-      'Código predial o placa. Se resuelve contra el padrón antes de mandar: el identificador interno no se teclea. En blanco, el alta cae sobre la obligación SIN unidad, que es otra distinta de la del predio.',
+      'Código de referencia catastral o placa. Se resuelve contra el padrón mientras se teclea, y debajo se dice qué salió y de quién es: el identificador interno no se escribe nunca. En blanco, el alta cae sobre la obligación SIN unidad, que es otra distinta.',
   },
   /* El valor por omision es el primero de la lista a proposito: un desplegable que
      ensena «2026» y manda «2024» es el defecto de #331.

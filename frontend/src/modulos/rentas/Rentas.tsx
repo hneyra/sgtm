@@ -445,6 +445,197 @@ function BloqueDeTabla({ tabla, onAnadir }: { tabla: TablaDef; onAnadir: () => v
 }
 
 /** Lo que va donde el recurso no publica un dato. */
+/* ══════════ La unidad del alta, resuelta contra el padrón (#554) ══════════ */
+
+/**
+ * Lo que la caja «Unidad (predio / placa)» resolvió, y de quién es.
+ *
+ * `PeticionDeMovimiento` no acepta ni el código catastral ni la placa: acepta
+ * `predioId` y `vehiculoId`, que son los identificadores internos que
+ * `ClaveDeSaldo` compara **por igualdad exacta**. Así que lo que quien atiende
+ * escribe se resuelve antes de mandar, y lo que viaja es el identificador.
+ *
+ * El `cruce` es la otra mitad, y es la que evita el defecto caro: una obligación
+ * es de un contribuyente **sobre** una unidad, de modo que un alta con la placa
+ * de otro queda asentada sobre una clave que nadie va a mirar —ni la ficha del
+ * vehículo, que es de su titular, ni la deuda sin unidad de quien paga—. El
+ * backend no lo comprueba: `MovimientosDeDeudaController` pasa los dos
+ * identificadores a `ClaveDeSaldo` tal cual (#628).
+ */
+type CruceDeLaUnidad =
+  | { estado: 'suya' }
+  | { estado: 'ajena'; de: string }
+  | { estado: 'sin-comprobar'; por: string };
+
+type UnidadDelAlta =
+  | { clase: 'nada' }
+  | {
+      clase: 'predio' | 'vehiculo';
+      /** Lo único que viaja: el identificador interno, en su campo. */
+      cuerpo: { predioId?: number; vehiculoId?: number };
+      /** Cómo se llama la unidad para quien la buscó: el código o la placa. */
+      codigo: string;
+      /** Qué es, con lo que el recurso publica. */
+      detalle: string;
+      cruce: CruceDeLaUnidad;
+    };
+
+/** Una placa comparable: sin guion y en mayúsculas, que es como se teclea de las dos formas. */
+const placaComparable = (placa: string) => placa.replace(/-/g, '').toUpperCase();
+
+/**
+ * Del código catastral o de la placa al identificador que el cuerpo pide.
+ *
+ * Se pregunta primero por el catastro y después por el padrón vehicular, en ese
+ * orden y no a la vez: un código de referencia catastral y una placa no se
+ * parecen, así que la segunda consulta sólo sale cuando la primera no encontró
+ * nada. Como mucho son dos peticiones por unidad tecleada, y ninguna mientras la
+ * mano se mueve (`useRebote`).
+ *
+ * **El cruce con el contribuyente se hace donde se puede hacer.** El vehículo lo
+ * trae en la misma respuesta —`VehiculoEncontradoResource` publica
+ * `codigoContribuyente` y `titular`—, así que se compara por código y se puede
+ * decir a nombre de quién figura. El predio no: `PredioDelCatastroResource` no
+ * publica ningún titular, y el nombre habría que pedirlo a
+ * `/catastro/predios/{id}/titulares`, que es de otro módulo y deja fila en la
+ * bitácora por cada tecla parada. Se cruza contra el padrón del propio
+ * contribuyente —la lectura que esta pantalla ya usa— y por eso el aviso del
+ * predio dice que no está entre los suyos, sin afirmar de quién es.
+ */
+async function resolverLaUnidadDelAlta(
+  escrito: string,
+  codContribuyente: string,
+  senal: AbortSignal,
+): Promise<UnidadDelAlta> {
+  const predios = await listarPredios({ codRefCatastral: escrito }, { tamano: 2 }, senal);
+  const predio = predios.contenido.find((x) => x.codRefCatastral === escrito);
+  if (predio !== undefined) {
+    let cruce: CruceDeLaUnidad;
+    try {
+      const suyos = await listarPrediosDelContribuyente(codContribuyente, { codigoPredial: escrito }, { tamano: 20 }, senal);
+      cruce = suyos.contenido.some((p) => p.predioId === predio.predioId)
+        ? { estado: 'suya' }
+        : { estado: 'ajena', de: 'no figura entre los predios de este contribuyente' };
+    } catch {
+      /* Que no se pueda comprobar NO es que sea de otro, y tampoco que sea suya:
+         un fallo de la lectura del padrón se dice como lo que es. Y no tumba la
+         resolución, que ya está hecha: el identificador que viaja es el mismo. */
+      cruce = { estado: 'sin-comprobar', por: 'no se pudo leer el padrón de predios de este contribuyente' };
+    }
+    return {
+      clase: 'predio',
+      cuerpo: { predioId: predio.predioId },
+      codigo: predio.codRefCatastral,
+      detalle: [predio.tipo, predio.direccion].filter((x) => x !== null && x !== '').join(' · '),
+      cruce,
+    };
+  }
+
+  const vehiculos = await buscarVehiculos({ placa: escrito }, { tamano: 2 }, senal);
+  const vehiculo = vehiculos.contenido.find((v) => placaComparable(v.placa) === placaComparable(escrito));
+  if (vehiculo !== undefined) {
+    return {
+      clase: 'vehiculo',
+      cuerpo: { vehiculoId: vehiculo.vehiculoId },
+      codigo: vehiculo.placa,
+      detalle: [vehiculo.clase, vehiculo.marca, vehiculo.modelo].filter((x) => x !== null && x !== '').join(' '),
+      cruce:
+        vehiculo.codigoContribuyente === codContribuyente
+          ? { estado: 'suya' }
+          : { estado: 'ajena', de: `figura a nombre de ${vehiculo.titular} (${vehiculo.codigoContribuyente})` },
+    };
+  }
+  return { clase: 'nada' };
+}
+
+/**
+ * La tarjeta que enseña **qué se resolvió** y de quién es (#554).
+ *
+ * Cuatro estados, y los cuatro se dicen distinto porque significan cosas
+ * distintas: se está preguntando, no se pudo preguntar, el padrón contestó que
+ * no hay nada con ese código, o hay unidad —y entonces se dice cuál, qué es y a
+ * nombre de quién figura—.
+ *
+ * El cruce es **un aviso, no un bloqueo**, y es deliberado: la deuda de un
+ * ejercicio anterior a una transferencia es del titular de entonces, no del de
+ * ahora, así que un alta sobre la unidad de otro puede ser exactamente lo que
+ * corresponde. Lo que no puede es pasar inadvertido.
+ */
+function UnidadDelAltaResuelta({
+  escrito,
+  enVuelo,
+  error,
+  unidad,
+  contribuyente,
+}: {
+  escrito: string;
+  enVuelo: boolean;
+  error: ErrorDeApi | null;
+  unidad: UnidadDelAlta | null;
+  contribuyente: Contribuyente;
+}) {
+  if (enVuelo)
+    return (
+      <p role="status" style={{ margin: 0, fontSize: 12.5, color: 'var(--ink-3)' }}>
+        Resolviendo «{escrito}» contra el padrón…
+      </p>
+    );
+  if (error !== null)
+    return (
+      <Aviso tono="bad" titulo="No se pudo comprobar la unidad">
+        {explicacionDelFallo(error)} Mientras no se sepa qué unidad es, el alta no se manda: iría sobre otra obligación.
+      </Aviso>
+    );
+  if (unidad === null) return null;
+  if (unidad.clase === 'nada')
+    return (
+      <Aviso tono="warn" titulo={`«${escrito}» no está en ningún padrón`}>
+        No es ningún código de referencia catastral del catastro ni ninguna placa del padrón vehicular. Corrígelo, o deja la caja en
+        blanco para dar de alta la obligación <strong>sin unidad</strong>, que es otra distinta.
+      </Aviso>
+    );
+  const esPredioDeLaUnidad = unidad.clase === 'predio';
+  return (
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+      <div
+        style={{
+          display: 'flex',
+          alignItems: 'baseline',
+          gap: 10,
+          flexWrap: 'wrap',
+          border: '1px solid var(--line)',
+          borderRadius: 8,
+          padding: '10px 12px',
+          background: 'var(--bg-elev)',
+        }}
+      >
+        <Insignia tono="ok">{esPredioDeLaUnidad ? 'PREDIO' : 'VEHÍCULO'}</Insignia>
+        <span style={{ fontFamily: 'var(--font-mono)', fontSize: 13, color: 'var(--ink)' }}>{unidad.codigo}</span>
+        <span style={{ flex: 1, minWidth: 120, fontSize: 12.5, color: 'var(--ink-3)' }}>
+          {unidad.detalle === '' ? SIN_DATO : unidad.detalle}
+        </span>
+        {/* El identificador es lo ÚNICO que viaja, y por eso se enseña: es lo
+            que separa esta obligación de la del mismo tributo sin unidad. */}
+        <span style={{ fontFamily: 'var(--font-mono)', fontSize: 11, color: 'var(--ink-4)' }}>
+          {esPredioDeLaUnidad ? `predioId ${String(unidad.cuerpo.predioId)}` : `vehiculoId ${String(unidad.cuerpo.vehiculoId)}`}
+        </span>
+      </div>
+      {unidad.cruce.estado === 'ajena' && (
+        <Aviso tono="warn" titulo={`La unidad resuelta ${unidad.cruce.de}`}>
+          El alta se registra sobre {contribuyente.nombreRazonSocial} ({contribuyente.codigo}). Si la deuda es de un ejercicio anterior
+          a la transferencia puede ser correcto; si no lo es, revísalo, porque la obligación quedaría colgada de una unidad que no es la
+          suya y no aparecería donde se la busca.
+        </Aviso>
+      )}
+      {unidad.cruce.estado === 'sin-comprobar' && (
+        <Aviso tono="warn" titulo="No se pudo comprobar de quién es la unidad">
+          {unidad.cruce.por}. La unidad está resuelta y el alta se puede mandar, pero de quién es no lo dice nadie: compruébalo antes.
+        </Aviso>
+      )}
+    </div>
+  );
+}
+
 const SIN_DATO = '—';
 
 /**
@@ -1099,6 +1290,30 @@ export default function Rentas({ dest, onDest }: PantallaProps) {
     obligacionMarcada === null ? null : (obligaciones[obligacionMarcada] ?? null);
 
   /**
+   * La unidad del alta, resuelta **mientras se teclea** y no al enviar (#554).
+   *
+   * Antes se resolvía dentro del envío, así que lo que quien atiende veía era un
+   * botón encendido sobre una caja con un código cualquiera, y sólo al pulsar se
+   * enteraba de que no era ninguna unidad del padrón. Ahora la pantalla lo dice
+   * antes: el impedimento apaga el acto y la tarjeta enseña qué se resolvió.
+   *
+   * Se pregunta con el valor aposentado —no con lo tecleado—, y el impedimento
+   * se calcula comparando los dos: a media pulsación no hay respuesta que
+   * enseñar, y anunciar «no existe» sobre un código a medio escribir es el
+   * defecto que #296 midió en la pantalla de inicio.
+   */
+  const unidadEscrita = useRebote(texto('altaUnidad').trim());
+  const unidadTecleada = texto('altaUnidad').trim();
+  const resolucionDeLaUnidad = useRecurso(
+    (s2) => resolverLaUnidadDelAlta(unidadEscrita, sujetoDeDeuda!.codigo, s2),
+    [unidadEscrita, sujetoDeDeuda?.codigo],
+    esDeuda && hoja === 'alta' && sujetoDeDeuda !== null && unidadEscrita !== '',
+  );
+  const unidadResuelta = unidadTecleada === '' ? null : resolucionDeLaUnidad.datos;
+  /** Todavía no hay respuesta para lo que hay escrito: ni la hubo, ni la habrá hasta que vuelva. */
+  const unidadEnVuelo = unidadTecleada !== '' && (unidadTecleada !== unidadEscrita || resolucionDeLaUnidad.cargando);
+
+  /**
    * Lo que impide registrar la transferencia, o `undefined` si nada lo impide.
    *
    * Se calcula antes de habilitar el botón y no dentro del envío: un acto que
@@ -1275,28 +1490,20 @@ export default function Rentas({ dest, onDest }: PantallaProps) {
   };
 
   /**
-   * La unidad del alta —predio o vehículo— resuelta a su identificador interno.
+   * Lo que viaja de la unidad: el identificador interno y nada más.
    *
    * `ClaveDeSaldo` compara `predioId`/`vehiculoId` por igualdad exacta, así que
-   * una obligación con predio y una sin él son dos obligaciones distintas: mandar
-   * el alta sin resolver la unidad la asienta sobre la que no tiene ninguna.
-   * Devuelve `null` cuando lo tecleado no se encuentra, y entonces no se manda.
+   * una obligación con unidad y una sin ella son dos obligaciones distintas:
+   * mandar el alta sin resolver la unidad la asienta sobre la que no tiene
+   * ninguna. La resolución ya está hecha —`resolucionDeLaUnidad`— y aquí sólo se
+   * lee: lo que se manda es exactamente lo que la tarjeta enseñó. Devuelve
+   * `null` cuando lo escrito no es ninguna unidad del padrón, y entonces no se
+   * manda; `{}` con la caja en blanco, que es la obligación sin unidad.
    */
-  const unidadDelAlta = async (): Promise<{ predioId?: number; vehiculoId?: number } | null> => {
-    const escrito = texto('altaUnidad').trim();
-    if (escrito === '') return {};
-    const predios = await listarPredios({ codRefCatastral: escrito }, { tamano: 2 });
-    const predio = predios.contenido.find((x) => x.codRefCatastral === escrito);
-    if (predio) return { predioId: predio.predioId };
-    const sinGuion = escrito.replace(/-/g, '').toUpperCase();
-    const vehiculos = await buscarVehiculos({ placa: escrito }, { tamano: 2 });
-    const vehiculo = vehiculos.contenido.find((v) => v.placa.replace(/-/g, '').toUpperCase() === sinGuion);
-    /* `VehiculoEncontradoResource` no publica el identificador interno del
-       vehículo, sólo su placa; el cuerpo del movimiento pide `vehiculoId`. Así
-       que una placa se reconoce y no se puede mandar: se dice, en vez de
-       asentarla sobre la obligación sin unidad. */
-    if (vehiculo) return null;
-    return null;
+  const unidadDelAlta = (): { predioId?: number; vehiculoId?: number } | null => {
+    if (unidadTecleada === '') return {};
+    const r = unidadResuelta;
+    return r === null || r.clase === 'nada' ? null : r.cuerpo;
   };
 
   /**
@@ -1310,6 +1517,16 @@ export default function Rentas({ dest, onDest }: PantallaProps) {
     if (observacionDelActo.trim() === '') return 'Falta la observación: sin motivo no se guarda';
     if (texto('altaConcepto').trim() === '') return 'Falta el concepto: es el tributo de la obligación';
     if (texto('altaAnio').trim() === '') return 'Falta el año de la obligación';
+    /* La unidad es el sexto campo que identifica la obligación, y el que más
+       cuesta si sale mal: un identificador equivocado asienta la deuda sobre una
+       clave que no es la que se marcó y que nadie va a mirar. Lo escrito se
+       resuelve contra el padrón antes de habilitar el acto; en blanco es una
+       respuesta legítima —la obligación sin unidad— y no impide nada. */
+    if (unidadEnVuelo) return `Resolviendo «${unidadTecleada}» contra el padrón…`;
+    if (unidadTecleada !== '' && resolucionDeLaUnidad.error !== null)
+      return `No se pudo comprobar «${unidadTecleada}» contra el padrón: ${explicacionDelFallo(resolucionDeLaUnidad.error)}. Un alta con la unidad sin resolver caería sobre otra obligación`;
+    if (unidadResuelta !== null && unidadResuelta.clase === 'nada')
+      return `«${unidadTecleada}» no es ningún código de referencia catastral del catastro ni ninguna placa del padrón vehicular. Corrígelo, o deja la caja en blanco para dar de alta la obligación sin unidad`;
     /* Media pregunta no sale. El backend la contesta con 422 —y bien, nombrando
        el campo—, pero ese 422 es la red y no el camino: gastarlo obliga a quien
        atiende a rellenar el formulario entero para que le digan lo que se sabia
@@ -1370,9 +1587,9 @@ export default function Rentas({ dest, onDest }: PantallaProps) {
   const darDeAltaLaDeuda = async () => {
     setRegistrando(true);
     try {
-      const unidad = await unidadDelAlta();
+      const unidad = unidadDelAlta();
       if (unidad === null) {
-        toast(`«${texto('altaUnidad').trim()}» no es ningún predio del padrón, y una placa todavía no se puede mandar.`);
+        toast(`«${unidadTecleada}» no es ninguna unidad del padrón: no se mandó nada.`);
         return;
       }
       /* `impedimentoDelAlta` ya apago el boton si lo escrito no era una
@@ -3012,6 +3229,22 @@ export default function Rentas({ dest, onDest }: PantallaProps) {
                 </p>
               </div>
               <div style={REJILLA_DE_CAMPOS}>{(hoja === 'alta' ? CAMPOS_DEL_ALTA : CAMPOS_DE_LA_BAJA).map(campo)}</div>
+              {/* Lo que la caja «Unidad» resolvió, debajo de ella y antes de los
+                  importes (#554). Sin esto, lo que viaja —un identificador
+                  interno que nadie teclea— no se ve por ninguna parte, y la
+                  única forma de saber si el alta va sobre el predio que se
+                  quería era mirar la cuenta corriente después. */}
+              {hoja === 'alta' && sujetoDeDeuda !== null && unidadTecleada !== '' && (
+                <div style={{ padding: '0 16px 16px' }}>
+                  <UnidadDelAltaResuelta
+                    escrito={unidadTecleada}
+                    enVuelo={unidadEnVuelo}
+                    error={resolucionDeLaUnidad.error}
+                    unidad={unidadResuelta}
+                    contribuyente={sujetoDeDeuda}
+                  />
+                </div>
+              )}
             </section>
 
             {hoja === 'alta' && (

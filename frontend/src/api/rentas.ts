@@ -146,6 +146,12 @@ export function listarPrediosDelContribuyente(
  * afectación se deriva del año de fabricación y siempre existe.
  */
 export type VehiculoDelContribuyente = {
+  /**
+   * El identificador interno (#554). Es el mismo campo que publica la hermana de
+   * Consultas, porque es la misma fila: declararlo en una sola de las dos las
+   * dejaría diciendo cosas distintas del mismo vehículo.
+   */
+  vehiculoId: number;
   placa: string;
   clase: string | null;
   marca: string;
