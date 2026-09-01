@@ -8496,6 +8496,50 @@ paths:
                 contribuyentes: [lectura]
         "403":
           $ref: "#/components/responses/SinMunicipalidad"
+  "/seguridad/sesion/municipalidad":
+    get:
+      operationId: municipalidad_de_la_sesion
+      summary: "Municipalidad de la sesión"
+      description: |
+        A quién pertenecen las cifras de la pantalla: la municipalidad a la que
+        pertenece la sesión, con su nombre tal como sale impreso.
+
+        **Sin ningún parámetro, y eso es la decisión.** El identificador sale del claim
+        `municipalidad_id` del token, se fija una vez con `SET LOCAL` y lo compara el
+        `WHERE` de la consulta (ARQ-03 §3.1). Admitir un identificador convertiría esta
+        lectura en un **directorio de municipalidades**: con el token de A no hay forma de
+        obtener el nombre de B, y un parámetro de más se rechaza con 422 nombrándolo.
+
+        Autenticada, pero **no es una opción del catálogo**: el rótulo de la entidad no es
+        de un módulo, es del sistema entero, y sin él las doce pantallas quedan sin decir
+        de quién son sus cifras. Cualquier sesión válida la lee, tenga los permisos que
+        tenga — el mismo trato que `permisos_de_la_sesion` (ADR-0013).
+
+        `nombre` es el nombre **completo**, con su tipo delante —«Municipalidad Distrital
+        de Catacaos»—, porque de ahí sale el membrete de las hojas que se imprimen; `tipo`
+        va aparte para quien necesite distinguir una distrital de una provincial y **no se
+        antepone**. `ubigeo` son los seis dígitos del distrito.
+      tags: ["Seguridad"]
+      responses:
+        200:
+          description: "La municipalidad a la que pertenece la sesión"
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [id, ubigeo, nombre, tipo]
+                properties:
+                  id: { type: integer, format: int64 }
+                  ubigeo: { type: string, minLength: 6, maxLength: 6 }
+                  nombre: { type: string }
+                  tipo: { type: string, enum: [DISTRITAL, PROVINCIAL] }
+              example:
+                id: 1
+                ubigeo: "200105"
+                nombre: "Municipalidad Distrital de Catacaos"
+                tipo: "DISTRITAL"
+        "403":
+          $ref: "#/components/responses/SinMunicipalidad"
   "/seguridad/usuarios/{id}/permisos":
     get:
       operationId: permisos_efectivos_de_usuario
