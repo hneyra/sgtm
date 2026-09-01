@@ -1072,6 +1072,46 @@ const OPERACIONES_ADICIONALES = {
         (REQ-03 §5). Un usuario sin ningún permiso recibe \`{}\`, no un 403.
       `),
     },
+    // Y QUIEN es la sesion (#559). Vive aqui por lo mismo que las otras dos
+    // —no es una opcion del catalogo, sino la sesion hablando de si misma— y no
+    // por afinidad con los permisos.
+    {
+      operationId: 'identidad_de_la_sesion',
+      metodo: 'get',
+      ruta: '/api/v1/seguridad/sesion',
+      titulo: 'Quién es la sesión',
+      descripcion: literal(`
+        La persona autenticada, ya resuelta a la fila de \`usuario\` de **esta**
+        municipalidad: su \`usuarioId\`, su \`cuenta\`, su \`nombre\` y el ejercicio de
+        trabajo que tenga registrado.
+
+        **El \`usuarioId\` es lo que ninguna otra lectura publicaba.**
+        \`PUT /seguridad/usuarios/{id}/clave\` sólo admite la clave propia —el servidor
+        compara la cuenta del token con la del usuario que ese \`id\` nombra—, y hasta
+        aquí la interfaz no sabía cuál era el suyo: las dos únicas operaciones que
+        publican un \`usuario.id\` son el listado de usuarios y la matriz de otro, las
+        dos detrás de un permiso de administración mucho mayor que «cambiar mi propia
+        contraseña».
+
+        **Sin ningún parámetro, y eso es la decisión.** El sujeto sale de la cuenta del
+        token y se resuelve dentro del contexto de tenant. Con un identificador esto
+        sería el padrón de usuarios sin su permiso, y devolvería el \`id\` de otro —que
+        es justo lo que la guarda del cambio de clave existe para rechazar—. Un
+        parámetro de más se rechaza con 422 nombrándolo.
+
+        Autenticada, pero **no es una opción del catálogo**: leer quién es uno mismo no
+        revela nada que no revele el token que ya se presentó. Cualquier sesión válida
+        la lee, tenga los permisos que tenga — el mismo trato que
+        \`permisos_de_la_sesion\` y \`municipalidad_de_la_sesion\` (ADR-0013).
+
+        \`ejercicioDeTrabajo\` es **nulo** mientras nadie lo haya fijado con
+        \`PUT /seguridad/sesion/ejercicio\`, y eso no es una falta de dato: es la
+        respuesta. El año del reloj del servidor ahí afirmaría que alguien lo eligió, y
+        lo que hay que poder separar es exactamente eso — el filtro de vista, que es
+        local y no necesita permiso, del acto registrado con su observación y su
+        privilegio \`ESPECIAL\` sobre \`cambiar_anio\`.
+      `),
+    },
     // Y a QUIEN pertenece la sesion (#555). Vive aqui por lo mismo que
     // `permisos_de_la_sesion` —no es una opcion del catalogo, sino la sesion
     // hablando de si misma— y no por afinidad con los permisos.

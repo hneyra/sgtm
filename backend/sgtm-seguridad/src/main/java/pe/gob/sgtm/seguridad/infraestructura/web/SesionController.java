@@ -22,9 +22,11 @@ import pe.gob.sgtm.autorizacion.RequiereAcceso;
 import pe.gob.sgtm.dominio.Ejercicio;
 import pe.gob.sgtm.dominio.Observacion;
 import pe.gob.sgtm.seguridad.aplicacion.AdministrarSesion;
+import pe.gob.sgtm.seguridad.aplicacion.IdentidadDeLaSesion;
 import pe.gob.sgtm.seguridad.aplicacion.MunicipalidadDeLaSesion;
 import pe.gob.sgtm.seguridad.aplicacion.PermisosDeLaSesion;
 import pe.gob.sgtm.seguridad.dominio.ConsultaDeAuditoria;
+import pe.gob.sgtm.seguridad.dominio.Identidad;
 import pe.gob.sgtm.seguridad.dominio.Municipalidad;
 import pe.gob.sgtm.seguridad.dominio.RegistroAuditado;
 import pe.gob.sgtm.seguridad.dominio.Respaldo;
@@ -38,7 +40,8 @@ import pe.gob.sgtm.web.RespuestaPaginada;
 /**
  * Sesion, auditoria y respaldos: las operaciones que cierran el modulo de seguridad (RF-124 a
  * RF-126), mas las tres que <b>no son opciones del catalogo</b> sino la sesion hablando de si misma
- * —sus permisos (ADR-0013), su municipalidad (#555) y su ejercicio de trabajo—.
+ * —quien es (#559), que puede hacer (ADR-0013) y a que municipalidad pertenece (#555)—, y el cambio
+ * de ejercicio de trabajo, que si lo es.
  */
 @RestController
 public class SesionController {
@@ -46,14 +49,45 @@ public class SesionController {
     private final AdministrarSesion administrar;
     private final PermisosDeLaSesion permisos;
     private final MunicipalidadDeLaSesion municipalidad;
+    private final IdentidadDeLaSesion identidad;
 
     public SesionController(
             AdministrarSesion administrar,
             PermisosDeLaSesion permisos,
-            MunicipalidadDeLaSesion municipalidad) {
+            MunicipalidadDeLaSesion municipalidad,
+            IdentidadDeLaSesion identidad) {
         this.administrar = administrar;
         this.permisos = permisos;
         this.municipalidad = municipalidad;
+        this.identidad = identidad;
+    }
+
+    /**
+     * Quien es la sesion: el usuario que hay detras del token, ya resuelto a la fila de {@code
+     * usuario} de esta municipalidad (#559, RF-121).
+     *
+     * <p><b>Lo que publica y no publicaba nadie es el {@code usuarioId}.</b> {@link
+     * #cambiarClave(long, SolicitudDeCambioDeClave)} solo admite la clave propia, y la interfaz no
+     * tenia forma de saber cual era su identificador: las dos unicas lecturas que publicaban un
+     * {@code usuario.id} —el listado de usuarios y la matriz de otro— estan detras de un permiso de
+     * administracion mucho mayor que «cambiar mi propia contrasena», y deducirlo cruzando la cuenta
+     * del token contra el listado obligaria a otorgarlo.
+     *
+     * <p><b>Sin ningun parametro</b>, por lo mismo que {@link #municipalidadDeLaSesion()}: el
+     * sujeto sale del token y no de la peticion. Con uno, esta lectura seria el padron de usuarios
+     * sin su permiso —y devolveria el {@code id} de otro, que es exactamente lo que la guarda del
+     * cambio de clave existe para rechazar—. Uno de mas ni siquiera se ignora: {@code
+     * GuardiaDeParametros} lo rechaza con {@code 422} nombrandolo (#539).
+     *
+     * <p>Declara el centinela {@link RequiereAcceso#SESION_PROPIA}, igual que las otras dos
+     * lecturas de esta clase (ADR-0013): leer quien es uno mismo no revela nada que no revele el
+     * token que ya se presento, y exigir aqui el acceso {@code usuarios} dejaria a quien no
+     * administra sin poder pedir el cambio de su propia clave.
+     */
+    @GetMapping(Api.RAIZ + "/seguridad/sesion")
+    @RequiereAcceso(acceso = RequiereAcceso.SESION_PROPIA, privilegio = Privilegio.LECTURA)
+    public IdentidadResource identidadDeLaSesion() {
+        return IdentidadResource.de(identidad.actual());
     }
 
     /**
@@ -246,6 +280,34 @@ public class SesionController {
                     municipalidad.ubigeo(),
                     municipalidad.nombre(),
                     municipalidad.tipo());
+        }
+    }
+
+    /**
+     * Quien es la sesion, en cuatro campos.
+     *
+     * <p>{@code usuarioId} es el de <b>esta</b> municipalidad: la misma persona con la misma cuenta
+     * en dos municipalidades son dos filas de {@code usuario} y dos identificadores distintos, y
+     * por eso no puede salir del token —que trae la cuenta— sino de la consulta.
+     *
+     * <p>{@code ejercicioDeTrabajo} es <b>nulo</b> mientras nadie lo haya fijado con {@code PUT
+     * /seguridad/sesion/ejercicio}, y eso no es una falta de dato: es la respuesta. Ponerle el año
+     * del reloj del servidor afirmaria que alguien lo eligio, y lo que #557 tiene que poder separar
+     * es exactamente eso —el filtro de vista, que es local y no necesita permiso, del acto
+     * registrado con su observacion y su privilegio {@code ESPECIAL}—. Un cero o un año por omision
+     * aqui hacen que las dos cosas vuelvan a ser la misma.
+     */
+    public record IdentidadResource(
+            long usuarioId, String cuenta, String nombre, @Nullable Integer ejercicioDeTrabajo) {
+
+        static IdentidadResource de(Identidad identidad) {
+            return new IdentidadResource(
+                    identidad.usuarioId(),
+                    identidad.cuenta(),
+                    identidad.nombre(),
+                    identidad.ejercicioDeTrabajo() == null
+                            ? null
+                            : identidad.ejercicioDeTrabajo().valor());
         }
     }
 

@@ -8548,6 +8548,51 @@ paths:
                 contribuyentes: [lectura]
         "403":
           $ref: "#/components/responses/SinMunicipalidad"
+  "/seguridad/sesion":
+    get:
+      operationId: identidad_de_la_sesion
+      summary: "Quién es la sesión"
+      description: |
+        La persona autenticada, ya resuelta a la fila de `usuario` de **esta**
+        municipalidad: su `usuarioId`, su `cuenta`, su `nombre` y el ejercicio de
+        trabajo que tenga registrado.
+
+        **El `usuarioId` es lo que ninguna otra lectura publicaba.**
+        `PUT /seguridad/usuarios/{id}/clave` sólo admite la clave propia —el servidor
+        compara la cuenta del token con la del usuario que ese `id` nombra—, y hasta
+        aquí la interfaz no sabía cuál era el suyo: las dos únicas operaciones que
+        publican un `usuario.id` son el listado de usuarios y la matriz de otro, las
+        dos detrás de un permiso de administración mucho mayor que «cambiar mi propia
+        contraseña».
+
+        **Sin ningún parámetro, y eso es la decisión.** El sujeto sale de la cuenta del
+        token y se resuelve dentro del contexto de tenant. Con un identificador esto
+        sería el padrón de usuarios sin su permiso, y devolvería el `id` de otro —que
+        es justo lo que la guarda del cambio de clave existe para rechazar—. Un
+        parámetro de más se rechaza con 422 nombrándolo.
+
+        Autenticada, pero **no es una opción del catálogo**: leer quién es uno mismo no
+        revela nada que no revele el token que ya se presentó. Cualquier sesión válida
+        la lee, tenga los permisos que tenga — el mismo trato que
+        `permisos_de_la_sesion` y `municipalidad_de_la_sesion` (ADR-0013).
+
+        `ejercicioDeTrabajo` es **nulo** mientras nadie lo haya fijado con
+        `PUT /seguridad/sesion/ejercicio`, y eso no es una falta de dato: es la
+        respuesta. El año del reloj del servidor ahí afirmaría que alguien lo eligió, y
+        lo que hay que poder separar es exactamente eso — el filtro de vista, que es
+        local y no necesita permiso, del acto registrado con su observación y su
+        privilegio `ESPECIAL` sobre `cambiar_anio`.
+      tags: ["Seguridad"]
+      responses:
+        200:
+          description: Operacion realizada
+          content:
+            application/json:
+              schema: { type: object }
+        "403":
+          $ref: "#/components/responses/SinMunicipalidad"
+        "422":
+          $ref: "#/components/responses/ErrorDeValidacion"
   "/seguridad/sesion/municipalidad":
     get:
       operationId: municipalidad_de_la_sesion
