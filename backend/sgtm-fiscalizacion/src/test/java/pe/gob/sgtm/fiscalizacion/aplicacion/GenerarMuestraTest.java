@@ -34,6 +34,7 @@ import pe.gob.sgtm.fiscalizacion.dominio.MuestraDelPrograma;
 import pe.gob.sgtm.fiscalizacion.dominio.MuestraDelProgramaRepository;
 import pe.gob.sgtm.fiscalizacion.dominio.ProgramaFiscalizacion;
 import pe.gob.sgtm.fiscalizacion.dominio.ProgramaFiscalizacionRepository;
+import pe.gob.sgtm.fiscalizacion.dominio.ResultadoDelSorteo;
 import pe.gob.sgtm.fiscalizacion.dominio.TipoDePrograma;
 
 /**
@@ -43,6 +44,10 @@ import pe.gob.sgtm.fiscalizacion.dominio.TipoDePrograma;
  * es la única fuente de la condición en el sistema y la misma que dibuja {@code fisc_omisos}. Lo
  * que estas pruebas miden es lo que el sorteo añade — las dos exclusiones, la guarda de los
  * parámetros y la de sortear dos veces.
+ *
+ * <p><b>Y desde #586, el reparto entero.</b> El predio sin titular vigente entra —era el 34,5 % del
+ * padrón de Catacaos, y apartarlo escondía al candidato de primer orden—, y lo que sí se excluye se
+ * cuenta por motivo, de modo que {@code detectados = sorteados + excluidos}.
  */
 @DisplayName("#481 — Generar la muestra de un programa")
 class GenerarMuestraTest {
@@ -68,9 +73,9 @@ class GenerarMuestraTest {
     void sorteaSoloLosDelCriterio() {
         long programaId = programas.sembrar(programa(CondicionFiscalizada.OMISO));
 
-        int cuantos = servicio().generar(programaId, OBSERVACION);
+        ResultadoDelSorteo resultado = servicio().generar(programaId, OBSERVACION);
 
-        assertThat(cuantos).isEqualTo(2);
+        assertThat(resultado.sorteados()).isEqualTo(2);
         assertThat(muestras.predios()).containsExactlyInAnyOrder(OMISO_UNO, OMISO_DOS);
     }
 
@@ -100,12 +105,16 @@ class GenerarMuestraTest {
         muestras.sembrar(otro, OMISO_UNO);
         long programaId = programas.sembrar(programa(CondicionFiscalizada.OMISO));
 
-        int cuantos = servicio().generar(programaId, OBSERVACION);
+        ResultadoDelSorteo resultado = servicio().generar(programaId, OBSERVACION);
 
-        assertThat(cuantos)
+        assertThat(resultado.sorteados())
                 .as("la muestra depende del orden: el primero que se genera se lleva los predios")
                 .isEqualTo(1);
         assertThat(muestras.prediosDe(programaId)).containsExactly(OMISO_DOS);
+        assertThat(resultado.excluidosPorOtroPrograma())
+                .as("y el que se llevo el otro programa se cuenta, con SU motivo (#586)")
+                .isEqualTo(1);
+        assertThat(resultado.excluidosPorActaDelEjercicio()).isZero();
     }
 
     @Test
@@ -126,26 +135,156 @@ class GenerarMuestraTest {
                         OBSERVACION));
         long programaId = programas.sembrar(programa(CondicionFiscalizada.OMISO));
 
-        servicio().generar(programaId, OBSERVACION);
+        ResultadoDelSorteo resultado = servicio().generar(programaId, OBSERVACION);
 
         assertThat(muestras.prediosDe(programaId)).containsExactly(OMISO_UNO);
+        assertThat(resultado.excluidosPorActaDelEjercicio())
+                .as("y se cuenta con SU motivo, que no es el mismo que el de otro programa (#586)")
+                .isEqualTo(1);
+        assertThat(resultado.excluidosPorOtroPrograma()).isZero();
     }
 
     @Test
-    @DisplayName("un predio SIN TITULAR se detecta pero no se sortea: no hay a quien visitar")
-    void noSorteaUnPredioSinTitular() {
+    @DisplayName("un predio SIN TITULAR se sortea, y su fila entra con la columna nula (#586)")
+    void sorteaElPredioSinTitular() {
         long programaId = programas.sembrar(programa(CondicionFiscalizada.OMISO));
 
-        // Desde #545 la deteccion los enseña —son el predio que nadie reclama—, pero
-        // `programa_muestra.contribuyente_id` es NOT NULL (V60) y una visita se dirige a alguien.
-        int cuantos =
+        // Desde #545 la deteccion los enseña —son el predio que nadie reclama, el candidato de
+        // primer orden—, y hasta #586 `GenerarMuestra` los apartaba EN SILENCIO porque
+        // `programa_muestra.contribuyente_id` era NOT NULL (V60). V71 lo relajo.
+        ResultadoDelSorteo resultado =
                 servicio(new TitularesDeMentira().con(OMISO_DOS, 100L + OMISO_DOS))
                         .generar(programaId, OBSERVACION);
 
-        assertThat(cuantos).isEqualTo(1);
-        assertThat(muestras.prediosDe(programaId))
-                .as("el que no tiene titular no entra, y el que lo tiene si")
-                .containsExactly(OMISO_DOS);
+        assertThat(resultado.sorteados())
+                .as("los DOS entran: el que tiene titular y el que no")
+                .isEqualTo(2);
+        assertThat(muestras.prediosDe(programaId)).containsExactlyInAnyOrder(OMISO_UNO, OMISO_DOS);
+
+        MuestraDelPrograma sinTitular = muestras.fila(OMISO_UNO);
+        assertThat(sinTitular.contribuyenteId())
+                .as("nulo, no un titular inventado para poder imputar")
+                .isNull();
+        assertThat(sinTitular.sinTitular()).isTrue();
+        assertThat(muestras.fila(OMISO_DOS).contribuyenteId()).isEqualTo(100L + OMISO_DOS);
+    }
+
+    @Test
+    @DisplayName("y la respuesta dice cuantos de los sorteados no tienen titular")
+    void diceCuantosEntraronSinTitular() {
+        long programaId = programas.sembrar(programa(CondicionFiscalizada.OMISO));
+
+        ResultadoDelSorteo resultado =
+                servicio(new TitularesDeMentira().con(OMISO_DOS, 100L + OMISO_DOS))
+                        .generar(programaId, OBSERVACION);
+
+        assertThat(resultado.sorteadosSinTitular())
+                .as("quien visita va sabiendo que ahi tiene que averiguar quien ocupa")
+                .isEqualTo(1);
+    }
+
+    @Test
+    @DisplayName("el padron examinado se puede reconstruir: detectados = sorteados + excluidos")
+    void elRepartoCuadra() {
+        // Un padron con los tres candidatos OMISO en juego: uno se lo llevo otro programa, otro ya
+        // tiene acta del ejercicio, y el tercero entra. Sin las tres cifras, una muestra de 1 sobre
+        // un padron de 3 es indistinguible de una muestra de 1 sobre un padron de 1.
+        long otro = programas.sembrar(programa(CondicionFiscalizada.OMISO));
+        muestras.sembrar(otro, OMISO_UNO);
+        actas.sembrar(
+                ActaFiscalizacion.nuevaPredial(
+                        99L,
+                        1,
+                        100L + OMISO_DOS,
+                        OMISO_DOS,
+                        FICHA,
+                        LocalDate.of(2026, 2, 1),
+                        "R. MENDOZA CRUZ",
+                        Hallazgo.OMISO,
+                        null,
+                        null,
+                        OBSERVACION));
+        long programaId = programas.sembrar(programa(CondicionFiscalizada.OMISO));
+
+        ResultadoDelSorteo resultado = servicio().generar(programaId, OBSERVACION);
+
+        assertThat(resultado.detectados())
+                .as("los dos OMISO del padron; el CONFORME no lo detecta este criterio")
+                .isEqualTo(2);
+        assertThat(resultado.sorteados()).isZero();
+        assertThat(resultado.excluidosPorOtroPrograma()).isEqualTo(1);
+        assertThat(resultado.excluidosPorActaDelEjercicio()).isEqualTo(1);
+        assertThat(resultado.excluidos()).isEqualTo(2);
+        assertThat(resultado.sorteados() + resultado.excluidos())
+                .as("y por eso quien lee la respuesta puede reconstruir el padron examinado")
+                .isEqualTo(resultado.detectados());
+    }
+
+    @Test
+    @DisplayName("un predio que cumple los DOS motivos se cuenta una sola vez")
+    void unPredioConLosDosMotivosSeCuentaUnaVez() {
+        long otro = programas.sembrar(programa(CondicionFiscalizada.OMISO));
+        muestras.sembrar(otro, OMISO_UNO);
+        actas.sembrar(
+                ActaFiscalizacion.nuevaPredial(
+                        99L,
+                        1,
+                        100L + OMISO_UNO,
+                        OMISO_UNO,
+                        FICHA,
+                        LocalDate.of(2026, 2, 1),
+                        "R. MENDOZA CRUZ",
+                        Hallazgo.OMISO,
+                        null,
+                        null,
+                        OBSERVACION));
+        long programaId = programas.sembrar(programa(CondicionFiscalizada.OMISO));
+
+        ResultadoDelSorteo resultado = servicio().generar(programaId, OBSERVACION);
+
+        assertThat(resultado.excluidos())
+                .as("sumar los dos motivos por separado daria mas excluidos que detectados")
+                .isEqualTo(1);
+        assertThat(resultado.detectados()).isEqualTo(2);
+        assertThat(resultado.sorteados()).isEqualTo(1);
+    }
+
+    @Test
+    @DisplayName("el reparto se ACUMULA por el padron entero, no se lee de la ultima pagina")
+    void elRepartoSeAcumulaPorElPadronEntero() {
+        // El padron se recorre en paginas de 200, asi que con tres predios sembrados el bucle da
+        // una sola vuelta y «acumular» y «quedarse con la ultima pagina» valen lo mismo. Aqui se
+        // siembran 250 candidatos —dos vueltas— con 210 ya tomados por otro programa, repartidos
+        // a proposito entre las DOS paginas.
+        //
+        // Leyendo la ultima pagina saldria «50 detectados, 40 sorteados, 10 excluidos»: cuadra
+        // consigo mismo, o sea que ni siquiera el invariante lo delata, y describe un padron que
+        // no existe. Es el modo de fallo de este issue un escalon mas arriba.
+        long otro = programas.sembrar(programa(CondicionFiscalizada.OMISO));
+        DeteccionDeMentira padron = new DeteccionDeMentira();
+        TitularesDeMentira titulares = new TitularesDeMentira();
+        for (long predioId = 1000; predioId < 1250; predioId++) {
+            padron.con(fila(predioId, CondicionFiscalizada.OMISO));
+            titulares.con(predioId, 100L + predioId);
+            if (predioId < 1210) {
+                muestras.sembrar(otro, predioId);
+            }
+        }
+        long programaId = programas.sembrar(programa(CondicionFiscalizada.OMISO));
+
+        ResultadoDelSorteo resultado =
+                new GenerarMuestra(
+                                programas,
+                                muestras,
+                                actas,
+                                new DeteccionDeOmisos(padron, titulares),
+                                auditados::add,
+                                RELOJ)
+                        .generar(programaId, OBSERVACION);
+
+        assertThat(resultado.detectados()).isEqualTo(250);
+        assertThat(resultado.sorteados()).isEqualTo(40);
+        assertThat(resultado.excluidosPorOtroPrograma()).isEqualTo(210);
     }
 
     @Test
@@ -185,15 +324,25 @@ class GenerarMuestraTest {
     }
 
     @Test
-    @DisplayName("el sorteo se audita con su observacion y cuantos predios entraron")
+    @DisplayName("el sorteo se audita con su observacion y con el REPARTO entero (#586)")
     void elSorteoSeAudita() {
+        long otro = programas.sembrar(programa(CondicionFiscalizada.OMISO));
+        muestras.sembrar(otro, OMISO_UNO);
         long programaId = programas.sembrar(programa(CondicionFiscalizada.OMISO));
 
-        servicio().generar(programaId, OBSERVACION);
+        servicio(new TitularesDeMentira()).generar(programaId, OBSERVACION);
 
         assertThat(auditados).hasSize(1);
         assertThat(auditados.get(0).observacion()).isEqualTo(OBSERVACION);
-        assertThat(auditados.get(0).datosNuevos()).contains("\"predios\":2");
+        assertThat(auditados.get(0).datosNuevos())
+                .as(
+                        "con solo «predios» quien audita meses despues no sabe sobre que padron se"
+                                + " sorteo esta muestra")
+                .contains("\"detectados\":2")
+                .contains("\"predios\":1")
+                .contains("\"sinTitular\":1")
+                .contains("\"excluidosPorOtroPrograma\":1")
+                .contains("\"excluidosPorActaDelEjercicio\":0");
     }
 
     // ------------------------------------------------------------------
@@ -322,6 +471,14 @@ class GenerarMuestraTest {
                     .filter(m -> m.programaId() == programaId)
                     .map(MuestraDelPrograma::predioId)
                     .toList();
+        }
+
+        /** La fila sorteada de un predio: hace falta para mirar su titular, no su recuento. */
+        MuestraDelPrograma fila(long predioId) {
+            return guardadas.stream()
+                    .filter(m -> m.predioId() == predioId)
+                    .findFirst()
+                    .orElseThrow();
         }
 
         @Override
