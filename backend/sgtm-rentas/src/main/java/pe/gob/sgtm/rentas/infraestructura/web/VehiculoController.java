@@ -2,7 +2,10 @@ package pe.gob.sgtm.rentas.infraestructura.web;
 
 import java.time.Clock;
 import java.time.LocalDate;
+import java.util.Locale;
+import java.util.Optional;
 import org.jspecify.annotations.Nullable;
+import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.RequestMapping;
@@ -10,11 +13,15 @@ import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 import pe.gob.sgtm.autorizacion.Privilegio;
 import pe.gob.sgtm.autorizacion.RequiereAcceso;
+import pe.gob.sgtm.contribuyentes.DirectorioDeContribuyentes;
+import pe.gob.sgtm.contribuyentes.ResumenDeContribuyente;
 import pe.gob.sgtm.dominio.Placa;
 import pe.gob.sgtm.rentas.aplicacion.ConsultaDeVehiculos;
 import pe.gob.sgtm.rentas.dominio.CriterioDeVehiculo;
 import pe.gob.sgtm.web.Api;
+import pe.gob.sgtm.web.CodigoDeError;
 import pe.gob.sgtm.web.ParametrosDePaginacion;
+import pe.gob.sgtm.web.ProblemaDeNegocio;
 import pe.gob.sgtm.web.RespuestaPaginada;
 
 /**
@@ -41,11 +48,34 @@ import pe.gob.sgtm.web.RespuestaPaginada;
  * conexiones de la interfaz llegan con el trozo de su modulo (#433), y quien tenga Rentas y no
  * Consultas veria un aviso de permiso ajeno dentro de su propio expediente.
  *
- * <p><b>{@code contribuyente} es obligatorio, y esa es la decision que sostiene el endpoint.</b>
- * Sin el, esto seria una segunda puerta al padron vehicular entero <b>detras de un permiso mas
+ * <p><b>El contribuyente es obligatorio, y esa es la decision que sostiene el endpoint.</b> Sin el,
+ * esto seria una segunda puerta al padron vehicular entero <b>detras de un permiso mas
  * estrecho</b>: quien solo tiene {@code vehiculos} hoy llega a una ficha por placa —tiene que saber
  * la placa— y pasaria a poder listarlo todo. Con el criterio exigido, la operacion es lo que dice
  * ser: los vehiculos de una persona.
+ *
+ * <p>Se pide con <b>dos nombres</b>, {@code contribuyente} y {@code codContribuyente}, y uno de los
+ * dos es obligatorio. Es el mismo par que {@code GET /rentas/predios} ya admite: las dos lecturas
+ * llenan la <b>misma</b> seccion del expediente —«Predios y vehiculos»— y quien conecta la segunda
+ * copiando la primera escribia {@code codContribuyente}, recibia un 422 que nombra un parametro que
+ * la pantalla no dibuja, y el sintoma no se parecia a la causa (#595).
+ *
+ * <h2>Tres cosas distintas que se decian igual (#595)</h2>
+ *
+ * <p>Hasta #595 esta operacion respondia {@code 200} con la pagina vacia en <b>dos</b> casos que no
+ * son el mismo, y solo uno de los dos es «este contribuyente no tiene vehiculos»:
+ *
+ * <ul>
+ *   <li><b>un codigo que no esta en el padron</b> —tecleado mal, o de otra municipalidad—: ahora
+ *       {@code 404} nombrando el codigo, como su hermana de predios desde #541. Es lo que se
+ *       pregunta en ventanilla, y las dos respuestas eran identicas byte a byte;
+ *   <li><b>un contribuyente del padron sin ningun vehiculo</b>: sigue siendo {@code 200} con cero
+ *       filas, que es lo unico que de verdad significa «no tiene».
+ * </ul>
+ *
+ * <p>Y las dos se leen juntas: con un codigo inexistente la pantalla decia a la vez «ese codigo no
+ * esta en el padron» —de predios— y «esta persona no tiene ningun vehiculo a su nombre», una debajo
+ * de la otra, y la segunda era falsa.
  */
 @RestController
 @RequestMapping(Api.RAIZ + "/rentas/vehiculos")
@@ -55,10 +85,13 @@ public class VehiculoController {
     private static final String ORDEN_POR_OMISION = "placa";
 
     private final ConsultaDeVehiculos consulta;
+    private final DirectorioDeContribuyentes directorio;
     private final Clock reloj;
 
-    public VehiculoController(ConsultaDeVehiculos consulta, Clock reloj) {
+    public VehiculoController(
+            ConsultaDeVehiculos consulta, DirectorioDeContribuyentes directorio, Clock reloj) {
         this.consulta = consulta;
+        this.directorio = directorio;
         this.reloj = reloj;
     }
 
@@ -82,21 +115,57 @@ public class VehiculoController {
      * <p>La fecha es la del corte de la deuda (regla 9). Sin ella, la de hoy.
      */
     @GetMapping
+    @Transactional(readOnly = true)
     public RespuestaPaginada<VehiculoEncontradoResource> delContribuyente(
-            @RequestParam String contribuyente,
+            @RequestParam(required = false) @Nullable String contribuyente,
+            @RequestParam(required = false) @Nullable String codContribuyente,
             @RequestParam(required = false) @Nullable String fecha,
             ParametrosDePaginacion parametros) {
+
+        String codigo = primeroNoVacio(codContribuyente, contribuyente);
+        if (codigo == null) {
+            throw new ProblemaDeNegocio(
+                    CodigoDeError.VALIDACION,
+                    "Hay que decir de quien son los vehiculos: falta «codContribuyente» (o su"
+                            + " otro nombre, «contribuyente»)");
+        }
+        Optional<ResumenDeContribuyente> encontrado =
+                directorio.porCodigo(codigo.toUpperCase(Locale.ROOT));
+        if (encontrado.isEmpty()) {
+            throw new ProblemaDeNegocio(
+                    CodigoDeError.NO_ENCONTRADO,
+                    "En el padron de esta municipalidad no hay ningun contribuyente con codigo '"
+                            + codigo
+                            + "'");
+        }
 
         // El criterio se compone **solo** con el contribuyente: los otros tres que
         // `CriterioDeVehiculo` admite —placa, motor, estado— son los de la busqueda del
         // padron, y esta operacion no es una busqueda. Anadirlos aqui seria devolver por
         // la puerta estrecha lo que el parametro obligatorio acaba de cerrar.
-        CriterioDeVehiculo criterio = new CriterioDeVehiculo(null, null, contribuyente, null);
+        //
+        // Y el codigo que viaja es el **canonico del padron**, no el tecleado: quien lo
+        // escribio en minusculas pregunta por la misma persona.
+        CriterioDeVehiculo criterio =
+                new CriterioDeVehiculo(null, null, encontrado.get().codigo(), null);
 
         return RespuestaPaginada.de(
                 consulta.buscar(
                         criterio, fechaDe(fecha), parametros.aPaginacion(ORDEN_POR_OMISION)),
                 VehiculoEncontradoResource::de);
+    }
+
+    private static @Nullable String primeroNoVacio(@Nullable String uno, @Nullable String otro) {
+        String primero = limpio(uno);
+        return primero != null ? primero : limpio(otro);
+    }
+
+    private static @Nullable String limpio(@Nullable String texto) {
+        if (texto == null) {
+            return null;
+        }
+        String sinBlancos = texto.strip();
+        return sinBlancos.isEmpty() ? null : sinBlancos;
     }
 
     private LocalDate fechaDe(@Nullable String texto) {

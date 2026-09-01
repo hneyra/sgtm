@@ -1488,10 +1488,18 @@ const OPERACIONES_ADICIONALES = {
       parametros: [
         {
           nombre: 'contribuyente',
-          requerido: true,
           descripcion:
-            'Codigo del contribuyente. OBLIGATORIO: sin el, esto seria una segunda puerta al ' +
-            'padron vehicular entero detras de un permiso mas estrecho que el de Consultas.',
+            'Codigo del contribuyente. Uno de los dos —este o «codContribuyente»— es ' +
+            'OBLIGATORIO: sin ninguno, 422, porque sin criterio esto seria una segunda puerta ' +
+            'al padron vehicular entero detras de un permiso mas estrecho que el de Consultas. ' +
+            'Y un codigo que no esta en el padron es 404, no una pagina vacia (#595).',
+        },
+        {
+          nombre: 'codContribuyente',
+          descripcion:
+            'El mismo filtro con el nombre que usa su hermana GET /rentas/predios, con la que ' +
+            'esta lectura llena la misma seccion del expediente. Uno de los dos —este o ' +
+            '«contribuyente»— es OBLIGATORIO: sin ninguno, 422 (#595).',
         },
         {
           nombre: 'fecha',
@@ -1514,6 +1522,12 @@ const OPERACIONES_ADICIONALES = {
         La fila es la misma que publica /consultas/vehiculos: dos formas distintas de la misma
         lectura dirían dos cosas del mismo vehículo, y la que se leyera en el expediente sería la
         que nadie compara.
+
+        **Un código que no está en el padrón es 404, no una página vacía** (#595). Un 200 con cero
+        filas se lee como «esta persona no tiene ningún vehículo», y sobre un código mal tecleado
+        —o de otra municipalidad— esa frase es falsa; se leía además junto a la de predios, que
+        desde #541 sí dice «ese código no está en el padrón», una debajo de la otra. Lo único que
+        sigue siendo 200 con cero filas es un contribuyente del padrón sin vehículos.
       `),
     },
     {
