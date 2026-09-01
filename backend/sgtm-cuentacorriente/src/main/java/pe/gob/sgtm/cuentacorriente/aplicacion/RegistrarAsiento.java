@@ -188,6 +188,12 @@ public class RegistrarAsiento {
                 + asiento.monto().valor().toPlainString()
                 + ",\"asientoReversadoId\":"
                 + asiento.asientoReversadoId()
+                // La declaracion de #653 viaja tambien a la bitacora: sin ella, la fila de un alta
+                // sobre la unidad de otro —declarada a proposito— es indistinguible de la de un
+                // alta sobre la unidad propia, y lo que separa el acto legitimo del error es
+                // precisamente que alguien lo dijera.
+                + ",\"unidadDeTitularAnterior\":"
+                + asiento.unidadDeTitularAnterior()
                 + "}";
     }
 
