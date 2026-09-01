@@ -40,6 +40,13 @@ import pe.gob.sgtm.web.ProblemaDeNegocio;
  * emite. Numerar cada vez que alguien abre una ficha llenaria el correlativo de ruido. Lo que si se
  * registra —y se reimprime identico— son los valores, recibos y papeletas, que es para lo que
  * existe {@code EmitirDocumento}.
+ *
+ * <p><b>El documento se dibuja despues de que cierre la transaccion de la lectura, y eso esta
+ * bien</b> (#535): dibujar no toca la base. Lo unico que toca es la pregunta por el regimen de la
+ * instalacion —si el papel sale marcado (#122)—, y esa se hace dentro de una transaccion propia que
+ * abre {@code RegimenDeLaInstalacionJdbc}, que es donde vive el motivo. Envolver aqui la peticion
+ * entera mantendria una conexion tomada mientras se escribe el PDF, y habria que repetirlo en los
+ * dieciocho endpoints que generan documentos.
  */
 @RestController
 @RequestMapping(Api.RAIZ + "/catastro/contribuyentes")
