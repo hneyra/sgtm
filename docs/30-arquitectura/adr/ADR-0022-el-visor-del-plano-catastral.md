@@ -63,8 +63,14 @@ o acércate.
 ### 3. Los predios sin geometría se **cuentan**, no se esconden
 
 ADR-0021 dice que son «todos los de hoy, y muchos no la tendrán nunca». La lectura devuelve, junto a
-los lotes, **cuántos predios del mismo marco y los mismos filtros no tienen polígono**, y la pantalla
-lo dice siempre, incluso cuando son cero.
+los lotes, **cuántos predios del padrón, con los mismos filtros de sector y de manzana, no tienen
+polígono — sin acotar por el marco**, y la pantalla lo dice siempre, incluso cuando son cero.
+
+Que el marco **no** la acote es la decisión, no un descuido: un predio sin polígono no tiene sitio en
+el marco, así que compararlo contra `bbox` daría cero **siempre** —sus cuatro columnas `marco_*` de
+`V65` son nulas y ninguna desigualdad se cumple—, y daría cero justo cuando la cifra más hace falta.
+El único dato que podría situarlo, el perímetro de su manzana, no existe en el esquema, y derivarlo
+de la unión de los lotes ya levantados es lo que §5 prohíbe.
 
 Sin esa cifra, el visor afirma algo que no sabe. Con doscientos lotes dibujados y ochocientos sin
 polígono, un plano mudo dice «este sector tiene doscientos lotes», y lo que pasa es que tiene mil y
