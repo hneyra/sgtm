@@ -72,6 +72,23 @@ public interface AdministracionRepository {
      */
     Pagina<Grupo> gruposDeUsuario(long usuarioId, Paginacion paginacion);
 
+    /**
+     * Quien esta en un grupo (#582).
+     *
+     * <p>Es la pregunta inversa de {@link #gruposDeUsuario}, y hasta #582 no se podia hacer:
+     * derivarla costaba una peticion por usuario del padron de cuentas.
+     *
+     * <p><b>Solo las pertenencias activas</b>, por lo mismo que su gemela: la fila de una baja
+     * sigue ahi porque no se borra (RNF-051), pero quien salio del grupo ya no esta en el, y
+     * devolverlo aqui le atribuiria al grupo gente que ya no tiene sus permisos.
+     *
+     * <p>Lo que <b>si</b> devuelve son los usuarios deshabilitados que siguen afiliados: estar en
+     * el grupo y poder entrar son dos cosas distintas, y {@link Usuario} publica su estado para que
+     * quien lea las separe. Esconderlos dejaria sin contestar «que cuenta deshabilitada conserva
+     * permisos», que es justo lo que se quiere poder ver.
+     */
+    Pagina<Usuario> usuariosDeGrupo(long grupoId, Paginacion paginacion);
+
     /** Alta o baja de la pertenencia. Nunca borra: la fila queda con {@code activo} en falso. */
     Miembro guardar(Miembro miembro);
 }

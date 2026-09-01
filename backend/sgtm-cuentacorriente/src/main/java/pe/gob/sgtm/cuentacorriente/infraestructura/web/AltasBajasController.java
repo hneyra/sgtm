@@ -66,15 +66,20 @@ public class AltasBajasController {
     @GetMapping
     @Transactional(readOnly = true)
     public RespuestaPaginada<AsientoResource> altasYBajas(
-            @RequestParam String codigoCont,
+            @RequestParam(required = false) @Nullable String codigoCont,
+            @RequestParam(required = false) @Nullable String codContribuyente,
             @RequestParam(required = false) @Nullable String ano,
             @RequestParam(required = false) @Nullable String tributo,
             @RequestParam(required = false) @Nullable String altaBaja,
             ParametrosDePaginacion paginacion) {
 
+        String codigo = exigirContribuyente(codContribuyente, codigoCont, "codigoCont");
+        if (consulta.contribuyentePorCodigo(codigo).isEmpty()) {
+            throw noEstaEnElPadron(codigo);
+        }
+
         CriterioDeAltasBajas criterio =
-                new CriterioDeAltasBajas(
-                        codigoCont, ejercicioDe(ano), tributo, sentidoDe(altaBaja));
+                new CriterioDeAltasBajas(codigo, ejercicioDe(ano), tributo, sentidoDe(altaBaja));
 
         return RespuestaPaginada.de(
                 consulta.altasYBajas(criterio, paginacion.aPaginacion(ORDEN_POR_OMISION)),
@@ -103,5 +108,56 @@ public class AltasBajasController {
                     CodigoDeError.VALIDACION,
                     "El filtro «Alta / Baja» admite ALTA o BAJA: '" + texto + "'");
         }
+    }
+
+    /**
+     * Lo que la peticion diga de quien es la consulta, con los dos nombres (#622).
+     *
+     * <p>Uno de los dos es <b>obligatorio</b>: sin ninguno, 422. Sin esa exigencia esto seria una
+     * puerta al padron entero.
+     */
+    private static String exigirContribuyente(
+            @Nullable String canonico, @Nullable String alias, String nombreDelAlias) {
+        String codigo = primeroNoVacio(canonico, alias);
+        if (codigo == null) {
+            throw new ProblemaDeNegocio(
+                    CodigoDeError.VALIDACION,
+                    "Hay que decir de quien es la consulta: falta «codContribuyente» (o su otro"
+                            + " nombre, «"
+                            + nombreDelAlias
+                            + "»)");
+        }
+        return codigo;
+    }
+
+    private static @Nullable String primeroNoVacio(@Nullable String uno, @Nullable String otro) {
+        String primero = limpio(uno);
+        return primero != null ? primero : limpio(otro);
+    }
+
+    private static @Nullable String limpio(@Nullable String texto) {
+        if (texto == null) {
+            return null;
+        }
+        String sinBlancos = texto.strip();
+        return sinBlancos.isEmpty() ? null : sinBlancos;
+    }
+
+    /**
+     * Un codigo que no esta en el padron es {@code 404} nombrandolo, no una pagina vacia (#622).
+     *
+     * <p>Es el mismo defecto que #541 y #595 cerraron en las dos lecturas de Rentas: el expediente
+     * pide siete lecturas con el mismo codigo, una contestaba 404 y las otras seis «existe y no
+     * tiene nada». Quien atiende leia seis afirmaciones de que la persona existe debajo de una que
+     * decia que no — y la que mas cuesta es la de deuda, porque «no tiene deuda pendiente» sobre
+     * alguien que el padron no reconoce es lo que se dice antes de emitir una constancia de no
+     * adeudo.
+     */
+    private static RuntimeException noEstaEnElPadron(String codigo) {
+        return new ProblemaDeNegocio(
+                CodigoDeError.NO_ENCONTRADO,
+                "En el padron de esta municipalidad no hay ningun contribuyente con codigo '"
+                        + codigo
+                        + "'");
     }
 }

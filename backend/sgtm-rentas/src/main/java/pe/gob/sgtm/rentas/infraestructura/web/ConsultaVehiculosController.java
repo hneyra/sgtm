@@ -3,6 +3,7 @@ package pe.gob.sgtm.rentas.infraestructura.web;
 import java.time.Clock;
 import java.time.LocalDate;
 import java.time.format.DateTimeParseException;
+import java.util.Locale;
 import org.jspecify.annotations.Nullable;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.RequestMapping;
@@ -10,11 +11,14 @@ import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 import pe.gob.sgtm.autorizacion.Privilegio;
 import pe.gob.sgtm.autorizacion.RequiereAcceso;
+import pe.gob.sgtm.contribuyentes.DirectorioDeContribuyentes;
 import pe.gob.sgtm.rentas.aplicacion.ConsultaDeVehiculos;
 import pe.gob.sgtm.rentas.dominio.CriterioDeVehiculo;
 import pe.gob.sgtm.rentas.dominio.EstadoVehiculo;
 import pe.gob.sgtm.web.Api;
+import pe.gob.sgtm.web.CodigoDeError;
 import pe.gob.sgtm.web.ParametrosDePaginacion;
+import pe.gob.sgtm.web.ProblemaDeNegocio;
 import pe.gob.sgtm.web.RespuestaPaginada;
 
 /**
@@ -39,10 +43,13 @@ public class ConsultaVehiculosController {
     private static final String ORDEN_POR_OMISION = "placa";
 
     private final ConsultaDeVehiculos consulta;
+    private final DirectorioDeContribuyentes directorio;
     private final Clock reloj;
 
-    public ConsultaVehiculosController(ConsultaDeVehiculos consulta, Clock reloj) {
+    public ConsultaVehiculosController(
+            ConsultaDeVehiculos consulta, DirectorioDeContribuyentes directorio, Clock reloj) {
         this.consulta = consulta;
+        this.directorio = directorio;
         this.reloj = reloj;
     }
 
@@ -51,12 +58,21 @@ public class ConsultaVehiculosController {
             @RequestParam(required = false) @Nullable String placa,
             @RequestParam(required = false) @Nullable String nroMotor,
             @RequestParam(required = false) @Nullable String contribuyente,
+            @RequestParam(required = false) @Nullable String codContribuyente,
             @RequestParam(required = false) @Nullable String estado,
             @RequestParam(required = false) @Nullable String fecha,
             ParametrosDePaginacion parametros) {
 
+        // Aqui el contribuyente es un FILTRO de la busqueda del padron y no el sujeto de la
+        // consulta, asi que puede faltar. Lo que no puede es traer un codigo que no existe y
+        // contestar como si la persona no tuviera vehiculos (#622).
+        String codigo = primeroNoVacio(codContribuyente, contribuyente);
+        if (codigo != null && directorio.porCodigo(codigo.toUpperCase(Locale.ROOT)).isEmpty()) {
+            throw noEstaEnElPadron(codigo);
+        }
+
         CriterioDeVehiculo criterio =
-                new CriterioDeVehiculo(placa, nroMotor, contribuyente, estadoDe(estado));
+                new CriterioDeVehiculo(placa, nroMotor, codigo, estadoDe(estado));
 
         return RespuestaPaginada.de(
                 consulta.buscar(
@@ -82,5 +98,34 @@ public class ConsultaVehiculosController {
             throw new IllegalArgumentException(
                     "La fecha debe tener formato AAAA-MM-DD: '" + texto + "'", excepcion);
         }
+    }
+
+    /**
+     * Un codigo que no esta en el padron es {@code 404} nombrandolo, no una pagina vacia (#622).
+     *
+     * <p>Es el defecto que #541 y #595 cerraron en las dos lecturas de Rentas, en la pantalla de al
+     * lado: el expediente de Consultas pedia siete lecturas con el mismo codigo, una contestaba 404
+     * y las otras seis «existe y no tiene nada». Las dos que listan padron —esta y su gemela—
+     * contradecian ademas a la pantalla de Rentas sobre la misma persona.
+     */
+    private static RuntimeException noEstaEnElPadron(String codigo) {
+        return new ProblemaDeNegocio(
+                CodigoDeError.NO_ENCONTRADO,
+                "En el padron de esta municipalidad no hay ningun contribuyente con codigo '"
+                        + codigo
+                        + "'");
+    }
+
+    private static @Nullable String primeroNoVacio(@Nullable String uno, @Nullable String otro) {
+        String primero = limpio(uno);
+        return primero != null ? primero : limpio(otro);
+    }
+
+    private static @Nullable String limpio(@Nullable String texto) {
+        if (texto == null) {
+            return null;
+        }
+        String sinBlancos = texto.strip();
+        return sinBlancos.isEmpty() ? null : sinBlancos;
     }
 }

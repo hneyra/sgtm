@@ -493,11 +493,25 @@ const DEL_BACKEND = {
   // «Año» y «Tributo» los dibuja la pantalla, pero en la seccion «Filtros del
   // detalle» y no en la barra de filtros, que es lo unico que el prototipo
   // publica como `filters`. Por eso van aqui, y entre los dos que los rodean.
+  // El codigo del contribuyente se unifica en `codContribuyente` (#622). En la
+  // misma pantalla el mismo dato viajaba con tres grafias —`contribuyente` en
+  // predios y vehiculos, `codContribuyente` en deuda, pagos y valores, y
+  // `codigoCont` en altas y bajas—, de modo que el dia que una dejara de admitir
+  // su nombre el 422 nombraria un parametro que quien lee la pantalla no ha
+  // escrito. Las tres que no lo tenian lo ganan aqui; el nombre anterior sigue
+  // declarado y sigue admitido, porque es el que el frontend manda hoy.
   consulta_altas_bajas: [
+    {
+      nombre: 'codContribuyente',
+      ejemplo: '',
+      tras: 'codigoCont',
+      descripcion:
+        'Codigo del contribuyente, con el nombre unificado. «codigoCont» es el mismo dato',
+    },
     {
       nombre: 'ano',
       ejemplo: '',
-      tras: 'codigoCont',
+      tras: 'codContribuyente',
       descripcion: 'Filtro «Año» de la pantalla, dentro de «Filtros del detalle»',
     },
     {
@@ -529,7 +543,23 @@ const DEL_BACKEND = {
     },
   ],
   // La deuda de cada fila se actualiza a una fecha, y la fila la dice (regla 9).
+  consulta_predios: [
+    {
+      nombre: 'codContribuyente',
+      ejemplo: '',
+      tras: 'contribuyente',
+      descripcion:
+        'Codigo del contribuyente, con el nombre unificado. «contribuyente» es el mismo dato',
+    },
+  ],
   consulta_vehiculos: [
+    {
+      nombre: 'codContribuyente',
+      ejemplo: '',
+      tras: 'contribuyente',
+      descripcion:
+        'Codigo del contribuyente, con el nombre unificado. «contribuyente» es el mismo dato',
+    },
     {
       nombre: 'fecha',
       ejemplo: '',
@@ -1195,6 +1225,34 @@ const OPERACIONES_ADICIONALES = {
         usuario deshabilitado o fuera de vigencia recibe la lista **vacía**. Un \`id\`
         que no existe en esta municipalidad es **404**, no una lista vacía: no tener
         permisos y no existir son dos respuestas distintas.
+      `),
+    },
+  ],
+  // Y la pregunta inversa: quien esta EN un grupo. De `miembro` solo habia el
+  // POST que afilia, asi que derivarla costaba una peticion por usuario del
+  // padron de cuentas (#582).
+  miembros: [
+    {
+      operationId: 'miembros_del_grupo',
+      metodo: 'get',
+      titulo: 'Usuarios que pertenecen a un grupo',
+      paginacion: true,
+      descripcion: literal(`
+        Quiénes están en un grupo (#582, RF-120): la pregunta inversa de
+        \`/seguridad/usuarios/{id}/grupos\`. Hasta ahora no se podía hacer —de esta
+        ruta sólo existía el \`POST\` que afilia—, así que responder «quién está
+        dentro» obligaba a recorrer el padrón de cuentas preguntando por cada una.
+
+        **Sólo las pertenencias activas.** Una baja no se borra —la fila sigue ahí con
+        \`activo\` en falso (RNF-051)—, pero quien salió del grupo ya no está en él.
+        Lo que **sí** devuelve son los usuarios **deshabilitados** que siguen
+        afiliados: estar en el grupo y poder entrar son cosas distintas, y cada fila
+        publica \`habilitado\` para separarlas — es lo que permite contestar qué cuenta
+        deshabilitada conserva permisos sin una segunda lectura.
+
+        Un \`grupo\` que no existe en esta municipalidad es **404**; un grupo sin
+        miembros es una página vacía con **200**. No tener a nadie y no existir son dos
+        respuestas distintas.
       `),
     },
   ],

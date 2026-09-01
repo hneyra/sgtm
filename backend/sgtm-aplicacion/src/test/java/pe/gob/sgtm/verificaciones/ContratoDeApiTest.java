@@ -174,6 +174,10 @@ class ContratoDeApiTest {
                     "GET /seguridad/usuarios/{id}/grupos",
                     "GET /seguridad/usuarios/{id}/permisos",
                     "POST /seguridad/grupos/{grupo}/miembros",
+                    // #582 — la pregunta inversa: quien esta EN un grupo. De esta misma
+                    // ruta solo habia el POST que afilia, asi que derivarla costaba una
+                    // peticion por usuario del padron de cuentas.
+                    "GET /seguridad/grupos/{grupo}/miembros",
                     "PUT /seguridad/grupos/{id}/permisos",
                     "GET /seguridad/grupos/{id}/permisos",
                     "GET /seguridad/sesion/permisos",
