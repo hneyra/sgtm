@@ -3,11 +3,20 @@
 
 /* ══════════ Niveles y accesos ══════════ */
 
-/** Los siete niveles del manual. «Total» no es un nivel más: implica los otros
- *  seis, y el sistema actual permitía marcarlo sin decirlo. */
-export type Nivel = 'Total' | 'Ejecuta' | 'Consulta' | 'Ingresa' | 'Modifica' | 'Anula' | 'Imprime';
+/** Los siete privilegios. El rotulo que usa el manual para `ESPECIAL` es
+ *  «Total», y no lo es: ver el comentario de `NIVELES`. */
+export type Nivel = 'Especial' | 'Ejecuta' | 'Consulta' | 'Ingresa' | 'Modifica' | 'Anula' | 'Imprime';
 
-export const NIVELES: Nivel[] = ['Total', 'Ejecuta', 'Consulta', 'Ingresa', 'Modifica', 'Anula', 'Imprime'];
+/**
+ * Los siete privilegios, con el nombre que el dominio les da.
+ *
+ * **No existe ninguno que se llame «Total».** El artboard lo dibuja primero y
+ * como si implicara los otros seis, y en el backend es `ESPECIAL`: uno mas,
+ * ni mayor ni menor. Sobre ese rotulo falso estaba construido el primer riesgo
+ * del panel —«tres cuentas con privilegio Especial»—, que decia otra cosa de la que
+ * parecia.
+ */
+export const NIVELES: Nivel[] = ['Ejecuta', 'Consulta', 'Ingresa', 'Modifica', 'Anula', 'Imprime', 'Especial'];
 
 export type Acceso = {
   id: string;
@@ -44,7 +53,7 @@ export const GRUPOS: Record<string, Grupo> = {
   ADMINISTRADORES: {
     label: 'ADMINISTRADORES',
     miembros: ['jquispe', 'aayca'],
-    permisos: { permisos: ['Total'], caja: ['Consulta'], baja: ['Consulta'], aranceles: ['Consulta'] },
+    permisos: { permisos: ['Especial'], caja: ['Consulta'], baja: ['Consulta'], aranceles: ['Consulta'] },
   },
   CAJA: {
     label: 'CAJA',
@@ -76,12 +85,12 @@ export type Usuario = {
 
 export const USUARIOS: Record<string, Usuario> = {
   jquispe: { label: 'jquispe', nombre: 'QUISPE PEÑA, JORGE', estado: 'Activa', clave: 12, propios: {} },
-  aayca: { label: 'aayca', nombre: 'AYCA GONZALES, ALBERTO', estado: 'Activa', clave: 384, propios: { anulacion: ['Total'] } },
+  aayca: { label: 'aayca', nombre: 'AYCA GONZALES, ALBERTO', estado: 'Activa', clave: 384, propios: { anulacion: ['Especial'] } },
   jcardenas: { label: 'jcardenas', nombre: 'CÁRDENAS VEGA, JOSÉ', estado: 'Activa', clave: 44, propios: { anulacion: ['Ejecuta', 'Consulta'] } },
   mrios: { label: 'mrios', nombre: 'RÍOS MENDOZA, MARÍA', estado: 'Activa', clave: 8, propios: { prescripcion: ['Consulta', 'Ingresa'] } },
   lpena: { label: 'lpena', nombre: 'PEÑA SANDOVAL, LUIS', estado: 'Activa', clave: 201, propios: { acta: ['Ejecuta', 'Consulta', 'Ingresa', 'Modifica'] } },
   vreto: { label: 'vreto', nombre: 'RETO SANTOS, VÍCTOR', estado: 'Activa', clave: 96, propios: {} },
-  fruiz: { label: 'fruiz', nombre: 'RUIZ INGA, FERNANDO', estado: 'Inactiva', clave: 812, propios: { caja: ['Total'] } },
+  fruiz: { label: 'fruiz', nombre: 'RUIZ INGA, FERNANDO', estado: 'Inactiva', clave: 812, propios: { caja: ['Especial'] } },
 };
 
 /* ══════════ Auditoría ══════════ */
@@ -91,7 +100,7 @@ export type FilaDeAuditoria = [string, string, string, string, string, string, s
 
 export const AUDITORIA: FilaDeAuditoria[] = [
   ['13/08/2026 09:41', 'jcardenas', 'Tesorería', 'Anulación de recibo', 'Recibo 0003-0041184 · S/ 1,245.00', '10.4.2.18', 'Alto'],
-  ['13/08/2026 08:12', 'jquispe', 'Seguridad', 'Cambio de permisos', 'aayca: Anulación de recibo → Total', '10.4.2.3', 'Alto'],
+  ['13/08/2026 08:12', 'jquispe', 'Seguridad', 'Cambio de permisos', 'aayca: Anulación de recibo → Especial', '10.4.2.3', 'Alto'],
   ['12/08/2026 17:04', 'mrios', 'Rentas · Registro', 'Baja de deuda', '2 cuotas · S/ 1,613.96 · prescripción', '10.4.2.22', 'Alto'],
   ['12/08/2026 16:48', 'lpena', 'Fiscalización', 'Cierre de acta', 'ACT-2026-00418 · diferencia +33.50 m²', '10.4.5.7', 'Medio'],
   ['12/08/2026 11:20', 'vreto', 'Catastro', 'Modificación de ficha', '01-1042-0004 · área construida 136 → 198', '10.4.5.11', 'Medio'],

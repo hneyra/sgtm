@@ -110,7 +110,14 @@ const DESTINOS: [string, string][] = [
 const gruposDe = (id: string) => Object.keys(GRUPOS).filter((g) => GRUPOS[g].miembros.indexOf(id) >= 0);
 
 type Seleccion = { tipo: 'usuario' | 'grupo'; id: string };
-type CeldaDeMatriz = { nivel: Nivel; esPropio: boolean; esHeredado: boolean; on: boolean };
+type CeldaDeMatriz = {
+  nivel: Nivel;
+  esPropio: boolean;
+  esHeredado: boolean;
+  on: boolean;
+  /** Lo que el grupo daba y la excepcion propia le quita a este acceso. */
+  revocado: boolean;
+};
 type FilaDeMatriz = {
   acceso: Acceso;
   prop: Nivel[];
@@ -195,24 +202,35 @@ export default function Seguridad({ dest, onDest }: PantallaProps) {
     const filas: FilaDeMatriz[] = accesosVisibles.map((a) => {
       const prop = eff.editados[a.id] !== undefined ? eff.editados[a.id] : eff.propios[a.id] || [];
       const her = eff.heredados[a.id] || [];
+      /* **La excepcion SUSTITUYE al grupo, no se suma.** `ComprobadorDeAccesoJdbc`
+         lo documenta: si hay una fila propia para un acceso, esa fila decide
+         entera —otorgue o niegue— y lo del grupo no cuenta para ese acceso.
+         Sumarlos (`esPropio || esHeredado`) hace creer que marcar una casilla
+         AÑADE un privilegio, cuando marcar una sobre un acceso que el grupo
+         daba con cuatro deja uno y apaga los otros tres, en silencio. */
+      const hayExcepcion = prop.length > 0;
+      const vigentes = hayExcepcion ? prop : her;
       const celdas = NIVELES.map((n) => {
-        const esPropio = prop.indexOf(n) >= 0;
-        const esHeredado = her.indexOf(n) >= 0;
-        const on = esPropio || esHeredado;
-        if (esPropio) nPropios++;
-        if (esHeredado && !esPropio) nHeredados++;
-        if (on && n === 'Total') nTotales++;
-        return { nivel: n, esPropio, esHeredado, on };
+        const enExcepcion = prop.indexOf(n) >= 0;
+        const enGrupo = her.indexOf(n) >= 0;
+        const on = vigentes.indexOf(n) >= 0;
+        /* Lo que el grupo daba y la excepcion quita. Es lo que hay que ver
+           antes de guardar, no despues. */
+        const revocado = hayExcepcion && enGrupo && !enExcepcion;
+        if (on && hayExcepcion) nPropios++;
+        if (on && !hayExcepcion) nHeredados++;
+        if (on && n === 'Especial') nTotales++;
+        return { nivel: n, esPropio: on && hayExcepcion, esHeredado: on && !hayExcepcion, on, revocado };
       });
-      const soloHeredado = prop.length === 0 && her.length > 0;
-      const origen =
-        prop.length > 0 && her.length > 0
-          ? 'Propio y heredado'
-          : prop.length > 0
-            ? 'Propio'
-            : her.length > 0
-              ? 'Heredado'
-              : 'Sin permiso';
+      const soloHeredado = !hayExcepcion && her.length > 0;
+      const revocadosAqui = celdas.filter((c) => c.revocado).length;
+      const origen = hayExcepcion
+        ? revocadosAqui > 0
+          ? `Excepcion · quita ${revocadosAqui}`
+          : 'Excepcion propia'
+        : her.length > 0
+          ? 'Heredado del grupo'
+          : 'Sin permiso';
       return { acceso: a, prop, her, celdas, origen, soloHeredado, tenida: a.sensible && (prop.length > 0 || her.length > 0) };
     });
     return { filas, nPropios, nHeredados, nTotales };
@@ -248,13 +266,16 @@ export default function Seguridad({ dest, onDest }: PantallaProps) {
   }, [q]);
 
   /* ── Los riesgos del panel, derivados de los datos ──────────── */
+  /* Antes se llamaba «con nivel Total» y contaba un privilegio que no existe.
+     Cuenta `Especial`, que es lo que el dominio declara: el que abre lo que
+     ningun otro abre, y por eso interesa saber quien lo tiene. */
   const conTotal = useMemo(
     () =>
       Object.keys(USUARIOS).filter((u) => {
         const propios = USUARIOS[u].propios;
-        const enPropios = Object.keys(propios).some((a) => propios[a].indexOf('Total') >= 0);
+        const enPropios = Object.keys(propios).some((a) => propios[a].indexOf('Especial') >= 0);
         const enGrupos = gruposDe(u).some((g) =>
-          Object.keys(GRUPOS[g].permisos).some((a) => GRUPOS[g].permisos[a].indexOf('Total') >= 0),
+          Object.keys(GRUPOS[g].permisos).some((a) => GRUPOS[g].permisos[a].indexOf('Especial') >= 0),
         );
         return enPropios || enGrupos;
       }),
@@ -605,7 +626,7 @@ export default function Seguridad({ dest, onDest }: PantallaProps) {
                       [
                         ['Permisos propios', String(matriz.nPropios), 'var(--ink)'],
                         ['Heredados', String(matriz.nHeredados), 'var(--accent-ink)'],
-                        ['Con nivel Total', String(matriz.nTotales), matriz.nTotales > 0 ? 'var(--bad-fg)' : 'var(--ink-3)'],
+                        ['Con privilegio Especial', String(matriz.nTotales), matriz.nTotales > 0 ? 'var(--bad-fg)' : 'var(--ink-3)'],
                         ['Accesos mostrados', accesosVisibles.length + ' de ' + ACCESOS.length, 'var(--ink-3)'],
                       ] as [string, string, string][]
                     ).map((r) => (
