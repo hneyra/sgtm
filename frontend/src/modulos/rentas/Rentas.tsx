@@ -488,6 +488,7 @@ function TablaLeida<T>({
   estado,
   fila,
   vacia,
+  sinPreguntar,
   cuenta,
   pagina,
   irAPagina,
@@ -497,6 +498,8 @@ function TablaLeida<T>({
   fila: (x: T) => string[];
   /** Qué decir cuando la lectura fue bien y no trajo ninguna. */
   vacia: string;
+  /** Qué decir cuando la lectura NO se llegó a hacer, y por qué (#595). */
+  sinPreguntar: string;
   /** Cómo se cuenta lo que trajo: «3 predios», «1 vehículo». */
   cuenta: (n: number) => string;
   pagina: number;
@@ -508,11 +511,22 @@ function TablaLeida<T>({
      Pasarlo por `FalloDeLectura` lo rotularía «No se encontró …» en rojo junto
      a un botón de reintentar, y lo que hay que hacer no es insistir. */
   const noEstaEnElPadron = estado.error !== null && estado.error.codigo === 'NO_ENCONTRADO';
+  /* La lectura no se hizo: `useRecurso` con `activo=false` deja los tres
+     campos en reposo —sin datos, sin cargar, sin error—, que es EXACTAMENTE la
+     forma de una lectura que fue bien y trajo cero filas. Sin distinguirlas, la
+     tabla de un contribuyente que la ficha no resolvió decía «está en el padrón
+     y no tiene ninguno» debajo del aviso que acababa de decir que no está: las
+     dos cosas a la vez, y la de abajo falsa. Es el mismo defecto que #595
+     arregló un piso más abajo, en el backend, y que aquí seguía en pie porque
+     la interfaz ni siquiera llegaba a preguntar. */
+  const noSePregunto = estado.datos === null && !estado.cargando && estado.error === null;
   return (
     <div style={{ borderTop: '1px solid var(--line)' }}>
       <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap', padding: '11px 16px' }}>
         <p style={{ margin: 0, flex: 1, fontSize: 13, fontWeight: 500 }}>{tabla.titulo}</p>
-        <span style={META}>{estado.cargando ? 'consultando…' : estado.error !== null ? SIN_DATO : cuenta(total)}</span>
+        <span style={META}>
+          {estado.cargando ? 'consultando…' : estado.error !== null || noSePregunto ? SIN_DATO : cuenta(total)}
+        </span>
       </div>
       {noEstaEnElPadron && (
         <div style={{ padding: '0 16px 12px' }}>
@@ -533,7 +547,9 @@ function TablaLeida<T>({
             cols={tabla.cols}
             filas={filas}
             min={tabla.min}
-            vacia={estado.cargando ? 'Consultando el padrón…' : estado.error !== null ? undefined : vacia}
+            vacia={
+              estado.cargando ? 'Consultando el padrón…' : estado.error !== null ? undefined : noSePregunto ? sinPreguntar : vacia
+            }
           />
         </div>
       )}
@@ -668,8 +684,21 @@ export default function Rentas({ dest, onDest }: PantallaProps) {
    *
    * Las dos se piden con el código **que la ficha acaba de resolver** y no con
    * `sujeto`: así no se pregunta por alguien que la lectura anterior no
-   * encontró, y las tres respuestas de `/rentas/predios` quedan bien repartidas
-   * —el 404 pasa a ser el caso raro que se explica, no el corriente—.
+   * encontró, y las tres respuestas quedan bien repartidas —el 404 pasa a ser
+   * el caso raro que se explica, no el corriente—.
+   *
+   * **Y desde #595 las dos contestan lo mismo a la misma pregunta.** Hasta ese
+   * arreglo, `/rentas/vehiculos` daba `200` con cero filas para un código que
+   * no está en el padrón mientras `/rentas/predios` daba `404`, así que la
+   * misma sección afirmaba a la vez que la persona no existe y que existe y no
+   * tiene vehículos. Se piden con el mismo nombre de parámetro por lo mismo:
+   * `codContribuyente` en las dos.
+   *
+   * Cuando la ficha NO resuelve el código, las dos quedan `activo=false` y no
+   * se pide ninguna. Ese reposo lo dibuja `TablaLeida` con su propio texto: sin
+   * él es indistinguible de una lectura que trajo cero filas. El texto vale
+   * también para el expediente nuevo —que tampoco pregunta, porque todavía no
+   * hay a quién— y por eso no apunta al aviso de arriba, que ahí no está.
    *
    * Son dos lecturas y no una porque son dos padrones con dos permisos:
    * `predios_rentas` y `vehiculos`. Quien tenga uno y no el otro ve la tabla
@@ -2128,6 +2157,7 @@ export default function Rentas({ dest, onDest }: PantallaProps) {
                                   irAPagina={setPaginaDePredios}
                                   cuenta={(n) => `${n} ${n === 1 ? 'predio' : 'predios'}`}
                                   vacia="Este contribuyente está en el padrón y no tiene ningún predio inscrito a su nombre."
+                                  sinPreguntar="No se ha preguntado: sin un contribuyente del padrón abierto no hay de quién listar predios. Pasa con un expediente nuevo, que todavía no está en el padrón, y con un código que el padrón no reconoce."
                                   fila={(p: PredioDelContribuyente) => [
                                     p.codigoReferenciaCatastral,
                                     p.direccion,
@@ -2148,6 +2178,7 @@ export default function Rentas({ dest, onDest }: PantallaProps) {
                                   irAPagina={setPaginaDeVehiculos}
                                   cuenta={(n) => `${n} ${n === 1 ? 'vehículo' : 'vehículos'}`}
                                   vacia="Este contribuyente está en el padrón y no tiene ningún vehículo a su nombre."
+                                  sinPreguntar="No se ha preguntado: sin un contribuyente del padrón abierto no hay de quién listar vehículos. Pasa con un expediente nuevo, que todavía no está en el padrón, y con un código que el padrón no reconoce."
                                   fila={(v: VehiculoDelContribuyente) => [
                                     v.placa,
                                     v.clase ?? SIN_DATO,

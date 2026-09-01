@@ -164,23 +164,38 @@ export type VehiculoDelContribuyente = {
 /**
  * Los vehículos de un contribuyente.
  *
- * **El parámetro se llama `contribuyente` y NO admite `codContribuyente`**,
- * al revés que su hermana de predios, que acepta los dos nombres. Medido:
- * `?codContribuyente=C-000007` contesta `422 «Falta el parametro obligatorio
- * 'contribuyente'»`. Por eso aquí va como argumento y no como filtro suelto:
- * mandarlo con el otro nombre da un 422 que nombra un parámetro que quien lee
- * la pantalla no ha escrito.
+ * **Contesta lo mismo que su hermana de predios a la misma pregunta**, y hasta
+ * #595 no lo hacía. Medido de nuevo con el arreglo dentro:
  *
- * Y a diferencia de los predios, un código que no está en el padrón **no da
- * 404** sino `200` con cero filas (medido). La pantalla no puede distinguirlos
- * por aquí, y no le hace falta: sabe quién está abierto porque acaba de leerlo.
+ * <ul>
+ *   <li>`?codContribuyente=NO-EXISTE` → **`404 NO_ENCONTRADO`**, «En el padron
+ *       de esta municipalidad no hay ningun contribuyente con codigo
+ *       'NO-EXISTE'» —el mismo mensaje, palabra por palabra, que devuelve
+ *       `/rentas/predios`—;
+ *   <li>`?codContribuyente=C-000001` —del padrón, sin ningún vehículo— →
+ *       **`200` con cero filas**, que es lo único que de verdad significa «no
+ *       tiene».
+ * </ul>
+ *
+ * Antes las dos respuestas eran la segunda, así que las dos tablas de la misma
+ * sección decían cosas distintas de la misma persona: la de predios, «ese
+ * código no está en el padrón»; la de vehículos, una línea más abajo, «está en
+ * el padrón y no tiene ninguno». La segunda era falsa.
+ *
+ * **El parámetro se manda `codContribuyente`, el mismo nombre que los
+ * predios.** Desde #595 el backend admite los dos —`contribuyente` sigue
+ * valiendo— y uno de los dos es obligatorio; se elige el del prototipo, que es
+ * el que ya usa la lectura hermana. Dos nombres para lo mismo dentro de una
+ * sección es como empiezan estos defectos: el día que uno de los dos deje de
+ * admitirse, el 422 nombraría un parámetro que quien lee la pantalla no ha
+ * escrito.
  */
 export function listarVehiculosDelContribuyente(
-  contribuyente: string,
+  codContribuyente: string,
   paginacion: Paginacion,
   senal?: AbortSignal,
 ): Promise<RespuestaPaginada<VehiculoDelContribuyente>> {
-  return solicitar('/rentas/vehiculos', { parametros: { contribuyente, ...paginacion }, senal });
+  return solicitar('/rentas/vehiculos', { parametros: { codContribuyente, ...paginacion }, senal });
 }
 
 /* ══════════ Escrituras ══════════
