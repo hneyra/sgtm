@@ -124,6 +124,7 @@ class ProyeccionDelSaldoTest {
                         "EM-2026-0001",
                         null,
                         null,
+                        null,
                         null);
 
         assertThat(ProyeccionDelSaldo.de(List.of(sinPeriodo), CALCULO))
@@ -153,7 +154,8 @@ class ProyeccionDelSaldoTest {
                 "EM-2026-0001",
                 null,
                 null,
-                concepto.exigeMotivo() ? "motivo de la prueba" : null);
+                concepto.exigeMotivo() ? "motivo de la prueba" : null,
+                null);
     }
 
     private static Asiento conFase(Asiento asiento, Fase fase) {
@@ -174,6 +176,7 @@ class ProyeccionDelSaldoTest {
                 asiento.documentoOrigen(),
                 asiento.asientoReversadoId(),
                 asiento.usuarioId(),
-                asiento.motivo());
+                asiento.motivo(),
+                asiento.acto());
     }
 }

@@ -3815,7 +3815,7 @@ function memoriaDelVehicular(c: CalculoVehicular): LineaDeMemoria[] {
       '=',
       'Base imponible — el mayor de los dos',
       unico === undefined ? 'Son varios vehículos: la base de cada uno está en la tabla' : `Vehículo ${unico.placa}`,
-      unico?.valorReferencial ?? SIN_CIFRA_DEL_SERVIDOR,
+      unico?.baseImponible ?? SIN_CIFRA_DEL_SERVIDOR,
       'sub',
     ],
     ['×', 'Alícuota del ejercicio', 'Del conjunto sellado, como todo lo que multiplica un importe', `${c.alicuota} %`, undefined, ''],
@@ -3880,7 +3880,7 @@ function filasDeLaDeterminacion(
     return resultado.datos.determinaciones.map((d) => [
       d.placa,
       d.ejercicio,
-      d.valorReferencial,
+      d.baseImponible,
       `${alicuota} %`,
       d.montoDeterminado,
       d.simulacion ? 'SIMULADA' : 'ASENTADA',
@@ -3929,7 +3929,7 @@ function totalesDeLaDeterminacion(
        tres determinaciones que esta operación no hace —determina UNO— (RNF-083). */
     const unico = resultado.datos.determinaciones.length === 1 ? resultado.datos.determinaciones[0] : undefined;
     return [
-      ['Base imponible', unico?.valorReferencial ?? SIN_CIFRA_DEL_SERVIDOR, 0],
+      ['Base imponible', unico?.baseImponible ?? SIN_CIFRA_DEL_SERVIDOR, 0],
       ['Impuesto anual', unico?.montoDeterminado ?? SIN_CIFRA_DEL_SERVIDOR, 0],
       ['Cuota trimestral', SIN_CIFRA_DEL_SERVIDOR, 0],
       ['Total tres ejercicios', SIN_CIFRA_DEL_SERVIDOR, 1],

@@ -268,6 +268,43 @@ const SUPRIMIDOS = {
   // paginacion los pone el generador a toda lectura con tabla, y aqui no hay
   // ninguna que paginar. `fechaDeConsulta`, que si se lee y es el parametro de la
   // regla 9, se declara en DEL_BACKEND.
+  // `POST /rentas/predial/calculo-individual` declara tres filtros de la
+  // DECLARACION JURADA que motiva la determinacion —«DJ N°», «Tipo de
+  // declaracion», «Fecha de declaracion»— y `PredialController.calcular` no lee
+  // ninguno (#576). Medido: con `djN=ZZZ` contesta exactamente lo mismo.
+  //
+  // Y no se cierra haciendo que los lea, porque **acotar por declaracion jurada
+  // no es filtrar esta operacion: es calcular otra cosa**. La base del predial es
+  // POR CONTRIBUYENTE y no por predio (NEG-05 §1): los tramos progresivos se
+  // aplican al conjunto de sus predios, y calcularlo sobre los de una sola
+  // declaracion produce el mismo error sistematico a la baja que NEG-05 advierte
+  // —y la cifra que sale es plausible: nadie la distinguiria de la correcta—.
+  //
+  // La pantalla los dibuja porque el manual los dibuja: son los datos de la DJ
+  // que se esta atendiendo, no un criterio de calculo. Quien quiera acotar la
+  // determinacion a una declaracion no quiere un filtro, quiere otra operacion.
+  predial_individual: ['djN', 'tipoDeDeclaracion', 'fechaDeDeclaracion'],
+  // `POST /rentas/espectaculos` declara los cuatro filtros de una BUSQUEDA
+  // —«Nº de expediente», «Organizador», «Desde», «Hasta»— y
+  // `EspectaculoController.registrar` solo tiene `@RequestBody` (#576).
+  //
+  // No hay a que ruta sumarlos: **ninguna lectura del contrato lista los
+  // espectaculos declarados**, que es lo que #432 dejo medido al bloquear esos
+  // mismos cuatro en la pantalla. Un filtro de busqueda declarado sobre el POST
+  // que registra no acota nada ni podria: lo que ese POST recibe es un
+  // espectaculo, no una consulta.
+  //
+  // Vuelven el dia que exista la lectura, y entonces seran suyos y no de este
+  // acto — igual que los tres de `fisc_vehicular`.
+  espectaculos: ['nDeExpediente', 'organizador', 'desde', 'hasta'],
+  // Y `alcabala` SIGUE sin declarar ninguno, que es lo correcto y conviene
+  // dejarlo dicho (#576 AC 4): sus tres filtros del manual —«Nº de
+  // liquidacion», «Nº de expediente», «Fecha de la transferencia»— no tienen a
+  // que ruta sumarse, porque **ninguna lectura del contrato lista las
+  // transferencias**. #432 lo midio: rentas declara los dos POST que las
+  // registran y `/fiscalizacion/transferencias`, que es otra cosa. Publicar esa
+  // lectura es su propio issue; hasta entonces, no declarar nada es la unica
+  // respuesta honesta.
   fisc_estado_cuenta: [
     'tipoDePapeleta',
     'papeleta',
@@ -577,6 +614,47 @@ const DEL_BACKEND = {
  * pantalla que todavia no la tiene.
  */
 const DESCRIPCIONES = {
+  // Rentas · Determinaciones (#577)
+  vehicular_calculo: bloque(`
+    Determina —o simula— el impuesto al patrimonio vehicular de **un ejercicio**, sobre los
+    vehículos que el criterio elija: una placa, o todos los del contribuyente.
+
+    **Un ejercicio, no tres.** La descripción de esta operación prometía «por los tres ejercicios
+    en que el vehículo permanece afecto» y devolvía una determinación por vehículo del ejercicio
+    pedido (#577). Los tres ejercicios son la **afectación** —estructural, y \`GET
+    /rentas/vehiculos\` ya la publica como \`afectoDesde\`/\`afectoHasta\`—, no el alcance de este
+    cálculo: determinar tres a la vez asentaría tres deudas por un botón que dice «Calcular». Cada
+    fila de la respuesta dice de qué vehículo es, con su \`placa\`.
+
+    **\`baseImponible\` se llamaba \`valorReferencial\` y no lo era**: es el mayor entre el valor
+    de adquisición y el referencial del MEF (art. 32 LTM). Los dos operandos que la memoria del
+    cálculo compara no viajan, porque la determinación guarda la base y no de qué salió.
+
+    La marca \`simulacion\` del cuerpo es **obligatoria** y distingue calcular de asentar: no hay
+    omisión segura en ninguna de las dos direcciones.
+  `),
+  // Rentas · Determinaciones (#577)
+  predial_masivo: bloque(`
+    Recalcula el padrón declarado del ejercicio y deja constancia de los contribuyentes
+    **observados** que quedan fuera de la emisión (#523).
+
+    El \`alcance\` admite las **cuatro** palabras que el manual dibuja, letra por letra (#577):
+
+    - \`TODOS\` — todo el padrón declarado del ejercicio.
+    - \`SECTOR\` — los que tienen al menos un predio en el sector; exige \`sector\`. Se determina
+      igual sobre **todos** sus predios: la base es del contribuyente (NEG-05 §1) y recortarla al
+      sector produciría un error a la baja. El sector elige a quién se emite, no qué se le cobra.
+    - \`RANGO_DE_CODIGO\` — los que caen en un tramo de código de contribuyente; exige
+      \`codigoDesde\` y \`codigoHasta\`, extremos incluidos. Se compara como texto, que es el orden
+      con que la pantalla lista el padrón.
+    - \`OBSERVADOS\` — los que la **última corrida del ejercicio** dejó observados. Sin corrida
+      previa no recorre a nadie, y eso es lo correcto: «ninguno quedó observado» y «todavía no se
+      ha corrido» son dos cosas distintas.
+
+    Los dos interruptores que la pantalla dibuja y esta corrida no hace —arbitrios y cuponera— se
+    **rechazan** con 422 en vez de ignorarse: una corrida «correcta» a quien pidió además los
+    arbitrios sólo se notaría al buscar los recibos que nadie generó.
+  `),
   // Seguridad (#543)
   permisos: bloque(`
     Fija los niveles de accesibilidad de un grupo (RF-121). Recibe la lista **completa** de
@@ -994,6 +1072,46 @@ const OPERACIONES_ADICIONALES = {
         (REQ-03 §5). Un usuario sin ningún permiso recibe \`{}\`, no un 403.
       `),
     },
+    // Y QUIEN es la sesion (#559). Vive aqui por lo mismo que las otras dos
+    // —no es una opcion del catalogo, sino la sesion hablando de si misma— y no
+    // por afinidad con los permisos.
+    {
+      operationId: 'identidad_de_la_sesion',
+      metodo: 'get',
+      ruta: '/api/v1/seguridad/sesion',
+      titulo: 'Quién es la sesión',
+      descripcion: literal(`
+        La persona autenticada, ya resuelta a la fila de \`usuario\` de **esta**
+        municipalidad: su \`usuarioId\`, su \`cuenta\`, su \`nombre\` y el ejercicio de
+        trabajo que tenga registrado.
+
+        **El \`usuarioId\` es lo que ninguna otra lectura publicaba.**
+        \`PUT /seguridad/usuarios/{id}/clave\` sólo admite la clave propia —el servidor
+        compara la cuenta del token con la del usuario que ese \`id\` nombra—, y hasta
+        aquí la interfaz no sabía cuál era el suyo: las dos únicas operaciones que
+        publican un \`usuario.id\` son el listado de usuarios y la matriz de otro, las
+        dos detrás de un permiso de administración mucho mayor que «cambiar mi propia
+        contraseña».
+
+        **Sin ningún parámetro, y eso es la decisión.** El sujeto sale de la cuenta del
+        token y se resuelve dentro del contexto de tenant. Con un identificador esto
+        sería el padrón de usuarios sin su permiso, y devolvería el \`id\` de otro —que
+        es justo lo que la guarda del cambio de clave existe para rechazar—. Un
+        parámetro de más se rechaza con 422 nombrándolo.
+
+        Autenticada, pero **no es una opción del catálogo**: leer quién es uno mismo no
+        revela nada que no revele el token que ya se presentó. Cualquier sesión válida
+        la lee, tenga los permisos que tenga — el mismo trato que
+        \`permisos_de_la_sesion\` y \`municipalidad_de_la_sesion\` (ADR-0013).
+
+        \`ejercicioDeTrabajo\` es **nulo** mientras nadie lo haya fijado con
+        \`PUT /seguridad/sesion/ejercicio\`, y eso no es una falta de dato: es la
+        respuesta. El año del reloj del servidor ahí afirmaría que alguien lo eligió, y
+        lo que hay que poder separar es exactamente eso — el filtro de vista, que es
+        local y no necesita permiso, del acto registrado con su observación y su
+        privilegio \`ESPECIAL\` sobre \`cambiar_anio\`.
+      `),
+    },
     // Y a QUIEN pertenece la sesion (#555). Vive aqui por lo mismo que
     // `permisos_de_la_sesion` —no es una opcion del catalogo, sino la sesion
     // hablando de si misma— y no por afinidad con los permisos.
@@ -1403,6 +1521,50 @@ const OPERACIONES_ADICIONALES = {
   // Ninguno recibe el número de la DJ en el cuerpo: lo pone el sistema, con el
   // correlativo de `dj_correlativo` y la plantilla parametrizada de D-09.
   declaracion_jurada: [
+    {
+      operationId: 'hoja_de_declaracion_jurada',
+      metodo: 'get',
+      ruta: '/api/v1/rentas/declaraciones/{djNro}/hoja',
+      titulo: 'Hoja resumen de la declaración jurada',
+      parametros: [
+        { nombre: 'djNro', en: 'path', requerido: true, descripcion: 'Número de la declaración' },
+        {
+          nombre: 'ano',
+          requerido: true,
+          ejemplo: '2026',
+          descripcion: 'Ejercicio de la declaración',
+        },
+        {
+          nombre: 'fecha',
+          ejemplo: '2026-03-01',
+          descripcion:
+            'Fecha de corte a la que se resuelven el domicilio y la titularidad (regla 9); si' +
+            ' falta, hoy',
+        },
+      ],
+      descripcion: bloque(`
+        Lo que la hoja resumen consigna: el **declarante** —código, nombre, documento y domicilio
+        fiscal **vigente a la fecha**—, sus **predios** con su % de propiedad, y las **cifras** de
+        la última determinación predial del ejercicio (#563).
+
+        Es el único documento del módulo pensado para **imprimirse y firmarse** —termina en
+        «Declaro bajo juramento…» y dos líneas de firma— y todo lo que consignaba venía del juego
+        de datos de la maqueta: el nombre y el DNI de otra persona, dos predios que no son suyos y
+        un «total a pagar». Una vez impresa y firmada, una hoja así **no se distingue de una
+        correcta**, y a diferencia de una pantalla nadie la vuelve a mirar contra la base.
+
+        **Un campo nulo es un campo que no hay.** Sin determinación del ejercicio no hay autovalúo,
+        ni valúo afecto, ni impuesto: publicar cero sería escribir «no debe nada» en un papel que
+        alguien firma. Y ni siquiera con determinación viajan el **derecho de emisión** y el
+        **total a pagar**: la determinación guarda la base y el impuesto, no el derecho, que es
+        \`DERECHO_EMISION_PREDIAL\` del conjunto sellado —cifra de ordenanza local, D-02b—.
+
+        \`faltan\` es una **lista de motivos**, no un booleano: «no se puede imprimir» sin decir por
+        qué es lo que hace que alguien lo imprima igual desde otro sitio.
+
+        Una declaración que no existe es **404**, no una hoja vacía.
+      `),
+    },
     {
       operationId: 'presentar_declaracion_jurada',
       metodo: 'post',

@@ -143,6 +143,16 @@ class ActoCoactivoControllerTest {
     private final MockMvc mvcPagado = montar(consultaSinDeuda);
 
     private MockMvc montar(ConsultaDeExpedientes cual) {
+        return montar(cual, plazos);
+    }
+
+    /**
+     * El mismo borde con otro lector de plazos detras, para las tres rutas que lo leen (#562).
+     *
+     * <p>El conjunto sellado se resuelve al pedir el plazo, asi que la unica forma de probar «no
+     * hay ningun conjunto» es montar el borde otra vez con un lector que lo diga.
+     */
+    private MockMvc montar(ConsultaDeExpedientes cual, PlazosCoactivosParametrizados losPlazos) {
         return MockMvcBuilders.standaloneSetup(
                         new ActoCoactivoController(
                                 new RegistrarActoCoactivo(
@@ -153,7 +163,7 @@ class ActoCoactivoControllerTest {
                                         cual,
                                         valores,
                                         contribuyentes,
-                                        plazos,
+                                        losPlazos,
                                         documentos,
                                         (RegistroDeAuditoria registro) -> {},
                                         RELOJ),
@@ -162,7 +172,7 @@ class ActoCoactivoControllerTest {
                                         diligencias,
                                         expedientes,
                                         movimientos,
-                                        plazos,
+                                        losPlazos,
                                         (RegistroDeAuditoria registro) -> {},
                                         RELOJ),
                                 new ReimprimirActoCoactivo(actos, expedientes, documentos),
@@ -556,7 +566,169 @@ class ActoCoactivoControllerTest {
         }
     }
 
+    @Nested
+    @DisplayName("#562 — lo que falta publicar es 422, no 500 con incidencia")
+    class LoQueFaltaPublicar {
+
+        @Test
+        @DisplayName("dictar un acto sin ningun conjunto sellado, 422 y nombra el ejercicio")
+        void dictarSinConjuntoSellado() throws Exception {
+            MvcResult resultado = dictarRec1Con(sinSellar());
+
+            assertThat(resultado.getResponse().getStatus())
+                    .as("no es que el servidor este roto: es que nadie ha sellado 2026 (D-02a)")
+                    .isEqualTo(422);
+            String cuerpo = resultado.getResponse().getContentAsString();
+            assertThat(cuerpo).contains("VALIDACION").contains("2026");
+            assertThat(cuerpo)
+                    .as("un 500 traeria identificador de incidencia; esto no es una incidencia")
+                    .doesNotContain("incidencia");
+        }
+
+        @Test
+        @DisplayName("y con el conjunto sellado y sin la llave sigue nombrando la llave (#41)")
+        void dictarSinLaLlave() throws Exception {
+            MvcResult resultado = dictarRec1Con(sinElPlazo());
+
+            assertThat(resultado.getResponse().getStatus()).isEqualTo(422);
+            assertThat(resultado.getResponse().getContentAsString())
+                    .as("hay conjunto y le falta una cifra: lo que se nombra es la llave")
+                    .contains("PLAZO:REC1_CUMPLIMIENTO")
+                    .doesNotContain("incidencia");
+        }
+
+        @Test
+        @DisplayName("notificar la REC-1 sin conjunto sellado, 422 y nombra el ejercicio")
+        void notificarSinConjuntoSellado() throws Exception {
+            emitirRec("REC1", null, null);
+
+            MvcResult resultado =
+                    montar(consulta, sinSellar())
+                            .perform(
+                                    MockMvcRequestBuilders.post("/api/v1/coactiva/notificaciones")
+                                            .contentType(MediaType.APPLICATION_JSON)
+                                            .content(cuerpoDeLaDiligencia()))
+                            .andReturn();
+
+            assertThat(resultado.getResponse().getStatus()).isEqualTo(422);
+            String cuerpo = resultado.getResponse().getContentAsString();
+            assertThat(cuerpo).contains("VALIDACION").contains("2026").doesNotContain("incidencia");
+        }
+
+        @Test
+        @DisplayName("emitir la REC en lote lo dice expediente por expediente, no revienta")
+        void emitirLaRecEnLoteLoDiceExpedientePorExpediente() throws Exception {
+            MvcResult resultado =
+                    montar(consulta, sinSellar())
+                            .perform(
+                                    MockMvcRequestBuilders.post("/api/v1/coactiva/rec/impresion")
+                                            .contentType(MediaType.APPLICATION_JSON)
+                                            .content(
+                                                    "{\"expedientes\":[\"EXP-2026-000001\"],"
+                                                            + "\"rec\":\"REC1\",\"observacion\":\"Se"
+                                                            + " emite la REC\"}"))
+                            .andReturn();
+
+            assertThat(resultado.getResponse().getStatus())
+                    .as(
+                            "esta ruta emite un lote: lo que el dominio sabe explicar sale como"
+                                    + " expediente rechazado con su motivo, no como un 500 que se"
+                                    + " lleva por delante los otros diecinueve")
+                    .isEqualTo(200);
+            String cuerpo = resultado.getResponse().getContentAsString();
+            assertThat(cuerpo).contains("\"expediente\":\"EXP-2026-000001\"").contains("2026");
+            assertThat(cuerpo).doesNotContain("incidencia");
+        }
+
+        @Test
+        @DisplayName("y ninguna de las tres escribe una incidencia en el registro de errores")
+        void loQueFaltaPublicarNoEnsuciaElRegistro() throws Exception {
+            ch.qos.logback.classic.Logger registro =
+                    (ch.qos.logback.classic.Logger)
+                            org.slf4j.LoggerFactory.getLogger(ManejadorDeErrores.class);
+            ch.qos.logback.core.read.ListAppender<ch.qos.logback.classic.spi.ILoggingEvent>
+                    anotados = new ch.qos.logback.core.read.ListAppender<>();
+            anotados.start();
+            registro.addAppender(anotados);
+            try {
+                dictarRec1Con(sinSellar());
+                montar(consulta, sinSellar())
+                        .perform(
+                                MockMvcRequestBuilders.post("/api/v1/coactiva/rec/impresion")
+                                        .contentType(MediaType.APPLICATION_JSON)
+                                        .content(
+                                                "{\"expedientes\":[\"EXP-2026-000001\"],"
+                                                        + "\"rec\":\"REC1\",\"observacion\":\"Se emite"
+                                                        + " la REC\"}"));
+            } finally {
+                registro.detachAppender(anotados);
+            }
+
+            assertThat(
+                            anotados.list.stream()
+                                    .filter(e -> e.getLevel() == ch.qos.logback.classic.Level.ERROR)
+                                    .toList())
+                    .as(
+                            "es la mitad del defecto que la respuesta no ensena: con D-02a abierta"
+                                    + " esto pasa en TODAS las municipalidades, y el registro de"
+                                    + " incidencias es para defectos, no para cifras sin publicar")
+                    .isEmpty();
+        }
+
+        @Test
+        @DisplayName("lo que SI es un fallo del servidor sigue siendo 500 con su incidencia")
+        void loQueSiEsInternoNoSeDisfraza() throws Exception {
+            MvcResult resultado = dictarRec1Con(conUnPlazoIlegible());
+
+            assertThat(resultado.getResponse().getStatus())
+                    .as(
+                            "traducir lo que falta publicar no puede convertir TODO en 422: un"
+                                    + " plazo sellado que no se puede leer es un dato que hay que"
+                                    + " investigar")
+                    .isEqualTo(500);
+            assertThat(resultado.getResponse().getContentAsString()).contains("incidencia");
+        }
+
+        // --------------------------------------------------------------
+
+        private MvcResult dictarRec1Con(PlazosCoactivosParametrizados losPlazos) throws Exception {
+            return montar(consulta, losPlazos)
+                    .perform(
+                            MockMvcRequestBuilders.post(
+                                            "/api/v1/coactiva/expedientes/EXP-2026-000001/actos")
+                                    .contentType(MediaType.APPLICATION_JSON)
+                                    .content(
+                                            "{\"tipo\":\"REC1\",\"glosa\":\"Se inicia la"
+                                                    + " cobranza\",\"observacion\":\"Se dicta la"
+                                                    + " REC-1\"}"))
+                    .andReturn();
+        }
+
+        private String cuerpoDeLaDiligencia() {
+            return "{\"acto\":\"REC1-2026-000001\",\"fecha\":\""
+                    + DILIGENCIA
+                    + "\",\"modalidad\":\"PERSONAL\",\"resultado\":\"NOTIFICADO\","
+                    + "\"notificador\":\"J. RUIZ PALACIOS\",\"receptor\":\"TITULAR, PRUEBA\","
+                    + "\"observacion\":\"Se diligencio\"}";
+        }
+    }
+
     // ------------------------------------------------------------------
+
+    /** Ningun conjunto sellado rige el ejercicio: lo que ocurre hoy en todas (D-02a). */
+    private static PlazosCoactivosParametrizados sinSellar() {
+        return new PlazosCoactivosParametrizados(new PlazosDeMentira(null).sinSellar());
+    }
+
+    /** Hay conjunto y le falta la llave del plazo: el caso que #41 ya traducia. */
+    private static PlazosCoactivosParametrizados sinElPlazo() {
+        return new PlazosCoactivosParametrizados(new PlazosDeMentira(null));
+    }
+
+    /** Un plazo sellado que no se puede leer como plazo: eso si hay que investigarlo. */
+    private static PlazosCoactivosParametrizados conUnPlazoIlegible() {
+        return new PlazosCoactivosParametrizados(new PlazosDeMentira("no es un plazo"));
+    }
 
     /**
      * A que dia esta la deuda que se imprimio en ese papel.

@@ -46,6 +46,26 @@ import pe.gob.sgtm.web.ProblemaDeNegocio;
  * <p>Y es tambien lo que hace que <b>quebrar un convenio coactivo devuelva la deuda a COACTIVA</b>
  * sin una linea de codigo especifica: el quiebre es el de #35 y lee {@code
  * convenio_deuda.fase_origen}.
+ *
+ * <h2>Que devuelve 422, y por que no 500 (#562)</h2>
+ *
+ * <p>El cronograma no se puede armar sin el interes de fraccionamiento, sin el maximo de cuotas y
+ * sin la politica con que se redondea cada cuota, y las tres salen del <b>conjunto sellado</b> del
+ * ejercicio del convenio (regla 5). Que falte cualquiera de ellas <b>no es un fallo del
+ * servidor</b>: es una cifra que todavia nadie ha publicado, y con D-02a y D-03c abiertas es el
+ * estado <i>normal</i> del sistema. Hasta #562 ninguna de las seis estaba traducida aqui —este era
+ * el peor de los cinco endpoints coactivos del censo— y salian como <b>500 {@code ERROR_INTERNO}
+ * con identificador de incidencia</b>, con lo que el fraccionamiento coactivo entero era
+ * inalcanzable y cada intento dejaba una incidencia de nivel ERROR en el registro.
+ *
+ * <p><b>Se captura una sola excepcion, {@code CondicionesSinPublicar}, y no las seis.</b> Las seis
+ * viven en {@code tesoreria.aplicacion} y en {@code parametros}; las de tesoreria estan en un
+ * subpaquete, asi que nombrarlas aqui seria depender de un tipo no expuesto y Spring Modulith lo
+ * rechaza (#51). Se traducen en la frontera del modulo —{@code FraccionamientoCoactivoTesoreria}—
+ * conservando el mensaje, que es el que nombra la llave o el ejercicio.
+ *
+ * <p>Un fallo de verdad del servidor sigue siendo 500 con su incidencia, y hay una prueba de
+ * contraste que lo mide: una traduccion demasiado ancha es peor que el defecto que arregla.
  */
 @RestController
 @RequestMapping(Api.RAIZ + "/coactiva")
@@ -107,7 +127,11 @@ public class ConvenioCoactivoController {
             throw new ProblemaDeNegocio(CodigoDeError.CONFLICTO, mensajeDe(enConflicto));
         } catch (FraccionarEnCoactiva.DeudaAjenaAlProcedimiento
                 | FraccionamientoCoactivo.SinDeudaCoactivaQueFraccionar
+                | FraccionamientoCoactivo.CondicionesSinPublicar
                 | IllegalArgumentException invalido) {
+            // `CondicionesSinPublicar` no es un fallo del servidor: es que nadie ha publicado
+            // todavia el interes, el maximo de cuotas o la politica de redondeo del ejercicio
+            // (D-02a, D-03c). Ver la cabecera de la clase (#562).
             throw new ProblemaDeNegocio(CodigoDeError.VALIDACION, mensajeDe(invalido));
         }
     }

@@ -31,6 +31,7 @@ import pe.gob.sgtm.dominio.Ejercicio;
 import pe.gob.sgtm.dominio.ModalidadDeNotificacion;
 import pe.gob.sgtm.dominio.Observacion;
 import pe.gob.sgtm.dominio.ResultadoDeNotificacion;
+import pe.gob.sgtm.parametros.LectorDeParametros;
 import pe.gob.sgtm.valores.aplicacion.ConsultaDeValores;
 import pe.gob.sgtm.valores.aplicacion.IniciarCorridaMasiva;
 import pe.gob.sgtm.valores.aplicacion.PasarACoactiva;
@@ -64,6 +65,37 @@ import pe.gob.sgtm.web.RespuestaPaginada;
  * deuda de cada candidato y emitir su valor- corre en el perfil batch (ADR-0003), aparte de esta
  * peticion web, para que una corrida de miles de contribuyentes no compita con la caja por el mismo
  * proceso.
+ *
+ * <h2>Que devuelve 422, y por que no 500 (#562)</h2>
+ *
+ * <p>La notificacion de un valor no se puede registrar sin el plazo de reclamacion que le
+ * corresponde, y ese plazo sale del <b>conjunto sellado</b> que rige a la fecha de la diligencia
+ * ({@link PlazosParametrizados}, regla 5). Que el conjunto exista y no traiga la llave ({@code
+ * PlazoSinParametrizar}) ya estaba traducido desde #192; que <b>no exista ningun conjunto
+ * sellado</b> ({@code EjercicioSinSellar}) no lo estaba, y con D-02a abierta ese es el estado
+ * <i>normal</i> de todas las municipalidades: caia en el {@code @ExceptionHandler(Exception.class)}
+ * de {@code ManejadorDeErrores} y salia como <b>500 {@code ERROR_INTERNO} con identificador de
+ * incidencia</b>.
+ *
+ * <p>Son las dos consecuencias que #540 midio en Rentas y #547 en Tesoreria: la interfaz no puede
+ * distinguir «falta publicar una cifra» —que se arregla publicandola— de «el servidor esta roto»
+ * —que se arregla llamando a alguien—, y un cliente que reintenta un 500 reintenta para siempre; y
+ * cada intento <b>escribia una incidencia de nivel ERROR en el registro</b>, o sea el registro de
+ * errores del servidor lleno de lo que no es un error.
+ *
+ * <p>El mensaje es el de la propia excepcion: ya esta redactado en lenguaje del dominio y nombra la
+ * llave —{@code PLAZO:NOTIFICACION_VALOR-OP}— o, cuando lo que falta es el conjunto entero y no hay
+ * llave que nombrar, el <b>ejercicio</b>; sin tabla, sin restriccion y sin SQL (RNF-033).
+ *
+ * <p>Lo que <b>no</b> cambia: un fallo de verdad del servidor sigue siendo 500 con su incidencia.
+ * Una traduccion demasiado ancha —capturar {@code RuntimeException}— es peor que el defecto que
+ * arregla, y hay una prueba de contraste que lo mide con un plazo sellado ilegible.
+ *
+ * <p>La traduccion vive aqui y no en {@code ManejadorDeErrores} porque {@code pe.gob.sgtm.web} esta
+ * en {@code sgtm-plataforma}, que no depende —ni debe— de {@code sgtm-parametros}, que es un
+ * contexto acotado; y porque la eleccion de codigo no es uniforme en el sistema, asi que decidirla
+ * en un sitio unico decidiria tambien por catastro, que traduce la misma excepcion a 404 a
+ * proposito.
  */
 @RestController
 @RequestMapping(Api.RAIZ + "/valores")
@@ -219,7 +251,10 @@ public class ValoresController {
         } catch (RegistrarNotificacion.DiligenciaAnteriorALaEmision
                 | RegistrarNotificacion.SinDomicilio
                 | PlazosParametrizados.PlazoSinParametrizar
+                | LectorDeParametros.EjercicioSinSellar
                 | IllegalArgumentException invalido) {
+            // `EjercicioSinSellar` no es un fallo del servidor: es que nadie ha sellado todavia
+            // el conjunto del ejercicio de la diligencia (D-02a). Ver la cabecera de la clase.
             throw new ProblemaDeNegocio(CodigoDeError.VALIDACION, mensajeDe(invalido));
         }
     }

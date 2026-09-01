@@ -2414,6 +2414,11 @@
       "condicionEspecial": "texto",
       "activo": "booleano"
     },
+    "datosPersonales": {
+      "fechaNacimiento": "fecha",
+      "estadoCivil": "texto",
+      "conyugeId": "entero"
+    },
     "aLaFecha": "fecha",
     "domicilioFiscal": {
       "id": "entero",
@@ -2483,6 +2488,46 @@
     "fueraDePlazo": "booleano",
     "estado": "texto",
     "djRectificaId": "entero"
+  },
+  "GET /rentas/declaraciones/{djNro}/hoja": {
+    "declaracion": {
+      "id": "entero",
+      "numero": "texto",
+      "ejercicio": "entero",
+      "tipo": "texto",
+      "predioId": "entero",
+      "vehiculoId": "entero",
+      "fichaCatastralId": "entero",
+      "fechaPresentacion": "texto",
+      "fechaLimite": "texto",
+      "fueraDePlazo": "booleano",
+      "estado": "texto",
+      "djRectificaId": "entero"
+    },
+    "aLaFecha": "fecha",
+    "declarante": {
+      "codigo": "texto",
+      "nombre": "texto",
+      "documento": "texto",
+      "domicilioFiscal": "texto"
+    },
+    "predios": [
+      {
+        "predioId": "entero",
+        "codRefCatastral": "texto",
+        "direccion": "texto",
+        "tipo": "texto",
+        "porcentajePropiedad": "texto",
+        "autovaluo": "texto",
+        "valuoExonerado": "texto",
+        "valuoAfecto": "texto"
+      }
+    ],
+    "valuoAfectoTotal": "texto",
+    "impuestoInsoluto": "texto",
+    "faltan": [
+      "texto"
+    ]
   },
   "GET /rentas/predial/corridas/ultima": {
     "id": "entero",
@@ -2686,6 +2731,12 @@
     "totalElementos": "entero",
     "totalPaginas": "entero",
     "hayMas": "booleano"
+  },
+  "GET /seguridad/sesion": {
+    "usuarioId": "entero",
+    "cuenta": "texto",
+    "nombre": "texto",
+    "ejercicioDeTrabajo": "entero"
   },
   "GET /seguridad/sesion/municipalidad": {
     "id": "entero",
@@ -5408,7 +5459,7 @@
         "vehiculoId": "entero",
         "placa": "texto",
         "contribuyenteId": "entero",
-        "valorReferencial": "texto",
+        "baseImponible": "texto",
         "montoDeterminado": "texto",
         "simulacion": "booleano"
       }

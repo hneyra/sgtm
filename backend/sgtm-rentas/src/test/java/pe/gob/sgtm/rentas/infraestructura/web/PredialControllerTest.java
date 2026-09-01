@@ -389,6 +389,133 @@ class PredialControllerTest {
         assertThat(resultado.getResponse().getContentAsString()).contains("sector");
     }
 
+    // ------------------------------------------- los cuatro alcances (#577)
+
+    @Test
+    @DisplayName("un alcance que no esta en la lista se rechaza, y la lista sale entera")
+    void unAlcanceDesconocidoSeRechaza() throws Exception {
+        MvcResult resultado =
+                mvc.perform(
+                                post("/api/v1/rentas/predial/calculo-masivo")
+                                        .contentType(MediaType.APPLICATION_JSON)
+                                        .content(
+                                                "{\"simulacion\":true,\"alcance\":\"TODO EL"
+                                                        + " PADRON\"}"))
+                        .andReturn();
+
+        assertThat(resultado.getResponse().getStatus())
+                .as(
+                        "«TODO EL PADRON» es el rotulo del desplegable y NO es la palabra que este"
+                                + " servicio admite: parecerse no es serlo (#427)")
+                .isEqualTo(422);
+        assertThat(resultado.getResponse().getContentAsString())
+                .contains("TODOS")
+                .contains("SECTOR")
+                .contains("RANGO_DE_CODIGO")
+                .contains("OBSERVADOS");
+    }
+
+    @Test
+    @DisplayName("el alcance por rango sin sus dos extremos se rechaza: seria la corrida entera")
+    void elRangoSinSusExtremosSeRechaza() throws Exception {
+        MvcResult resultado =
+                mvc.perform(
+                                post("/api/v1/rentas/predial/calculo-masivo")
+                                        .contentType(MediaType.APPLICATION_JSON)
+                                        .content(
+                                                "{\"simulacion\":true,\"alcance\":\"RANGO_DE_CODIGO\","
+                                                        + "\"codigoDesde\":\"C-001\"}"))
+                        .andReturn();
+
+        assertThat(resultado.getResponse().getStatus()).isEqualTo(422);
+        assertThat(resultado.getResponse().getContentAsString()).contains("codigoHasta");
+    }
+
+    @Test
+    @DisplayName("el rango de codigo recorre el tramo y a nadie mas")
+    void elRangoDeCodigoAcotaElConjunto() throws Exception {
+        sembrarDosContribuyentes();
+
+        MvcResult diag =
+                mvc.perform(
+                                post("/api/v1/rentas/predial/calculo-masivo")
+                                        .contentType(MediaType.APPLICATION_JSON)
+                                        .content(
+                                                "{\"simulacion\":false,\"ejercicio\":\"2026\","
+                                                        + "\"alcance\":\"RANGO_DE_CODIGO\","
+                                                        + "\"codigoDesde\":\"C-002\",\"codigoHasta\":\"C-999\","
+                                                        + "\"recalculaYaEmitidos\":true,"
+                                                        + "\"observacion\":\"Emision del tramo alto\"}"))
+                        .andReturn();
+
+        assertThat(determinaciones.determinados)
+                .as(
+                        "el CONJUNTO recorrido, no el recuento: sin el filtro saldrian los dos y el"
+                                + " numero por si solo no lo distingue del tramo bien acotado")
+                .containsExactly(502L);
+    }
+
+    @Test
+    @DisplayName(
+            "«solo observados» recorre a los que la corrida anterior dejo fuera, y a nadie mas")
+    void soloObservadosRecorreALosDeLaCorridaAnterior() throws Exception {
+        sembrarDosContribuyentes();
+
+        // Primera corrida: C-001 esta EMITIDA y sin «recalcula ya emitidos» queda
+        // observado; C-002 esta en BORRADOR y se determina.
+        MvcResult primera =
+                mvc.perform(
+                                post("/api/v1/rentas/predial/calculo-masivo")
+                                        .contentType(MediaType.APPLICATION_JSON)
+                                        .content(
+                                                "{\"simulacion\":false,\"ejercicio\":\"2026\","
+                                                        + "\"observacion\":\"Emision anual\"}"))
+                        .andReturn();
+        assertThat(primera.getResponse().getContentAsString())
+                .contains("\"codContribuyente\":\"C-001\"");
+        assertThat(determinaciones.determinados).containsExactly(502L);
+        determinaciones.determinados.clear();
+
+        mvc.perform(
+                        post("/api/v1/rentas/predial/calculo-masivo")
+                                .contentType(MediaType.APPLICATION_JSON)
+                                .content(
+                                        "{\"simulacion\":false,\"ejercicio\":\"2026\","
+                                                + "\"alcance\":\"OBSERVADOS\","
+                                                + "\"recalculaYaEmitidos\":true,"
+                                                + "\"observacion\":\"Segunda pasada de la campana\"}"))
+                .andReturn();
+
+        assertThat(determinaciones.determinados)
+                .as(
+                        "es el alcance que mas se usa en una campana —volver a correr sobre los que"
+                                + " quedaron fuera— y el que no habia manera de pedir. Con TODOS"
+                                + " saldrian los dos")
+                .containsExactly(501L);
+    }
+
+    @Test
+    @DisplayName("«solo observados» sin corrida previa no recorre a nadie, y eso no es «ninguno»")
+    void soloObservadosSinCorridaPreviaNoRecorreANadie() throws Exception {
+        sembrarDosContribuyentes();
+
+        mvc.perform(
+                        post("/api/v1/rentas/predial/calculo-masivo")
+                                .contentType(MediaType.APPLICATION_JSON)
+                                .content(
+                                        "{\"simulacion\":false,\"ejercicio\":\"2026\","
+                                                + "\"alcance\":\"OBSERVADOS\","
+                                                + "\"recalculaYaEmitidos\":true,"
+                                                + "\"observacion\":\"Segunda pasada\"}"))
+                .andReturn();
+
+        assertThat(determinaciones.determinados)
+                .as(
+                        "«ninguno quedo observado» y «todavia no se ha corrido» son dos cosas"
+                                + " distintas, y la unica que puede emitir es la primera")
+                .isEmpty();
+    }
+
     @Test
     @DisplayName("la corrida masiva pide su propio permiso, no el del calculo individual")
     void laCorridaTieneSuPropioPermiso() throws Exception {
@@ -573,6 +700,39 @@ class PredialControllerTest {
     }
 
     // ---------------------------------------------------------------- utilidades
+
+    /**
+     * Dos contribuyentes: C-001 con su determinacion EMITIDA y C-002 en BORRADOR.
+     *
+     * <p>Con uno solo no se puede medir ningun alcance: acotar y no acotar dan el mismo resultado y
+     * la prueba no distingue las dos cosas (#577).
+     */
+    private void sembrarDosContribuyentes() {
+        predios.con(501L, 11L, "10001", "AV. GRAU 100", Porcentaje.total());
+        predios.con(502L, 12L, "10002", "CALLE LIMA 200", Porcentaje.total());
+        determinaciones.sembrar(
+                EJERCICIO,
+                7L,
+                501L,
+                EstadoDeDeterminacion.EMITIDA,
+                DetalleDeterminacionPredio.nuevo(
+                        11L,
+                        Dinero.de("100000.00"),
+                        Dinero.CERO,
+                        Porcentaje.total(),
+                        Dinero.de("100000.00")));
+        determinaciones.sembrar(
+                EJERCICIO,
+                8L,
+                502L,
+                EstadoDeDeterminacion.BORRADOR,
+                DetalleDeterminacionPredio.nuevo(
+                        12L,
+                        Dinero.de("120000.00"),
+                        Dinero.CERO,
+                        Porcentaje.total(),
+                        Dinero.de("120000.00")));
+    }
 
     /** Un padron con un contribuyente al que la corrida SI llega a determinar. */
     private void sembrarUnPadronQueSeRecalcula() {
@@ -763,15 +923,35 @@ class PredialControllerTest {
 
     private static final class PrediosDePrueba implements PrediosDelContribuyente {
 
-        private final List<PredioDelContribuyente> suyos = new ArrayList<>();
+        /**
+         * Los predios <b>de cada</b> contribuyente.
+         *
+         * <p>Devolverlos todos a todos parecia inofensivo con un solo contribuyente y no lo es en
+         * cuanto hay dos: la determinacion exige que cada predio de la base traiga su autovaluo
+         * declarado, asi que el segundo contribuyente heredaba el predio del primero y salia
+         * observado por no declararlo (#577).
+         */
+        private final Map<Long, List<PredioDelContribuyente>> porContribuyente =
+                new LinkedHashMap<>();
 
         void con(long predioId, String codigo, String direccion, Porcentaje cuota) {
-            suyos.add(new PredioDelContribuyente(predioId, codigo, "URBANO", direccion, cuota));
+            con(501L, predioId, codigo, direccion, cuota);
+        }
+
+        void con(
+                long contribuyenteId,
+                long predioId,
+                String codigo,
+                String direccion,
+                Porcentaje cuota) {
+            porContribuyente
+                    .computeIfAbsent(contribuyenteId, quien -> new ArrayList<>())
+                    .add(new PredioDelContribuyente(predioId, codigo, "URBANO", direccion, cuota));
         }
 
         @Override
         public List<PredioDelContribuyente> de(long contribuyenteId, LocalDate fecha) {
-            return List.copyOf(suyos);
+            return List.copyOf(porContribuyente.getOrDefault(contribuyenteId, List.of()));
         }
     }
 
@@ -787,6 +967,10 @@ class PredialControllerTest {
         private static final ResumenDeContribuyente UNO =
                 new ResumenDeContribuyente(501L, "C-001", "SUC. RUFINA MEDINA MEDINA", "03593174");
 
+        /** El segundo hace falta para medir un ALCANCE: con uno solo, acotar no se nota (#577). */
+        private static final ResumenDeContribuyente DOS =
+                new ResumenDeContribuyente(502L, "C-002", "SULLON VILCHEZ, JOSE RAUL", "29614026");
+
         @Override
         public List<ResumenDeContribuyente> buscar(String texto, int maximo) {
             throw new UnsupportedOperationException("La determinacion no busca por texto");
@@ -794,7 +978,10 @@ class PredialControllerTest {
 
         @Override
         public Optional<ResumenDeContribuyente> porCodigo(String codigo) {
-            return "C-001".equals(codigo) ? Optional.of(UNO) : Optional.empty();
+            if ("C-001".equals(codigo)) {
+                return Optional.of(UNO);
+            }
+            return "C-002".equals(codigo) ? Optional.of(DOS) : Optional.empty();
         }
 
         @Override
@@ -802,6 +989,9 @@ class PredialControllerTest {
             Map<Long, ResumenDeContribuyente> encontrados = new LinkedHashMap<>();
             if (ids.contains(UNO.id())) {
                 encontrados.put(UNO.id(), UNO);
+            }
+            if (ids.contains(DOS.id())) {
+                encontrados.put(DOS.id(), DOS);
             }
             return encontrados;
         }
@@ -823,14 +1013,26 @@ class PredialControllerTest {
                 new LinkedHashMap<>();
         private final List<Determinacion> cabeceras = new ArrayList<>();
 
+        /** Quien recibio determinacion nueva, en orden. Es el CONJUNTO que un alcance acota. */
+        private final List<Long> determinados = new ArrayList<>();
+
         void sembrarEmitida(Ejercicio ejercicio, long id, DetalleDeterminacionPredio... detalle) {
+            sembrar(ejercicio, id, 501L, EstadoDeDeterminacion.EMITIDA, detalle);
+        }
+
+        void sembrar(
+                Ejercicio ejercicio,
+                long id,
+                long contribuyenteId,
+                EstadoDeDeterminacion estado,
+                DetalleDeterminacionPredio... detalle) {
             cabeceras.add(
                     new Determinacion(
                             id,
                             ejercicio,
                             "PREDIAL",
                             null,
-                            501L,
+                            contribuyenteId,
                             null,
                             null,
                             77L,
@@ -838,7 +1040,7 @@ class PredialControllerTest {
                             Dinero.de("165.00"),
                             List.of("RT-011"),
                             OrigenDeDeterminacion.ORDINARIA,
-                            EstadoDeDeterminacion.EMITIDA,
+                            estado,
                             "siembra"));
             detallePorId.put(id, List.of(detalle));
         }
@@ -872,6 +1074,7 @@ class PredialControllerTest {
                 throw new IllegalStateException("un defecto de verdad, con su rastro");
             }
             insertadas++;
+            determinados.add(determinacion.contribuyenteId());
             return new Determinacion(
                     900L + insertadas,
                     determinacion.ejercicio(),
@@ -937,6 +1140,8 @@ class PredialControllerTest {
                             corrida.ejercicio(),
                             corrida.alcance(),
                             corrida.sector(),
+                            corrida.codigoDesde(),
+                            corrida.codigoHasta(),
                             corrida.modalidad(),
                             corrida.simulacion(),
                             corrida.conjunto(),

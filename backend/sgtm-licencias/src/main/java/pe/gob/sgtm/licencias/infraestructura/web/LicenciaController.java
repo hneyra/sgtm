@@ -42,6 +42,7 @@ import pe.gob.sgtm.licencias.dominio.EstadoDeLicencia;
 import pe.gob.sgtm.licencias.dominio.LicenciaRepository;
 import pe.gob.sgtm.licencias.dominio.MovimientoDeLicenciaRepository;
 import pe.gob.sgtm.licencias.dominio.TipoDeLicencia;
+import pe.gob.sgtm.parametros.LectorDeParametros;
 import pe.gob.sgtm.web.Api;
 import pe.gob.sgtm.web.CodigoDeError;
 import pe.gob.sgtm.web.ParametrosDePaginacion;
@@ -71,6 +72,28 @@ import pe.gob.sgtm.web.RespuestaPaginada;
  * <p>{@code {id}} es el numero <b>impreso</b> de la licencia, tal como esta en el papel del
  * establecimiento. Ni el identificador interno de la fila —que ninguna pantalla conoce— ni el
  * ejercicio y el correlativo por separado.
+ *
+ * <h2>Que devuelve 422, y por que no 500 (#562)</h2>
+ *
+ * <p>El concepto del TUPA con que se comprueba el derecho de tramite sale del <b>conjunto
+ * sellado</b> que rige a la fecha del acto ({@link DerechosDeTramiteParametrizados}, regla 5). Que
+ * el conjunto exista y no traiga la llave ({@code DerechoSinParametrizar}) ya estaba traducido
+ * desde #44; que <b>no exista ningun conjunto sellado</b> ({@code EjercicioSinSellar}) no lo
+ * estaba, y con D-02a abierta ese es el estado <i>normal</i> de todas las municipalidades: caia en
+ * el {@code @ExceptionHandler(Exception.class)} de {@code ManejadorDeErrores} y salia como <b>500
+ * {@code ERROR_INTERNO} con identificador de incidencia</b>. Dos consecuencias, las mismas que #540
+ * midio en Rentas y #547 en Tesoreria: la interfaz no puede distinguir «falta publicar una cifra»
+ * de «el servidor esta roto», y un cliente que reintenta un 500 reintenta para siempre; y cada
+ * intento escribia una incidencia de nivel ERROR en el registro del servidor.
+ *
+ * <p>El mensaje es el de la propia excepcion: nombra la llave —{@code
+ * TUPA:DERECHO_LICENCIA_FUNCIONAMIENTO}— o, cuando lo que falta es el conjunto entero y no hay
+ * llave que nombrar, el <b>ejercicio</b>. Un fallo de verdad del servidor sigue siendo 500 con su
+ * incidencia: la lista nombra las excepciones una a una y no captura {@code RuntimeException}.
+ *
+ * <p>Los dos endpoints de resumen anual <b>no</b> necesitan la traduccion, y no por descuido:
+ * {@link pe.gob.sgtm.licencias.aplicacion.ResumenAnualDeLicencias} ya captura las dos dentro y
+ * devuelve la fila del ano con sus conteos y el motivo en lugar de la cifra (#54).
  */
 @RestController
 @RequestMapping(Api.RAIZ + "/licencias")
@@ -213,10 +236,13 @@ public class LicenciaController {
             throw new ProblemaDeNegocio(CodigoDeError.VALIDACION, mensajeDe(noEstaElGiro));
         } catch (ComprobacionDelDerecho.DerechoNoPagado sinPagar) {
             throw new ProblemaDeNegocio(CodigoDeError.VALIDACION, mensajeDe(sinPagar));
-        } catch (DerechosDeTramiteParametrizados.DerechoSinParametrizar sinParametro) {
+        } catch (DerechosDeTramiteParametrizados.DerechoSinParametrizar
+                | LectorDeParametros.EjercicioSinSellar sinParametro) {
             // 422 y no 500: la peticion esta bien y el sistema tampoco esta roto. Lo que falta es
             // un dato de configuracion, y quien opera tiene que enterarse de cual para poder
             // pedirlo, en vez de recibir «error interno» y un identificador de incidencia.
+            // `EjercicioSinSellar` —que no haya NINGUN conjunto sellado— es el mismo caso y hasta
+            // #562 seguia saliendo como 500 con incidencia. Ver la cabecera de la clase.
             throw new ProblemaDeNegocio(CodigoDeError.VALIDACION, mensajeDe(sinParametro));
         } catch (LicenciaRepository.NumeroDuplicado repetido) {
             throw new ProblemaDeNegocio(CodigoDeError.CONFLICTO, mensajeDe(repetido));
@@ -290,7 +316,8 @@ public class LicenciaController {
             throw new ProblemaDeNegocio(CodigoDeError.NO_ENCONTRADO, mensajeDe(sinPapel));
         } catch (ComprobacionDelDerecho.DerechoNoPagado sinPagar) {
             throw new ProblemaDeNegocio(CodigoDeError.VALIDACION, mensajeDe(sinPagar));
-        } catch (DerechosDeTramiteParametrizados.DerechoSinParametrizar sinParametro) {
+        } catch (DerechosDeTramiteParametrizados.DerechoSinParametrizar
+                | LectorDeParametros.EjercicioSinSellar sinParametro) {
             throw new ProblemaDeNegocio(CodigoDeError.VALIDACION, mensajeDe(sinParametro));
         } catch (DuplicadoDeLicenciaRepository.DuplicadoDuplicado carrera) {
             throw new ProblemaDeNegocio(CodigoDeError.CONFLICTO, mensajeDe(carrera));

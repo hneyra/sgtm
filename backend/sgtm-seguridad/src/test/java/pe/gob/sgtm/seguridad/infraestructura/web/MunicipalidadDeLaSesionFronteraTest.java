@@ -114,7 +114,8 @@ class MunicipalidadDeLaSesionFronteraTest {
 
         comprobador = new ComprobadorQueNiegaTodo();
         mvc =
-                MockMvcBuilders.standaloneSetup(new SesionController(null, null, municipalidad))
+                MockMvcBuilders.standaloneSetup(
+                                new SesionController(null, null, municipalidad, null))
                         .addInterceptors(
                                 new GuardiaDeAcceso(comprobador, RELOJ), new GuardiaDeParametros())
                         .setControllerAdvice(new ManejadorDeErrores())
