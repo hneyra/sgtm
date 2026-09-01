@@ -140,7 +140,8 @@ class SaldoYMovimientosTest {
                                 registrarAsiento,
                                 new CalculoDeDeuda(new SinAcumulacionDePrueba()),
                                 new PoliticaDeRedondeo(2, RoundingMode.HALF_UP),
-                                emitir),
+                                emitir,
+                                TITULARES_DE_LA_UNIDAD),
                         gestor);
         reconstruir = envolver(new ReconstruirSaldo(asientos, saldos, RELOJ), gestor);
         padron = new ReconstruirPadron(asientos, reconstruir, gestor);
@@ -622,4 +623,28 @@ class SaldoYMovimientosTest {
             return Dinero.CERO;
         }
     }
+
+    /**
+     * El puerto de #635 en su forma mas simple: la unidad es de quien la pide.
+     *
+     * <p>Lo que este archivo mide no es la titularidad —eso lo mide {@code
+     * UnidadDelMovimientoFronteraTest} contra PostgreSQL, con transferencia incluida— sino lo de
+     * siempre. Un doble que rechazara todo dejaria estas pruebas rojas por un motivo que no es el
+     * que examinan.
+     */
+    private static final pe.gob.sgtm.cuentacorriente.TitularesDeLaUnidad TITULARES_DE_LA_UNIDAD =
+            new pe.gob.sgtm.cuentacorriente.TitularesDeLaUnidad() {
+
+                @Override
+                public java.util.List<TitularDeLaUnidad> delPredio(
+                        long predioId, java.time.LocalDate fecha) {
+                    return java.util.List.of();
+                }
+
+                @Override
+                public java.util.List<TitularDeLaUnidad> delVehiculo(
+                        long vehiculoId, java.time.LocalDate fecha) {
+                    return java.util.List.of();
+                }
+            };
 }

@@ -125,6 +125,25 @@ public class DeclaracionJuradaRepositoryJdbc extends RepositorioJdbc
      * <p>{@code DISTINCT} porque un predio puede tener mas de una fila vigente en el mismo
      * ejercicio y la respuesta es un si o un no, no un recuento.
      */
+    /**
+     * Todos los del ejercicio (#631). Va por el mismo indice —{@code dj_ejercicio_predio_ix}, V39—
+     * y sin la condicion de la lista, que es lo unico que cambia.
+     */
+    @Override
+    public java.util.Set<Long> prediosConDeclaracionVigente(Ejercicio ejercicio) {
+        return new java.util.LinkedHashSet<>(
+                jdbc().sql(
+                                "SELECT DISTINCT d.predio_id"
+                                        + DESDE
+                                        + " WHERE d.ejercicio = :ejercicio"
+                                        + "   AND d.predio_id IS NOT NULL"
+                                        + "   AND d.estado = ANY(:estados)")
+                        .param("ejercicio", ejercicio.valor())
+                        .param("estados", EstadoDeDeclaracion.nombresDeLasVigentes())
+                        .query(Long.class)
+                        .list());
+    }
+
     @Override
     public java.util.Set<Long> prediosConDeclaracionVigente(
             java.util.Collection<Long> predioIds, Ejercicio ejercicio) {

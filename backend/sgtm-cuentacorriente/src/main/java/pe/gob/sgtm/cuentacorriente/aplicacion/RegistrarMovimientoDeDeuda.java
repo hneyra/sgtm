@@ -7,6 +7,7 @@ import java.util.Map;
 import org.jspecify.annotations.Nullable;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import pe.gob.sgtm.cuentacorriente.TitularesDeLaUnidad;
 import pe.gob.sgtm.cuentacorriente.dominio.Asiento;
 import pe.gob.sgtm.cuentacorriente.dominio.AsientoRepository;
 import pe.gob.sgtm.cuentacorriente.dominio.CalculoDeDeuda;
@@ -59,18 +60,21 @@ public class RegistrarMovimientoDeDeuda {
     private final CalculoDeDeuda calculo;
     private final PoliticaDeRedondeo redondeo;
     private final EmitirDocumento documentos;
+    private final TitularesDeLaUnidad titulares;
 
     public RegistrarMovimientoDeDeuda(
             AsientoRepository asientos,
             RegistrarAsiento registrarAsiento,
             CalculoDeDeuda calculo,
             PoliticaDeRedondeo redondeo,
-            EmitirDocumento documentos) {
+            EmitirDocumento documentos,
+            TitularesDeLaUnidad titulares) {
         this.asientos = asientos;
         this.registrarAsiento = registrarAsiento;
         this.calculo = calculo;
         this.redondeo = redondeo;
         this.documentos = documentos;
+        this.titulares = titulares;
     }
 
     /**
@@ -132,12 +136,34 @@ public class RegistrarMovimientoDeDeuda {
             RangoDeCuotas cuotas,
             String codigoContribuyente,
             Observacion observacion) {
+        return registrar(
+                movimiento,
+                cuotas,
+                ComprobacionDeUnidad.NO_APLICA,
+                codigoContribuyente,
+                observacion);
+    }
+
+    /**
+     * El mismo acto, diciendo si hay que comprobar que la unidad sea del contribuyente (#635).
+     *
+     * <p>Ver {@link ComprobacionDeUnidad}. Las dos sobrecargas de arriba conservan las firmas que
+     * usan los contextos que generan sus propios cargos, y con ellas su comportamiento.
+     */
+    @Transactional
+    public Registro registrar(
+            MovimientoDeDeuda movimiento,
+            RangoDeCuotas cuotas,
+            ComprobacionDeUnidad comprobacion,
+            String codigoContribuyente,
+            Observacion observacion) {
 
         // Antes que nada, y antes en particular que la comprobacion de que la baja no
         // excede la deuda: en un ejercicio sin particion no hay ningun asiento, de modo
         // que aquella diria «a esa fecha solo se deben 0.00» —cierto, y por la razon
         // equivocada— sobre una deuda que ni siquiera se puede escribir (#597).
         registrarAsiento.exigirEjercicioAsentable(movimiento.clave().ejercicio());
+        exigirQueLaUnidadSeaDelContribuyente(movimiento, comprobacion);
 
         List<MovimientoDeDeuda> porCuota = movimiento.enCadaCuota(cuotas);
         for (MovimientoDeDeuda deLaCuota : porCuota) {
@@ -190,6 +216,7 @@ public class RegistrarMovimientoDeDeuda {
     public Registro registrarRepartido(
             MovimientoDeDeuda movimiento,
             @Nullable RangoDeCuotas cuotas,
+            ComprobacionDeUnidad comprobacion,
             String codigoContribuyente,
             Observacion observacion) {
 
@@ -201,6 +228,7 @@ public class RegistrarMovimientoDeDeuda {
                             + " periodos");
         }
         registrarAsiento.exigirEjercicioAsentable(movimiento.clave().ejercicio());
+        exigirQueLaUnidadSeaDelContribuyente(movimiento, comprobacion);
         List<MovimientoDeDeuda> partes = repartir(movimiento, cuotas);
         return asentarYEmitir(
                 movimiento, partes, etiquetaDe(partes), codigoContribuyente, observacion);
@@ -359,6 +387,140 @@ public class RegistrarMovimientoDeDeuda {
      * para que casi siempre se descarte. Con el numero se pide cuando haga falta, y sale identico.
      */
     public record Registro(List<Asiento> asientos, String numeroDeDocumento) {}
+
+    /**
+     * Si hay que comprobar que la unidad de la obligacion sea del contribuyente (#635).
+     *
+     * <p>Son tres y no un booleano porque los tres casos existen de verdad y confundirlos rompe
+     * algo distinto en cada uno.
+     */
+    public enum ComprobacionDeUnidad {
+
+        /**
+         * Se exige: la unidad tiene que ser del contribuyente a la fecha valor.
+         *
+         * <p>Es lo que el alta y la baja de ventanilla piden. Hasta #635 nadie lo comprobaba, y un
+         * alta con el {@code vehiculoId} de otra persona quedaba asentada sobre una clave que nadie
+         * va a mirar — invisible desde la ficha del vehiculo, sin sumarse a la deuda de quien paga,
+         * y publicada como una fila mas en el estado de cuenta del obligado.
+         */
+        EXIGIDA,
+
+        /**
+         * La peticion declara que la deuda es de un titular anterior, y entonces se admite.
+         *
+         * <p>No es una puerta trasera: la deuda de un ejercicio anterior a una transferencia
+         * <b>es</b> del titular de entonces, asi que un alta sobre la unidad de otro puede ser
+         * exactamente lo que corresponde. Lo que separa ese caso del error es que alguien lo diga,
+         * y la observacion del acto queda con la constancia de que se dijo.
+         */
+        DECLARADA_DE_TITULAR_ANTERIOR,
+
+        /**
+         * No se comprueba, y hay un motivo.
+         *
+         * <p>Lo usan los contextos que generan sus propios cargos —licencias, anuncios— y ahi la
+         * unidad <b>no es</b> del obligado por definicion en varios casos: una papeleta se asienta
+         * con el predio de la infraccion y quien la paga puede no ser su titular (#331). Exigirla
+         * ahi rechazaria actos correctos.
+         */
+        NO_APLICA
+    }
+
+    /**
+     * La unidad de la obligacion tiene que ser del contribuyente que la debe (#635).
+     *
+     * <p>Un predio que no existe y uno sin titularidad vigente contestan lo mismo, y es deliberado:
+     * lo decide {@code catastro.TitularesDelPredio} —contestar distinto convertiria la lectura en
+     * un detector de predios ajenos— y aqui se respeta. Los dos son «no se puede comprobar que sea
+     * suya», que es lo que el mensaje dice.
+     *
+     * <p>La titularidad se resuelve a la <b>fecha valor</b> del movimiento y no con el reloj: la
+     * deuda de 2024 la debe quien era titular en 2024, y comparar contra el titular de hoy
+     * rechazaria el acto correcto y aceptaria el equivocado. Es el defecto de #24 y #366 en este
+     * camino.
+     */
+    private void exigirQueLaUnidadSeaDelContribuyente(
+            MovimientoDeDeuda movimiento, ComprobacionDeUnidad comprobacion) {
+
+        if (comprobacion == ComprobacionDeUnidad.NO_APLICA) {
+            return;
+        }
+        ClaveDeSaldo clave = movimiento.clave();
+        if (clave.predioId() != null) {
+            comprobar(
+                    "predio",
+                    clave.predioId(),
+                    titulares.delPredio(clave.predioId(), movimiento.fechaValor()),
+                    clave.contribuyenteId(),
+                    comprobacion);
+        }
+        if (clave.vehiculoId() != null) {
+            comprobar(
+                    "vehiculo",
+                    clave.vehiculoId(),
+                    titulares.delVehiculo(clave.vehiculoId(), movimiento.fechaValor()),
+                    clave.contribuyenteId(),
+                    comprobacion);
+        }
+    }
+
+    private static void comprobar(
+            String unidad,
+            long unidadId,
+            List<TitularesDeLaUnidad.TitularDeLaUnidad> deLaUnidad,
+            long contribuyenteId,
+            ComprobacionDeUnidad comprobacion) {
+
+        if (deLaUnidad.isEmpty()) {
+            throw new UnidadAjena(
+                    "El "
+                            + unidad
+                            + " "
+                            + unidadId
+                            + " no tiene titular en esta municipalidad, asi que no se puede"
+                            + " comprobar que la obligacion sea suya. Un identificador que no"
+                            + " apunta a nada deja el cargo sobre una clave que ninguna consulta"
+                            + " va a mirar");
+        }
+        for (TitularesDeLaUnidad.TitularDeLaUnidad titular : deLaUnidad) {
+            if (titular.contribuyenteId() == contribuyenteId) {
+                return;
+            }
+        }
+        if (comprobacion == ComprobacionDeUnidad.DECLARADA_DE_TITULAR_ANTERIOR) {
+            return;
+        }
+        StringBuilder quienes = new StringBuilder();
+        for (TitularesDeLaUnidad.TitularDeLaUnidad titular : deLaUnidad) {
+            if (quienes.length() > 0) {
+                quienes.append(", ");
+            }
+            quienes.append(titular.codigo()).append(" ").append(titular.nombre()).append('\'');
+        }
+        throw new UnidadAjena(
+                "El "
+                        + unidad
+                        + " "
+                        + unidadId
+                        + " es de '"
+                        + quienes
+                        + " a la fecha valor del movimiento, no del contribuyente que lo debe. Si"
+                        + " es deuda de un titular anterior, hay que declararlo con"
+                        + " «deudaDeTitularAnterior»");
+    }
+
+    /**
+     * La unidad no es del contribuyente del movimiento, y nadie declaro que fuera de un titular
+     * anterior (#635).
+     */
+    public static final class UnidadAjena extends RuntimeException {
+        @java.io.Serial private static final long serialVersionUID = 1L;
+
+        UnidadAjena(String mensaje) {
+            super(mensaje);
+        }
+    }
 
     private void verificarQueNoExcedeLaDeuda(MovimientoDeDeuda movimiento) {
         ClaveDeSaldo clave = movimiento.clave();
