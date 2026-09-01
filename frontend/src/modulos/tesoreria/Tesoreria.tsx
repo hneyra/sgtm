@@ -1,10 +1,10 @@
-import { useEffect, useMemo, useState, type CSSProperties, type ReactNode } from 'react';
+import { useEffect, useMemo, useRef, useState, type CSSProperties, type ReactNode } from 'react';
 import { Shell, type EntradaDePaleta } from '../../shell/Shell';
 import type { PantallaProps } from '../../App';
 import { Icono } from '../../ds/Icono';
 import { Aviso, Insignia, type Tono } from '../../ds/componentes';
 import { usarPreferencias } from '../../shell/preferencias';
-import { ErrorDeApi, fijarToken } from '../../api/cliente';
+import { ErrorDeApi, claveDeIdempotencia, fijarToken } from '../../api/cliente';
 import { cuentaActual, hayPuerta } from '../../api/sesion';
 import { useRebote, useRecurso } from '../../api/useRecurso';
 import { ejercicioParametrizado } from '../../api/seguridad';
@@ -639,12 +639,47 @@ export default function Tesoreria({ dest, onDest }: PantallaProps) {
                   ? 'Falta la observación: toda cobranza se guarda con el motivo de quien la hace.'
                   : '';
 
+  /**
+   * La clave del intento en curso, una por acto.
+   *
+   * **Se genera la primera vez que se pide y no cambia hasta que alguien la
+   * olvida.** Regenerarla en cada envio convertiria un reintento en un segundo
+   * cobro, que es exactamente lo que la clave existe para impedir: el servidor
+   * la usa para devolver el recibo YA emitido en vez de emitir otro
+   * (`recibo_idempotencia_uq`, V29).
+   *
+   * Se olvida en dos momentos, y los dos hacen falta. **Al terminar bien**,
+   * porque el intento se acabo y el siguiente es otro acto. **Y al cambiar
+   * aquello sobre lo que se actua**, porque una clave reusada con otro sujeto
+   * no devuelve el acto ajeno —el servidor contesta 409 (#606)— pero deja a
+   * quien atiende delante de un conflicto que no entiende.
+   *
+   * No se olvida al fallar: ese es el caso para el que existe.
+   */
+  const claveDelCobro = useRef<string | null>(null);
+  const claveDelConvenio = useRef<string | null>(null);
+  const claveDelCierre = useRef<string | null>(null);
+  const clave = (donde: { current: string | null }): string =>
+    (donde.current ??= claveDeIdempotencia());
+  /* La otra mitad del olvido, y la que no se ve venir: al cambiar de sujeto.
+     Una clave reusada con otro contribuyente NO devuelve el acto ajeno —el
+     servidor contesta 409 (#606)— pero deja a quien atiende delante de un
+     conflicto que no explica nada. El intento era del anterior. */
+  useEffect(() => {
+    claveDelCobro.current = null;
+    claveDelConvenio.current = null;
+  }, [codigoReposado]);
+  useEffect(() => {
+    claveDelCierre.current = null;
+  }, [numeroReposado]);
+
   const cobrar = async () => {
     if (impedimentoDelCobro !== '' || cobrando) return;
     setCobrando(true);
     setFalloDeCobro(null);
     try {
-      const r = await cobrarDeuda({
+      const r = await cobrarDeuda(
+        {
         caja: caja.trim(),
         cajero: cajero.trim(),
         codContribuyente: codigoReposado,
@@ -655,7 +690,13 @@ export default function Tesoreria({ dest, onDest }: PantallaProps) {
         obligaciones: seleccion,
         ...(tipoDePago === 'PRECONVENIO' ? { numeroDeConvenio: numeroDeConvenio.trim() } : {}),
         observacion: obsCobro.trim(),
-      });
+        },
+        clave(claveDelCobro),
+      );
+      /* El intento se acabo: el siguiente cobro es otro acto y necesita otra
+         clave. Si esto no estuviera, dos cobranzas seguidas del mismo cajero
+         irian con la misma y la segunda devolveria el recibo de la primera. */
+      claveDelCobro.current = null;
       setEmitido(r);
       setMarcadas({});
       setObsCobro('');
@@ -717,10 +758,11 @@ export default function Tesoreria({ dest, onDest }: PantallaProps) {
     setFalloConv(null);
     setActoConv('registrar');
     try {
-      const c = await registrarPreconvenio({
-        ...cuerpoDelFraccionamiento(),
-        observacion: obsConvenio.trim(),
-      });
+      const c = await registrarPreconvenio(
+        { ...cuerpoDelFraccionamiento(), observacion: obsConvenio.trim() },
+        clave(claveDelConvenio),
+      );
+      claveDelConvenio.current = null;
       setConvenioNuevo(c);
       setObsConvenio('');
       toast('Preconvenio ' + c.numero + ' registrado. Todavía no acoge deuda.');
@@ -741,13 +783,18 @@ export default function Tesoreria({ dest, onDest }: PantallaProps) {
     setCerrandoConv(true);
     setFalloCierre(null);
     try {
-      const c = await cerrarConvenio(abierto, {
-        accion,
-        motivo: motivoCierre.trim(),
-        ...(responsableCierre.trim() !== '' ? { responsableAnul: responsableCierre.trim() } : {}),
-        ...(memoCierre.trim() !== '' ? { nDeMemorando: memoCierre.trim() } : {}),
-        observacion: obsCierreConvenio.trim(),
-      });
+      const c = await cerrarConvenio(
+        abierto,
+        {
+          accion,
+          motivo: motivoCierre.trim(),
+          ...(responsableCierre.trim() !== '' ? { responsableAnul: responsableCierre.trim() } : {}),
+          ...(memoCierre.trim() !== '' ? { nDeMemorando: memoCierre.trim() } : {}),
+          observacion: obsCierreConvenio.trim(),
+        },
+        clave(claveDelCierre),
+      );
+      claveDelCierre.current = null;
       setMotivoCierre('');
       setObsCierreConvenio('');
       convenios.reintentar();
