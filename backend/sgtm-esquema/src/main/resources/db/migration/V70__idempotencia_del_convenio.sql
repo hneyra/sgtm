@@ -1,5 +1,5 @@
 -- ============================================================================
---  V69 — Reenviar el mismo intento no abre un segundo convenio (#606)
+--  V70 — Reenviar el mismo intento no abre un segundo convenio (#606)
 --
 --  `CajaController` lee la cabecera `Idempotency-Key` en sus dos POST desde #33,
 --  y `recibo_idempotencia_uq` (V29 §5) la convierte en garantia. `AnuncioController`

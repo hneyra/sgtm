@@ -120,7 +120,7 @@ import tools.jackson.databind.json.JsonMapper;
  * #606 — Y el reenvio del mismo intento, tambien de HTTP a PostgreSQL.
  *
  * <p>Se prueba aqui y no con dobles porque lo que hay que demostrar es que la garantia esta en la
- * BASE: `convenio_idempotencia_uq` (V69). Con un doble, la unicidad la reproduciria el propio doble
+ * BASE: `convenio_idempotencia_uq` (V70). Con un doble, la unicidad la reproduciria el propio doble
  * y la prueba diria que el doble funciona.
  */
 @DisplayName("#547 — Fraccionamientos: el 422 que nombra la llave, de HTTP a PostgreSQL")
@@ -463,7 +463,7 @@ class ConveniosFronteraTest {
         fraccionar(COMPLETO, false, clave, CODIGO);
 
         assertThat(conveniosConLaClave(clave))
-                .as("`convenio_idempotencia_uq` (V69): una fila, no dos")
+                .as("`convenio_idempotencia_uq` (V70): una fila, no dos")
                 .isEqualTo(1);
     }
 

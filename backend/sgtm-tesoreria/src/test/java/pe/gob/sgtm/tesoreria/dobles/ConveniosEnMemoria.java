@@ -23,7 +23,7 @@ import pe.gob.sgtm.tesoreria.dominio.NumeroDeConvenio;
  * dos registros consecutivos no repitan numero se prueba aqui; que no lo repitan <b>bajo
  * concurrencia real</b> es otra cosa, y esa la hace {@code ConvenioJdbcTest} contra PostgreSQL.
  *
- * <p>Reproduce tambien {@code convenio_idempotencia_uq} (V69): sin ella el doble dejaria pasar lo
+ * <p>Reproduce tambien {@code convenio_idempotencia_uq} (V70): sin ella el doble dejaria pasar lo
  * que la base rechaza, y las pruebas de {@code RegistrarPreconvenio} probarian menos de lo que
  * parece.
  */

@@ -67,7 +67,7 @@ import pe.gob.sgtm.tesoreria.dominio.TipoDeGarantia;
  *
  * <p><b>La guarda es la base, no el {@code if}.</b> Quitar la lectura previa de {@link
  * ConvenioRepository#porClaveDeIdempotencia} dejando el indice sigue produciendo <b>un solo</b>
- * convenio —{@code convenio_idempotencia_uq} (V69) rechaza el segundo {@code INSERT}—; lo unico que
+ * convenio —{@code convenio_idempotencia_uq} (V70) rechaza el segundo {@code INSERT}—; lo unico que
  * se pierde es poder contestar con el convenio de la primera vez en vez de con un 409. Es la
  * leccion de #188: la restriccion sostiene la regla, la lectura sostiene el mensaje. Y no se puede
  * al reves: entre el {@code SELECT} y el {@code INSERT} cabe otra peticion, asi que dos envios

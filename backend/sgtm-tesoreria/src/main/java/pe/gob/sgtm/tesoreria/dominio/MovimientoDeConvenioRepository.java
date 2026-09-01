@@ -20,7 +20,7 @@ public interface MovimientoDeConvenioRepository {
      *     traen los tres cierres: la formalizacion entra por la caja y la protege {@code
      *     recibo_idempotencia_uq} (V29)
      * @throws ClaveRepetida si esa clave ya registro otro movimiento. Lo decide {@code
-     *     convenio_movimiento_idempotencia_uq} (V69)
+     *     convenio_movimiento_idempotencia_uq} (V70)
      * @throws ConvenioYaFormalizado si el convenio ya tenia su formalizacion
      * @throws ConvenioYaCerrado si el convenio ya estaba anulado, quebrado o reformulado. Los dos
      *     los decide la base —{@code convenio_movimiento_formalizacion_uq} y {@code

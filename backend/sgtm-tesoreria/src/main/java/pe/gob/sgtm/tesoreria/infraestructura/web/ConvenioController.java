@@ -84,7 +84,7 @@ import pe.gob.sgtm.web.RespuestaPaginada;
  * AnuncioController} si los distingue (#51), y esa diferencia queda anotada a proposito.
  *
  * <p>La garantia ultima son {@code convenio_idempotencia_uq} y {@code
- * convenio_movimiento_idempotencia_uq} (V69), no las lecturas previas de los casos de uso: entre
+ * convenio_movimiento_idempotencia_uq} (V70), no las lecturas previas de los casos de uso: entre
  * leer y escribir cabe otra peticion. Las lecturas estan para poder contestar algo util.
  *
  * <p><b>La simulacion no consume la clave</b>: con {@code simular = true} no se escribe nada, asi

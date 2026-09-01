@@ -13,7 +13,7 @@ import pe.gob.sgtm.tesoreria.dominio.TipoDeMovimientoDeConvenio;
 /**
  * Los movimientos de un convenio, en memoria. <b>Solo agrega</b>, como en la base.
  *
- * <p>Reproduce las dos unicidades de V31 —una formalizacion y un cierre por convenio— y la de V69
+ * <p>Reproduce las dos unicidades de V31 —una formalizacion y un cierre por convenio— y la de V70
  * —una clave de idempotencia por movimiento— porque sin ellas el doble dejaria pasar lo que la base
  * rechaza y las pruebas de {@code FormalizarConvenio} y {@code CerrarConvenio} probarian menos de
  * lo que parece. Que la garantia funcione <b>bajo concurrencia real</b> es otra cosa, y esa la hace

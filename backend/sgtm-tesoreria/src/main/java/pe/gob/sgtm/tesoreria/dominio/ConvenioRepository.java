@@ -47,7 +47,7 @@ public interface ConvenioRepository {
      *
      * <p>Es lo que convierte un reenvio en una respuesta correcta en vez de en un error. Por si
      * sola una lectura no garantiza nada —dos peticiones simultaneas no verian nada las dos—, y por
-     * eso la garantia final sigue siendo {@code convenio_idempotencia_uq} (V69).
+     * eso la garantia final sigue siendo {@code convenio_idempotencia_uq} (V70).
      */
     Optional<Convenio> porClaveDeIdempotencia(String clave);
 
