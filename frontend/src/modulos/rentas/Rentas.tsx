@@ -9,6 +9,8 @@ import {
   correrPredialMasivo,
   determinarPredial,
   indicadores,
+  listarPrediosDelContribuyente,
+  listarVehiculosDelContribuyente,
   ultimaCorridaPredial,
   tipoDeTransferenciaDelBackend,
   transferirPredio,
@@ -18,6 +20,8 @@ import {
   type CorridaDePredial,
   type DeterminacionPredial,
   type PeticionDeMovimientoDeDeuda,
+  type PredioDelContribuyente,
+  type VehiculoDelContribuyente,
 } from '../../api/rentas';
 import { listarPredios, listarSectores } from '../../api/catastro';
 /* Dos lecturas de `consultas` que este módulo necesita y no duplica: la deuda de
@@ -440,6 +444,89 @@ function BloqueDeTabla({ tabla, onAnadir }: { tabla: TablaDef; onAnadir: () => v
   );
 }
 
+/** Lo que va donde el recurso no publica un dato. */
+const SIN_DATO = '—';
+
+/**
+ * Una tabla del expediente que la llena el backend, no el catálogo.
+ *
+ * <h2>Las tres respuestas de `GET /rentas/predios`, dichas por separado (#541)</h2>
+ *
+ * Hasta #541 esa lectura contestaba `200` con la página vacía tanto si faltaba
+ * el parámetro como si el código no estaba en el padrón como si la persona no
+ * tenía predios, y las tres se dibujaban igual. Ahora son tres, y aquí se
+ * separan porque **no se parecen en nada para quien atiende**:
+ *
+ * <ul>
+ *   <li>`404 NO_ENCONTRADO` — el código no está en el padrón. No es «no tiene
+ *       predios»: es «esa persona no existe», y aquí sólo puede pasar si le
+ *       dieron de baja entre la lectura de la ficha y ésta. Se dice así, sin
+ *       ofrecer «reintentar»: volver a pulsar no la trae de vuelta.
+ *   <li>`422 VALIDACION` — la petición no dijo de quién. Desde esta pantalla no
+ *       debería ocurrir nunca —la lectura no se activa sin contribuyente
+ *       abierto— y por eso, si ocurre, es un defecto de la interfaz y no del
+ *       dato: `FalloDeLectura` lo dice con el mensaje del servidor.
+ *   <li>`200` con cero filas — el único que de verdad significa «no tiene».
+ * </ul>
+ *
+ * El resto de fallos —permiso, sesión, red— los reparte `FalloDeLectura`, que
+ * ya distingue lo que se arregla reintentando de lo que no.
+ */
+function TablaLeida<T>({
+  tabla,
+  estado,
+  fila,
+  vacia,
+  cuenta,
+}: {
+  tabla: TablaDef;
+  estado: { datos: RespuestaPaginada<T> | null; cargando: boolean; error: ErrorDeApi | null; reintentar: () => void };
+  fila: (x: T) => string[];
+  /** Qué decir cuando la lectura fue bien y no trajo ninguna. */
+  vacia: string;
+  /** Cómo se cuenta lo que trajo: «3 predios», «1 vehículo». */
+  cuenta: (n: number) => string;
+}) {
+  const filas = (estado.datos?.contenido ?? []).map(fila);
+  const total = estado.datos?.totalElementos ?? 0;
+  /* El 404 no es un fallo de lectura sino una respuesta: la persona no está.
+     Pasarlo por `FalloDeLectura` lo rotularía «No se encontró …» en rojo junto
+     a un botón de reintentar, y lo que hay que hacer no es insistir. */
+  const noEstaEnElPadron = estado.error !== null && estado.error.codigo === 'NO_ENCONTRADO';
+  return (
+    <div style={{ borderTop: '1px solid var(--line)' }}>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap', padding: '11px 16px' }}>
+        <p style={{ margin: 0, flex: 1, fontSize: 13, fontWeight: 500 }}>{tabla.titulo}</p>
+        <span style={META}>{estado.cargando ? 'consultando…' : estado.error !== null ? SIN_DATO : cuenta(total)}</span>
+      </div>
+      {noEstaEnElPadron && (
+        <div style={{ padding: '0 16px 12px' }}>
+          <Aviso tono="warn" titulo="Ese código no está en el padrón">
+            {estado.error?.mensaje}. No es que no tenga: es que el padrón no reconoce el código, así que no hay de quién listar. Puede
+            haberse dado de baja entre la lectura de la ficha y ésta.
+          </Aviso>
+        </div>
+      )}
+      {estado.error !== null && !noEstaEnElPadron && (
+        <div style={{ padding: '0 16px 12px' }}>
+          <FalloDeLectura error={estado.error} que={'los ' + tabla.titulo.toLowerCase()} alReintentar={estado.reintentar} />
+        </div>
+      )}
+      {!noEstaEnElPadron && (
+        <div style={{ borderTop: '1px solid var(--line)' }}>
+          <TablaDeDatos
+            cols={tabla.cols}
+            filas={filas}
+            min={tabla.min}
+            vacia={estado.cargando ? 'Consultando el padrón…' : estado.error !== null ? undefined : vacia}
+          />
+        </div>
+      )}
+      {tabla.nota !== undefined && <p style={PIE}>{tabla.nota}</p>}
+    </div>
+  );
+}
+
 /** La cabecera pulsable de una sección plegable. */
 function Cabecera({
   abierta,
@@ -531,6 +618,29 @@ export default function Rentas({ dest, onDest }: PantallaProps) {
   );
   const contribuyenteAbierto =
     (expediente.datos?.contenido ?? []).find((c) => c.codigo === sujeto) ?? null;
+
+  /**
+   * Las unidades afectas del contribuyente abierto, leídas de su padrón (#541).
+   *
+   * Las dos se piden con el código **que la ficha acaba de resolver** y no con
+   * `sujeto`: así no se pregunta por alguien que la lectura anterior no
+   * encontró, y las tres respuestas de `/rentas/predios` quedan bien repartidas
+   * —el 404 pasa a ser el caso raro que se explica, no el corriente—.
+   *
+   * Son dos lecturas y no una porque son dos padrones con dos permisos:
+   * `predios_rentas` y `vehiculos`. Quien tenga uno y no el otro ve la tabla
+   * que puede y el aviso de permiso en la que no, en vez de perder las dos.
+   */
+  const prediosDelContribuyente = useRecurso(
+    (senal) => listarPrediosDelContribuyente(contribuyenteAbierto!.codigo, {}, { tamano: 50 }, senal),
+    [contribuyenteAbierto?.codigo],
+    contribuyenteAbierto !== null,
+  );
+  const vehiculosDelContribuyente = useRecurso(
+    (senal) => listarVehiculosDelContribuyente(contribuyenteAbierto!.codigo, { tamano: 50 }, senal),
+    [contribuyenteAbierto?.codigo],
+    contribuyenteAbierto !== null,
+  );
   const cargando = padron.cargando;
   const vacio = !padron.cargando && padron.error === null && padron.datos !== null && filasDelPadron.length === 0;
   const [tipo, setTipo] = useState<ClaveDeDeterminacion>('predial');
@@ -746,7 +856,7 @@ export default function Rentas({ dest, onDest }: PantallaProps) {
         setDeterminacion({
           clase: 'predial',
           datos: await determinarPredial(
-            { codContribuyente: filtroQueViaja('codContribuyente'), ano: pref.ejercicio },
+            { codContribuyente: filtroQueViaja('codContribuyente'), ejercicio: pref.ejercicio },
             { simulacion: true },
           ),
         });
@@ -1878,7 +1988,44 @@ export default function Rentas({ dest, onDest }: PantallaProps) {
                                 </p>
                               )}
                               {bl.campos.length > 0 && <div style={REJILLA_DE_CAMPOS}>{bl.campos.map(campo)}</div>}
-                              {bl.tabla && (
+                              {/* Un bloque con `lectura` lo llena el backend; el
+                                  resto sigue saliendo del catálogo. */}
+                              {bl.tabla && bl.lectura === 'predios' && (
+                                <TablaLeida
+                                  tabla={bl.tabla}
+                                  estado={prediosDelContribuyente}
+                                  cuenta={(n) => `${n} ${n === 1 ? 'predio' : 'predios'}`}
+                                  vacia="Este contribuyente está en el padrón y no tiene ningún predio inscrito a su nombre."
+                                  fila={(p: PredioDelContribuyente) => [
+                                    p.codigoReferenciaCatastral,
+                                    p.direccion,
+                                    p.tipo,
+                                    p.uso ?? SIN_DATO,
+                                    p.sector ?? SIN_DATO,
+                                    p.areaTerreno ?? SIN_DATO,
+                                    p.porcentajePropiedad,
+                                    p.condicion ?? SIN_DATO,
+                                  ]}
+                                />
+                              )}
+                              {bl.tabla && bl.lectura === 'vehiculos' && (
+                                <TablaLeida
+                                  tabla={bl.tabla}
+                                  estado={vehiculosDelContribuyente}
+                                  cuenta={(n) => `${n} ${n === 1 ? 'vehículo' : 'vehículos'}`}
+                                  vacia="Este contribuyente está en el padrón y no tiene ningún vehículo a su nombre."
+                                  fila={(v: VehiculoDelContribuyente) => [
+                                    v.placa,
+                                    v.clase ?? SIN_DATO,
+                                    v.marca,
+                                    v.modelo,
+                                    String(v.anioFabricacion),
+                                    `${String(v.afectoDesde)} — ${String(v.afectoHasta)}`,
+                                    v.estado,
+                                  ]}
+                                />
+                              )}
+                              {bl.tabla && bl.lectura === undefined && (
                                 <BloqueDeTabla tabla={bl.tabla} onAnadir={() => toast('Se abriría el alta de una fila de esta lista.')} />
                               )}
                             </div>

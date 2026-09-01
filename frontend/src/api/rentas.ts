@@ -44,6 +44,145 @@ export function buscarContribuyentes(
 }
 
 
+/* ══════════ Los predios del contribuyente ══════════ */
+
+/**
+ * Un predio del padrón predial de rentas. Es `PredioDeRentasResource`.
+ *
+ * **Sin autovalúo, y no por olvido.** El recurso no lo publica porque no está
+ * almacenado en ningún sitio ni se puede derivar: llegar a él desde la ficha
+ * exige el cuadro de valores unitarios y la depreciación —a las dos les falta
+ * una dimensión, GOB-03 H-14/H-15—, los aranceles de la ordenanza (D-02b) y el
+ * `% actualización` (D-11). Su propio javadoc lo dice: una columna de dinero
+ * siempre en blanco es peor que no tenerla, porque una cifra ausente y un cero
+ * no se distinguen en una grilla.
+ *
+ * `areaTerreno` llega **sin unidad** —`valor.toPlainString()`— al revés que en
+ * omisos, donde es `AreaM2.toString()` y trae los «m2» dentro. No se le añaden
+ * aquí: la cabecera de la columna es la que dice en qué se mide.
+ */
+export type PredioDelContribuyente = {
+  /** El identificador interno, que es con el que se declara el autovalúo al determinar. */
+  predioId: number;
+  codigoReferenciaCatastral: string;
+  /** `URBANO` | `RUSTICO`. */
+  tipo: string;
+  direccion: string;
+  /** De la ficha catastral vigente. Nulo si el predio no tiene ficha. */
+  uso: string | null;
+  sector: string | null;
+  /** Metros cuadrados, sin unidad. Nula si la ficha no la trae. */
+  areaTerreno: string | null;
+  /** La cuota de ESTE contribuyente sobre el predio, de `titularidad`. */
+  porcentajePropiedad: string;
+  /** `PROPIETARIO_UNICO`, `COPROPIETARIO`, `CONYUGE`, `SUCESION`… La suya, no la del primer titular. */
+  condicion: string | null;
+};
+
+/**
+ * Los predios de un contribuyente.
+ *
+ * <h2>Tres respuestas distintas donde antes había una (#541)</h2>
+ *
+ * Hasta #541 esta lectura contestaba `200` con la página vacía en tres casos
+ * que no son el mismo. Ahora los separa, y quien la llama tiene que separarlos
+ * también —medido contra el backend—:
+ *
+ * <ul>
+ *   <li>sin ningún contribuyente → **`422 VALIDACION`**, «Hay que decir de
+ *       quién son los predios: falta «codContribuyente» (o su otro nombre,
+ *       «contribuyente»)». Por eso el parámetro es obligatorio en esta firma:
+ *       un `string` y no un `string | undefined`;
+ *   <li>un código que no está en el padrón → **`404 NO_ENCONTRADO`**, «En el
+ *       padron de esta municipalidad no hay ningun contribuyente con codigo
+ *       'NO-EXISTE'»;
+ *   <li>un contribuyente del padrón sin ningún predio → **`200` con cero
+ *       filas**, que es lo único que de verdad significa «no tiene predios».
+ * </ul>
+ *
+ * Las dos primeras eran idénticas byte a byte y la pantalla las dibujaba como
+ * la tercera: «este contribuyente no tiene predios» sobre alguien que no
+ * existe, que es de las lecturas más caras que se pueden dar en ventanilla.
+ *
+ * `codContribuyente` y `contribuyente` son el mismo filtro con dos nombres
+ * —el prototipo dibuja «Cod. Contribuyente» y el resto de las lecturas usa
+ * `contribuyente`—; se manda el primero, que es el del prototipo.
+ *
+ * Los otros tres filtros los resuelve el backend **en memoria** sobre la lista
+ * del contribuyente: `codigoPredial` por prefijo, `sector` y `condicion` por
+ * igualdad sin distinguir mayúsculas.
+ */
+export type FiltroDePrediosDeRentas = {
+  codigoPredial?: string;
+  sector?: string;
+  condicion?: string;
+};
+
+export function listarPrediosDelContribuyente(
+  codContribuyente: string,
+  filtro: FiltroDePrediosDeRentas,
+  paginacion: Paginacion,
+  senal?: AbortSignal,
+): Promise<RespuestaPaginada<PredioDelContribuyente>> {
+  return solicitar('/rentas/predios', {
+    parametros: { codContribuyente, ...filtro, ...paginacion },
+    senal,
+  });
+}
+
+/**
+ * Un vehículo del padrón, con su deuda a la fecha. Es `VehiculoEncontradoResource`.
+ *
+ * Es **la misma fila** que publica `/consultas/vehiculos`, y el backend lo dice
+ * en su javadoc: dos formas distintas de la misma lectura dirían dos cosas del
+ * mismo vehículo, y la que se leyera en el expediente sería la que nadie
+ * compara. Aun así se pide por `/rentas/vehículos` y no por la de Consultas, y
+ * el motivo también es suyo: las conexiones de la interfaz llegan con el trozo
+ * de su módulo (#433), así que quien tenga Rentas y no Consultas vería un aviso
+ * de permiso ajeno dentro de su propio expediente. El acceso de ésta es
+ * `vehiculos`.
+ *
+ * `afectoDesde` y `afectoHasta` son `int` en el recurso, no nulos: el rango de
+ * afectación se deriva del año de fabricación y siempre existe.
+ */
+export type VehiculoDelContribuyente = {
+  placa: string;
+  clase: string | null;
+  marca: string;
+  modelo: string;
+  anioFabricacion: number;
+  /** `ACTIVO` | `TRANSFERIDO` | `BAJA` | `ROBADO`. */
+  estado: string;
+  afectoDesde: number;
+  afectoHasta: number;
+  contribuyenteId: number;
+  codigoContribuyente: string;
+  titular: string;
+  deuda: { importe: string; actualizadoA: string };
+};
+
+/**
+ * Los vehículos de un contribuyente.
+ *
+ * **El parámetro se llama `contribuyente` y NO admite `codContribuyente`**,
+ * al revés que su hermana de predios, que acepta los dos nombres. Medido:
+ * `?codContribuyente=C-000007` contesta `422 «Falta el parametro obligatorio
+ * 'contribuyente'»`. Por eso aquí va como argumento y no como filtro suelto:
+ * mandarlo con el otro nombre da un 422 que nombra un parámetro que quien lee
+ * la pantalla no ha escrito.
+ *
+ * Y a diferencia de los predios, un código que no está en el padrón **no da
+ * 404** sino `200` con cero filas (medido). La pantalla no puede distinguirlos
+ * por aquí, y no le hace falta: sabe quién está abierto porque acaba de leerlo.
+ */
+export function listarVehiculosDelContribuyente(
+  contribuyente: string,
+  paginacion: Paginacion,
+  senal?: AbortSignal,
+): Promise<RespuestaPaginada<VehiculoDelContribuyente>> {
+  return solicitar('/rentas/vehiculos', { parametros: { contribuyente, ...paginacion }, senal });
+}
+
 /* ══════════ Escrituras ══════════
    Las cuatro exigen `observacion` (regla 10, RNF-052): sin motivo no se
    guarda, y el backend lo comprueba tambien de su lado. */
@@ -253,9 +392,19 @@ export type PredioDelCalculo = { predioId: number; autovaluo: string; valuoExone
  * El cuerpo de `POST /rentas/predial/calculo-individual`.
  *
  * El contribuyente y el ejercicio viajan además por la CONSULTA
- * (`codContribuyente`, `ano`), que es donde el contrato los declara y lo que
- * permite compartir la búsqueda por la URL (#399). El cuerpo gana si trae los
- * dos (#425), así que aquí sólo va lo que no es un filtro.
+ * (`codContribuyente`, `ejercicio`), que es donde el contrato los declara y lo
+ * que permite compartir la búsqueda por la URL (#399). El cuerpo gana si trae
+ * los dos (#425), así que aquí sólo va lo que no es un filtro.
+ *
+ * <h2>Se manda `ejercicio` y no `ano`, y no es indiferente (#541)</h2>
+ *
+ * El contrato declara los dos y el controlador lee los dos —`ano` es el rótulo
+ * del prototipo, `ejercicio` es como se llama el dato en el cuerpo y en el
+ * dominio—, así que las dos formas contestan lo mismo. Se manda la canónica
+ * porque **es la que el propio backend nombra cuando falta**: sin ninguno de
+ * los dos responde «Hay que decir que ejercicio se determina: falta
+ * «ejercicio»» (medido), y un mensaje que nombra un parámetro que la pantalla
+ * no manda es de los que cuesta leer en ventanilla.
  */
 export type PeticionDePredialIndividual = {
   /** Con `true` calcula y no asienta; con `false` escribe la determinación. */
@@ -325,7 +474,7 @@ export type DeterminacionPredial = {
 };
 
 export function determinarPredial(
-  sujeto: { codContribuyente: string; ano: string },
+  sujeto: { codContribuyente: string; ejercicio: string },
   peticion: PeticionDePredialIndividual,
   senal?: AbortSignal,
 ): Promise<DeterminacionPredial> {

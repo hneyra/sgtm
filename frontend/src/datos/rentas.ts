@@ -46,7 +46,23 @@ export type TablaDef = {
   nota?: string;
 };
 
-export type BloqueDef = { titulo?: string; nota?: string; campos: CampoDef[]; tabla?: TablaDef };
+/**
+ * Un bloque del expediente.
+ *
+ * `lectura` dice que la tabla de este bloque **la llena el backend** y no el
+ * catálogo: `filas` se queda vacía a propósito y quien dibuja pide. Sin esa
+ * marca el bloque enseña lo que traiga `filas`, que es lo que hacían los dos de
+ * «Predios y vehículos» hasta #541: dos predios de la maqueta con su ubicación,
+ * su área y un autovalúo de S/ 132,196.75, bajo el nombre de la persona que se
+ * acabara de abrir.
+ */
+export type BloqueDef = {
+  titulo?: string;
+  nota?: string;
+  campos: CampoDef[];
+  tabla?: TablaDef;
+  lectura?: 'predios' | 'vehiculos';
+};
 
 export type SeccionDef = { id: string; label: string; hint: string; conteo: string; bloques: BloqueDef[] };
 
@@ -217,61 +233,79 @@ export const EXPEDIENTE: SeccionDef[] = [
     ],
   },
 
+  /* Las dos tablas de esta sección las llena el backend desde #541 —`GET
+     /rentas/predios` y `GET /rentas/vehiculos`, con `lectura`—, así que aquí
+     quedan sus columnas y ni una fila. Antes traían las de la maqueta: dos
+     predios con ubicación, área y autovalúo al céntimo, y dos vehículos con
+     marca, modelo y base imponible, dibujados bajo el nombre de cualquier
+     contribuyente que se abriera.
+
+     El «conteo» de la sección tampoco puede ser una cifra: «2 predios · 1
+     vehículo» es un dato de una persona concreta, y esto es la definición de
+     la sección. Dice lo que la sección ES; las cifras las ponen las tablas
+     cuando el backend las da. */
   {
     id: 'unidades',
     label: 'Predios y vehículos',
     hint: 'Las unidades afectas de las que sale el impuesto',
-    conteo: '2 predios · 1 vehículo',
+    conteo: '2 padrones',
     bloques: [
       {
         titulo: 'Predios',
         nota: 'El padrón predial de rentas. El código predial es el mismo código de referencia catastral: no hay dos padrones de predios.',
         campos: [],
+        lectura: 'predios',
         tabla: {
           titulo: 'Predios registrados',
-          conteo: '2 predios · autovalúo S/ 170,616.75',
-          accion: 'Ver ficha catastral',
-          min: '800px',
+          conteo: '',
+          min: '860px',
+          /* Las seis del manual que `PredioDeRentasResource` publica, más dos
+             suyas —tipo y sector— que dicen dónde está el predio y si es urbano
+             o rústico. Se van «Const. m²», que vive en las construcciones de la
+             ficha y no en esta lectura, y «Autovalúo S/», que el recurso NO
+             publica y su javadoc explica por qué: no está almacenado ni se puede
+             derivar sin el cuadro de valores unitarios, la depreciación, los
+             aranceles (D-02b) y el % de actualización (D-11). Una columna de
+             dinero siempre en blanco es peor que no tenerla. */
           cols: [
             ['Código predial', 0],
             ['Ubicación', 0],
+            ['Tipo', 0],
             ['Uso', 0],
+            ['Sector', 0],
             ['Terreno m²', 1],
-            ['Const. m²', 1],
             ['% prop.', 1],
-            ['Autovalúo S/', 1],
             ['Condición', 0],
           ],
-          filas: [
-            ['02-014-D-14-01', 'CALLE SANTA ROSA 116', 'Casa habitación', '210.00', '164.50', '100.00', '132,196.75', 'Afecto'],
-            ['04-021-B-07-00', 'MZ. B LT. 7 — BELLAVISTA', 'Terreno sin construir', '184.00', '0.00', '50.00', '38,420.00', 'Afecto'],
-          ],
-          nota: 'El autovalúo del conjunto es la base imponible del predial: se determina por contribuyente, no por predio.',
+          filas: [],
+          nota:
+            'El autovalúo del conjunto es la base imponible del predial —se determina por contribuyente, no por predio— y no sale aquí: ' +
+            'esta lectura no lo publica porque el sistema todavía no sabe valorizar un predio. Se declara al determinar.',
         },
       },
       {
         titulo: 'Vehículos',
         nota: 'La afectación corre tres ejercicios desde el año siguiente a la primera inscripción registral.',
         campos: [],
+        lectura: 'vehiculos',
         tabla: {
           titulo: 'Vehículos afectos',
-          conteo: '2 registros',
-          accion: '+ Añadir vehículo',
+          conteo: '',
           min: '760px',
+          /* «Base imponible S/» no está: es el mayor entre el valor de
+             adquisición y el referencial del MEF, y eso lo resuelve el cálculo
+             vehicular, no el padrón. La afectación sí viene, en dos enteros. */
           cols: [
             ['Placa', 0],
             ['Clase', 0],
             ['Marca', 0],
             ['Modelo', 0],
             ['Año fab.', 0],
-            ['Base imponible S/', 1],
             ['Afectación', 0],
             ['Estado', 0],
           ],
-          filas: [
-            ['T2G-418', 'AUTOMÓVIL', 'TOYOTA', 'YARIS GLI', '2018', '61,400.00', '2019 — 2021', 'Baja por vencimiento'],
-            ['V1H-882', 'CAMIONETA', 'HYUNDAI', 'TUCSON', '2024', '112,800.00', '2025 — 2027', 'Afecto'],
-          ],
+          filas: [],
+          nota: 'La base imponible no sale del padrón: es el mayor entre el valor de adquisición y el referencial del MEF, y la pone el cálculo vehicular.',
         },
       },
     ],
@@ -465,6 +499,27 @@ const SIN_LECTURA_QUE_LISTE =
 /** Y el tercero: la hoja entera todavía no habla con el backend. */
 const HOJA_SIN_CONECTAR =
   'Esta hoja todavía no pide nada al backend, así que su filtro no tendría a qué petición sumarse.';
+
+/* ── Y un cuarto, que no dice «todavía» ─────────────────────────────────────
+   Los tres de arriba se abren solos el día que el backend crezca. Estos dos no:
+   lo que falta no es la consulta sino que **los valores del desplegable no
+   existen en el sistema**, así que el filtro no se podría servir ni queriendo
+   sin decidir antes qué significan. #541 los hizo contestar `422` en vez de
+   ignorarlos, que es lo correcto y lo que obliga a bloquearlos aquí: mandarlos
+   rompe la búsqueda entera en vez de devolver de más. */
+
+/** «Zona»: vive en `sector.zona` y cada municipalidad la escribe a su manera. */
+const ZONA_QUE_NO_EXISTE =
+  'Las cuatro zonas de este desplegable no existen en el sistema. La zona de un predio la pone su sector y es texto libre por ' +
+  'municipalidad —la carga real escribe «Urbana» y «Rustica»—, así que ninguna de ellas casaría con ningún dato. El backend la ' +
+  'rechaza con 422 en vez de ignorarla, para que no devuelva una tabla vacía que se leería como «no hay cuotas». Se acota por código ' +
+  'predial (#541).';
+
+/** «Uso»: vive en `ficha_catastral.uso`, tambien texto libre. */
+const USO_QUE_NO_EXISTE =
+  'Los cinco usos de este desplegable tampoco existen en el sistema. El uso lo guarda la ficha catastral como texto libre —«Casa ' +
+  'habitacion», «Tienda de artesanía»— y no coincide con este vocabulario en mayúsculas; el backend lo rechaza con 422. Se acota por ' +
+  'código predial (#541).';
 
 /** Las dos cajas del masivo que enseñan una cifra normativa: se leen, no se escriben. */
 const DEL_CONJUNTO_SELLADO =
@@ -667,14 +722,17 @@ export const DETERMINACIONES: Record<ClaveDeDeterminacion, DeterminacionDef> = {
     endpoint: 'GET /api/v1/rentas/arbitrios',
     desc: 'Limpieza pública, parques y jardines y serenazgo. La tasa depende del uso del predio, la zona, la frecuencia del servicio y los metros de frontis declarados en la ficha catastral.',
     filtros: [
+      /* El unico de los tres que el backend SI sabe servir —su 422 lo dice con
+         todas las letras: «Acote por codigoPredial»—, y por eso su motivo es el
+         de la hoja sin conectar y no el de los otros dos. */
       { l: 'Código predial', v: '', bloqueado: HOJA_SIN_CONECTAR },
-      { l: 'Zona', t: 'sel', v: 'Zona 2', o: ['Zona 1', 'Zona 2', 'Zona 3', 'Zona 4'], bloqueado: HOJA_SIN_CONECTAR },
+      { l: 'Zona', t: 'sel', v: 'Zona 2', o: ['Zona 1', 'Zona 2', 'Zona 3', 'Zona 4'], bloqueado: ZONA_QUE_NO_EXISTE },
       {
         l: 'Uso',
         t: 'sel',
         v: 'CASA HABITACIÓN',
         o: ['CASA HABITACIÓN', 'COMERCIO', 'INDUSTRIA', 'SERVICIOS', 'TERRENO SIN CONSTRUIR'],
-        bloqueado: HOJA_SIN_CONECTAR,
+        bloqueado: USO_QUE_NO_EXISTE,
       },
     ],
     tabla: {
