@@ -101,8 +101,90 @@ export type Usuario = {
   vigenciaHasta: string | null;
 };
 
-/** Es `PermisoResource`. **No trae `usuarioId`**: solo publica los del grupo. */
-export type PermisoDeGrupo = { id: number; acceso: string; grupoId: number; privilegios: Privilegio[] };
+/**
+ * Un permiso **configurado** sobre un grupo. Es `PermisoResource`.
+ *
+ * <h2>Las dos claves son nulables, y eso es lo que dice de quien es la fila</h2>
+ *
+ * Desde #543 el recurso declara `usuarioId` y su `grupoId` dejo de ser
+ * primitivo. Antes valia `0L` cuando la fila no tenia grupo —o sea, cuando era
+ * la excepcion de un usuario— y salia por HTTP **indistinguible de un permiso
+ * del grupo 0**. Esta lectura solo devuelve los del grupo que se pide, asi que
+ * hoy `usuarioId` llega siempre nulo por ella; se declara porque es el campo
+ * que separa las dos clases de fila, no porque esta pantalla lo use.
+ *
+ * Y **no es lo mismo que el permiso EFECTIVO de un usuario**: esto es lo que se
+ * configura y se guarda con el `PUT` de la misma ruta; aquello es lo que una
+ * persona puede, con la precedencia ya resuelta. Ver `PermisoEfectivo`.
+ */
+export type PermisoDeGrupo = {
+  id: number;
+  acceso: string;
+  grupoId: number | null;
+  usuarioId: number | null;
+  privilegios: Privilegio[];
+};
+
+/**
+ * De donde le viene a un usuario lo que puede hacer sobre un acceso.
+ *
+ * Es `PermisoEfectivo.OrigenDelPermiso` del backend, letra por letra. Solo hay
+ * dos valores y **no hay un tercero para «de los dos»**: la precedencia no suma.
+ *
+ * Va como union y no como el arreglo `as const` de `PRIVILEGIOS` y `OPERACIONES`
+ * porque nadie lo recorre —no llena ningun desplegable—: lo unico que se hace
+ * con el es distinguir las dos ramas, y una constante que no lee nadie no
+ * protege de nada.
+ */
+export type OrigenDelPermiso = 'EXCEPCION' | 'GRUPO';
+
+/**
+ * Lo que un usuario **puede** hacer sobre un acceso, ya resuelto por el
+ * servidor. Es `PermisoEfectivoResource` (#543).
+ *
+ * <h2>Por que el origen viaja en el dato</h2>
+ *
+ * La regla es que la excepcion propia de un usuario **sustituye** al grupo
+ * entero para ese acceso —otorgue o niegue—, no se suma. Deducirla comparando
+ * dos listas obliga a quien pregunta a reimplementar justo la regla que no se
+ * puede equivocar: la interfaz vieja calculaba `on = propio || heredado`, que
+ * convierte una excepcion que **restringe** en una que amplia.
+ *
+ * <h2>Lo que hay que saber para dibujarlo sin mentir</h2>
+ *
+ * Medido el 2026-09-01 contra el backend local, y contrastado con
+ * `PermisoRepositoryJdbc.efectivosConOrigenDe` y con
+ * `PermisosDeUnUsuarioFronteraTest`:
+ *
+ * 1. **Un acceso sin nada configurado NO produce fila.** Serian 134 filas
+ *    vacias por usuario. Asi que «no esta en la lista» significa «no hay nada
+ *    configurado», no «se le nego».
+ * 2. **`privilegios: []` si es una fila, y solo la produce una excepcion que
+ *    niega.** Es lo unico que distingue «se le nego expresamente» de «nunca lo
+ *    tuvo», y por eso las dos no se pueden dibujar igual.
+ * 3. **`grupoId` es nulo con `origen: 'GRUPO'`** cuando lo otorga mas de un
+ *    grupo vigente: no hay UNO que nombrar, y elegir el primero por id daria un
+ *    dato plausible y equivocado. Con `origen: 'EXCEPCION'` es nulo siempre —el
+ *    constructor del backend lo rechaza si no lo es—.
+ * 4. **Un usuario deshabilitado o fuera de vigencia recibe la lista VACIA**, con
+ *    la misma regla que el guardia (`AND EXISTS (... u.habilitado AND vigencia)`
+ *    en la consulta; AC 2 de la prueba de frontera). No es que no tenga
+ *    permisos configurados: es que hoy no puede ninguno. Dibujar «sin permisos»
+ *    ahi seria decir algo distinto de lo que pasa.
+ * 5. Un `id` que no existe **en esta municipalidad** es 404 nombrandolo, no una
+ *    lista vacia. Comprobado cruzado: el usuario 2 —que existe en la
+ *    municipalidad 9— es 404 desde la 1.
+ *
+ * Y **no se escribe**: el contrato publica esta ruta solo con `GET`. La
+ * excepcion de usuario existe en el dominio (`AdministrarPermisos.fijarParaUsuario`)
+ * y no tiene endpoint.
+ */
+export type PermisoEfectivo = {
+  acceso: string;
+  privilegios: Privilegio[];
+  origen: OrigenDelPermiso;
+  grupoId: number | null;
+};
 
 /**
  * Una fila de la bitacora. Es `AuditoriaResource`, campo por campo.
@@ -143,6 +225,37 @@ export const listarUsuarios = (p: Paginacion, s?: AbortSignal) =>
 /** Los permisos de UN grupo. Devuelve lista suelta, no el sobre paginado. */
 export const permisosDelGrupo = (grupoId: number, s?: AbortSignal) =>
   solicitar<PermisoDeGrupo[]>(`/seguridad/grupos/${grupoId}/permisos`, { senal: s });
+
+/**
+ * A que grupos pertenece un usuario (#543).
+ *
+ * **Solo las pertenencias activas**: una baja no borra la fila (RNF-051) pero
+ * quien salio del grupo ya no pertenece. Lo que si devuelve son los grupos
+ * deshabilitados o fuera de vigencia a los que se sigue perteneciendo —cada
+ * fila trae su `habilitado` y su vigencia—, y esa distincion importa: pertenecer
+ * y surtir efecto no son lo mismo. Un grupo deshabilitado no aparece como
+ * origen de ningun permiso efectivo, porque la consulta que los resuelve exige
+ * `g.habilitado` y la vigencia.
+ *
+ * No pertenecer a ninguno es una pagina vacia con 200; un usuario que no existe
+ * en esta municipalidad es 404.
+ */
+export const gruposDelUsuario = (usuarioId: number, p: Paginacion, s?: AbortSignal) =>
+  solicitar<RespuestaPaginada<Grupo>>(`/seguridad/usuarios/${usuarioId}/grupos`, {
+    parametros: { ...p },
+    senal: s,
+  });
+
+/**
+ * La matriz efectiva de un usuario, con el origen de cada fila (#543).
+ *
+ * Devuelve lista suelta, no el sobre paginado, y **sin filas** para los accesos
+ * sobre los que no hay nada configurado. Lee `PermisoEfectivo` antes de
+ * dibujarla: las cinco cosas que ahi se anotan son las que separan una matriz
+ * honesta de una que se equivoca en el sentido peor.
+ */
+export const permisosEfectivosDelUsuario = (usuarioId: number, s?: AbortSignal) =>
+  solicitar<PermisoEfectivo[]>(`/seguridad/usuarios/${usuarioId}/permisos`, { senal: s });
 
 /**
  * La bitacora.

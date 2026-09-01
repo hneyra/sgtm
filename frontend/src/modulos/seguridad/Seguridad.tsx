@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState, type CSSProperties } from 'react';
 import { Icono } from '../../ds/Icono';
 import {
   fijarPermisosDelGrupo,
+  gruposDelUsuario,
   listarAccesos,
   listarAuditoria,
   listarConjuntosDeParametros,
@@ -10,13 +11,16 @@ import {
   listarRespaldos,
   listarUsuarios,
   permisosDelGrupo,
+  permisosEfectivosDelUsuario,
   OPERACIONES,
   PRIVILEGIOS,
   ROTULO_DEL_PRIVILEGIO,
   type Acceso,
+  type PermisoEfectivo,
   type Privilegio,
 } from '../../api/seguridad';
 import { FalloDeLectura } from '../../api/Fallo';
+import { Aviso } from '../../ds/componentes';
 import { ErrorDeApi } from '../../api/cliente';
 import { useRebote, useRecurso } from '../../api/useRecurso';
 import { ICO } from '../../ds/iconos';
@@ -169,6 +173,7 @@ export default function Seguridad({ dest, onDest }: PantallaProps) {
   const catalogo = useMemo(() => accesosReales.datos?.contenido ?? [], [accesosReales.datos]);
 
   const esGrupo = sel?.tipo === 'grupo';
+  const esUsuario = sel?.tipo === 'usuario';
   const grupoElegido = esGrupo ? grupos.find((g) => g.id === sel?.id) : undefined;
   const usuarioElegido = sel?.tipo === 'usuario' ? usuarios.find((u) => u.id === sel.id) : undefined;
 
@@ -185,6 +190,24 @@ export default function Seguridad({ dest, onDest }: PantallaProps) {
     enAccesos && esGrupo,
   );
 
+  /* ── Y las dos de un USUARIO, que antes no existian (#543) ──────
+     `permisosEfectivosDelUsuario` trae la matriz YA resuelta —una fila por
+     acceso configurado, con su origen—, y `gruposDelUsuario` a que grupos
+     pertenece. Son dos preguntas distintas y las dos hacen falta: la segunda no
+     compone la primera —para eso esta `origen`—, pero es lo unico que explica
+     un permiso heredado de mas de un grupo, donde `grupoId` viene nulo a
+     proposito. */
+  const efectivosReales = useRecurso(
+    (s) => permisosEfectivosDelUsuario(sel!.id, s),
+    [sel?.id],
+    enAccesos && esUsuario,
+  );
+  const gruposDeLaCuenta = useRecurso(
+    (s) => gruposDelUsuario(sel!.id, { tamano: 100 }, s),
+    [sel?.id],
+    enAccesos && esUsuario,
+  );
+
   /* La observacion es de UN cambio, no de la sesion: al cambiar de grupo se
      vacia. Sin esto, el motivo tecleado para el grupo A viaja con el cambio del
      grupo B —la fila de auditoria diria por que se toco otro grupo—, que es
@@ -194,12 +217,13 @@ export default function Seguridad({ dest, onDest }: PantallaProps) {
     setErrorAlGuardar(null);
   }, [sel?.tipo, sel?.id]);
 
-  /* ── La matriz: sólo de un GRUPO, y sólo del backend ────────────
-     De un grupo se reconstruye con dos lecturas. De un USUARIO no: no hay
-     lectura de pertenencia a grupo, la excepción propia no tiene ruta y
-     `PermisoResource` ni siquiera declara `usuarioId` (#543). Antes se rellenaba
-     con el juego de datos y se rotulaba «del juego de datos», que no basta: la
-     matriz se veía igual de real que la del grupo de al lado. */
+  /* ── Lo CONFIGURADO de un grupo, que es lo que se edita ─────────
+     Ojo con no confundirlo con lo EFECTIVO de una cuenta, que es otra pregunta
+     y otra lectura (#543): esto es lo que el grupo concede y lo que el `PUT` de
+     la misma ruta guarda; aquello, lo que una persona puede, con la precedencia
+     ya resuelta por el servidor. Componer lo segundo con lo primero es lo que
+     el arreglo vino a impedir: la excepción propia SUSTITUYE al grupo, y unirlas
+     convierte una excepción que restringe en una que amplía. */
   const propios = useMemo(() => {
     const m: Record<string, Privilegio[]> = {};
     (permisosReales.datos ?? []).forEach((p) => {
@@ -229,16 +253,9 @@ export default function Seguridad({ dest, onDest }: PantallaProps) {
   }, [modFiltro, catalogo]);
 
   const matriz = useMemo(() => {
-    let nOtorgados = 0;
-    let nEspeciales = 0;
     const filas: FilaDeMatriz[] = accesosVisibles.map((a) => {
       const vigentes = editados[a.codigo] ?? propios[a.codigo] ?? [];
-      const celdas = PRIVILEGIOS.map((p) => {
-        const on = vigentes.indexOf(p) >= 0;
-        if (on) nOtorgados++;
-        if (on && p === 'ESPECIAL') nEspeciales++;
-        return { privilegio: p, on };
-      });
+      const celdas = PRIVILEGIOS.map((p) => ({ privilegio: p, on: vigentes.indexOf(p) >= 0 }));
       return {
         acceso: a,
         vigentes,
@@ -248,7 +265,7 @@ export default function Seguridad({ dest, onDest }: PantallaProps) {
         sensible: MUEVEN_DINERO.has(a.codigo),
       };
     });
-    return { filas, nOtorgados, nEspeciales };
+    return { filas };
   }, [accesosVisibles, editados, propios, nombreDelModulo]);
 
   /* Lo que se va a mandar: **sólo los accesos que se tocaron**, mirando la
@@ -264,7 +281,7 @@ export default function Seguridad({ dest, onDest }: PantallaProps) {
   );
 
   const impedimentoAlGuardar = !esGrupo
-    ? 'La matriz de un usuario no se lee del backend, así que tampoco se escribe (#543).'
+    ? 'La matriz de una cuenta ya se lee (#543), pero su excepción propia no tiene ruta de escritura en el contrato (#585).'
     : permisosReales.datos === null
       ? 'Todavía no se han leído los permisos de este grupo.'
       : aGuardar.length === 0
@@ -316,7 +333,9 @@ export default function Seguridad({ dest, onDest }: PantallaProps) {
         id: g.id,
         label: g.nombre,
         /* No hay lectura de miembros —`/grupos/{id}/miembros` es sólo POST—, así
-           que aquí va la descripción del grupo y nunca un recuento (#543). */
+           que aquí va la descripción del grupo y nunca un recuento. Derivarlo
+           costaría una petición POR USUARIO y sólo sería exacto con la página de
+           usuarios completa: pedido en #582. */
         nota: g.descripcion ?? 'Sin descripción',
         marca: g.habilitado ? '' : 'Deshabilitado',
       }),
@@ -337,12 +356,17 @@ export default function Seguridad({ dest, onDest }: PantallaProps) {
   }, [q, grupos, usuarios]);
 
   /* ── Los hallazgos del panel: los que SÍ se pueden calcular ─────
-     El artboard listaba cuatro y ninguno se podía: «permiso Total» y «cuentas
-     inactivas con permisos» necesitan la matriz de un usuario (#543), la
-     caducidad de la contraseña la gobierna el proveedor de identidad y no este
-     sistema, y «restauración sin verificar» no es un campo de `RespaldoResource`.
+     El artboard listaba cuatro y ninguno se podía. Con #543 uno cambió de
+     motivo y otro resultó ser imposible por diseño: «permiso Total» ya se
+     pregunta de UNA cuenta, pero del padrón costaría una petición por usuario y
+     no hay filtro por privilegio; y «cuentas inactivas con permisos» no se puede
+     ni así, porque la lectura efectiva aplica la misma regla que el guardia y a
+     una cuenta deshabilitada le contesta la lista vacía (#583). La caducidad de
+     la contraseña la gobierna el proveedor de identidad y no este sistema, y
+     «restauración sin verificar» no es un campo de `RespaldoResource` (#558).
      Los tres de aquí salen de columnas que las dos lecturas ya traen. */
   const hoy = new Date().toISOString().slice(0, 10);
+
   const cuentasDeshabilitadas = usuarios.filter((u) => !u.habilitado);
   const cuentasVencidas = usuarios.filter((u) => u.vigenciaHasta !== null && u.vigenciaHasta < hoy);
   const gruposDeshabilitados = grupos.filter((g) => !g.habilitado);
@@ -383,6 +407,82 @@ export default function Seguridad({ dest, onDest }: PantallaProps) {
       conteo: String(gruposDeshabilitados.length),
     },
   ];
+
+  /* ── La matriz de un USUARIO, entera del backend (#543) ─────────
+     Se dibuja sobre el MISMO catalogo filtrado que la del grupo, porque la
+     pregunta es la misma —que puede hacer sobre cada opcion—, pero las filas no
+     salen igual: la lectura solo devuelve los accesos sobre los que hay algo
+     configurado, asi que «no viene fila» y «viene fila sin privilegios» son dos
+     cosas distintas y no se pueden pintar iguales. La primera es «nunca lo
+     tuvo»; la segunda solo la produce una excepcion que NIEGA. */
+  const nombreDelGrupo = useMemo(() => {
+    const m = new Map<number, string>();
+    (gruposReales.datos?.contenido ?? []).forEach((g) => m.set(g.id, g.nombre));
+    return m;
+  }, [gruposReales.datos]);
+
+  const efectivosPorAcceso = useMemo(() => {
+    const m = new Map<string, PermisoEfectivo>();
+    (efectivosReales.datos ?? []).forEach((e) => m.set(e.acceso, e));
+    return m;
+  }, [efectivosReales.datos]);
+
+  /* Los recuentos de la cabecera salen del CATALOGO ENTERO, no de lo filtrado.
+     «Con privilegio Especial: 0» bajo el filtro «Sensibles» —que son doce
+     accesos de 134— se lee como «esta cuenta no tiene Especial en ninguna
+     parte», y esa frase es la que decide si alguien investiga o pasa de largo.
+     Lo que si dice el filtro es cuantas filas hay en pantalla, y para eso esta
+     la cuarta casilla. */
+  const totalesDelUsuario = useMemo(() => {
+    let nOtorgados = 0;
+    let nEspeciales = 0;
+    let nExcepciones = 0;
+    let nNegados = 0;
+    (efectivosReales.datos ?? []).forEach((e) => {
+      nOtorgados += e.privilegios.length;
+      if (e.privilegios.indexOf('ESPECIAL') >= 0) nEspeciales++;
+      if (e.origen === 'EXCEPCION') {
+        nExcepciones++;
+        if (e.privilegios.length === 0) nNegados++;
+      }
+    });
+    return { nOtorgados, nEspeciales, nExcepciones, nNegados };
+  }, [efectivosReales.datos]);
+
+  /* Lo mismo para el grupo, y por el mismo motivo: hasta hoy estas dos cifras
+     se calculaban sobre `accesosVisibles`, o sea sobre el filtro puesto. */
+  const totalesDelGrupo = useMemo(() => {
+    let nOtorgados = 0;
+    let nEspeciales = 0;
+    catalogo.forEach((a) => {
+      const vigentes = editados[a.codigo] ?? propios[a.codigo] ?? [];
+      nOtorgados += vigentes.length;
+      if (vigentes.indexOf('ESPECIAL') >= 0) nEspeciales++;
+    });
+    return { nOtorgados, nEspeciales };
+  }, [catalogo, editados, propios]);
+
+  /* Una cuenta deshabilitada o fuera de vigencia recibe la lista VACIA, con la
+     misma regla que el guardia. No es que no tenga permisos configurados: es
+     que hoy no puede ninguno, y las dos frases no significan lo mismo. Por eso
+     ahi no se dibuja la matriz: 134 filas diciendo «sin configurar» serian 134
+     afirmaciones falsas sobre la configuracion. */
+  const cuentaPuedeOperarHoy =
+    usuarioElegido !== undefined &&
+    usuarioElegido.habilitado &&
+    (usuarioElegido.vigenciaDesde === null || usuarioElegido.vigenciaDesde <= hoy) &&
+    (usuarioElegido.vigenciaHasta === null || usuarioElegido.vigenciaHasta >= hoy);
+
+  const matrizDelUsuario = useMemo(
+    () =>
+      accesosVisibles.map((a) => ({
+        acceso: a,
+        efectivo: efectivosPorAcceso.get(a.codigo),
+        modulo: nombreDelModulo.get(a.moduloId) ?? SIN_DATO,
+        sensible: MUEVEN_DINERO.has(a.codigo),
+      })),
+    [accesosVisibles, efectivosPorAcceso, nombreDelModulo],
+  );
 
   const catalogoCompleto = accesosReales.datos !== null && !accesosReales.datos.hayMas;
   const usuariosCompletos = usuariosReales.datos !== null && !usuariosReales.datos.hayMas;
@@ -594,12 +694,15 @@ export default function Seguridad({ dest, onDest }: PantallaProps) {
                     jquispe, aayca, fruiz» nombraba a tres personas que no existen
                     en ninguna de las dos municipalidades. */}
                 <p style={{ margin: 0, padding: '11px 16px', background: 'var(--bg-elev)', fontSize: 12, lineHeight: 1.5, color: 'var(--ink-3)', textWrap: 'pretty' }}>
-                  Faltan cuatro hallazgos que el diseño pedía y hoy no se pueden calcular: <strong>quién tiene el privilegio
-                  Especial</strong> y <strong>qué cuenta deshabilitada conserva permisos</strong> necesitan la matriz de un usuario, que
-                  ninguna lectura publica (#543); la <strong>caducidad de la contraseña</strong> la gobierna el proveedor de identidad y
-                  no este sistema; y la <strong>última restauración verificada</strong> no es un campo de la consulta de respaldos. Un
-                  permiso total sobre un módulo tributario permite anular recibos y dar de baja deuda: no es una preferencia, es la llave
-                  de la caja, y por eso no se enseña una cifra inventada en su sitio.
+                  Faltan cuatro hallazgos que el diseño pedía y hoy no se pueden calcular. <strong>Quién tiene el privilegio
+                  Especial</strong> ya se puede preguntar de una cuenta —está en su matriz (#543)—, pero no del padrón: haría falta una
+                  petición por usuario y no hay filtro por privilegio (#583). <strong>Qué cuenta deshabilitada conserva permisos</strong>
+                  no se puede ni así, y no por falta de lectura: la de permisos efectivos aplica la misma regla que el guardia y a una
+                  cuenta deshabilitada le contesta la lista <strong>vacía</strong>, tanto si conserva permisos como si nunca los tuvo
+                  (#583). La <strong>caducidad de la contraseña</strong> la gobierna el proveedor de identidad y no este sistema; y la
+                  <strong>última restauración verificada</strong> no es un campo de la consulta de respaldos. Un permiso total sobre un
+                  módulo tributario permite anular recibos y dar de baja deuda: no es una preferencia, es la llave de la caja, y por eso
+                  no se enseña una cifra inventada en su sitio.
                 </p>
               </section>
             )}
@@ -661,8 +764,9 @@ export default function Seguridad({ dest, onDest }: PantallaProps) {
         {enAccesos && (
           <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
             <p style={{ margin: 0, fontFamily: 'var(--font-serif)', fontSize: 17, lineHeight: 1.6, color: 'var(--ink-2)', maxWidth: '70ch' }}>
-              Elige un grupo y mira qué puede hacer. Los permisos se dan al grupo y se heredan: es la forma de darlos que se puede
-              revisar, y la única que este sistema publica para leer.
+              Elige un grupo y mira qué concede, o una cuenta y mira qué puede. Los permisos se dan al grupo y se heredan; una cuenta
+              puede además tener una <strong>excepción propia</strong>, que <strong>sustituye</strong> a lo que su grupo le da para ese
+              acceso —otorgue o niegue— en vez de sumarse. La matriz de una cuenta dice, fila a fila, cuál de las dos mandó.
             </p>
 
             {gruposReales.error !== null && (
@@ -774,8 +878,8 @@ export default function Seguridad({ dest, onDest }: PantallaProps) {
                         <p style={{ margin: '3px 0 0', fontSize: 12.5, color: 'var(--ink-3)', textWrap: 'pretty' }}>
                           {esGrupo
                             ? /* Nunca «N miembros»: `/grupos/{id}/miembros` es sólo
-                                 POST, así que ese recuento no existe (#543). */
-                              'Grupo · el backend no publica sus miembros (#543)'
+                                 POST, así que ese recuento no existe (#582). */
+                              'Grupo · el backend no publica quién está dentro (#582)'
                             : 'Cuenta ' + (usuarioElegido?.cuenta ?? SIN_DATO) + (usuarioElegido?.correo ? ' · ' + usuarioElegido.correo : '')}
                         </p>
                       </div>
@@ -790,59 +894,282 @@ export default function Seguridad({ dest, onDest }: PantallaProps) {
                       </span>
                     </div>
                     {esGrupo && (
-                      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit,minmax(150px,1fr))', gap: 0, background: 'var(--bg-card)' }}>
-                        {(
+                      <FranjaDeCasillas
+                        casillas={[
+                          /* Estas dos cuentan sobre el CATALOGO ENTERO y no sobre
+                             el filtro puesto: ver `totalesDelGrupo`. Cuantas filas
+                             hay en pantalla lo dice la cuarta casilla. */
+                          ['Privilegios otorgados', permisosReales.datos ? String(totalesDelGrupo.nOtorgados) : SIN_DATO, 'var(--ink)'],
                           [
-                            ['Privilegios otorgados', permisosReales.datos ? String(matriz.nOtorgados) : SIN_DATO, 'var(--ink)'],
-                            ['Con privilegio Especial', permisosReales.datos ? String(matriz.nEspeciales) : SIN_DATO, matriz.nEspeciales > 0 ? 'var(--bad-fg)' : 'var(--ink-3)'],
-                            ['Sin guardar', String(aGuardar.length), aGuardar.length > 0 ? 'var(--warn-fg)' : 'var(--ink-3)'],
-                            [
-                              'Accesos mostrados',
-                              accesosReales.datos
-                                ? accesosVisibles.length + ' de ' + accesosReales.datos.totalElementos
-                                : SIN_DATO,
-                              'var(--ink-3)',
-                            ],
-                          ] as [string, string, string][]
-                        ).map((r) => (
-                          <div key={r[0]} style={{ background: 'var(--bg-card)', padding: '13px 16px', borderLeft: '1px solid var(--line)', borderTop: '1px solid var(--line)', margin: '-1px 0 0 -1px' }}>
-                            <p style={{ margin: '0 0 4px', fontSize: 10, fontWeight: 500, textTransform: 'uppercase', letterSpacing: '.11em', color: 'var(--ink-3)' }}>
-                              {r[0]}
-                            </p>
-                            <p style={{ margin: 0, fontFamily: 'var(--font-mono)', fontSize: 14, color: r[2] }}>{r[1]}</p>
-                          </div>
-                        ))}
-                      </div>
+                            'Accesos con Especial',
+                            permisosReales.datos ? String(totalesDelGrupo.nEspeciales) : SIN_DATO,
+                            totalesDelGrupo.nEspeciales > 0 ? 'var(--bad-fg)' : 'var(--ink-3)',
+                          ],
+                          ['Sin guardar', String(aGuardar.length), aGuardar.length > 0 ? 'var(--warn-fg)' : 'var(--ink-3)'],
+                          [
+                            'Accesos mostrados',
+                            accesosReales.datos
+                              ? accesosVisibles.length + ' de ' + accesosReales.datos.totalElementos
+                              : SIN_DATO,
+                            'var(--ink-3)',
+                          ],
+                        ]}
+                      />
+                    )}
+                    {/* Las de una CUENTA, y la tercera es la que este arreglo
+                        hizo posible: cuantos de sus permisos son excepcion
+                        propia, o sea cuantos NO se ven mirando a su grupo. */}
+                    {esUsuario && cuentaPuedeOperarHoy && (
+                      <FranjaDeCasillas
+                        casillas={[
+                          ['Privilegios efectivos', efectivosReales.datos ? String(totalesDelUsuario.nOtorgados) : SIN_DATO, 'var(--ink)'],
+                          [
+                            'Accesos con Especial',
+                            efectivosReales.datos ? String(totalesDelUsuario.nEspeciales) : SIN_DATO,
+                            totalesDelUsuario.nEspeciales > 0 ? 'var(--bad-fg)' : 'var(--ink-3)',
+                          ],
+                          [
+                            'Por excepción propia',
+                            efectivosReales.datos
+                              ? String(totalesDelUsuario.nExcepciones) +
+                                (totalesDelUsuario.nNegados > 0 ? ' · ' + totalesDelUsuario.nNegados + ' niegan' : '')
+                              : SIN_DATO,
+                            totalesDelUsuario.nExcepciones > 0 ? 'var(--warn-fg)' : 'var(--ink-3)',
+                          ],
+                          [
+                            'Accesos mostrados',
+                            accesosReales.datos
+                              ? accesosVisibles.length + ' de ' + accesosReales.datos.totalElementos
+                              : SIN_DATO,
+                            'var(--ink-3)',
+                          ],
+                        ]}
+                      />
                     )}
                   </section>
                 )}
 
-                {/* ── La matriz de un USUARIO: no la hay ──
-                    Y decirlo es lo único honesto: la excepción propia de un
-                    usuario SUSTITUYE a lo que le da el grupo —no se suma—, así
-                    que una matriz mal reconstruida no se equivoca de poco. */}
-                {sel !== null && !esGrupo && (
-                  <section style={{ ...TARJETA, padding: '16px 16px 17px' }}>
-                    <h2 style={{ margin: '0 0 6px', fontFamily: 'var(--font-serif)', fontSize: 16, fontWeight: 600 }}>
-                      Permisos efectivos de esta cuenta
-                    </h2>
-                    <p style={{ margin: 0, fontSize: 13, lineHeight: 1.55, color: 'var(--ink-3)', maxWidth: '76ch', textWrap: 'pretty' }}>
-                      No se pueden mostrar, y no es que estén vacíos: <strong>ninguna lectura los publica</strong>. Haría falta saber a qué
-                      grupos pertenece la cuenta —<code>/seguridad/grupos/{'{id}'}/miembros</code> es sólo <code>POST</code>— y qué
-                      excepción propia tiene, que no tiene ruta y cuyo recurso ni siquiera declara <code>usuarioId</code>. Está pedido en
-                      el issue <strong>#543</strong>.
-                    </p>
-                    <p style={{ margin: '9px 0 0', fontSize: 12.5, lineHeight: 1.55, color: 'var(--ink-4)', maxWidth: '76ch', textWrap: 'pretty' }}>
-                      Importa cómo se publique: una excepción de usuario <strong>sustituye</strong> a lo que el grupo concede para ese
-                      acceso —otorgue o niegue—, no se suma. Deducirla comparando dos listas obliga a reimplementar esa precedencia, que
-                      es justo la que no se puede equivocar.
-                    </p>
-                    <p style={{ margin: '9px 0 0', fontSize: 12.5, lineHeight: 1.55, color: 'var(--ink-3)' }}>
-                      Lo que sí se puede revisar hoy es el permiso <strong>del grupo</strong>: elígelo en la lista de la izquierda.
-                    </p>
-                  </section>
-                )}
+                {/* ── La matriz de un USUARIO, del backend (#543) ──
+                    Aquí no se reconstruye nada: el servidor manda una fila por
+                    acceso con la precedencia YA resuelta, y cada fila dice de
+                    dónde viene. Componerla aquí uniendo «lo del grupo» con «lo
+                    propio» es exactamente el defecto que este arreglo cerró:
+                    una excepción que RESTRINGE se volvía una que amplía. */}
+                {sel !== null && esUsuario && (
+                  <>
+                    <section style={TARJETA}>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap', padding: '13px 16px', borderBottom: '1px solid var(--line)' }}>
+                        <h2 style={{ margin: 0, flex: 1, fontFamily: 'var(--font-serif)', fontSize: 16, fontWeight: 600 }}>
+                          Grupos a los que pertenece
+                          <span style={{ marginLeft: 9, fontFamily: 'var(--font-sans)', fontSize: 11, fontWeight: 400, color: 'var(--ink-3)' }}>
+                            {gruposDeLaCuenta.cargando ? 'leyendo…' : gruposDeLaCuenta.datos ? 'del backend' : 'sin leer'}
+                          </span>
+                        </h2>
+                      </div>
+                      <div style={{ padding: '13px 16px' }}>
+                        {gruposDeLaCuenta.error !== null && (
+                          <FalloDeLectura
+                            error={gruposDeLaCuenta.error}
+                            que="los grupos de esta cuenta"
+                            acceso="usuarios"
+                            alReintentar={gruposDeLaCuenta.reintentar}
+                          />
+                        )}
+                        {gruposDeLaCuenta.datos !== null && gruposDeLaCuenta.datos.contenido.length === 0 && (
+                          <p style={{ margin: 0, fontSize: 12.5, lineHeight: 1.55, color: 'var(--ink-3)', textWrap: 'pretty' }}>
+                            No pertenece a ninguno. Lo que pueda hacer sale entonces sólo de sus excepciones propias, si tiene alguna.
+                          </p>
+                        )}
+                        {gruposDeLaCuenta.datos !== null && gruposDeLaCuenta.datos.contenido.length > 0 && (
+                          <div style={{ display: 'flex', gap: 9, flexWrap: 'wrap' }}>
+                            {gruposDeLaCuenta.datos.contenido.map((g) => {
+                              const surteEfecto =
+                                g.habilitado &&
+                                (g.vigenciaDesde === null || g.vigenciaDesde <= hoy) &&
+                                (g.vigenciaHasta === null || g.vigenciaHasta >= hoy);
+                              return (
+                                <span
+                                  key={g.id}
+                                  style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '8px 11px', border: '1px solid var(--line-2)', borderRadius: 6, background: 'var(--bg-elev)' }}
+                                >
+                                  <Icono d={ICO_GRUPO} tam={13} grosor={1.8} style={{ color: 'var(--ink-4)', flex: '0 0 auto' }} />
+                                  <span style={{ fontSize: 12.5, color: 'var(--ink-2)' }}>{g.nombre}</span>
+                                  {/* Pertenecer y surtir efecto no son lo mismo, y el
+                                      backend lo separa a propósito: esta lectura devuelve
+                                      también los grupos deshabilitados o fuera de vigencia
+                                      a los que se sigue perteneciendo, y la matriz de
+                                      abajo no los cuenta como origen de nada. */}
+                                  {!surteEfecto && <span style={INS.bad}>Hoy no concede nada</span>}
+                                </span>
+                              );
+                            })}
+                          </div>
+                        )}
+                        {/* La nota explica lo que la lista dice, así que sin lista
+                            no explica nada: bajo un aviso de fallo se leería como si
+                            algo se hubiera llegado a leer. */}
+                        {gruposDeLaCuenta.datos !== null && (
+                          <p style={{ margin: '10px 0 0', fontSize: 11.5, lineHeight: 1.5, color: 'var(--ink-4)', maxWidth: '78ch', textWrap: 'pretty' }}>
+                            Sólo las pertenencias activas: quien salió de un grupo deja de pertenecer, aunque su fila siga ahí porque
+                            aquí no se borra (RNF-051).
+                          </p>
+                        )}
+                      </div>
+                    </section>
 
+                    <section style={TARJETA}>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap', padding: '13px 16px', borderBottom: '1px solid var(--line)' }}>
+                        <h2 style={{ margin: 0, flex: 1, fontFamily: 'var(--font-serif)', fontSize: 16, fontWeight: 600 }}>
+                          Permisos efectivos
+                          <span style={{ marginLeft: 9, fontFamily: 'var(--font-sans)', fontSize: 11, fontWeight: 400, color: 'var(--ink-3)' }}>
+                            {efectivosReales.cargando ? 'leyendo…' : efectivosReales.datos ? 'del backend' : 'sin leer'}
+                          </span>
+                        </h2>
+                        {['Sensibles', 'Todos'].map((m) => (
+                          <PastillaDeFiltro key={m} label={m} on={modFiltro === m} onClick={() => setModFiltro(m)} />
+                        ))}
+                        {modulosOfrecidos.map((m) => (
+                          <PastillaDeFiltro
+                            key={m.id}
+                            label={m.nombre}
+                            on={modFiltro === String(m.id)}
+                            onClick={() => setModFiltro(String(m.id))}
+                          />
+                        ))}
+                      </div>
+
+                      {efectivosReales.error !== null && (
+                        <div style={{ padding: '14px 16px' }}>
+                          <FalloDeLectura
+                            error={efectivosReales.error}
+                            que="los permisos efectivos de esta cuenta"
+                            acceso="permisos"
+                            alReintentar={efectivosReales.reintentar}
+                          />
+                        </div>
+                      )}
+                      {efectivosReales.cargando && (
+                        <p style={{ margin: 0, padding: '14px 16px', fontSize: 12.5, color: 'var(--ink-3)' }}>Leyendo los permisos de la cuenta…</p>
+                      )}
+
+                      {/* Una cuenta que hoy no puede operar recibe la lista VACÍA,
+                          con la misma regla que el guardia. Dibujar la matriz aquí
+                          serían 134 filas diciendo «sin configurar», y eso es una
+                          afirmación sobre la configuración que nadie ha leído. */}
+                      {efectivosReales.datos !== null && !cuentaPuedeOperarHoy && (
+                        <div style={{ padding: '14px 16px' }}>
+                          <Aviso tono="bad" titulo="Esta cuenta hoy no puede nada, y por eso la matriz no se dibuja">
+                            La lectura de permisos efectivos aplica la <strong>misma regla que el guardia</strong>: a una cuenta
+                            deshabilitada o fuera de vigencia le contesta la lista vacía. Vacía no quiere decir «no tiene permisos
+                            configurados» —puede tenerlos, y volverían a valer el día que se rehabilite—, quiere decir que hoy no le
+                            sirve ninguno. Los permisos de sus grupos se revisan eligiendo el grupo en la lista de la izquierda.
+                          </Aviso>
+                        </div>
+                      )}
+
+                      {efectivosReales.datos !== null && cuentaPuedeOperarHoy && accesosReales.datos !== null && (
+                        <>
+                          <div style={{ overflowX: 'auto' }}>
+                            <table style={{ width: '100%', borderCollapse: 'collapse', minWidth: 820 }}>
+                              <thead>
+                                <tr>
+                                  {/* «Acceso y de dónde viene» en la MISMA columna, y esa es
+                                      la fija: con el origen en una columna del final, en un
+                                      portátil se quedaba fuera del marco —«Grupo · Admini…»—
+                                      justo el dato por el que existe esta matriz. */}
+                                  <th style={{ padding: '10px 14px', textAlign: 'left', fontSize: 10.5, fontWeight: 500, textTransform: 'uppercase', letterSpacing: '.1em', color: 'var(--ink-3)', background: 'var(--bg-elev)', position: 'sticky', left: 0, borderRight: '1px solid var(--line)' }}>
+                                    Acceso · origen
+                                  </th>
+                                  {PRIVILEGIOS.map((p) => (
+                                    <th key={p} title={p} style={{ padding: '10px 8px', textAlign: 'center', fontSize: 10, fontWeight: 500, textTransform: 'uppercase', letterSpacing: '.08em', color: 'var(--ink-3)', background: 'var(--bg-elev)', whiteSpace: 'nowrap' }}>
+                                      {ROTULO_DEL_PRIVILEGIO[p]}
+                                    </th>
+                                  ))}
+                                </tr>
+                              </thead>
+                              <tbody>
+                                {matrizDelUsuario.length === 0 && (
+                                  <tr>
+                                    <td colSpan={PRIVILEGIOS.length + 1} style={{ ...TD, whiteSpace: 'normal', color: 'var(--ink-3)' }}>
+                                      Ningún acceso del catálogo cae en este filtro.
+                                    </td>
+                                  </tr>
+                                )}
+                                {matrizDelUsuario.map((f) => {
+                                  const privilegios = f.efectivo?.privilegios ?? [];
+                                  const negado = f.efectivo !== undefined && privilegios.length === 0;
+                                  const origen = origenDeLaFila(f.efectivo, nombreDelGrupo);
+                                  const fondo = negado
+                                    ? 'var(--bad-bg)'
+                                    : f.sensible && privilegios.length > 0
+                                      ? 'var(--warn-bg)'
+                                      : 'transparent';
+                                  return (
+                                    <tr key={f.acceso.codigo} className="hov-elev" style={{ borderTop: '1px solid var(--line)', background: fondo }}>
+                                      <td style={{ padding: '10px 14px', fontSize: 12.5, color: 'var(--ink)', whiteSpace: 'nowrap', maxWidth: 300, position: 'sticky', left: 0, borderRight: '1px solid var(--line)', background: fondo === 'transparent' ? 'var(--bg-card)' : fondo }}>
+                                        <span style={{ display: 'block' }}>{f.acceso.nombre}</span>
+                                        <span style={{ display: 'block', fontSize: 10.5, color: 'var(--ink-4)', marginTop: 1 }}>
+                                          {f.modulo + (f.sensible ? ' · mueve dinero' : '')}
+                                        </span>
+                                        {/* El nombre del grupo puede ser largo: la insignia
+                                            envuelve en vez de ensanchar la columna fija. */}
+                                        <span
+                                          style={{ ...INS[origen.tono], display: 'inline-block', whiteSpace: 'normal', marginTop: 5 }}
+                                          title={origen.ayuda}
+                                        >
+                                          {origen.texto}
+                                        </span>
+                                      </td>
+                                      {PRIVILEGIOS.map((pr) => {
+                                        const on = privilegios.indexOf(pr) >= 0;
+                                        return (
+                                          <td key={pr} style={{ padding: '6px 8px', textAlign: 'center' }}>
+                                            <span
+                                              role="img"
+                                              aria-label={ROTULO_DEL_PRIVILEGIO[pr] + (on ? ': sí' : ': no')}
+                                              title={ROTULO_DEL_PRIVILEGIO[pr] + (on ? ': lo tiene' : ': no lo tiene')}
+                                              style={{
+                                                display: 'inline-grid',
+                                                placeItems: 'center',
+                                                width: 26,
+                                                height: 26,
+                                                borderRadius: 6,
+                                                border: `1px solid ${on ? 'var(--accent)' : 'var(--line-2)'}`,
+                                                background: on ? 'var(--accent)' : 'var(--bg-card)',
+                                                color: '#fff',
+                                                /* Sin fila no hay nada configurado: la casilla se
+                                                   apaga para que no se lea como «se le negó». Lo
+                                                   negado se distingue en las dos últimas columnas. */
+                                                opacity: f.efectivo === undefined ? 0.45 : 1,
+                                              }}
+                                            >
+                                              {on && <Icono d={['M5 12.5l4.5 4.5L19 7']} tam={12} grosor={3} />}
+                                            </span>
+                                          </td>
+                                        );
+                                      })}
+                                    </tr>
+                                  );
+                                })}
+                              </tbody>
+                            </table>
+                          </div>
+
+                          {/* Aquí no hay «Guardar», y no es un olvido: la excepción de
+                              usuario existe en el dominio y el contrato publica esta
+                              ruta sólo con GET. Dibujar el formulario apagado sería
+                              prometer un acto que no tiene a dónde ir. */}
+                          <p style={{ margin: 0, padding: '12px 16px', borderTop: '1px solid var(--line)', background: 'var(--bg-elev)', fontSize: 12, lineHeight: 1.55, color: 'var(--ink-3)', textWrap: 'pretty' }}>
+                            Esto se lee y no se escribe: los permisos se dan al <strong>grupo</strong>, y la excepción propia de una
+                            cuenta —la que <strong>sustituye</strong> a lo que su grupo le concede, otorgue o niegue— no tiene ruta de
+                            escritura en el contrato. Un acceso que no aparece configurado en ninguna parte sale como{' '}
+                            <em>sin configurar</em>, que no es lo mismo que <em>negado</em>: negar es una excepción, y se ve.
+                          </p>
+                        </>
+                      )}
+                    </section>
+                  </>
+                )}
                 {/* ── La matriz de un GRUPO ── */}
                 {sel !== null && esGrupo && (
                   <section style={TARJETA}>
@@ -1363,7 +1690,7 @@ export default function Seguridad({ dest, onDest }: PantallaProps) {
               <p style={{ margin: 0, flex: 1, fontSize: 13, lineHeight: 1.55, color: 'var(--warn-fg)', textWrap: 'pretty' }}>
                 <strong>Esta alta todavía no se puede hacer desde aquí.</strong> No hay <code>POST /seguridad/usuarios</code> en el
                 contrato, y una cuenta son dos mitades —la fila del padrón y la cuenta en el proveedor de identidad (ADR-0012)—, así que
-                el alta completa exige decidir antes cómo se coordinan. Está pedido en el issue <strong>#543</strong>. Mientras tanto se
+                el alta completa exige decidir antes cómo se coordinan. Está pedido en el issue <strong>#572</strong>. Mientras tanto se
                 dan de alta con el mecanismo declarativo del despliegue.
               </p>
             </div>
@@ -1429,11 +1756,11 @@ export default function Seguridad({ dest, onDest }: PantallaProps) {
               </div>
               <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap', padding: '13px 16px', borderTop: '1px solid var(--line)', background: 'var(--bg-elev)' }}>
                 <p style={{ margin: 0, flex: 1, minWidth: 170, fontSize: 12, color: 'var(--ink-3)', textWrap: 'pretty' }}>
-                  Sin <code>POST /seguridad/usuarios</code> no hay a dónde mandar el alta (#543).
+                  Sin <code>POST /seguridad/usuarios</code> no hay a dónde mandar el alta (#572).
                 </p>
                 <button
                   disabled
-                  title="No hay POST /seguridad/usuarios en el contrato: el alta no se puede mandar a ninguna parte (#543)."
+                  title="No hay POST /seguridad/usuarios en el contrato: el alta no se puede mandar a ninguna parte (#572)."
                   style={{ border: 0, borderRadius: 6, padding: '10px 20px', background: 'var(--accent)', color: '#fff', fontSize: 13, fontWeight: 500, cursor: 'not-allowed', opacity: 0.5 }}
                 >
                   Crear el usuario
@@ -1444,6 +1771,91 @@ export default function Seguridad({ dest, onDest }: PantallaProps) {
         )}
       </div>
     </Shell>
+  );
+}
+
+/**
+ * De donde le viene a una cuenta lo que puede hacer sobre un acceso (#543).
+ *
+ * Son cinco estados y **ninguno se puede fundir con otro**, porque las
+ * diferencias son justo las que se leen mal:
+ *
+ * - **Sin fila** es «no hay nada configurado». La lectura no devuelve una fila
+ *   por acceso sino una por acceso configurado: serian 134 vacias por cuenta.
+ * - **Fila con cero privilegios** solo la produce una excepcion que NIEGA, y es
+ *   lo unico que distingue «se le nego expresamente» de «nunca lo tuvo».
+ * - **Excepcion** sustituye a lo del grupo, no se suma. Por eso se dibuja en
+ *   tono de aviso aunque otorgue: es una desviacion de lo que el grupo dice, y
+ *   quien audita tiene que verla.
+ * - **Grupo con `grupoId`** es lo heredado de UNO.
+ * - **Grupo sin `grupoId`** es lo heredado de VARIOS: el backend manda el grupo
+ *   solo cuando hay uno solo, porque elegir el primero por id daria un dato
+ *   plausible y equivocado. Aqui eso se dice, no se rellena con el primero de
+ *   los grupos de la cuenta.
+ */
+function origenDeLaFila(
+  efectivo: PermisoEfectivo | undefined,
+  nombreDelGrupo: Map<number, string>,
+): { texto: string; tono: TonoDeSeguridad; ayuda: string } {
+  if (efectivo === undefined) {
+    return {
+      texto: 'Sin configurar',
+      tono: 'neutro',
+      ayuda:
+        'La lectura no devuelve ninguna fila para este acceso: no hay nada configurado, ni por grupo ni por excepción. ' +
+        'No es lo mismo que estar negado.',
+    };
+  }
+  if (efectivo.origen === 'EXCEPCION') {
+    return efectivo.privilegios.length === 0
+      ? {
+          texto: 'Excepción · niega',
+          tono: 'bad',
+          ayuda:
+            'Una excepción de esta cuenta le retira el acceso. Sustituye a lo que su grupo conceda, así que aquí el ' +
+            'grupo no cuenta: se le negó expresamente.',
+        }
+      : {
+          texto: 'Excepción propia',
+          tono: 'warn',
+          ayuda:
+            'Una excepción de esta cuenta, que SUSTITUYE a lo que sus grupos le den para este acceso. No se suma a ello: ' +
+            'lo que se ve aquí es lo único que vale.',
+        };
+  }
+  if (efectivo.grupoId === null) {
+    return {
+      texto: 'De más de un grupo',
+      tono: 'ok',
+      ayuda:
+        'Lo otorga más de uno de sus grupos vigentes, así que no hay UNO que nombrar. El backend manda el grupo sólo ' +
+        'cuando lo concede uno solo; elegir el primero por id sería un dato plausible y equivocado.',
+    };
+  }
+  const nombre = nombreDelGrupo.get(efectivo.grupoId);
+  return {
+    texto: 'Grupo · ' + (nombre ?? '#' + efectivo.grupoId),
+    tono: 'ok',
+    ayuda:
+      nombre === undefined
+        ? 'Lo hereda del grupo ' + efectivo.grupoId + ', que no está en la lista de grupos leída.'
+        : 'Lo hereda de «' + nombre + '». No tiene excepción propia sobre este acceso.',
+  };
+}
+
+/** La franja de cifras de la cabecera: rótulo, valor y color del valor. */
+function FranjaDeCasillas({ casillas }: { casillas: [string, string, string][] }) {
+  return (
+    <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit,minmax(150px,1fr))', gap: 0, background: 'var(--bg-card)' }}>
+      {casillas.map((r) => (
+        <div key={r[0]} style={{ background: 'var(--bg-card)', padding: '13px 16px', borderLeft: '1px solid var(--line)', borderTop: '1px solid var(--line)', margin: '-1px 0 0 -1px' }}>
+          <p style={{ margin: '0 0 4px', fontSize: 10, fontWeight: 500, textTransform: 'uppercase', letterSpacing: '.11em', color: 'var(--ink-3)' }}>
+            {r[0]}
+          </p>
+          <p style={{ margin: 0, fontFamily: 'var(--font-mono)', fontSize: 14, color: r[2] }}>{r[1]}</p>
+        </div>
+      ))}
+    </div>
   );
 }
 
