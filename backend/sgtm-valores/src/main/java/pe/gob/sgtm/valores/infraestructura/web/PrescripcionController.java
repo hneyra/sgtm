@@ -19,6 +19,7 @@ import pe.gob.sgtm.contribuyentes.DirectorioDeContribuyentes;
 import pe.gob.sgtm.contribuyentes.ResumenDeContribuyente;
 import pe.gob.sgtm.dominio.Ejercicio;
 import pe.gob.sgtm.dominio.Observacion;
+import pe.gob.sgtm.parametros.LectorDeParametros;
 import pe.gob.sgtm.valores.aplicacion.DeclararPrescripcion;
 import pe.gob.sgtm.valores.aplicacion.PlazosParametrizados;
 import pe.gob.sgtm.valores.dominio.CausalDePrescripcion;
@@ -39,6 +40,23 @@ import pe.gob.sgtm.web.ProblemaDeNegocio;
  * coactivos y no lee ninguno —eso es #40—.
  *
  * <p>Sin {@code PUT} ni {@code PATCH}: una resolucion no se edita.
+ *
+ * <h2>Que devuelve 422, y por que no 500 (#562)</h2>
+ *
+ * <p>El plazo del art. 43 y el desfase del inicio del computo del art. 44 salen del <b>conjunto
+ * sellado</b> que rige a la fecha de la solicitud ({@link PlazosParametrizados}, regla 5). Que el
+ * conjunto exista y no traiga la llave ({@code PlazoSinParametrizar}) ya estaba traducido desde
+ * #192; que <b>no exista ningun conjunto sellado</b> ({@code EjercicioSinSellar}) no lo estaba, y
+ * con D-02a abierta ese es el estado <i>normal</i> de todas las municipalidades: caia en el
+ * {@code @ExceptionHandler(Exception.class)} de {@code ManejadorDeErrores} y salia como <b>500
+ * {@code ERROR_INTERNO} con identificador de incidencia</b> —con lo que, ademas, cada intento
+ * ensuciaba el registro de errores del servidor con lo que no es un error—.
+ *
+ * <p>El mensaje es el de la propia excepcion: nombra la llave —{@code
+ * PLAZO:PRESCRIPCION-DECLARACION_PRESENTADA}— o, cuando lo que falta es el conjunto entero y no hay
+ * llave que nombrar, el <b>ejercicio</b>. Un fallo de verdad del servidor sigue siendo 500 con su
+ * incidencia, y hay una prueba de contraste que lo mide. El razonamiento completo esta en la
+ * cabecera de {@link ValoresController}.
  */
 @RestController
 @RequestMapping(Api.RAIZ + "/coactiva")
@@ -86,6 +104,7 @@ public class PrescripcionController {
                     .body(PrescripcionResource.de(guardada, contribuyente.codigo()));
         } catch (DeclararPrescripcion.RangoInvertido
                 | PlazosParametrizados.PlazoSinParametrizar
+                | LectorDeParametros.EjercicioSinSellar
                 | IllegalArgumentException invalido) {
             throw new ProblemaDeNegocio(CodigoDeError.VALIDACION, mensajeDe(invalido));
         }

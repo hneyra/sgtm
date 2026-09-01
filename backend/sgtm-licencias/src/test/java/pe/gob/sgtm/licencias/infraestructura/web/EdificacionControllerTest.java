@@ -32,6 +32,7 @@ import pe.gob.sgtm.licencias.aplicacion.CompletarSeccionDelFue;
 import pe.gob.sgtm.licencias.aplicacion.ConsultaDeFue;
 import pe.gob.sgtm.licencias.aplicacion.DerechosDeTramiteParametrizados;
 import pe.gob.sgtm.licencias.aplicacion.EmitirLicenciaDeEdificacion;
+import pe.gob.sgtm.licencias.aplicacion.LecturaDelFue;
 import pe.gob.sgtm.licencias.aplicacion.PresentarFue;
 import pe.gob.sgtm.licencias.aplicacion.RevalidarLicenciaDeEdificacion;
 import pe.gob.sgtm.licencias.aplicacion.ValorizacionDelFue;
@@ -110,15 +111,34 @@ class EdificacionControllerTest {
     /** Sin cuadro sellado: la licencia sale igual, y el papel imprime «—». */
     private final MockMvc mvcSinCuadro = montar(new CuadroDeMentira().vacio());
 
+    /**
+     * Sin <b>ningun</b> conjunto sellado del que salga el derecho de tramite: lo que ocurre hoy en
+     * todas las municipalidades con D-02a abierta (#562). Hasta este issue salia como 500 con
+     * identificador de incidencia.
+     */
+    private final MockMvc mvcSinSellar =
+            montar(
+                    new CuadroDeMentira().con("MUROS", 'A', "120.000000"),
+                    new DerechosDeMentira(null, null)
+                            .conEdificacion(DERECHO_EDIFICACION, DERECHO_REVALIDACION)
+                            .sinSellar());
+
     private MockMvc montar(CuadroDeMentira cuadro) {
+        return montar(
+                cuadro,
+                new DerechosDeMentira(null, null)
+                        .conEdificacion(DERECHO_EDIFICACION, DERECHO_REVALIDACION));
+    }
+
+    private MockMvc montar(CuadroDeMentira cuadro, DerechosDeMentira derechosDelTupa) {
         DerechosDeTramiteParametrizados derechos =
-                new DerechosDeTramiteParametrizados(
-                        new DerechosDeMentira(null, null)
-                                .conEdificacion(DERECHO_EDIFICACION, DERECHO_REVALIDACION));
+                new DerechosDeTramiteParametrizados(derechosDelTupa);
         ValorizacionDelFue valorizaciones = new ValorizacionDelFue(cuadro);
         return MockMvcBuilders.standaloneSetup(
                         new EdificacionController(
-                                new ConsultaDeFue(expedientes, movimientos, padron, valorizaciones),
+                                new ConsultaDeFue(
+                                        new LecturaDelFue(expedientes, movimientos, padron),
+                                        valorizaciones),
                                 new PresentarFue(
                                         expedientes,
                                         padron,
@@ -489,6 +509,46 @@ class EdificacionControllerTest {
                                     .formatted(RECIBO_REVALIDACION),
                             422);
             assertThat(cuerpo).contains("no una revalidacion");
+        }
+    }
+
+    @Nested
+    @DisplayName("#562 — sin ningun conjunto sellado")
+    class SinConjuntoSellado {
+
+        @Test
+        @DisplayName("emitir la licencia es 422 y nombra el ejercicio, no 500 con incidencia")
+        void emitirSinConjuntoSellado() throws Exception {
+            expedienteCompleto();
+
+            String cuerpo = emitir(mvcSinSellar, 422);
+
+            assertThat(cuerpo)
+                    .as("no es que el servidor este roto: es que nadie ha sellado 2026 (D-02a)")
+                    .contains("VALIDACION")
+                    .contains("2026")
+                    .doesNotContain("incidencia");
+        }
+
+        @Test
+        @DisplayName("y la revalidacion tambien: es la otra ruta que pide el derecho")
+        void revalidarSinConjuntoSellado() throws Exception {
+            expedienteCompleto();
+            emitir(mvc, 201);
+            presentar("EXP-2026-0090", "REVALIDACION_DE_LICENCIA", "LE-2026-000001", 201);
+
+            String cuerpo =
+                    envio(
+                            mvcSinSellar,
+                            "/api/v1/licencias/edificacion/EXP-2026-0090/revalidacion",
+                            """
+                            {"nuevaVigenciaHasta":"2030-03-16","nDeRecibo":"%s",
+                             "observacion":"Se revalida por solicitud del administrado"}
+                            """
+                                    .formatted(RECIBO_REVALIDACION),
+                            422);
+
+            assertThat(cuerpo).contains("2026").doesNotContain("incidencia");
         }
     }
 

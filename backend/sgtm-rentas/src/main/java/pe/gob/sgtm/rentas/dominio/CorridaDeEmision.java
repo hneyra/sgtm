@@ -38,6 +38,8 @@ public record CorridaDeEmision(
         Ejercicio ejercicio,
         String alcance,
         @Nullable String sector,
+        @Nullable String codigoDesde,
+        @Nullable String codigoHasta,
         String modalidad,
         boolean simulacion,
         String conjunto,

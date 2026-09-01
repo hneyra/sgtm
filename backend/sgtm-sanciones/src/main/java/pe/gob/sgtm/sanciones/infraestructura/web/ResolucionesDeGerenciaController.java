@@ -15,7 +15,9 @@ import pe.gob.sgtm.documentos.FormatoDeDocumento;
 import pe.gob.sgtm.dominio.ModalidadDeNotificacion;
 import pe.gob.sgtm.dominio.Observacion;
 import pe.gob.sgtm.dominio.ResultadoDeNotificacion;
+import pe.gob.sgtm.parametros.LectorDeParametros;
 import pe.gob.sgtm.sanciones.aplicacion.NotificarResolucionDeGerencia;
+import pe.gob.sgtm.sanciones.aplicacion.PlazosDeSancionesParametrizados;
 import pe.gob.sgtm.sanciones.aplicacion.RegistrarDescargo;
 import pe.gob.sgtm.sanciones.aplicacion.ResolverConResolucionDeGerencia;
 import pe.gob.sgtm.sanciones.dominio.EfectoSobreLaMulta;
@@ -49,6 +51,25 @@ import pe.gob.sgtm.web.ProblemaDeNegocio;
  * <p>Lo que la respuesta lleva del documento es su número, su formato, su resumen SHA-256 y el
  * nombre del archivo; la descarga es otra petición. Meter un PDF en base64 dentro de un JSON lo
  * hincha un tercio.
+ *
+ * <h2>Qué devuelve 422, y por qué no 500 (#562)</h2>
+ *
+ * <p>El plazo de cumplimiento de la resolución ordinaria sale del <b>conjunto sellado</b> que rige
+ * a la fecha del acto —o de la diligencia— ({@link PlazosDeSancionesParametrizados}, regla 5). Ni
+ * que falte el conjunto entero ({@code EjercicioSinSellar}) ni que falte la llave dentro de él
+ * ({@code PlazoSinParametrizar}) estaban traducidas: las dos salían como <b>500 {@code
+ * ERROR_INTERNO} con identificador de incidencia</b>, y con D-02a abierta ese es el estado
+ * <i>normal</i> de todas las municipalidades — con lo que dictar la ordinaria y notificar cualquier
+ * resolución eran inalcanzables, y cada intento ensuciaba el registro de errores del servidor.
+ *
+ * <p><b>La sancionadora y la administrativa no leen el plazo</b> —{@code
+ * ResolverConResolucionDeGerencia} solo lo resuelve cuando el tipo es {@code ORDINARIA}— y la
+ * diligencia solo lo lee cuando el resultado <b>surte efecto</b>: por esas ramas no se alcanzaba
+ * ninguna de las dos, y siguen igual.
+ *
+ * <p>El mensaje es el de la propia excepción: nombra la llave —{@code
+ * PLAZO:RG_ORDINARIA_CUMPLIMIENTO}— o, cuando lo que falta es el conjunto entero y no hay llave que
+ * nombrar, el <b>ejercicio</b>. Un fallo de verdad del servidor sigue siendo 500 con su incidencia.
  */
 @RestController
 @RequestMapping(Api.RAIZ)
@@ -157,7 +178,11 @@ public class ResolucionesDeGerenciaController {
                     CodigoDeError.CONFLICTO, PeticionesDeSanciones.mensajeDe(conflicto));
         } catch (RegistrarDescargo.PapeletaSinNadaQueImpugnar
                 | ResolverConResolucionDeGerencia.DescargoDeOtraPapeleta
+                | PlazosDeSancionesParametrizados.PlazoSinParametrizar
+                | LectorDeParametros.EjercicioSinSellar
                 | IllegalArgumentException invalido) {
+            // Las dos de parametros no son un fallo del servidor: es una cifra que todavia nadie
+            // ha publicado, y con D-02a abierta es el estado normal. Ver la cabecera de la clase.
             throw PeticionesDeSanciones.invalido(invalido);
         }
     }
@@ -196,7 +221,11 @@ public class ResolucionesDeGerenciaController {
                     CodigoDeError.NO_ENCONTRADO, PeticionesDeSanciones.mensajeDe(noExiste));
         } catch (NotificarResolucionDeGerencia.DiligenciaAnteriorALaResolucion
                 | NotificarResolucionDeGerencia.SinDireccion
+                | PlazosDeSancionesParametrizados.PlazoSinParametrizar
+                | LectorDeParametros.EjercicioSinSellar
                 | IllegalArgumentException invalido) {
+            // Igual que en `dictar`: el plazo de cumplimiento de la ordinaria sale del conjunto
+            // sellado, y que falte no es un fallo del servidor. Ver la cabecera de la clase.
             throw PeticionesDeSanciones.invalido(invalido);
         }
     }

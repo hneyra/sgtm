@@ -305,6 +305,108 @@ class EscrituraDelPadronControllerTest {
         }
 
         @Test
+        @DisplayName("corrige los tres datos personales que el expediente dibujaba y no guardaba")
+        void corrigeLosDatosPersonales() throws Exception {
+            long conyuge = altaDe("C-0210", "40100210", "CONYUGE, LA");
+            long id = altaDe("C-0211", "40100211", "SIN FECHA, ALGUIEN");
+
+            MvcResult corregido =
+                    enviar(
+                            put("/api/v1/rentas/contribuyentes/" + id),
+                            """
+                            {"observacion":"Corrige los datos personales segun DNI",
+                             "fechaNacimiento":"1958-03-14",
+                             "estadoCivil":"CASADO",
+                             "conyugeId":"""
+                                    + conyuge
+                                    + "}");
+
+            assertThat(corregido.getResponse().getStatus())
+                    .as("respuesta: %s", corregido.getResponse().getContentAsString())
+                    .isEqualTo(200);
+
+            String ficha = fichaDe(id);
+            assertThat(ficha)
+                    .as(
+                            "hasta #552 esta escritura los copiaba de la fila existente: la"
+                                    + " pantalla los dibujaba editables y no viajaban")
+                    .contains("\"fechaNacimiento\":\"1958-03-14\"")
+                    .contains("\"estadoCivil\":\"CASADO\"")
+                    .contains("\"conyugeId\":" + conyuge);
+        }
+
+        @Test
+        @DisplayName("la ficha los publica y la grilla no: la grilla es una busqueda")
+        void laGrillaNoPublicaLosDatosPersonales() throws Exception {
+            altaDe("C-0212", "40100212", "EN LA GRILLA, ALGUIEN");
+
+            MvcResult grilla =
+                    mvc.perform(
+                                    org.springframework.test.web.servlet.request
+                                            .MockMvcRequestBuilders.get(
+                                                    "/api/v1/rentas/contribuyentes")
+                                            .param("codigo", "C-0212"))
+                            .andReturn();
+
+            assertThat(grilla.getResponse().getContentAsString())
+                    .as(
+                            "«lo que no se publica no se filtra»: la fila de una busqueda no"
+                                    + " necesita los datos personales para hacer su trabajo")
+                    .doesNotContain("fechaNacimiento")
+                    .doesNotContain("estadoCivil")
+                    .doesNotContain("conyugeId");
+        }
+
+        @Test
+        @DisplayName("nadie es su propio conyuge")
+        void nadieEsSuPropioConyuge() throws Exception {
+            long id = altaDe("C-0213", "40100213", "SOLO, ALGUIEN");
+
+            MvcResult resultado =
+                    enviar(
+                            put("/api/v1/rentas/contribuyentes/" + id),
+                            """
+                            {"observacion":"Intento de sociedad conyugal de uno",
+                             "conyugeId":"""
+                                    + id
+                                    + "}");
+
+            assertThat(resultado.getResponse().getStatus()).isEqualTo(422);
+            assertThat(resultado.getResponse().getContentAsString()).contains("conyuge");
+        }
+
+        @Test
+        @DisplayName("la cadena vacia borra el estado civil; la ausencia lo conserva")
+        void laCadenaVaciaBorraYLaAusenciaConserva() throws Exception {
+            long id = altaDe("C-0214", "40100214", "CAMBIA DE ESTADO, ALGUIEN");
+            enviar(
+                    put("/api/v1/rentas/contribuyentes/" + id),
+                    """
+                    {"observacion":"Declara su estado civil","estadoCivil":"SOLTERO"}
+                    """);
+
+            enviar(
+                    put("/api/v1/rentas/contribuyentes/" + id),
+                    """
+                    {"observacion":"Corrige el nombre y nada mas",
+                     "nombreRazonSocial":"CAMBIA DE ESTADO, OTRO"}
+                    """);
+            assertThat(fichaDe(id))
+                    .as("lo que no viene, no cambia")
+                    .contains("\"estadoCivil\":\"SOLTERO\"");
+
+            enviar(
+                    put("/api/v1/rentas/contribuyentes/" + id),
+                    """
+                    {"observacion":"Se retira el estado civil declarado por error",
+                     "estadoCivil":""}
+                    """);
+            assertThat(fichaDe(id))
+                    .as("la cadena vacia es una instruccion, no una omision")
+                    .contains("\"estadoCivil\":null");
+        }
+
+        @Test
         @DisplayName("la baja no borra: la fila sigue, con activo en falso")
         void laBajaNoBorra() throws Exception {
             long id = altaDe("C-0201", "40100201", "SE DA DE BAJA, ALGUIEN");
@@ -748,6 +850,16 @@ class EscrituraDelPadronControllerTest {
 
     private static long altaDe(String codigo, String documento, String nombre) throws Exception {
         return idDe(enviar(post("/api/v1/rentas/contribuyentes"), alta(codigo, documento, nombre)));
+    }
+
+    /** La ficha completa del contribuyente, que es donde viven los datos personales (#552). */
+    private static String fichaDe(long id) throws Exception {
+        return mvc.perform(
+                        org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get(
+                                "/api/v1/rentas/contribuyentes/" + id + "/ficha"))
+                .andReturn()
+                .getResponse()
+                .getContentAsString();
     }
 
     private static MvcResult enviar(

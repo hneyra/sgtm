@@ -1,4 +1,5 @@
-import { solicitar, type RespuestaPaginada } from './cliente';
+import { descargar, solicitar, type RespuestaPaginada } from './cliente';
+import type { FormatoDeDocumento } from './descarga';
 import type { Paginacion } from './catastro';
 
 /**
@@ -14,11 +15,19 @@ import type { Paginacion } from './catastro';
  * <h2>Cinco controladores y ninguna ruta de más</h2>
  *
  * `CajaController` (dos POST), `ConvenioController` (un POST, un GET, un POST de
- * cierre), `ReciboController` (un GET y un POST), `CierreController` (un POST) y
- * `RecaudacionController` (dos GET). Eso es todo lo que hay: **no existe** un
- * listado de recibos, ni un catálogo de cajas, ni uno de conceptos del TUPA, ni
- * un `GET` del arqueo por su cuenta. Lo que la pantalla no puede pedir se dice en
- * pantalla; no se rellena con el juego de datos del prototipo.
+ * cierre), `ReciboController` (**dos** GET y un POST desde #548), `CierreController`
+ * (un POST) y `RecaudacionController` (dos GET). Eso es todo lo que hay: no existe
+ * un catálogo de cajas, ni uno de conceptos del TUPA, ni un `GET` del arqueo por su
+ * cuenta. Lo que la pantalla no puede pedir se dice en pantalla; no se rellena con
+ * el juego de datos del prototipo.
+ *
+ * <h2>Lo que #548 cambió aquí</h2>
+ *
+ * Hasta #548 este archivo decía que **no existía** un listado de recibos, y era
+ * cierto: la única puerta a uno era saber su número impreso, que es justo lo que
+ * no tiene quien viene a pedir un duplicado. Ahora existe `GET /tesoreria/recibos`
+ * y la pantalla lo lee. La frase se corrige aquí y en la pantalla a la vez: una
+ * explicación que se quedó vieja es indistinguible de una que nunca fue cierta.
  */
 
 /** Un importe con la fecha a la que está actualizado. Es `ImporteActualizado`. */
@@ -195,6 +204,15 @@ export function cobrarDeuda(peticion: PeticionDeCobranza): Promise<Recibo> {
  * método y no hay `GET /tesoreria/tasas`—, así que quien atiende no tiene de
  * dónde elegir. El precio tampoco viaja: lo resuelve el servidor con la tarifa
  * vigente a la fecha del cobro (regla 5).
+ *
+ * **Y ya no admite `partida` ni `conceptoTupa` como parámetros de consulta.** El
+ * contrato los declaraba y ningún controlador los leía; #548 los retiró en vez de
+ * implementarlos, porque los dos acotan el **catálogo del TUPA** y esta operación
+ * es el `POST` que **cobra** los conceptos que llegan en el cuerpo, no la lectura
+ * que los lista. Medido: mandarlos ahora contesta 422 «Parametro desconocido», así
+ * que no son un filtro que se ignora sino uno que no existe. Esta función nunca los
+ * mandó —van en el cuerpo o no van—, de modo que aquí no hay nada que quitar; se
+ * anota para que a nadie se le ocurra añadirlos leyendo el prototipo.
  */
 export type PeticionDeCobroDeTasas = {
   caja: string;
@@ -208,6 +226,97 @@ export type PeticionDeCobroDeTasas = {
 
 export function cobrarTasas(peticion: PeticionDeCobroDeTasas): Promise<Recibo> {
   return solicitar('/tesoreria/caja/tasas', { metodo: 'POST', cuerpo: peticion });
+}
+
+
+/* ══════════ El listado de recibos (#548) ══════════ */
+
+/**
+ * Los dos estados que `EstadoDeRecibo` declara, letra por letra.
+ *
+ * **Se derivan, no se guardan** (V30): un recibo no se actualiza (V29), así que
+ * la columna `estado` que V3 le puso decía `EMITIDO` para siempre y se retiró.
+ * Lo que hay es una fila de `recibo_movimiento` con `tipo = 'ANULACION'`, o no la
+ * hay.
+ *
+ * Escritos como unión y no como `string` para que un tercer valor no compile: el
+ * backend rechaza con 422 lo que no sea una de las dos palabras —«Estado de
+ * recibo desconocido: 'Todos'. Se admite EMITIDO o ANULADO»— en vez de tratarlo
+ * como «todos», que sería devolver el listado entero a quien creía haber
+ * filtrado.
+ */
+export type EstadoDeRecibo = 'EMITIDO' | 'ANULADO';
+
+/**
+ * Una fila del listado. Es `ReciboEnListaResource`, campo por campo.
+ *
+ * **No trae el desglose**, y está decidido: una página de veinte filas no puede
+ * costar veinte lecturas de `recibo_detalle`, así que la columna «Concepto» que
+ * el prototipo dibuja —«Impuesto predial cuotas 1 y 2»— no tiene con qué
+ * llenarse aquí. Quien la quiere abre el recibo por su número, que ya tiene ruta.
+ *
+ * **Tampoco trae la caja ni el cajero**: son filtros de la búsqueda y no columnas
+ * de esta grilla; publicarlos sería inventarle una columna a la pantalla
+ * (RNF-080).
+ *
+ * `codContribuyente` y `contribuyente` llegan **nulos** cuando el padrón no
+ * resolvió a la persona: el recibo guarda el identificador, no el nombre.
+ */
+export type FilaDeRecibo = {
+  /** El número impreso, `001-0000123`. */
+  numero: string;
+  /** El instante de emisión, en ISO. */
+  emitidoEn: string;
+  codContribuyente: string | null;
+  contribuyente: string | null;
+  /** Lo cobrado, con la fecha que el recibo congeló al emitirse (regla 9). */
+  importe: Importe;
+  /** `EFECTIVO` | `CHEQUE` | `DEPOSITO` | `TARJETA` | `TRANSFERENCIA`. */
+  medioDePago: string;
+  duplicados: number;
+  /** `EMITIDO` o `ANULADO`, derivado del movimiento de anulación. */
+  estado: string;
+};
+
+/**
+ * Los filtros de `CriterioDeRecibos`. Todos opcionales, todos por igualdad o por
+ * rango: ninguno es aproximado ni por prefijo.
+ *
+ * **No hay filtro por número de recibo, y no es un olvido**: el número exacto ya
+ * tiene su propia ruta, y este listado existe justamente para quien **no** lo
+ * sabe —perdido el papel, hasta #548 el recibo no se podía encontrar—.
+ *
+ * `codContribuyente` es el **código exacto** del padrón, no el nombre: el
+ * prototipo escribe «Nombre o código» en esa caja y el backend sólo compara el
+ * código. Buscar por nombre es otra pantalla.
+ */
+export type FiltroDeRecibos = {
+  codContribuyente?: string;
+  /** El código de la ventanilla que emitió. No hay catálogo: se teclea. */
+  caja?: string;
+  /** La cuenta de quien cobró, exacta. La pantalla del manual no lo dibuja. */
+  cajero?: string;
+  /** Primer día del rango de emisión, inclusive, en ISO. */
+  desde?: string;
+  /** Último día, inclusive. Con `desde` posterior a `hasta` el backend da 422. */
+  hasta?: string;
+  /** Sin él, los dos estados. `Todos` **no** es un valor: el backend lo rechaza. */
+  estado?: EstadoDeRecibo;
+};
+
+/**
+ * El listado de recibos emitidos (#548, RF-082).
+ *
+ * Acceso `duplicado_recibo` con privilegio de **lectura**: mirar la lista no
+ * emite ningún papel. Un contribuyente sin recibos devuelve una página vacía con
+ * `totalElementos: 0`, nunca un 404 — buscar y no encontrar no es un error.
+ */
+export function listarRecibos(
+  filtro: FiltroDeRecibos,
+  paginacion: Paginacion,
+  senal?: AbortSignal,
+): Promise<RespuestaPaginada<FilaDeRecibo>> {
+  return solicitar('/tesoreria/recibos', { parametros: { ...filtro, ...paginacion }, senal });
 }
 
 
@@ -230,6 +339,27 @@ export type DuplicadoDeRecibo = {
 
 export function duplicadoDeRecibo(numero: string, senal?: AbortSignal): Promise<DuplicadoDeRecibo> {
   return solicitar(`/tesoreria/recibos/${encodeURIComponent(numero)}/duplicado`, { senal });
+}
+
+/**
+ * El duplicado **como papel**: `?formato=PDF|XLS|RTF` (RF-082, RF-132).
+ *
+ * <b>Escribe, aunque sea un `GET`.</b> Lo dice `ReciboController`: el verbo lo
+ * fija el prototipo y el manual exige que cada reimpresión quede registrada con
+ * quien la generó, así que la misma ruta que sin `formato` sólo mira, con
+ * `formato` numera un duplicado más y pide la `observacion` (regla 10). Y pide
+ * `IMPRESION`, no `LECTURA`: mirar el recibo y sacarlo por la impresora son dos
+ * permisos distintos a propósito (cap. 4, RF-121).
+ *
+ * Por eso la pantalla no lo ofrece hasta que hay observación escrita: aquí no
+ * hay «descargar y ya veremos», hay un acto.
+ */
+export function descargarDuplicadoDeRecibo(
+  numero: string,
+  formato: FormatoDeDocumento,
+  observacion: string,
+): Promise<void> {
+  return descargar(`/tesoreria/recibos/${encodeURIComponent(numero)}/duplicado`, { formato, observacion });
 }
 
 /** El acta de anulación. Es `AnulacionResource`. */

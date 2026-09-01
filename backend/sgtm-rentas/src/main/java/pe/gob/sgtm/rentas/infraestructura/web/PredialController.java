@@ -277,6 +277,8 @@ public class PredialController {
                                     ejercicio,
                                     peticion.alcance() == null ? "" : peticion.alcance(),
                                     peticion.sector(),
+                                    peticion.codigoDesde(),
+                                    peticion.codigoHasta(),
                                     peticion.modalidad() == null ? "" : peticion.modalidad(),
                                     Boolean.TRUE.equals(peticion.recalculaYaEmitidos()),
                                     simulacion),

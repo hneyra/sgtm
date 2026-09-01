@@ -32,7 +32,8 @@ public class CorridaDeEmisionRepositoryJdbc extends RepositorioJdbc
         implements CorridaDeEmisionRepository {
 
     private static final String COLUMNAS =
-            "id, ejercicio, alcance, sector, modalidad, simulacion, conjunto,"
+            "id, ejercicio, alcance, sector, codigo_desde, codigo_hasta, modalidad,"
+                    + " simulacion, conjunto,"
                     + " leidos, determinados, monto_emitido, fecha_calculo";
 
     /**
@@ -57,13 +58,15 @@ public class CorridaDeEmisionRepositoryJdbc extends RepositorioJdbc
         Long id =
                 jdbc().sql(
                                 "INSERT INTO corrida_predial"
-                                        + " (municipalidad_id, ejercicio, alcance, sector,"
+                                        + " (municipalidad_id, ejercicio, alcance, sector, codigo_desde,"
+                                        + "  codigo_hasta,"
                                         + "  modalidad, simulacion, conjunto, leidos,"
                                         + "  determinados, monto_emitido, fecha_calculo,"
                                         + "  usuario_registro, fecha_registro, observacion)"
                                         + " VALUES ("
                                         + MUNICIPALIDAD_ACTUAL
-                                        + ", :ejercicio, :alcance, :sector, :modalidad,"
+                                        + ", :ejercicio, :alcance, :sector, :codigoDesde,"
+                                        + "  :codigoHasta, :modalidad,"
                                         + "  :simulacion, :conjunto, :leidos, :determinados,"
                                         + "  :monto, :fechaCalculo, :usuario, :registro,"
                                         + "  :observacion)"
@@ -71,6 +74,8 @@ public class CorridaDeEmisionRepositoryJdbc extends RepositorioJdbc
                         .param("ejercicio", corrida.ejercicio().valor())
                         .param("alcance", corrida.alcance())
                         .param("sector", corrida.sector())
+                        .param("codigoDesde", corrida.codigoDesde())
+                        .param("codigoHasta", corrida.codigoHasta())
                         .param("modalidad", corrida.modalidad())
                         .param("simulacion", corrida.simulacion())
                         .param("conjunto", corrida.conjunto())
@@ -104,6 +109,8 @@ public class CorridaDeEmisionRepositoryJdbc extends RepositorioJdbc
                 corrida.ejercicio(),
                 corrida.alcance(),
                 corrida.sector(),
+                corrida.codigoDesde(),
+                corrida.codigoHasta(),
                 corrida.modalidad(),
                 corrida.simulacion(),
                 corrida.conjunto(),
@@ -162,6 +169,8 @@ public class CorridaDeEmisionRepositoryJdbc extends RepositorioJdbc
                 new Ejercicio(fila.getInt("ejercicio")),
                 fila.getString("alcance"),
                 fila.getString("sector"),
+                fila.getString("codigo_desde"),
+                fila.getString("codigo_hasta"),
                 fila.getString("modalidad"),
                 fila.getBoolean("simulacion"),
                 fila.getString("conjunto"),

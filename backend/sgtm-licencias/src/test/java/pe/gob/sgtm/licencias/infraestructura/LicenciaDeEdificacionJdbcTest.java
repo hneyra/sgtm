@@ -71,6 +71,7 @@ import pe.gob.sgtm.licencias.aplicacion.ComprobacionDelDerecho;
 import pe.gob.sgtm.licencias.aplicacion.ConsultaDeFue;
 import pe.gob.sgtm.licencias.aplicacion.DerechosDeTramiteParametrizados;
 import pe.gob.sgtm.licencias.aplicacion.EmitirLicenciaDeEdificacion;
+import pe.gob.sgtm.licencias.aplicacion.LecturaDelFue;
 import pe.gob.sgtm.licencias.aplicacion.PresentarFue;
 import pe.gob.sgtm.licencias.aplicacion.RevalidarLicenciaDeEdificacion;
 import pe.gob.sgtm.licencias.aplicacion.ValorizacionDelFue;
@@ -163,6 +164,15 @@ class LicenciaDeEdificacionJdbcTest {
     private static BaseDeDatosDePrueba base;
     private static long municipalidad;
     private static long otraMunicipalidad;
+
+    /**
+     * Una municipalidad <b>recien implantada</b>: con padron y expedientes, y sin un solo conjunto
+     * de parametros sellado. Es el estado de hoy de todas ellas con D-02a abierta, y lo que #569
+     * necesita para que el lector de parametros <b>lance</b> de verdad.
+     */
+    private static long municipalidadRecienImplantada;
+
+    private static long contribuyenteRecienImplantada;
     private static long areaId;
     private static JdbcClient jdbc;
     private static TenantTransactionManager gestor;
@@ -186,6 +196,8 @@ class LicenciaDeEdificacionJdbcTest {
         base = BaseDeDatosDePrueba.provisionar();
         municipalidad = crearMunicipalidad("240460", "Municipalidad de las obras");
         otraMunicipalidad = crearMunicipalidad("240461", "Municipalidad vecina de #48");
+        municipalidadRecienImplantada =
+                crearMunicipalidad("240462", "Municipalidad recien implantada de #569");
 
         DriverManagerDataSource pool = new DriverManagerDataSource();
         pool.setUrl(base.url());
@@ -299,7 +311,17 @@ class LicenciaDeEdificacionJdbcTest {
                                 documentos,
                                 auditoria,
                                 RELOJ));
-        consulta = envolver(new ConsultaDeFue(expedientes, movimientos, padron, valorizaciones));
+        // Las DOS van envueltas, como en el contenedor: `envolver` usa
+        // `AnnotationTransactionAttributeSource`, asi que OBEDECE a la anotacion y sobre
+        // `ConsultaDeFue` —que no declara ninguna— no abre nada. Envolver solo `LecturaDelFue`
+        // haria que la mutacion de #569 —devolverle el `@Transactional` al metodo que orquesta—
+        // pasara en VERDE sin que nadie se enterara: la anotacion no se aplica a un objeto que
+        // nadie proxia (la leccion de #430 con `ImportarCajas`).
+        consulta =
+                envolver(
+                        new ConsultaDeFue(
+                                envolver(new LecturaDelFue(expedientes, movimientos, padron)),
+                                valorizaciones));
 
         // 2026 con cuadro de valores unitarios; 2027 con los conceptos del TUPA pero SIN cuadro.
         // El segundo es el que demuestra que sin cifra el sistema dice cual falta en vez de
@@ -307,6 +329,17 @@ class LicenciaDeEdificacionJdbcTest {
         crearConjunto(municipalidad, 2026, true);
         crearConjunto(municipalidad, 2027, false);
         crearConjunto(otraMunicipalidad, 2026, false);
+        // Y la tercera se queda SIN NINGUN conjunto: es lo unico que hace que
+        // `LectorDeParametrosSellados` lance de verdad, dentro de su propia transaccion (#569).
+        contribuyenteRecienImplantada =
+                insertarComoAppEn(
+                        municipalidadRecienImplantada,
+                        "INSERT INTO contribuyente (municipalidad_id, codigo_contribuyente,"
+                                + " tipo_documento, numero_documento, tipo_persona,"
+                                + " nombre_razon_social, usuario_registro) VALUES (?, 'C-569',"
+                                + " 'DNI', '20569001', 'NATURAL', 'VILELA SOSA, ROSA',"
+                                + " 'prueba') RETURNING id",
+                        municipalidadRecienImplantada);
 
         areaId = crearArea(municipalidad, "A-48");
         crearCaja(municipalidad, CAJA, "R48", areaId);
@@ -446,7 +479,7 @@ class LicenciaDeEdificacionJdbcTest {
         void anteproyectoNoSeEmite() {
             String expediente =
                     presentarFue(TipoDeTramiteDeEdificacion.ANTEPROYECTO_EN_CONSULTA, null, HOY);
-            completarTodo(expediente);
+            completarTodo(municipalidad, expediente);
             String recibo = cobrar(DERECHO_EDIFICACION);
 
             assertThatThrownBy(
@@ -589,7 +622,7 @@ class LicenciaDeEdificacionJdbcTest {
                             TipoDeTramiteDeEdificacion.AMPLIACION_DE_LICENCIA,
                             primera.numeroDeLicencia(),
                             HOY);
-            completarTodo(ampliacion);
+            completarTodo(municipalidad, ampliacion);
             EmitirLicenciaDeEdificacion.LicenciaEmitida segunda = emitirLicencia(ampliacion, HOY);
 
             assertThat(segunda.numeroDeLicencia())
@@ -914,7 +947,8 @@ class LicenciaDeEdificacionJdbcTest {
                                                                     TipoDeTramiteDeEdificacion
                                                                             .LICENCIA_DE_OBRA,
                                                                     null,
-                                                                    HOY),
+                                                                    HOY,
+                                                                    "C-" + contribuyente()),
                                                             PORQUE)))
                     .isInstanceOf(
                             pe.gob.sgtm.licencias.dominio.FueRepository.ExpedienteDuplicado.class);
@@ -1026,6 +1060,198 @@ class LicenciaDeEdificacionJdbcTest {
         }
     }
 
+    @Nested
+    @DisplayName("#569 — El reporte general en una municipalidad sin conjunto sellado")
+    class ReporteSinConjuntoSellado {
+
+        @Test
+        @DisplayName("AC 1 y AC 5: con dos expedientes y sin conjunto sellado, el reporte responde")
+        void dosFilasSinConjuntoSellado() {
+            String uno = expedienteRecienImplantado();
+            String otro = expedienteRecienImplantado();
+
+            Pagina<ConsultaDeFue.FilaDelReporte> hoja = reporteRecienImplantado();
+
+            assertThat(hoja.contenido())
+                    .extracting(fila -> fila.fila().fue().expediente())
+                    .as("el reporte devuelve las dos filas en vez de reventar al confirmar")
+                    .contains(uno, otro);
+        }
+
+        @Test
+        @DisplayName("AC 2 y AC 3: la fila sale sin cifra, y el motivo nombra el ejercicio")
+        void sinCifraYConMotivo() {
+            String expediente = expedienteRecienImplantado();
+
+            Pagina<ConsultaDeFue.FilaDelReporte> hoja = reporteRecienImplantado();
+
+            assertThat(hoja.contenido())
+                    .filteredOn(fila -> fila.fila().fue().expediente().equals(expediente))
+                    .singleElement()
+                    .satisfies(
+                            fila -> {
+                                assertThat(fila.valorizacion()).isNotNull();
+                                assertThat(fila.valorizacion().estaDisponible())
+                                        .as("ni cero ni inventada: la cifra no esta (AC 2)")
+                                        .isFalse();
+                                assertThat(fila.valorizacion().valorizacion()).isNull();
+                                assertThat(fila.valorizacion().motivo())
+                                        .as("y dice por que, nombrando el ejercicio (AC 3)")
+                                        .contains("2026");
+                            });
+        }
+
+        @Test
+        @DisplayName("AC 3: con el conjunto sellado incompleto, la fila nombra la llave que falta")
+        void nombraLaLlaveQueFalta() {
+            String expediente =
+                    presentarFue(TipoDeTramiteDeEdificacion.LICENCIA_DE_OBRA, null, HOY);
+            enContexto(() -> completar.completarTerreno(expediente, terreno("D", "7"), PORQUE));
+            enContexto(() -> completar.completarProyecto(expediente, proyecto(), PORQUE));
+            // PUERTAS categoria I no esta sembrada en el cuadro de 2026.
+            enContexto(
+                    () ->
+                            completar.completarValorizacion(
+                                    expediente,
+                                    List.of(
+                                            new CompletarSeccionDelFue.Estructura(
+                                                    1,
+                                                    PartidaDeEdificacion.PUERTAS,
+                                                    'I',
+                                                    new AreaM2(new BigDecimal("10.00")))),
+                                    PORQUE));
+
+            Pagina<ConsultaDeFue.FilaDelReporte> hoja =
+                    enContexto(() -> reporteDe(municipalidad, HOY));
+
+            assertThat(hoja.contenido())
+                    .filteredOn(fila -> fila.fila().fue().expediente().equals(expediente))
+                    .singleElement()
+                    .satisfies(
+                            fila -> {
+                                assertThat(fila.valorizacion()).isNotNull();
+                                assertThat(fila.valorizacion().estaDisponible()).isFalse();
+                                assertThat(fila.valorizacion().llaveQueFalta())
+                                        .isEqualTo("PUERTAS:I");
+                                assertThat(fila.valorizacion().motivo()).contains("PUERTAS:I");
+                            });
+        }
+
+        @Test
+        @DisplayName("AC 4: la fila que SI se puede valorizar trae su cifra con su fecha de corte")
+        void laQueSiSeValorizaTraeSuCifra() {
+            String expediente = expedienteCompleto(HOY);
+
+            Pagina<ConsultaDeFue.FilaDelReporte> hoja =
+                    enContexto(() -> reporteDe(municipalidad, HOY));
+
+            assertThat(hoja.contenido())
+                    .filteredOn(fila -> fila.fila().fue().expediente().equals(expediente))
+                    .singleElement()
+                    .satisfies(
+                            fila -> {
+                                assertThat(fila.valorizacion()).isNotNull();
+                                assertThat(fila.valorizacion().estaDisponible()).isTrue();
+                                assertThat(fila.valorizacion().motivo()).isNull();
+                                assertThat(fila.fila().aLaFecha())
+                                        .as("toda cifra dice de que dia es (regla 9, RNF-075)")
+                                        .isEqualTo(HOY);
+                            });
+        }
+
+        @Test
+        @DisplayName("AC 6: un rango sin ninguna fila sigue devolviendo la pagina vacia")
+        void rangoSinFilas() {
+            expedienteRecienImplantado();
+
+            Pagina<ConsultaDeFue.FilaDelReporte> hoja =
+                    enContextoDe(
+                            municipalidadRecienImplantada,
+                            () ->
+                                    consulta.reporte(
+                                            new CriterioDeFue(
+                                                    null,
+                                                    null,
+                                                    null,
+                                                    null,
+                                                    null,
+                                                    null,
+                                                    LocalDate.of(2019, 1, 1),
+                                                    LocalDate.of(2020, 1, 1),
+                                                    null),
+                                            null,
+                                            null,
+                                            LocalDate.of(2020, 1, 1),
+                                            Paginacion.de(0, 50, "expediente")));
+
+            assertThat(hoja.contenido()).isEmpty();
+            assertThat(hoja.totalElementos()).isZero();
+        }
+
+        @Test
+        @DisplayName("AC 7: la ficha del mismo expediente tampoco revienta sin conjunto sellado")
+        void laFichaTampocoRevienta() {
+            String expediente = expedienteRecienImplantado();
+
+            ConsultaDeFue.FichaDelFue ficha =
+                    enContextoDe(
+                            municipalidadRecienImplantada,
+                            () -> consulta.porExpediente(expediente, HOY).orElseThrow());
+
+            assertThat(ficha.valorizacion().estaDisponible()).isFalse();
+            assertThat(ficha.valorizacion().motivo()).contains("2026");
+        }
+
+        @Test
+        @DisplayName("AC 7: la emision sin conjunto sellado FALLA, y falla nombrando el ejercicio")
+        void laEmisionFallaEnVozAlta() {
+            // El otro anfitrion del modulo que llama a la valorizacion es `EmitirLicenciaDeEdifi-
+            // cacion`, y SI abre transaccion —tiene que abrirla: escribe—. No tiene el defecto de
+            // #569 porque nadie le captura nada: pide el concepto del TUPA ANTES de valorizar, y
+            // sin conjunto sellado esa lectura LANZA y la excepcion sale entera. La transaccion se
+            // deshace, que es lo correcto, y quien pregunta recibe el motivo en vez de un
+            // «rollback-only» que no dice nada.
+            String expediente = expedienteRecienImplantado();
+
+            assertThatThrownBy(
+                            () ->
+                                    enContextoDe(
+                                            municipalidadRecienImplantada,
+                                            () ->
+                                                    emitir.emitir(
+                                                            expediente,
+                                                            HOY,
+                                                            HOY.plusMonths(36),
+                                                            "R48-0000001",
+                                                            FormatoDeDocumento.PDF,
+                                                            PORQUE)))
+                    .isInstanceOf(
+                            pe.gob.sgtm.parametros.LectorDeParametros.EjercicioSinSellar.class)
+                    .hasMessageContaining("2026");
+        }
+
+        private static String expedienteRecienImplantado() {
+            return expedienteCompletoEn(
+                    municipalidadRecienImplantada, contribuyenteRecienImplantada, HOY);
+        }
+
+        private static Pagina<ConsultaDeFue.FilaDelReporte> reporteRecienImplantado() {
+            return enContextoDe(
+                    municipalidadRecienImplantada,
+                    () -> reporteDe(municipalidadRecienImplantada, HOY));
+        }
+
+        private static Pagina<ConsultaDeFue.FilaDelReporte> reporteDe(long muni, LocalDate corte) {
+            return consulta.reporte(
+                    new CriterioDeFue(
+                            null, null, null, null, null, null, corte.minusDays(1), corte, null),
+                    null,
+                    null,
+                    corte,
+                    Paginacion.de(0, 50, "expediente"));
+        }
+    }
+
     // ==================================================================
     // Ayudas
     // ==================================================================
@@ -1041,7 +1267,12 @@ class LicenciaDeEdificacionJdbcTest {
 
     /** Ejecuta con el contexto de tenant y el origen fijados, como hace el borde HTTP. */
     private static <T> T enContexto(Supplier<T> accion) {
-        TenantContext.fijar(new MunicipalidadId(municipalidad));
+        return enContextoDe(municipalidad, accion);
+    }
+
+    /** Lo mismo, en la municipalidad que se le diga: lo pide #569, que siembra en una tercera. */
+    private static <T> T enContextoDe(long muni, Supplier<T> accion) {
+        TenantContext.fijar(new MunicipalidadId(muni));
         OrigenContext.fijar(new Origen(USUARIO, "PC-OBRAS-01", "10.1.1.30"));
         return accion.get();
     }
@@ -1052,7 +1283,30 @@ class LicenciaDeEdificacionJdbcTest {
         enContexto(
                 () ->
                         presentar.presentar(
-                                solicitud(expediente, tramite, licenciaAnterior, fecha), PORQUE));
+                                solicitud(
+                                        expediente,
+                                        tramite,
+                                        licenciaAnterior,
+                                        fecha,
+                                        "C-" + contribuyente()),
+                                PORQUE));
+        return expediente;
+    }
+
+    /** Presenta un FUE en la municipalidad y a nombre del contribuyente que se le digan (#569). */
+    private static String presentarFueEn(long muni, long contribuyenteId, LocalDate fecha) {
+        String expediente = "EXP-569-" + CONTADOR.incrementAndGet();
+        enContextoDe(
+                muni,
+                () ->
+                        presentar.presentar(
+                                solicitud(
+                                        expediente,
+                                        TipoDeTramiteDeEdificacion.LICENCIA_DE_OBRA,
+                                        null,
+                                        fecha,
+                                        "C-" + contribuyenteId),
+                                PORQUE));
         return expediente;
     }
 
@@ -1060,11 +1314,12 @@ class LicenciaDeEdificacionJdbcTest {
             String expediente,
             TipoDeTramiteDeEdificacion tramite,
             String licenciaAnterior,
-            LocalDate fecha) {
+            LocalDate fecha,
+            String codigoContribuyente) {
         return new PresentarFue.Solicitud(
                 expediente,
                 fecha,
-                "C-" + contribuyente(),
+                codigoContribuyente,
                 null,
                 tramite,
                 TipoDeObra.EDIFICACION_NUEVA,
@@ -1079,14 +1334,22 @@ class LicenciaDeEdificacionJdbcTest {
     /** El expediente con las cinco secciones completadas y listo para emitir. */
     private static String expedienteCompleto(LocalDate fecha) {
         String expediente = presentarFue(TipoDeTramiteDeEdificacion.LICENCIA_DE_OBRA, null, fecha);
-        completarTodo(expediente);
+        completarTodo(municipalidad, expediente);
         return expediente;
     }
 
-    private static void completarTodo(String expediente) {
-        enContexto(() -> completar.completarTerreno(expediente, terreno("A", "3"), PORQUE));
-        enContexto(() -> completar.completarProyecto(expediente, proyecto(), PORQUE));
-        enContexto(
+    /** Lo mismo, en la municipalidad que se le diga y a nombre de su contribuyente (#569). */
+    private static String expedienteCompletoEn(long muni, long contribuyenteId, LocalDate fecha) {
+        String expediente = presentarFueEn(muni, contribuyenteId, fecha);
+        completarTodo(muni, expediente);
+        return expediente;
+    }
+
+    private static void completarTodo(long muni, String expediente) {
+        enContextoDe(muni, () -> completar.completarTerreno(expediente, terreno("A", "3"), PORQUE));
+        enContextoDe(muni, () -> completar.completarProyecto(expediente, proyecto(), PORQUE));
+        enContextoDe(
+                muni,
                 () ->
                         completar.completarValorizacion(
                                 expediente,
@@ -1102,7 +1365,8 @@ class LicenciaDeEdificacionJdbcTest {
                                                 'B',
                                                 new AreaM2(new BigDecimal("40.00")))),
                                 PORQUE));
-        enContexto(
+        enContextoDe(
+                muni,
                 () ->
                         completar.completarProfesionales(
                                 expediente,
@@ -1118,7 +1382,8 @@ class LicenciaDeEdificacionJdbcTest {
                                                 "CIP",
                                                 "67890")),
                                 PORQUE));
-        enContexto(
+        enContextoDe(
+                muni,
                 () ->
                         completar.completarDocumentos(
                                 expediente,
@@ -1512,8 +1777,12 @@ class LicenciaDeEdificacionJdbcTest {
     }
 
     private static long insertarComoApp(String sql, Object... parametros) {
+        return insertarComoAppEn(municipalidad, sql, parametros);
+    }
+
+    private static long insertarComoAppEn(long muni, String sql, Object... parametros) {
         try (Connection app = base.conexion(BaseDeDatosDePrueba.APP)) {
-            ContextoDeTenant.fijar(app, municipalidad);
+            ContextoDeTenant.fijar(app, muni);
             try (PreparedStatement sentencia = app.prepareStatement(sql)) {
                 for (int i = 0; i < parametros.length; i++) {
                     sentencia.setObject(i + 1, parametros[i]);

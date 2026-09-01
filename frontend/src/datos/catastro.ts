@@ -503,35 +503,61 @@ export const PREDIOS: readonly (readonly [string, string, string, string, string
 
 /* ══════════ Mapa catastral ══════════ */
 /**
- * `[clave, rótulo]`.
+ * Las cinco capas del artboard, y **cuál sostiene cada una** (ADR-0022 §5).
  *
  * **Sin conteo.** Los llevaba dentro —«18,412» predios, «2,184» vías, «1,096»
  * manzanas, «5» sectores— y eran los del artboard: el carril de al lado decía
  * 14 422 y 1 110 en cuanto alguna lectura los había contado, y las dos cifras se
  * leían a la vez sin que nada dijera cuál era la del sistema. El conteo lo pone
  * ahora la pantalla, de lo que el backend acaba de contar.
+ *
+ * **Y sólo una tiene geometría propia.** `predio.geometria` existe desde V61;
+ * `via`, `manzana` y `sector` no tienen ninguna columna de forma, así que su
+ * perímetro no se puede dibujar —y no se deriva de la unión de los lotes ya
+ * digitalizados, porque eso sería publicar un lindero que nadie levantó—. Lo que
+ * sí es cierto es que cada lote sabe de qué manzana y de qué sector es, y
+ * agruparlo por color dice eso y nada más.
  */
-export const CAPAS: readonly [string, string][] = [
-  ['predios', 'Predios (lotes)'],
-  ['vias', 'Vías y calles'],
-  ['manzanas', 'Manzanas'],
-  ['sectores', 'Sectores'],
-  ['aranceles', 'Aranceles por zona'],
-];
+export type CapaDelPlano = {
+  k: 'predios' | 'manzanas' | 'sectores' | 'vias' | 'aranceles';
+  label: string;
+  /** Qué hace la capa sobre el plano, o por qué no hay con qué dibujarla. */
+  nota: string;
+  /** Con `false` el conmutador nace apagado y bloqueado, con su motivo. */
+  dibujable: boolean;
+};
 
-export const SECTORES_DEL_MAPA = ['S-01', 'S-02', 'S-03', 'S-04', 'S-05'];
-
-/** El lote seleccionado: `[rótulo, valor, mono]`. */
-export const LOTE_SELECCIONADO: readonly [string, string, 0 | 1][] = [
-  ['Código predial', '01-1042-0004', 1],
-  ['Contribuyente', 'Villegas Prado, Rosa', 0],
-  ['Sector / manzana', 'S-01 · M-06', 1],
-  ['Lote', '04', 1],
-  ['Frente a vía', 'CALLE BOLÍVAR', 0],
-  ['Uso', 'Casa habitación', 0],
-  ['Área de terreno', '329.00 m²', 1],
-  ['Área construida', '136.00 m²', 1],
-  ['Arancel de la vía', 'S/ 198.40 / m²', 1],
+export const CAPAS: readonly CapaDelPlano[] = [
+  {
+    k: 'predios',
+    label: 'Predios (lotes)',
+    nota: 'El polígono de cada lote, tal como está en el padrón: ni reproyectado ni simplificado.',
+    dibujable: true,
+  },
+  {
+    k: 'manzanas',
+    label: 'Manzanas',
+    nota: 'Colorea y rotula los lotes por su manzana. No dibuja su perímetro: «manzana» no tiene columna de geometría.',
+    dibujable: true,
+  },
+  {
+    k: 'sectores',
+    label: 'Sectores',
+    nota: 'Colorea los lotes por su sector, cuando «Manzanas» está apagada. Tampoco tiene perímetro propio.',
+    dibujable: true,
+  },
+  {
+    k: 'vias',
+    label: 'Vías y calles',
+    nota: 'No se dibuja: «via» no tiene columna de geometría, así que el sistema no sabe por dónde pasa ninguna calle.',
+    dibujable: false,
+  },
+  {
+    k: 'aranceles',
+    label: 'Aranceles por zona',
+    nota: 'No se pinta, y no por prudencia: el arancel está llaveado por vía y tramo, y un predio no tiene tramo. Una vía con dos aranceles no se puede colorear sin elegir uno, y elegir mal no se ve.',
+    dibujable: false,
+  },
 ];
 
 /* ══════════ Territorio ══════════ */

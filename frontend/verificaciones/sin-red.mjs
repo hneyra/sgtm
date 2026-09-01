@@ -54,6 +54,14 @@ const CIFRAS = [
      forma del dinero: un año no casa, «1.0206» tampoco, y un porcentaje ya lo
      caza su propio patrón. */
   { nombre: 'importe suelto', re: /(?<![\d.,%])\d[\d,]*\.\d{2}(?![\d%])/g },
+  /* Una magnitud con su unidad: «1406.5 km», «820 m», «180.50 m2», «2.4 ha».
+     Existe porque los tres patrones de arriba exigen separador de millares o
+     dos decimales, y una medida no lleva ninguno de los dos: la escala de un
+     mapa se escapaba entera, y con ella una mutacion que afirmaba «1406.5 km de
+     ancho» sobre un lienzo vacio dejaba esto en VERDE. Va anclada a la unidad
+     —no a «cualquier numero»— porque ensancharlo a secas llena las 65 pantallas
+     de falsos positivos y un escaner que grita deja de leerse. */
+  { nombre: 'magnitud', re: /(?<![\d.,])\d[\d.,]*\s?(?:km|m²|m2|ha)\b/g },
 ];
 
 const navegador = await chromium.launch();
@@ -94,8 +102,18 @@ let vistas = 0;
 
 for (const m of MODULOS) {
   if (soloModulo && m.k !== soloModulo) continue;
-  const destinos = m.destinos.length ? m.destinos.map((d) => d.k) : [''];
-  for (const d of destinos) {
+  /* Los destinos del carril **y** la accion del panel y su documento.
+     Enumerando solo `m.destinos` esto era ciego a trece pantallas —las altas y
+     las hojas imprimibles—, y son justo donde mas cifras hay: `mirar.mjs` ya las
+     recorria y esto no, asi que devolver las cifras del artboard a la hoja de
+     una resolucion de determinacion la dejaba ensenandolas con la red cortada y
+     este arnes informando «ninguna ensenia una cifra», en verde. */
+  const paradas = [
+    ...m.destinos.map((d) => d.k),
+    ...(m.accion ? [m.accion.k] : []),
+    ...(m.documento ? [m.documento.k] : []),
+  ];
+  for (const d of paradas.length ? paradas : ['']) {
     const ruta = d ? `#/${m.k}/${d}` : `#/${m.k}`;
     await pagina.goto(`${BASE}/${ruta}`, { waitUntil: 'domcontentloaded' });
     await pagina.waitForTimeout(900);

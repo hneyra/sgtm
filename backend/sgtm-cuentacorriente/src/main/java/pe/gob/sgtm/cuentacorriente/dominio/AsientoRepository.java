@@ -59,6 +59,20 @@ public interface AsientoRepository {
     List<Asiento> deLaObligacion(ClaveDeSaldo clave);
 
     /**
+     * Los asientos de <b>todos los periodos</b> de una obligacion, sin filtro de fecha (#598).
+     *
+     * <p>Es {@link #deLaObligacion} sin la cuota: lo que la grilla de {@code consulta_deuda} agrupa
+     * en <b>una</b> fila. Existe porque una baja sobre esa fila tiene que repartirse entre los
+     * periodos que la componen, y para repartir hay que saber cuanto debe cada uno — algo que solo
+     * sabe el servidor: {@code ObligacionConDeudaResource} publica el total del grupo y no el
+     * importe de cada periodo.
+     *
+     * <p>Una sola consulta y no una por cuota: son doce como mucho, pero doce consultas por acto se
+     * convierten en doce mil en una corrida.
+     */
+    List<Asiento> deTodosLosPeriodosDe(ClaveDeObligacion clave);
+
+    /**
      * Los asientos que un documento origino y que <b>todavia no son una reversion</b> (#34).
      *
      * <p>Es como la anulacion de un recibo encuentra lo que tiene que deshacer: la cobranza dejo el

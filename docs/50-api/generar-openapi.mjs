@@ -268,6 +268,43 @@ const SUPRIMIDOS = {
   // paginacion los pone el generador a toda lectura con tabla, y aqui no hay
   // ninguna que paginar. `fechaDeConsulta`, que si se lee y es el parametro de la
   // regla 9, se declara en DEL_BACKEND.
+  // `POST /rentas/predial/calculo-individual` declara tres filtros de la
+  // DECLARACION JURADA que motiva la determinacion —«DJ N°», «Tipo de
+  // declaracion», «Fecha de declaracion»— y `PredialController.calcular` no lee
+  // ninguno (#576). Medido: con `djN=ZZZ` contesta exactamente lo mismo.
+  //
+  // Y no se cierra haciendo que los lea, porque **acotar por declaracion jurada
+  // no es filtrar esta operacion: es calcular otra cosa**. La base del predial es
+  // POR CONTRIBUYENTE y no por predio (NEG-05 §1): los tramos progresivos se
+  // aplican al conjunto de sus predios, y calcularlo sobre los de una sola
+  // declaracion produce el mismo error sistematico a la baja que NEG-05 advierte
+  // —y la cifra que sale es plausible: nadie la distinguiria de la correcta—.
+  //
+  // La pantalla los dibuja porque el manual los dibuja: son los datos de la DJ
+  // que se esta atendiendo, no un criterio de calculo. Quien quiera acotar la
+  // determinacion a una declaracion no quiere un filtro, quiere otra operacion.
+  predial_individual: ['djN', 'tipoDeDeclaracion', 'fechaDeDeclaracion'],
+  // `POST /rentas/espectaculos` declara los cuatro filtros de una BUSQUEDA
+  // —«Nº de expediente», «Organizador», «Desde», «Hasta»— y
+  // `EspectaculoController.registrar` solo tiene `@RequestBody` (#576).
+  //
+  // No hay a que ruta sumarlos: **ninguna lectura del contrato lista los
+  // espectaculos declarados**, que es lo que #432 dejo medido al bloquear esos
+  // mismos cuatro en la pantalla. Un filtro de busqueda declarado sobre el POST
+  // que registra no acota nada ni podria: lo que ese POST recibe es un
+  // espectaculo, no una consulta.
+  //
+  // Vuelven el dia que exista la lectura, y entonces seran suyos y no de este
+  // acto — igual que los tres de `fisc_vehicular`.
+  espectaculos: ['nDeExpediente', 'organizador', 'desde', 'hasta'],
+  // Y `alcabala` SIGUE sin declarar ninguno, que es lo correcto y conviene
+  // dejarlo dicho (#576 AC 4): sus tres filtros del manual —«Nº de
+  // liquidacion», «Nº de expediente», «Fecha de la transferencia»— no tienen a
+  // que ruta sumarse, porque **ninguna lectura del contrato lista las
+  // transferencias**. #432 lo midio: rentas declara los dos POST que las
+  // registran y `/fiscalizacion/transferencias`, que es otra cosa. Publicar esa
+  // lectura es su propio issue; hasta entonces, no declarar nada es la unica
+  // respuesta honesta.
   fisc_estado_cuenta: [
     'tipoDePapeleta',
     'papeleta',
@@ -577,6 +614,47 @@ const DEL_BACKEND = {
  * pantalla que todavia no la tiene.
  */
 const DESCRIPCIONES = {
+  // Rentas · Determinaciones (#577)
+  vehicular_calculo: bloque(`
+    Determina —o simula— el impuesto al patrimonio vehicular de **un ejercicio**, sobre los
+    vehículos que el criterio elija: una placa, o todos los del contribuyente.
+
+    **Un ejercicio, no tres.** La descripción de esta operación prometía «por los tres ejercicios
+    en que el vehículo permanece afecto» y devolvía una determinación por vehículo del ejercicio
+    pedido (#577). Los tres ejercicios son la **afectación** —estructural, y \`GET
+    /rentas/vehiculos\` ya la publica como \`afectoDesde\`/\`afectoHasta\`—, no el alcance de este
+    cálculo: determinar tres a la vez asentaría tres deudas por un botón que dice «Calcular». Cada
+    fila de la respuesta dice de qué vehículo es, con su \`placa\`.
+
+    **\`baseImponible\` se llamaba \`valorReferencial\` y no lo era**: es el mayor entre el valor
+    de adquisición y el referencial del MEF (art. 32 LTM). Los dos operandos que la memoria del
+    cálculo compara no viajan, porque la determinación guarda la base y no de qué salió.
+
+    La marca \`simulacion\` del cuerpo es **obligatoria** y distingue calcular de asentar: no hay
+    omisión segura en ninguna de las dos direcciones.
+  `),
+  // Rentas · Determinaciones (#577)
+  predial_masivo: bloque(`
+    Recalcula el padrón declarado del ejercicio y deja constancia de los contribuyentes
+    **observados** que quedan fuera de la emisión (#523).
+
+    El \`alcance\` admite las **cuatro** palabras que el manual dibuja, letra por letra (#577):
+
+    - \`TODOS\` — todo el padrón declarado del ejercicio.
+    - \`SECTOR\` — los que tienen al menos un predio en el sector; exige \`sector\`. Se determina
+      igual sobre **todos** sus predios: la base es del contribuyente (NEG-05 §1) y recortarla al
+      sector produciría un error a la baja. El sector elige a quién se emite, no qué se le cobra.
+    - \`RANGO_DE_CODIGO\` — los que caen en un tramo de código de contribuyente; exige
+      \`codigoDesde\` y \`codigoHasta\`, extremos incluidos. Se compara como texto, que es el orden
+      con que la pantalla lista el padrón.
+    - \`OBSERVADOS\` — los que la **última corrida del ejercicio** dejó observados. Sin corrida
+      previa no recorre a nadie, y eso es lo correcto: «ninguno quedó observado» y «todavía no se
+      ha corrido» son dos cosas distintas.
+
+    Los dos interruptores que la pantalla dibuja y esta corrida no hace —arbitrios y cuponera— se
+    **rechazan** con 422 en vez de ignorarse: una corrida «correcta» a quien pidió además los
+    arbitrios sólo se notaría al buscar los recibos que nadie generó.
+  `),
   // Seguridad (#543)
   permisos: bloque(`
     Fija los niveles de accesibilidad de un grupo (RF-121). Recibe la lista **completa** de
@@ -992,6 +1070,35 @@ const OPERACIONES_ADICIONALES = {
         Autenticada, pero **no es una opción del catálogo**: leer los permisos
         propios no revela nada que no se pueda enumerar probando cada endpoint
         (REQ-03 §5). Un usuario sin ningún permiso recibe \`{}\`, no un 403.
+      `),
+    },
+    // Y a QUIEN pertenece la sesion (#555). Vive aqui por lo mismo que
+    // `permisos_de_la_sesion` —no es una opcion del catalogo, sino la sesion
+    // hablando de si misma— y no por afinidad con los permisos.
+    {
+      operationId: 'municipalidad_de_la_sesion',
+      metodo: 'get',
+      ruta: '/api/v1/seguridad/sesion/municipalidad',
+      titulo: 'Municipalidad de la sesión',
+      descripcion: literal(`
+        A quién pertenecen las cifras de la pantalla: la municipalidad a la que
+        pertenece la sesión, con su nombre tal como sale impreso.
+
+        **Sin ningún parámetro, y eso es la decisión.** El identificador sale del claim
+        \`municipalidad_id\` del token, se fija una vez con \`SET LOCAL\` y lo compara el
+        \`WHERE\` de la consulta (ARQ-03 §3.1). Admitir un identificador convertiría esta
+        lectura en un **directorio de municipalidades**: con el token de A no hay forma de
+        obtener el nombre de B, y un parámetro de más se rechaza con 422 nombrándolo.
+
+        Autenticada, pero **no es una opción del catálogo**: el rótulo de la entidad no es
+        de un módulo, es del sistema entero, y sin él las doce pantallas quedan sin decir
+        de quién son sus cifras. Cualquier sesión válida la lee, tenga los permisos que
+        tenga — el mismo trato que \`permisos_de_la_sesion\` (ADR-0013).
+
+        \`nombre\` es el nombre **completo**, con su tipo delante —«Municipalidad Distrital
+        de Catacaos»—, porque de ahí sale el membrete de las hojas que se imprimen; \`tipo\`
+        va aparte para quien necesite distinguir una distrital de una provincial y **no se
+        antepone**. \`ubigeo\` son los seis dígitos del distrito.
       `),
     },
     // Y la matriz de OTRO usuario, que es la que se administra (#543). No sale
@@ -2627,6 +2734,33 @@ const RESPUESTAS = {
       tipoDeContenido: 'application/octet-stream',
       esquema: '{ type: string, format: binary }',
     },
+  },
+  // Sin 422 por lo mismo que `permisos_de_la_sesion`: no recibe cuerpo ni
+  // filtros, asi que no hay regla de negocio que pueda incumplir. Y la forma se
+  // describe entera porque la interfaz la consume entera: de estos tres campos
+  // salen el rotulo de la cabecera, el membrete de las hojas imprimibles y el
+  // ubigeo que el alta de predio prefijaba compilado (#555).
+  municipalidad_de_la_sesion: {
+    principal: {
+      codigo: '200',
+      descripcion: 'La municipalidad a la que pertenece la sesión',
+      esquema: sangrado(`
+        type: object
+        required: [id, ubigeo, nombre, tipo]
+        properties:
+          id: { type: integer, format: int64 }
+          ubigeo: { type: string, minLength: 6, maxLength: 6 }
+          nombre: { type: string }
+          tipo: { type: string, enum: [DISTRITAL, PROVINCIAL] }
+      `),
+      ejemplo: sangrado(`
+        id: 1
+        ubigeo: "200105"
+        nombre: "Municipalidad Distrital de Catacaos"
+        tipo: "DISTRITAL"
+      `),
+    },
+    sinValidacion: true,
   },
   permisos_de_la_sesion: {
     principal: {

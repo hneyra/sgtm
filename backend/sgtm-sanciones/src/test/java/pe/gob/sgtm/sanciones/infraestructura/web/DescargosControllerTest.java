@@ -181,6 +181,117 @@ class DescargosControllerTest {
         assertThat(descargos.guardados).isEmpty();
     }
 
+    // ---------------------------------------- #562: lo que falta publicar es 422, no 500
+
+    @Test
+    @DisplayName("sin ningun conjunto sellado, 422 nombrando el ejercicio y no 500")
+    void sinConjuntoSellado422() throws Exception {
+        MvcResult resultado = registrarCon(new ParametrosDeMentira().sinSellar());
+
+        assertThat(resultado.getResponse().getStatus())
+                .as("no es que el servidor este roto: es que nadie ha sellado 2026 (D-02a)")
+                .isEqualTo(422);
+        String cuerpo = resultado.getResponse().getContentAsString();
+        assertThat(cuerpo).contains("VALIDACION").contains("2026");
+        assertThat(cuerpo)
+                .as("un 500 traeria identificador de incidencia; esto no es una incidencia")
+                .doesNotContain("incidencia");
+        assertThat(descargos.guardados).isEmpty();
+    }
+
+    @Test
+    @DisplayName("y con conjunto sellado y sin la llave, 422 nombrandola: aqui faltaban las DOS")
+    void sinLaLlave422() throws Exception {
+        MvcResult resultado = registrarCon(new ParametrosDeMentira().sinElPlazo());
+
+        assertThat(resultado.getResponse().getStatus())
+                .as(
+                        "sanciones es el unico modulo del censo de #562 donde escapaban las dos:"
+                                + " ni el conjunto que falta ni la llave que falta estaban"
+                                + " traducidas")
+                .isEqualTo(422);
+        assertThat(resultado.getResponse().getContentAsString())
+                .contains("PLAZO:DESCARGO_PAPELETA")
+                .doesNotContain("incidencia");
+        assertThat(descargos.guardados).isEmpty();
+    }
+
+    @Test
+    @DisplayName("y ninguna de las dos escribe una incidencia en el registro de errores")
+    void loQueFaltaPublicarNoEnsuciaElRegistro() throws Exception {
+        ch.qos.logback.classic.Logger registro =
+                (ch.qos.logback.classic.Logger)
+                        org.slf4j.LoggerFactory.getLogger(ManejadorDeErrores.class);
+        ch.qos.logback.core.read.ListAppender<ch.qos.logback.classic.spi.ILoggingEvent> anotados =
+                new ch.qos.logback.core.read.ListAppender<>();
+        anotados.start();
+        registro.addAppender(anotados);
+        try {
+            registrarCon(new ParametrosDeMentira().sinSellar());
+            registrarCon(new ParametrosDeMentira().sinElPlazo());
+        } finally {
+            registro.detachAppender(anotados);
+        }
+
+        assertThat(
+                        anotados.list.stream()
+                                .filter(e -> e.getLevel() == ch.qos.logback.classic.Level.ERROR)
+                                .toList())
+                .as(
+                        "es la mitad del defecto que la respuesta no ensena: con D-02a abierta esto"
+                                + " pasa en TODAS las municipalidades, y el registro de incidencias"
+                                + " es para defectos, no para cifras sin publicar")
+                .isEmpty();
+    }
+
+    @Test
+    @DisplayName("lo que SI es un fallo del servidor sigue siendo 500 con su incidencia")
+    void loQueSiEsInternoNoSeDisfraza() throws Exception {
+        MvcResult resultado = registrarCon(new ParametrosDeMentira().conUnPlazoIlegible());
+
+        assertThat(resultado.getResponse().getStatus())
+                .as(
+                        "traducir lo que falta publicar no puede convertir TODO en 422: un plazo"
+                                + " sellado que no se puede leer es un dato que hay que investigar")
+                .isEqualTo(500);
+        assertThat(resultado.getResponse().getContentAsString()).contains("incidencia");
+    }
+
+    // ------------------------------------------------------------------
+
+    /** El mismo borde con otro lector de parametros detras del plazo (#562). */
+    private MvcResult registrarCon(ParametrosDeMentira lector) throws Exception {
+        MockMvc borde =
+                MockMvcBuilders.standaloneSetup(
+                                new DescargosController(
+                                        new RegistrarDescargo(
+                                                papeletas,
+                                                descargos,
+                                                new PlazosDeSancionesParametrizados(lector),
+                                                (RegistroDeAuditoria registro) -> {},
+                                                RELOJ)))
+                        .setControllerAdvice(new ManejadorDeErrores())
+                        .setMessageConverters(
+                                new JacksonJsonHttpMessageConverter(
+                                        JsonMapper.builder()
+                                                .addModule(
+                                                        new ConfiguracionDeJson()
+                                                                .moduloDeObjetosDeValor())
+                                                .build()))
+                        .build();
+        return borde.perform(
+                        post("/api/v1/transito/descargos")
+                                .param("papeleta", "PT-0002")
+                                .param("nDeExpediente", "2026-1188")
+                                .contentType(MediaType.APPLICATION_JSON)
+                                .content(
+                                        "{\"fechaDePresentacion\":\"2026-03-06\","
+                                                + "\"tipoDeRecurso\":\"DESCARGO\","
+                                                + "\"fundamento\":\"No conducia el vehiculo\","
+                                                + "\"observacion\":\"Se registra el escrito\"}"))
+                .andReturn();
+    }
+
     // ------------------------------------------------------------------
 
     /** Dos papeletas de transito, para que «viaja» y «se ignora» no den el mismo resultado. */
@@ -305,11 +416,40 @@ class DescargosControllerTest {
 
         private static final long CONJUNTO = 77L;
 
+        private boolean sinSellar;
+
+        private boolean sinElPlazo;
+
+        private @org.jspecify.annotations.Nullable String plazo = "5 DIAS_HABILES";
+
+        /** Ningun conjunto sellado rige el ejercicio: lo que ocurre hoy en todas (D-02a). */
+        ParametrosDeMentira sinSellar() {
+            this.sinSellar = true;
+            return this;
+        }
+
+        /** Hay conjunto y no trae la llave: es la otra mitad, y aqui tampoco estaba traducida. */
+        ParametrosDeMentira sinElPlazo() {
+            this.sinElPlazo = true;
+            return this;
+        }
+
+        /** Un plazo sellado que no se puede leer como plazo: eso si hay que investigarlo. */
+        ParametrosDeMentira conUnPlazoIlegible() {
+            this.plazo = "no es un plazo";
+            return this;
+        }
+
         @Override
         public ParametrosSellados vigenteEn(Ejercicio ejercicio) {
-            return ParametrosSellados.de(ejercicio, 1)
-                    .texto("PLAZO", "DESCARGO_PAPELETA", "5 DIAS_HABILES")
-                    .construir();
+            if (sinSellar) {
+                throw new EjercicioSinSellar(ejercicio);
+            }
+            ParametrosSellados.Constructor constructor = ParametrosSellados.de(ejercicio, 1);
+            if (!sinElPlazo && plazo != null) {
+                constructor.texto("PLAZO", "DESCARGO_PAPELETA", plazo);
+            }
+            return constructor.construir();
         }
 
         @Override
@@ -319,6 +459,9 @@ class DescargosControllerTest {
 
         @Override
         public IdentificadorDeConjunto conjuntoVigenteEn(Ejercicio ejercicio) {
+            if (sinSellar) {
+                throw new EjercicioSinSellar(ejercicio);
+            }
             return IdentificadorDeConjunto.de(CONJUNTO);
         }
     }

@@ -33,6 +33,19 @@ public final class LicenciasEnMemoria implements LicenciaRepository {
     private final Map<Integer, Long> correlativos = new HashMap<>();
     private long siguienteId = 1;
 
+    private boolean revienta;
+
+    /**
+     * Un defecto de verdad del servidor, para el contraste de #562.
+     *
+     * <p>Traducir «falta publicar una cifra» a 422 no puede convertir <b>todo</b> en 422: un fallo
+     * del servidor tiene que seguir diciendo que lo es y dejando su incidencia en el registro. Sin
+     * este interruptor, una traduccion demasiado ancha pasaria en verde.
+     */
+    public void reventarAlInsertar() {
+        this.revienta = true;
+    }
+
     @Override
     public long siguienteCorrelativo(Ejercicio ejercicio) {
         long siguiente = correlativos.getOrDefault(ejercicio.valor(), 0L) + 1;
@@ -42,6 +55,9 @@ public final class LicenciasEnMemoria implements LicenciaRepository {
 
     @Override
     public LicenciaDeFuncionamiento emitir(LicenciaDeFuncionamiento licencia) {
+        if (revienta) {
+            throw new IllegalStateException("un defecto de verdad, con su rastro");
+        }
         if (porNumero(licencia.numero()).isPresent()) {
             throw new NumeroDuplicado(
                     "Ya existe la licencia " + licencia.numero(),

@@ -1,50 +1,49 @@
 package pe.gob.sgtm.licencias.aplicacion;
 
 import java.time.LocalDate;
-import java.util.ArrayList;
-import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
-import java.util.Set;
 import org.jspecify.annotations.Nullable;
 import org.springframework.stereotype.Service;
-import org.springframework.transaction.annotation.Transactional;
 import pe.gob.sgtm.compartido.Pagina;
 import pe.gob.sgtm.compartido.Paginacion;
-import pe.gob.sgtm.contribuyentes.DirectorioDeContribuyentes;
 import pe.gob.sgtm.contribuyentes.ResumenDeContribuyente;
 import pe.gob.sgtm.licencias.dominio.CriterioDeFue;
 import pe.gob.sgtm.licencias.dominio.EstadoDelFue;
 import pe.gob.sgtm.licencias.dominio.EstructuraDelProyecto;
 import pe.gob.sgtm.licencias.dominio.FueDeEdificacion;
-import pe.gob.sgtm.licencias.dominio.FueRepository;
 import pe.gob.sgtm.licencias.dominio.MovimientoDeEdificacion;
-import pe.gob.sgtm.licencias.dominio.MovimientoDeEdificacionRepository;
 import pe.gob.sgtm.licencias.dominio.ProfesionalDelFue;
 import pe.gob.sgtm.licencias.dominio.ProyectoDelFue;
 import pe.gob.sgtm.licencias.dominio.RequisitoDelFue;
 import pe.gob.sgtm.licencias.dominio.SeccionDelFue;
 import pe.gob.sgtm.licencias.dominio.TerrenoDelFue;
-import pe.gob.sgtm.licencias.dominio.TipoDeMovimientoDeEdificacion;
 import pe.gob.sgtm.licencias.dominio.VigenciaDeLaLicencia;
 
 /**
  * La grilla, la ficha y el reporte general del FUE (#48, RF-113, RF-115).
  *
- * <h2>Lleva su propia transaccion, y hace falta</h2>
+ * <h2>Este servicio NO abre transaccion, y hace falta que no la abra</h2>
  *
- * <p>{@code @Transactional(readOnly = true)} es lo que abre la transaccion donde {@code
- * TenantTransactionManager} emite el {@code SET LOCAL app.municipalidad_id} que las politicas RLS
- * consultan. Un controlador que llamara al repositorio directamente leeria sin contexto, y eso no
- * devuelve vacio: <b>falla</b>, con un mensaje que no se parece a su causa. Es el defecto que la
- * marcha blanca de seguridad destapo en {@code GET /catastro/vias}.
+ * <p>Sus dos colaboradores traen la suya: {@link LecturaDelFue}, que lee las tablas del FUE, y
+ * {@link ValorizacionDelFue}, que le pide a {@code catastro} el cuadro de valores unitarios del
+ * conjunto sellado. Un ejercicio <b>sin conjunto sellado</b> —lo que ocurre hoy en todas las
+ * municipalidades, D-02a— hace que el lector de parametros <b>lance</b>. Si este servicio
+ * envolviera a los dos en una transaccion propia, esa excepcion la dejaria marcada
+ * <i>rollback-only</i> y, aunque {@link ValorizacionDelFue} la capture para devolver el motivo, el
+ * reporte entero fallaria al confirmarla con {@code UnexpectedRollbackException}: la hoja que
+ * explicaba el problema no llegaria a devolverse.
  *
- * <h2>El estado se deriva, y en dos consultas</h2>
+ * <p>Lo midio #569, y es la cuarta vez que este reparto aparece: #54 (el resumen anual de
+ * licencias), #72 (el acogimiento a campania) y #247 §2 (la publicacion de parametros). Es el
+ * reparto de #25 leido al reves: alli el defecto era que los puertos ajenos disimulaban la falta de
+ * transaccion del anfitrion —la seccion que se lee del repositorio propio SI la necesita, y por eso
+ * vive en {@link LecturaDelFue}—; aqui es que el anfitrion no debe abrir ninguna.
  *
- * <p>Una pagina de veinte expedientes necesita veinte estados, y cada estado necesita movimientos y
- * vigencias. Se leen los de los veinte de golpe y se derivan en memoria: con una lectura por fila
- * serian cuarenta y una consultas.
+ * <p><b>Añadir aqui una lectura suelta de un repositorio la rompe</b>, y no devolviendo vacio:
+ * fallando con «invalid input syntax for type bigint: ""», porque sin transaccion no hay {@code SET
+ * LOCAL} y la politica RLS no se puede evaluar (#486). Toda lectura va a {@link LecturaDelFue}.
  *
  * <h2>«A la fecha», tambien aqui</h2>
  *
@@ -56,102 +55,44 @@ import pe.gob.sgtm.licencias.dominio.VigenciaDeLaLicencia;
 @Service
 public class ConsultaDeFue {
 
-    /** Cuantos contribuyentes se resuelven como mucho al filtrar por nombre. */
-    private static final int TITULARES_MAXIMOS = 200;
-
-    private final FueRepository expedientes;
-    private final MovimientoDeEdificacionRepository movimientos;
-    private final DirectorioDeContribuyentes contribuyentes;
+    private final LecturaDelFue lectura;
     private final ValorizacionDelFue valorizaciones;
 
-    public ConsultaDeFue(
-            FueRepository expedientes,
-            MovimientoDeEdificacionRepository movimientos,
-            DirectorioDeContribuyentes contribuyentes,
-            ValorizacionDelFue valorizaciones) {
-        this.expedientes = expedientes;
-        this.movimientos = movimientos;
-        this.contribuyentes = contribuyentes;
+    public ConsultaDeFue(LecturaDelFue lectura, ValorizacionDelFue valorizaciones) {
+        this.lectura = lectura;
         this.valorizaciones = valorizaciones;
     }
 
     /**
      * La grilla, paginada, con el estado de cada fila derivado a {@code aLaFecha}.
      *
-     * <p><b>Sin valorizar.</b> Valorizar veinte expedientes por pagina seria pedir el cuadro de
-     * valores unitarios veinte veces para una columna que la grilla ni siquiera pinta. La
-     * valorizacion vive en la ficha y en el reporte, que son los dos sitios donde se lee.
-     *
-     * @param nombreDelSolicitante el filtro por nombre; se resuelve contra el padron
-     * @param estado el filtro por estado; se aplica <b>despues</b> de derivarlo, porque no es una
-     *     columna
+     * <p><b>Sin valorizar</b>: la columna que la grilla pinta no lleva importes, y valorizar veinte
+     * filas seria pedir el cuadro veinte veces para nada.
      */
-    @Transactional(readOnly = true)
     public Pagina<FueEnConsulta> buscar(
             CriterioDeFue criterio,
             @Nullable String nombreDelSolicitante,
             @Nullable EstadoDelFue estado,
             LocalDate aLaFecha,
             Paginacion paginacion) {
-
-        CriterioDeFue conTitulares = conTitularesResueltos(criterio, nombreDelSolicitante);
-        if (conTitulares.sinTitularPosible()) {
-            // Se filtro por solicitante y no hay ninguno que se parezca. Devolver la pagina entera
-            // aqui convertiria un nombre inexistente en «todos los expedientes», que es el defecto
-            // que la consulta de fichas ya cometio una vez.
-            return Pagina.vacia(paginacion);
-        }
-
-        Pagina<FueDeEdificacion> pagina = expedientes.buscar(conTitulares, paginacion);
-        if (pagina.estaVacia()) {
-            return Pagina.vacia(paginacion);
-        }
-
-        Set<Long> ids = new HashSet<>();
-        Set<Long> titulares = new HashSet<>();
-        for (FueDeEdificacion fue : pagina.contenido()) {
-            ids.add(fue.identificador());
-            titulares.add(fue.contribuyenteId());
-        }
-        Map<Long, List<MovimientoDeEdificacion>> historiales = movimientos.deExpedientes(ids);
-        Map<Long, List<VigenciaDeLaLicencia>> vigencias = movimientos.vigenciasDeVarias(ids);
-        Map<Long, TerrenoDelFue> terrenos = expedientes.terrenosDe(ids);
-        Map<Long, ResumenDeContribuyente> padron = contribuyentes.porIds(titulares);
-
-        Pagina<FueEnConsulta> resuelta =
-                pagina.mapear(
-                        fue ->
-                                filaDe(
-                                        fue,
-                                        historiales.getOrDefault(fue.identificador(), List.of()),
-                                        vigencias.getOrDefault(fue.identificador(), List.of()),
-                                        terrenos.get(fue.identificador()),
-                                        padron.get(fue.contribuyenteId()),
-                                        aLaFecha));
-
-        if (estado == null) {
-            return resuelta;
-        }
-        // El estado no es una columna y no se puede filtrar en el WHERE: se deriva y se filtra
-        // aqui. El total de la pagina se recalcula sobre lo que queda, para que el reporte no
-        // prometa mas filas de las que ensena.
-        List<FueEnConsulta> filtradas =
-                resuelta.contenido().stream().filter(fila -> fila.estado() == estado).toList();
-        return Pagina.de(filtradas, paginacion, filtradas.size());
+        return lectura.buscar(criterio, nombreDelSolicitante, estado, aLaFecha, paginacion);
     }
 
     /**
      * El reporte general de licencias de edificacion (RF-115, opcion {@code edificacion_reporte}).
      *
      * <p>Lo que la grilla no trae y este si: el area a construir y el valor de obra de cada fila.
-     * El cuadro de valores unitarios se lee <b>una sola vez</b> para toda la pagina —{@link
-     * ValorizacionDelFue#valorizarVarias}—, y con la misma fecha de corte: si cada fila lo
-     * resolviera por su cuenta y entre dos lecturas se sellara una version nueva, media hoja
-     * saldria con un cuadro y media con otro.
+     * Las filas se leen <b>en una transaccion</b> y el cuadro de valores unitarios se pide <b>fuera
+     * de ella</b> y una sola vez para toda la pagina —{@link ValorizacionDelFue#valorizarVarias}—,
+     * con la misma fecha de corte: si cada fila lo resolviera por su cuenta y entre dos lecturas se
+     * sellara una version nueva, media hoja saldria con un cuadro y media con otro.
+     *
+     * <p>Una fila que no se pueda valorizar sale con su {@link ValorizacionDelFue.Resultado} <b>sin
+     * cifra y con el motivo</b>, nombrando la llave que falta cuando la hay: ni cero ni error. Un
+     * cero es indistinguible de una obra que no vale nada cuando llega al papel (#48).
      *
      * @param aLaFecha la fecha de corte del reporte; deriva el estado y resuelve el cuadro
      */
-    @Transactional(readOnly = true)
     public Pagina<FilaDelReporte> reporte(
             CriterioDeFue criterio,
             @Nullable String nombreDelSolicitante,
@@ -159,150 +100,67 @@ public class ConsultaDeFue {
             LocalDate aLaFecha,
             Paginacion paginacion) {
 
-        Pagina<FueEnConsulta> filas =
-                buscar(criterio, nombreDelSolicitante, estado, aLaFecha, paginacion);
-        if (filas.estaVacia()) {
+        LecturaDelFue.DatosDelReporte datos =
+                lectura.datosDelReporte(
+                        criterio, nombreDelSolicitante, estado, aLaFecha, paginacion);
+        if (datos.filas().estaVacia()) {
+            // Ni una fila que valorizar: pedirle el cuadro a catastro seria una lectura de mas
+            // para una hoja en blanco. La pagina vacia sale igual (AC 6 de #569).
             return Pagina.vacia(paginacion);
         }
 
-        Set<Long> ids = new HashSet<>();
-        for (FueEnConsulta fila : filas.contenido()) {
-            ids.add(fila.fue().identificador());
-        }
-        Map<Long, ProyectoDelFue> proyectos = expedientes.proyectosDe(ids);
         Map<Long, ValorizacionDelFue.Resultado> valorizadas =
-                valorizaciones.valorizarVarias(expedientes.valorizacionesDe(ids), aLaFecha);
+                valorizaciones.valorizarVarias(datos.estructuras(), aLaFecha);
 
-        return filas.mapear(
-                fila ->
-                        new FilaDelReporte(
-                                fila,
-                                proyectos.get(fila.fue().identificador()),
-                                valorizadas.get(fila.fue().identificador())));
+        return datos.filas()
+                .mapear(
+                        fila ->
+                                new FilaDelReporte(
+                                        fila,
+                                        datos.proyectos().get(fila.fue().identificador()),
+                                        valorizadas.get(fila.fue().identificador())));
     }
 
-    /** La ficha completa de un expediente: sus secciones, su historial y su valorizacion. */
     /**
      * Los tramos de vigencia de una licencia de edificacion.
      *
      * <p>Los pide la respuesta de la revalidacion —las dos vigencias, la original y la nueva, que
-     * es el AC 4 de #48 leible desde el JSON—. Vive aqui y no en el controlador porque {@code
-     * edificacion_movimiento} tiene RLS: una consulta fuera de transaccion corre sin el {@code SET
-     * LOCAL} y revienta con «invalid input syntax for type bigint: ""» (#486).
+     * es el AC 4 de #48 leible desde el JSON—.
      */
-    @Transactional(readOnly = true)
-    public java.util.List<pe.gob.sgtm.licencias.dominio.VigenciaDeLaLicencia> vigenciasDe(
-            long licenciaId) {
-        return movimientos.vigenciasDe(licenciaId);
+    public List<VigenciaDeLaLicencia> vigenciasDe(long licenciaId) {
+        return lectura.vigenciasDe(licenciaId);
     }
 
-    @Transactional(readOnly = true)
+    /** La ficha completa de un expediente: sus secciones, su historial y su valorizacion. */
     public Optional<FichaDelFue> porExpediente(String expediente, LocalDate aLaFecha) {
-        return expedientes.porExpediente(expediente).map(fue -> ficha(fue, aLaFecha));
+        return lectura.porExpediente(expediente, aLaFecha).map(this::valorizada);
     }
 
     /** La ficha completa por el numero de la licencia otorgada. */
-    @Transactional(readOnly = true)
     public Optional<FichaDelFue> porNumeroDeLicencia(String numero, LocalDate aLaFecha) {
-        return expedientes.porNumeroDeLicencia(numero).map(fue -> ficha(fue, aLaFecha));
+        return lectura.porNumeroDeLicencia(numero, aLaFecha).map(this::valorizada);
     }
 
     // ------------------------------------------------------------------
 
-    private FichaDelFue ficha(FueDeEdificacion fue, LocalDate aLaFecha) {
-        long id = fue.identificador();
-        List<MovimientoDeEdificacion> historial = movimientos.deExpediente(id);
-        List<VigenciaDeLaLicencia> vigencias = movimientos.vigenciasDe(id);
-        Map<Long, ResumenDeContribuyente> padron =
-                contribuyentes.porIds(Set.of(fue.contribuyenteId()));
-        List<EstructuraDelProyecto> estructuras = expedientes.valorizacionVigente(id);
-
-        // La valorizacion se resuelve con la fecha del ACTO: la de la emision si ya la hubo, y la
-        // de la declaracion mientras no. Resolverla con «hoy» haria que la misma licencia
-        // consultada el anio que viene diera otra cifra sin que nada avisara (ARQ-09 §3, regla 9).
-        LocalDate fechaDelActo =
-                historial.stream()
-                        .filter(m -> m.tipo() == TipoDeMovimientoDeEdificacion.EMISION)
-                        .map(MovimientoDeEdificacion::fecha)
-                        .findFirst()
-                        .orElse(fue.fechaDeclaracion());
-
-        List<SeccionDelFue> faltantes = new ArrayList<>();
-        Optional<TerrenoDelFue> terreno = expedientes.terrenoVigente(id);
-        Optional<ProyectoDelFue> proyecto = expedientes.proyectoVigente(id);
-        List<ProfesionalDelFue> profesionales = expedientes.profesionalesVigentes(id);
-        List<RequisitoDelFue> requisitos = expedientes.requisitosVigentes(id);
-        if (terreno.isEmpty()) {
-            faltantes.add(SeccionDelFue.TERRENO);
-        }
-        if (proyecto.isEmpty()) {
-            faltantes.add(SeccionDelFue.PROYECTO);
-        }
-        if (estructuras.isEmpty()) {
-            faltantes.add(SeccionDelFue.VALORIZACION);
-        }
-        if (profesionales.isEmpty()) {
-            faltantes.add(SeccionDelFue.PROFESIONALES);
-        }
-        if (requisitos.isEmpty()) {
-            faltantes.add(SeccionDelFue.DOCUMENTOS);
-        }
-
+    /**
+     * Le pone su cifra a lo que se leyo de la base, ya fuera de la transaccion que lo leyo.
+     *
+     * <p>La valorizacion se resuelve con la fecha del ACTO —la de la emision si ya la hubo, y la de
+     * la declaracion mientras no—, que {@link LecturaDelFue} deja resuelta en {@code fechaDelActo}.
+     */
+    private FichaDelFue valorizada(LecturaDelFue.DatosDeLaFicha datos) {
         return new FichaDelFue(
-                filaDe(
-                        fue,
-                        historial,
-                        vigencias,
-                        terreno.orElse(null),
-                        padron.get(fue.contribuyenteId()),
-                        aLaFecha),
-                terreno.orElse(null),
-                proyecto.orElse(null),
-                estructuras,
-                profesionales,
-                requisitos,
-                historial,
-                vigencias,
-                List.copyOf(faltantes),
-                valorizaciones.valorizar(estructuras, fechaDelActo));
-    }
-
-    private static FueEnConsulta filaDe(
-            FueDeEdificacion fue,
-            List<MovimientoDeEdificacion> historial,
-            List<VigenciaDeLaLicencia> vigencias,
-            @Nullable TerrenoDelFue terreno,
-            @Nullable ResumenDeContribuyente solicitante,
-            LocalDate aLaFecha) {
-
-        String numero =
-                historial.stream()
-                        .filter(m -> m.tipo() == TipoDeMovimientoDeEdificacion.EMISION)
-                        .map(MovimientoDeEdificacion::numeroLicencia)
-                        .filter(java.util.Objects::nonNull)
-                        .findFirst()
-                        .orElse(null);
-
-        return new FueEnConsulta(
-                fue,
-                EstadoDelFue.derivarDe(historial, vigencias, aLaFecha),
-                aLaFecha,
-                numero,
-                terreno,
-                solicitante);
-    }
-
-    private CriterioDeFue conTitularesResueltos(
-            CriterioDeFue criterio, @Nullable String nombreDelSolicitante) {
-        String buscado = nombreDelSolicitante == null ? "" : nombreDelSolicitante.strip();
-        if (buscado.isEmpty()) {
-            return criterio;
-        }
-        Set<Long> encontrados = new HashSet<>();
-        for (ResumenDeContribuyente resumen : contribuyentes.buscar(buscado, TITULARES_MAXIMOS)) {
-            encontrados.add(resumen.id());
-        }
-        return criterio.conTitulares(encontrados);
+                datos.fila(),
+                datos.terreno(),
+                datos.proyecto(),
+                datos.estructuras(),
+                datos.profesionales(),
+                datos.requisitos(),
+                datos.historial(),
+                datos.vigencias(),
+                datos.seccionesFaltantes(),
+                valorizaciones.valorizar(datos.estructuras(), datos.fechaDelActo()));
     }
 
     // ------------------------------------------------------------------

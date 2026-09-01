@@ -2414,6 +2414,11 @@
       "condicionEspecial": "texto",
       "activo": "booleano"
     },
+    "datosPersonales": {
+      "fechaNacimiento": "fecha",
+      "estadoCivil": "texto",
+      "conyugeId": "entero"
+    },
     "aLaFecha": "fecha",
     "domicilioFiscal": {
       "id": "entero",
@@ -2686,6 +2691,12 @@
     "totalElementos": "entero",
     "totalPaginas": "entero",
     "hayMas": "booleano"
+  },
+  "GET /seguridad/sesion/municipalidad": {
+    "id": "entero",
+    "ubigeo": "texto",
+    "nombre": "texto",
+    "tipo": "texto"
   },
   "GET /seguridad/sesion/permisos": "objeto",
   "GET /seguridad/usuarios": {
@@ -5402,7 +5413,7 @@
         "vehiculoId": "entero",
         "placa": "texto",
         "contribuyenteId": "entero",
-        "valorReferencial": "texto",
+        "baseImponible": "texto",
         "montoDeterminado": "texto",
         "simulacion": "booleano"
       }
