@@ -30,10 +30,10 @@ import pe.gob.sgtm.rentas.dominio.predial.DeterminacionRepository;
  * Tributación Municipal, D.S. 156-2004-EF, arts. 21 a 29).
  *
  * <p><b>La elección de base queda registrada con su fundamento</b> —criterio de aceptación de #32—:
- * {@link BaseImponibleDeAlcabala#elegir} decide entre el valor de transferencia y el autoavalúo
+ * {@link BaseImponibleDeAlcabala#elegir} decide entre el valor de transferencia y el autovalúo
  * ajustado, y el texto de por qué viaja en la auditoría (regla 10), no solo el número elegido.
  *
- * <p><b>No calcula el ajuste del autoavalúo por el IPM</b>: llega como argumento, ya resuelto —ver
+ * <p><b>No calcula el ajuste del autovalúo por el IPM</b>: llega como argumento, ya resuelto —ver
  * el javadoc de {@link BaseImponibleDeAlcabala}—.
  *
  * <p>El tramo inafecto son <b>10 UIT</b> (TUO LTM art. 25): el «10» es estructura —la ley lo fija,
@@ -75,12 +75,12 @@ public class RegistrarAlcabala {
      * Determina la alcabala de una transferencia de predio ya registrada.
      *
      * @param transferenciaId la transferencia sobre la que se determina (#29)
-     * @param autoavaluoAjustado el autoavalúo del predio ya ajustado por el IPM
+     * @param autovaluoAjustado el autovalúo del predio ya ajustado por el IPM
      * @param observacion por qué se registra (regla 10)
      */
     @Transactional
     public Determinacion determinar(
-            long transferenciaId, Dinero autoavaluoAjustado, Observacion observacion) {
+            long transferenciaId, Dinero autovaluoAjustado, Observacion observacion) {
         Transferencia transferencia =
                 transferencias
                         .findById(transferenciaId)
@@ -104,7 +104,7 @@ public class RegistrarAlcabala {
 
         EleccionDeBase eleccion =
                 BaseImponibleDeAlcabala.elegir(
-                        transferencia.valorTransferencia(), autoavaluoAjustado);
+                        transferencia.valorTransferencia(), autovaluoAjustado);
 
         Dinero uit = new Dinero(sellados.exigirNumero(TIPO_UIT, null).valor());
         Dinero tramoInafecto = uit.por(UIT_DEL_TRAMO_INAFECTO);

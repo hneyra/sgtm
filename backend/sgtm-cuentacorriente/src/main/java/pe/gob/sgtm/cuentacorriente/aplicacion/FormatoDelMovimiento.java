@@ -4,10 +4,12 @@ import java.util.ArrayList;
 import java.util.List;
 import pe.gob.sgtm.cuentacorriente.dominio.Asiento;
 import pe.gob.sgtm.cuentacorriente.dominio.MovimientoDeDeuda;
+import pe.gob.sgtm.cuentacorriente.dominio.RangoDeCuotas;
 import pe.gob.sgtm.cuentacorriente.dominio.SentidoDelMovimiento;
 import pe.gob.sgtm.documentos.Campo;
 import pe.gob.sgtm.documentos.ModeloDeDocumento;
 import pe.gob.sgtm.documentos.Tabla;
+import pe.gob.sgtm.dominio.Dinero;
 
 /**
  * El formato impreso de un alta o una baja de deuda: la nota de abono y la nota de cargo del manual
@@ -34,39 +36,56 @@ public final class FormatoDelMovimiento {
         return sentido == SentidoDelMovimiento.ALTA ? "NA" : "NC";
     }
 
+    /**
+     * @param cuotas las que el acto abarca: el papel tiene que decir <b>cuales</b>, porque un rango
+     *     son varias obligaciones y una cabecera que dijera solo «Cuota: 1» sobre cuatro seria un
+     *     papel que no explica lo que sustenta (#538)
+     * @param asentados <b>todos</b> los asientos del acto, los de las {@code n} cuotas
+     */
     public static ModeloDeDocumento de(
-            MovimientoDeDeuda movimiento, List<Asiento> asentados, String codigoContribuyente) {
+            MovimientoDeDeuda movimiento,
+            RangoDeCuotas cuotas,
+            List<Asiento> asentados,
+            String codigoContribuyente) {
 
         List<Campo> cabecera =
                 List.of(
                         Campo.de("Contribuyente", codigoContribuyente),
                         Campo.de("Tributo", movimiento.clave().tributo()),
                         Campo.de("Ejercicio", movimiento.clave().ejercicio().toString()),
-                        Campo.de("Cuota", Integer.toString(movimiento.clave().periodo())),
+                        Campo.de("Cuota", cuotas.etiqueta()),
                         Campo.de("Fase", movimiento.fase().name()),
                         Campo.de("Documento de origen", movimiento.documentoOrigen()));
 
+        // La columna «Cuota» no es decorativa: sin ella, un acto de cuatro cuotas imprime
+        // dieciseis lineas de concepto e importe y ninguna dice a que cuota se imputa, que
+        // es el mismo dato invisible que #538 existe para no perder.
         List<List<String>> filas = new ArrayList<>();
+        Dinero total = Dinero.CERO;
         for (Asiento asiento : asentados) {
             filas.add(
                     List.of(
+                            asiento.periodo() == null ? "" : asiento.periodo().toString(),
                             asiento.concepto().name(),
                             asiento.tipo().name(),
                             asiento.monto().valor().toPlainString(),
                             asiento.id() == null ? "" : asiento.id().toString()));
+            total = total.mas(asiento.monto());
         }
 
         Tabla detalle =
                 Tabla.de(
                         "Detalle del movimiento",
-                        List.of("Concepto", "Tipo", "Importe", "Asiento"),
+                        List.of("Cuota", "Concepto", "Tipo", "Importe", "Asiento"),
                         filas);
 
         return new ModeloDeDocumento(
                 movimiento.sentido() == SentidoDelMovimiento.ALTA
                         ? "Nota de abono — alta de deuda"
                         : "Nota de cargo — baja de deuda",
-                "Total: " + movimiento.total().valor().toPlainString(),
+                // La suma de lo asentado, no el desglose de UNA cuota: con un rango, el
+                // total del acto es el de las n obligaciones que movio.
+                "Total: " + total.valor().toPlainString(),
                 // La fecha valor del movimiento, no la de impresion: es el dia con efecto
                 // tributario, y es lo que el papel tiene que poder defender (regla 9).
                 movimiento.fechaValor(),

@@ -20,6 +20,7 @@ import pe.gob.sgtm.cuentacorriente.aplicacion.RegistrarMovimientoDeDeuda;
 import pe.gob.sgtm.cuentacorriente.dominio.ClaveDeSaldo;
 import pe.gob.sgtm.cuentacorriente.dominio.Fase;
 import pe.gob.sgtm.cuentacorriente.dominio.MovimientoDeDeuda;
+import pe.gob.sgtm.cuentacorriente.dominio.RangoDeCuotas;
 import pe.gob.sgtm.cuentacorriente.dominio.SentidoDelMovimiento;
 import pe.gob.sgtm.dominio.Dinero;
 import pe.gob.sgtm.dominio.Ejercicio;
@@ -43,6 +44,48 @@ import pe.gob.sgtm.web.ProblemaDeNegocio;
  *
  * <p>El cuerpo es una <b>lista blanca</b>: un campo que la opcion no declara no entra, aunque
  * llegue en el JSON.
+ *
+ * <h2>El rango de cuotas, y por que se declara en vez de rechazarse (#538)</h2>
+ *
+ * <p>La pantalla del manual da de alta un <b>rango</b> —«cuotas 1 a 4»— y manda {@code cuotaDesde}
+ * y {@code cuotaHasta}. Hasta #538 el {@code record} declaraba solo {@code cuota}, singular:
+ * Jackson descartaba los dos campos de mas sin decir nada —el proyecto no activa {@code
+ * FAIL_ON_UNKNOWN_PROPERTIES} y el valor por omision de Spring Boot es desactivado— y la clave se
+ * componia con {@code cuota == null ? 0}. Respuesta <b>201</b>, importe correcto, documento
+ * emitido, y los asientos en {@code periodo = 0}.
+ *
+ * <p>Eso no se ve. {@code 0} <b>es un valor legitimo</b> —la obligacion anual, la que no se divide
+ * en cuotas; {@link ClaveDeSaldo} lo documenta—, asi que la fila mala es indistinguible de una
+ * buena: la deuda existe, la cifra es la correcta, y lo unico que cambia es a que cuota se imputa.
+ * Se descubre cuando alguien paga y el abono no cancela lo que creia.
+ *
+ * <p>De las dos salidas que #538 ofrecia se toma <b>la primera</b>, que el rango exista, por dos
+ * motivos. Uno, es lo que la pantalla necesita: rechazar el campo dejaria la unica pantalla que da
+ * de alta deuda a mano sin poder hacer lo que el manual dibuja. Y dos, la otra salida no es local:
+ * el silencio no lo produce este {@code record} sino la configuracion de Jackson, y endurecerla
+ * cambia el borde de las <b>102</b> operaciones con cuerpo del contrato a la vez —una decision que
+ * #539 tiene abierta para las lecturas y que no se toma de paso (#538 AC 3 lo dice con esas
+ * palabras)—.
+ *
+ * <h2>Las tres formas de decir que cuota, y ninguna se adivina</h2>
+ *
+ * <ul>
+ *   <li>ni {@code cuota} ni rango: la obligacion <b>anual</b>, {@code periodo = 0}, que es lo que
+ *       significaba y sigue significando;
+ *   <li>{@code cuota}: esa sola, como antes de #538;
+ *   <li>{@code cuotaDesde} y {@code cuotaHasta}: las dos incluidas, un asiento por cuota.
+ * </ul>
+ *
+ * <p>Media pregunta es media pregunta y se contesta con 422: solo {@code cuotaDesde}, el rango
+ * invertido, uno fuera de 1..12, o {@code cuota} <b>y</b> el rango a la vez. Ese ultimo caso no se
+ * resuelve por precedencia a proposito: elegir uno de los dos en silencio seria exactamente el
+ * defecto que este issue cierra, con otro nombre.
+ *
+ * <p><b>El desglose se repite en cada cuota</b>, no se reparte entre ellas: ver {@link
+ * MovimientoDeDeuda#enCadaCuota}. Lo que queda pendiente y no es del backend es que la pantalla lo
+ * diga: el rotulo del manual es «Insoluto (S/)» a secas junto a «Cuota desde» y «Cuota hasta», y no
+ * dice si esa cifra es la del ano o la de cada cuota. Quien porte la pantalla (#574) tiene que
+ * rotularlo, porque las dos lecturas son plausibles y se diferencian en un factor {@code n}.
  *
  * <h2>La baja lee sus tres datos tambien de la consulta (#425)</h2>
  *
@@ -126,8 +169,14 @@ public class MovimientosDeDeudaController {
                         "codContribuyente");
         long contribuyenteId = contribuyenteDe(codigoContribuyente);
 
+        RangoDeCuotas cuotas;
         MovimientoDeDeuda movimiento;
+        // El mismo `catch` cubre las dos: el rango y la clave comprueban sus invariantes con
+        // IllegalArgumentException —son dominio, y el dominio no conoce HTTP— y aqui se
+        // traducen a 422. `cuotasDe` lanza ademas su propio ProblemaDeNegocio para poder
+        // NOMBRAR el campo que esta mal, que es lo que un 422 tiene que decir.
         try {
+            cuotas = cuotasDe(peticion);
             movimiento =
                     new MovimientoDeDeuda(
                             sentido,
@@ -142,7 +191,7 @@ public class MovimientosDeDeudaController {
                                                     FiltroDeLaConsulta.primeroNoVacio(
                                                             peticion.ano(), deLaConsulta.ano()),
                                                     "ano")),
-                                    peticion.cuota() == null ? 0 : peticion.cuota(),
+                                    cuotas.desde(),
                                     peticion.predioId(),
                                     peticion.vehiculoId()),
                             importe(peticion.insoluto(), "insoluto"),
@@ -159,12 +208,79 @@ public class MovimientosDeDeudaController {
 
         RegistrarMovimientoDeDeuda.Registro registro;
         try {
-            registro = movimientos.registrar(movimiento, codigoContribuyente, observacion);
+            registro = movimientos.registrar(movimiento, cuotas, codigoContribuyente, observacion);
         } catch (RegistrarMovimientoDeDeuda.BajaMayorQueLaDeuda excede) {
             throw new ProblemaDeNegocio(CodigoDeError.VALIDACION, mensajeDe(excede));
         }
         return MovimientoDeDeudaResource.de(
                 sentido.name(), registro.asientos(), registro.numeroDeDocumento());
+    }
+
+    /**
+     * Que cuotas abarca el acto, dicho por la peticion y nunca adivinado (#538).
+     *
+     * <p>El {@code 0} entra por «sin cuota» y no por el rango: es la obligacion anual, no la cuota
+     * cero, asi que {@code cuotaDesde: 0} se rechaza nombrandolo en vez de asentar una obligacion
+     * distinta de la que se pidio —que es el defecto entero de este issue—.
+     */
+    private static RangoDeCuotas cuotasDe(PeticionDeMovimiento peticion) {
+        Integer cuota = peticion.cuota();
+        Integer desde = peticion.cuotaDesde();
+        Integer hasta = peticion.cuotaHasta();
+
+        if (desde == null && hasta == null) {
+            return cuota == null ? RangoDeCuotas.ANUAL : RangoDeCuotas.deUnaSola(cuota);
+        }
+        if (cuota != null) {
+            throw new ProblemaDeNegocio(
+                    CodigoDeError.VALIDACION,
+                    "Llegaron 'cuota' y 'cuotaDesde'/'cuotaHasta' a la vez, y dicen cosas"
+                            + " distintas: se manda la cuota sola o el rango, no los dos");
+        }
+        if (desde == null) {
+            throw new ProblemaDeNegocio(
+                    CodigoDeError.VALIDACION,
+                    "Falta el campo 'cuotaDesde': con 'cuotaHasta' solo no se sabe donde empieza"
+                            + " el rango");
+        }
+        if (hasta == null) {
+            throw new ProblemaDeNegocio(
+                    CodigoDeError.VALIDACION,
+                    "Falta el campo 'cuotaHasta': con 'cuotaDesde' solo no se sabe donde acaba el"
+                            + " rango");
+        }
+        if (desde == 0) {
+            throw new ProblemaDeNegocio(
+                    CodigoDeError.VALIDACION,
+                    "El campo 'cuotaDesde' no puede ser 0: 0 es la obligacion anual —la que no se"
+                            + " divide en cuotas— y se pide sin cuota, no como principio de un"
+                            + " rango");
+        }
+        if (desde > hasta) {
+            throw new ProblemaDeNegocio(
+                    CodigoDeError.VALIDACION,
+                    "El campo 'cuotaDesde' ("
+                            + desde
+                            + ") es mayor que 'cuotaHasta' ("
+                            + hasta
+                            + "): el rango va de la primera cuota a la ultima");
+        }
+        exigirQueSeaUnaCuota(desde, "cuotaDesde");
+        exigirQueSeaUnaCuota(hasta, "cuotaHasta");
+        return new RangoDeCuotas(desde, hasta);
+    }
+
+    private static void exigirQueSeaUnaCuota(int valor, String campo) {
+        if (valor < 1 || valor > ClaveDeSaldo.PERIODO_MAXIMO) {
+            throw new ProblemaDeNegocio(
+                    CodigoDeError.VALIDACION,
+                    "El campo '"
+                            + campo
+                            + "' esta fuera de rango: "
+                            + valor
+                            + ". Una cuota va de 1 a "
+                            + ClaveDeSaldo.PERIODO_MAXIMO);
+        }
     }
 
     private long contribuyenteDe(String codigo) {
@@ -254,6 +370,12 @@ public class MovimientosDeDeudaController {
      * <p>Los importes viajan como texto y no como numero a proposito: un {@code double} en el JSON
      * pierde centimos antes de llegar (regla 1), y aceptarlo como {@code BigDecimal} directo
      * dejaria que Jackson decidiera el formato en vez de rechazarlo con un mensaje que se entienda.
+     *
+     * <p>{@code cuota} y el par {@code cuotaDesde}/{@code cuotaHasta} son <b>excluyentes</b>: ver
+     * {@link #cuotasDe}. Los tres se declaran aqui —y no dos de ellos fuera— porque lo que la lista
+     * blanca protege es que nada entre sin declararse; lo que no puede hacer es distinguir «este
+     * campo no existe» de «este campo existe y se descarta», y esa es exactamente la diferencia que
+     * dejaba los asientos en {@code periodo = 0} sin que nada lo dijera (#538).
      */
     public record PeticionDeMovimiento(
             @Nullable String observacion,
@@ -261,6 +383,8 @@ public class MovimientosDeDeudaController {
             @Nullable String tributo,
             @Nullable String ano,
             @Nullable Integer cuota,
+            @Nullable Integer cuotaDesde,
+            @Nullable Integer cuotaHasta,
             @Nullable Long predioId,
             @Nullable Long vehiculoId,
             @Nullable String insoluto,

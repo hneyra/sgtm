@@ -1511,6 +1511,7 @@
   "GET /fiscalizacion/estado-cuenta": {
     "codContribuyente": "texto",
     "fechaDeConsulta": "texto",
+    "fiscalizado": "booleano",
     "lineas": [
       {
         "deuda": "texto",
@@ -1534,6 +1535,13 @@
       {
         "codRefCatastral": "texto",
         "titular": "texto",
+        "codigoDelTitular": "texto",
+        "titulares": [
+          {
+            "codigo": "texto",
+            "nombre": "texto"
+          }
+        ],
         "sector": "texto",
         "condicion": "texto",
         "declaroFueraDePlazo": "booleano",

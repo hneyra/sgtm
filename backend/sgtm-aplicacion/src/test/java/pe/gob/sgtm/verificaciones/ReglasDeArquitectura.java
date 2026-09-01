@@ -597,9 +597,12 @@ public final class ReglasDeArquitectura {
                         // El uso y las caracteristicas del predio a una fecha (#49).
                         PAQUETE_RAIZ + ".catastro.LectorDeCaracteristicas",
                         PAQUETE_RAIZ + ".catastro.CaracteristicasDelPredio",
-                        // El padron entero, paginado, para la deteccion de omisos (RF-055).
-                        PAQUETE_RAIZ + ".catastro.PadronDePredios",
-                        PAQUETE_RAIZ + ".catastro.PredioDelPadron",
+                        // Quien es titular de un predio a una fecha, por lote, para poner el
+                        // nombre en la fila de omisos (#545). Sustituye a PadronDePredios, que
+                        // desaparecio: la deteccion es una consulta propia desde #545 y el unico
+                        // dato del padron que le queda por pedir a catastro es este.
+                        PAQUETE_RAIZ + ".catastro.TitularesDelPredio",
+                        PAQUETE_RAIZ + ".catastro.TitularDelPredio",
                         // Lo que la transferencia DEVOLVIO. Es un registro de resultado, no una
                         // puerta: no tiene un metodo que escriba, y lo lee tambien quien dibuja el
                         // papel. Si estuviera entre los puertos, imprimir la resolucion exigiria
