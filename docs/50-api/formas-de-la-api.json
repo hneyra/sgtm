@@ -2484,6 +2484,46 @@
     "estado": "texto",
     "djRectificaId": "entero"
   },
+  "GET /rentas/declaraciones/{djNro}/hoja": {
+    "declaracion": {
+      "id": "entero",
+      "numero": "texto",
+      "ejercicio": "entero",
+      "tipo": "texto",
+      "predioId": "entero",
+      "vehiculoId": "entero",
+      "fichaCatastralId": "entero",
+      "fechaPresentacion": "texto",
+      "fechaLimite": "texto",
+      "fueraDePlazo": "booleano",
+      "estado": "texto",
+      "djRectificaId": "entero"
+    },
+    "aLaFecha": "fecha",
+    "declarante": {
+      "codigo": "texto",
+      "nombre": "texto",
+      "documento": "texto",
+      "domicilioFiscal": "texto"
+    },
+    "predios": [
+      {
+        "predioId": "entero",
+        "codRefCatastral": "texto",
+        "direccion": "texto",
+        "tipo": "texto",
+        "porcentajePropiedad": "texto",
+        "autovaluo": "texto",
+        "valuoExonerado": "texto",
+        "valuoAfecto": "texto"
+      }
+    ],
+    "valuoAfectoTotal": "texto",
+    "impuestoInsoluto": "texto",
+    "faltan": [
+      "texto"
+    ]
+  },
   "GET /rentas/predial/corridas/ultima": {
     "id": "entero",
     "ejercicio": "texto",
