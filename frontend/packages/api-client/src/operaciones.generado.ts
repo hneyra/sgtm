@@ -1423,7 +1423,7 @@ export const OPERACIONES = {
     metodo: 'GET',
     ruta: '/seguridad/auditoria',
     parametrosDeRuta: [],
-    parametrosDeConsulta: ['ejercicio', 'usuario', 'accion', 'desde', 'hasta', 'pagina', 'tamano', 'ordenarPor', 'direccion'],
+    parametrosDeConsulta: ['ejercicio', 'usuario', 'operacion', 'tabla', 'desde', 'hasta', 'pagina', 'tamano', 'ordenarPor', 'direccion'],
   },
   /** Parámetros del sistema — `GET /seguridad/parametros` */
   parametros: {
@@ -2796,7 +2796,8 @@ export interface ParametrosPorOperacion {
   readonly auditoria: {
     readonly ejercicio?: string;
     readonly usuario?: string;
-    readonly accion?: string;
+    readonly operacion?: string;
+    readonly tabla?: string;
     readonly desde?: string;
     readonly hasta?: string;
     readonly pagina?: string;

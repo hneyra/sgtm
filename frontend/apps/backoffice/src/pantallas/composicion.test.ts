@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { resolutorDeCampo, widgetDeFiltro } from './composicion';
+import { filtrosDe, resolutorDeCampo, widgetDeFiltro } from './composicion';
 import { cargarTodosLosAportes } from './aportes-de-modulo';
 
 /* Lo que se prueba aqui es **el registro mismo** —que `widgetDeFiltro` y
@@ -58,5 +58,47 @@ describe('resolutorDeCampo no resuelve por la cadena de prototipos', () => {
 
   it('«toString» tampoco: la misma barrera, otra clave heredada', () => {
     expect(resolutorDeCampo('alta_deuda', 'toString')).toBeUndefined();
+  });
+});
+
+/**
+ * `filtrosDelBackend`: lo que el servicio acota y el prototipo no dibuja (#544).
+ *
+ * Las tres propiedades que sostienen el mecanismo, y ninguna es cosmetica: sustituir
+ * **en el sitio** conserva el orden de la barra que el manual dibujo (RNF-080);
+ * anadir al final es lo que permite ofrecer un filtro que el prototipo nunca tuvo
+ * sin reordenar los suyos; y **negacion por omision**, que es lo que garantiza que
+ * las otras 133 pantallas se dibujen como se dibujaban.
+ */
+describe('filtrosDe compone lo que el catalogo dibuja con lo que el servicio acota', () => {
+  const DEL_CATALOGO = [
+    { clave: 'usuario', label: 'Usuario', t: 'sel' as const },
+    { clave: 'accion', label: 'Acción', t: 'sel' as const },
+    { clave: 'desde', label: 'Desde', t: 'date' as const },
+  ];
+
+  it('sustituye en el sitio del filtro al que releva, y anade el suyo al final', () => {
+    const compuestos = filtrosDe('auditoria', DEL_CATALOGO) ?? [];
+
+    expect(compuestos.map((campo) => campo.clave)).toEqual([
+      'usuario',
+      'operacion',
+      'desde',
+      'tabla',
+    ]);
+    // El rotulo sigue siendo el del manual: lo que cambia es a donde va y con
+    // que vocabulario.
+    expect(compuestos[1]?.label).toBe('Acción');
+  });
+
+  it('una opcion que no declara nada se dibuja exactamente como se dibujaba', () => {
+    expect(filtrosDe('modulos', DEL_CATALOGO)).toEqual(DEL_CATALOGO);
+  });
+
+  it('sin filtros en el catalogo no hay barra que completar', () => {
+    // Anadir un filtro no puede hacer aparecer un bloque de busqueda donde el
+    // prototipo no dibujo ninguno: para eso esta `filtrosPropios`, que es otra
+    // decision y se toma pantalla por pantalla.
+    expect(filtrosDe('auditoria', undefined)).toBeUndefined();
   });
 });

@@ -28,6 +28,27 @@ import {
  * falta, y a quien le toca.
  */
 
+/**
+ * La primera opcion de un desplegable significa «sin filtrar», y **no viaja** (#397, #544).
+ *
+ * Mandarla tal cual seria filtrar por la palabra: `usuario = 'Todos'` no lo es
+ * nadie —cero filas, indistinguible de «este usuario no hizo nada»— y
+ * `operacion = 'Todas'` lo rechaza el controlador con 422, porque su
+ * vocabulario es el de la bitacora y ahi esa palabra no existe. Lo que no se
+ * manda trae todo, que es lo que «Todas» quiere decir.
+ */
+const SIN_FILTRAR: Readonly<Record<string, string>> = { usuario: 'Todos', operacion: 'Todas' };
+
+function sinLoQueSignificaTodos(
+  parametros: Readonly<Record<string, string>>,
+): Record<string, string> {
+  const salida: Record<string, string> = {};
+  for (const [nombre, valor] of Object.entries(parametros)) {
+    if (SIN_FILTRAR[nombre] !== valor) salida[nombre] = valor;
+  }
+  return salida;
+}
+
 /** Filtros, orden y pagina de la URL, ya filtrados por lo que el contrato declara (#63). */
 const deLaBusqueda =
   (operacion: Parameters<typeof parametrosDeBusqueda>[0]) =>
@@ -133,11 +154,25 @@ const usuarios = definirConexion({
  * es la clave de particion de la tabla y su controlador lo exige (#13). Sin el,
  * la consulta recorre todas las particiones. No sale de la URL sino de la
  * sesion, que es de donde sale para las doce modulos.
+ *
+ * **Sus filtros son los cinco que acotan de verdad** (#544): `usuario`,
+ * `operacion`, `tabla`, `desde` y `hasta`. El que se fue —`accion`— no era uno
+ * sin implementar sino `operacion` con el nombre del prototipo; se teclea donde
+ * se tecleaba y viaja con el nombre y el vocabulario del backend
+ * (`seguridad/composicion.ts`).
+ *
+ * Lo que este issue **no** toca, y conviene que quede dicho: el desplegable de
+ * «Usuario» ofrece cuatro cuentas —`jcardenas`, `mrios`, `rmendoza`, `lpena`—
+ * que son las del juego de datos del prototipo, no las de la municipalidad. El
+ * filtro funciona (`usuario_id` acota), pero contra un padron real solo
+ * acertaria por casualidad. Sus valores tendrian que salir de
+ * `GET /seguridad/usuarios`, que ya existe; es una lectura mas al abrir la
+ * pantalla y una decision propia, no un descuido de este cambio.
  */
 const auditoria = definirConexion({
   operacion: 'auditoria',
   parametros: (contexto) => ({
-    ...deLaBusqueda('auditoria')(contexto),
+    ...sinLoQueSignificaTodos(deLaBusqueda('auditoria')(contexto)),
     ejercicio: String(contexto.ejercicio),
   }),
   leer: (cuerpo) => leerPaginado(cuerpo, 'la auditoria'),
