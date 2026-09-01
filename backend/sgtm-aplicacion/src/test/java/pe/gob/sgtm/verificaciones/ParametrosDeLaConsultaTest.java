@@ -221,6 +221,12 @@ class ParametrosDeLaConsultaTest {
      * bajan solas segun cada modulo se revisa; la que baja se ajusta en el mismo PR, que es donde
      * se sabe por que.
      *
+     * <p><b>Y las dos se MIDEN, no se razonan</b>: #546 puso 62 en la primera contando las
+     * operaciones que su cambio sacaba del censo, y la medida es 61 — con el techo de 62 la guarda
+     * se quedaba con una holgura de una operacion, y devolver al contrato los tres parametros del
+     * cruce registral la dejaba en VERDE. La cifra sale de correr la prueba con el techo en 0 y
+     * leer el «but was» que imprime.
+     *
      * <p>#546 baja las dos. {@code POST /fiscalizacion/vehicular} declaraba los tres filtros del
      * cruce registral —{@code placa}, {@code ejercicio}, {@code origenDelCruce}— y ese cruce no
      * existe: se retiran con {@code SUPRIMIDOS}. {@code GET /fiscalizacion/estado-cuenta} declaraba
@@ -229,7 +235,7 @@ class ParametrosDeLaConsultaTest {
      * contribuyente, que la operacion lee—: la brecha en las <b>dos</b> direcciones a la vez, que
      * es lo que hace que baje tambien la segunda cifra.
      */
-    private static final int OPERACIONES_CON_FILTRO_QUE_NADIE_LEE = 62;
+    private static final int OPERACIONES_CON_FILTRO_QUE_NADIE_LEE = 61;
 
     private static final int OPERACIONES_QUE_LEEN_UN_FILTRO_SIN_PUBLICAR = 18;
 
