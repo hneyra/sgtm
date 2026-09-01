@@ -10,6 +10,7 @@ import java.util.Set;
 import pe.gob.sgtm.catastro.dominio.CatastroRepository;
 import pe.gob.sgtm.catastro.dominio.Construccion;
 import pe.gob.sgtm.catastro.dominio.DetalleDeLaFicha;
+import pe.gob.sgtm.catastro.dominio.EstadoPredio;
 import pe.gob.sgtm.catastro.dominio.FichaCatastral;
 import pe.gob.sgtm.catastro.dominio.FichaCatastralRepository;
 import pe.gob.sgtm.catastro.dominio.FichaEncontrada;
@@ -17,6 +18,7 @@ import pe.gob.sgtm.catastro.dominio.FiltroDeFichas;
 import pe.gob.sgtm.catastro.dominio.FiltroDePredios;
 import pe.gob.sgtm.catastro.dominio.Inquilino;
 import pe.gob.sgtm.catastro.dominio.Manzana;
+import pe.gob.sgtm.catastro.dominio.ManzanaConConteos;
 import pe.gob.sgtm.catastro.dominio.OtraInstalacion;
 import pe.gob.sgtm.catastro.dominio.Predio;
 import pe.gob.sgtm.catastro.dominio.PredioDelCatastro;
@@ -154,6 +156,40 @@ final class CatastroEnMemoria
     @Override
     public List<Manzana> manzanasDe(long sectorId) {
         return manzanas.values().stream().filter(m -> m.sectorId() == sectorId).toList();
+    }
+
+    @Override
+    public Pagina<ManzanaConConteos> manzanas(Sector sector, Paginacion paginacion) {
+        Long sectorId = sector.id();
+        List<ManzanaConConteos> todas =
+                manzanas.values().stream()
+                        .filter(m -> sectorId != null && m.sectorId() == sectorId)
+                        .sorted(java.util.Comparator.comparing(Manzana::codigo))
+                        .map(m -> conConteos(m, sector.codigo()))
+                        .toList();
+        List<ManzanaConConteos> pagina =
+                todas.stream()
+                        .skip((long) paginacion.pagina() * paginacion.tamano())
+                        .limit(paginacion.tamano())
+                        .toList();
+        return Pagina.de(pagina, paginacion, todas.size());
+    }
+
+    /** Cuenta lo mismo que la consulta de la base: predios activos de la manzana, y sus lotes. */
+    private ManzanaConConteos conConteos(Manzana manzana, String sectorCodigo) {
+        Long id = manzana.id();
+        List<Predio> suyos =
+                predios.values().stream()
+                        .filter(p -> id != null && java.util.Objects.equals(p.manzanaId(), id))
+                        .filter(p -> p.estado() == EstadoPredio.ACTIVO)
+                        .toList();
+        long lotes =
+                suyos.stream()
+                        .map(Predio::lote)
+                        .filter(java.util.Objects::nonNull)
+                        .distinct()
+                        .count();
+        return new ManzanaConConteos(manzana, sectorCodigo, suyos.size(), lotes);
     }
 
     @Override

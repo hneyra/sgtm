@@ -320,8 +320,11 @@ describe('cuanto falta para poder apagar el proxy (#400)', () => {
   );
   const pendientes = DEL_CONTRATO.filter(([, metodo, ruta]) => loQueFalta(metodo, ruta).length > 0);
 
-  it('el contrato publica 199 operaciones', () => {
-    expect(DEL_CONTRATO.length).toBe(199);
+  /* 200 desde #537: `listado_de_manzanas`, la lectura que le faltaba al arbol
+     territorial —el backend contaba las manzanas de un sector y no las
+     enumeraba—. */
+  it('el contrato publica 200 operaciones', () => {
+    expect(DEL_CONTRATO.length).toBe(200);
   });
 
   it('encendidas: 3', () => {
@@ -347,9 +350,16 @@ describe('cuanto falta para poder apagar el proxy (#400)', () => {
      tiene la interfaz entera —la consume y el proxy ya la publica con la forma
      del backend— y no tiene controlador, asi que encenderla hoy la mandaria a un
      404. Las dos mitades de una ruta encendida se pueden echar en falta por
-     separado, y este censo las cuenta igual de pendientes. */
-  it('pendientes: 70', () => {
-    expect(pendientes.length).toBe(70);
+     separado, y este censo las cuenta igual de pendientes.
+
+     **71 desde #537**: `listado_de_manzanas` nace pendiente por la mitad de
+     interfaz, no por la de backend —su controlador existe y
+     `formas-de-la-api.json` la describe—. Ninguna pantalla declara como
+     consumirla porque la que la dibujara es la del frontend nuevo (#574), que
+     reimplementa esta aplicacion entera; conectarla aqui seria escribir codigo
+     que ese PR retira. */
+  it('pendientes: 71', () => {
+    expect(pendientes.length).toBe(71);
   });
 
   it('las tres cifras cubren el contrato entero', () => {

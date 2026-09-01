@@ -31,7 +31,7 @@ const CAMPOS_DE_DINERO =
   'monto|importe|saldo|deuda|total|insoluto|interes|autovaluo|arbitrio|recargo|vuelto|recibido';
 
 describe('las operaciones generadas son las del contrato', () => {
-  it('son las 134 del manual, mas sesenta y cinco operaciones sin pantalla propia', () => {
+  it('son las 134 del manual, mas sesenta y seis operaciones sin pantalla propia', () => {
     // Operaciones que no son opciones del catalogo y no tienen pantalla propia
     // de la que salir (generar-openapi.mjs, OPERACIONES_ADICIONALES):
     //   - `permisos_de_grupo` (#70): el GET que carga la matriz que `permisos`
@@ -194,8 +194,16 @@ describe('las operaciones generadas son las del contrato', () => {
     //     modulo, sin id y sin permiso propio, como la portada (ADR-0014 §5).
     //     Se declara bajo `consulta_fichas` porque es esa misma busqueda por
     //     otro camino, y ese es el permiso que exige.
+    //   - `listado_de_manzanas` (#537): las manzanas de un sector, con sus predios
+    //     y sus lotes. El backend publicaba CUANTAS tiene un sector y el alta de
+    //     una, y ninguna operacion las enumeraba, asi que el arbol territorial
+    //     solo podia decir el conteo. Cuelga de `sectores` —las manzanas no
+    //     tienen pantalla propia en el manual— y ese es el permiso que exige.
+    //     **Ninguna pantalla la consume todavia**: la interfaz que la dibujara
+    //     es la que viene en #574, y por eso nace «pendiente» en el censo de
+    //     #400 y no «lista».
     // Las 134 opciones del manual siguen siendo 134.
-    expect(Object.keys(OPERACIONES)).toHaveLength(199);
+    expect(Object.keys(OPERACIONES)).toHaveLength(200);
   });
 
   it('cada una declara verbo y camino relativo a /api/v1', () => {

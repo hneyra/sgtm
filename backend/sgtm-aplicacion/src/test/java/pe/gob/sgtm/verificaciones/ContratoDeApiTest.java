@@ -55,6 +55,7 @@ class ContratoDeApiTest {
                     "GET /catastro/sectores",
                     "POST /catastro/sectores",
                     "PUT /catastro/sectores/{codigo}",
+                    "GET /catastro/sectores/{codigo}/manzanas",
                     "POST /catastro/sectores/{codigo}/manzanas",
                     "GET /catastro/fichas/urbana/{codRefCatastral}",
                     "GET /catastro/fichas/economica/{codRefCatastral}",
