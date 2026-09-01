@@ -235,23 +235,16 @@ services:
     build:
       context: ../frontend
       args:
-        # Vite resuelve estas variables AL COMPILAR: no son configuracion de
-        # ejecucion y cambiarlas exige reconstruir la imagen. Es la consecuencia de
+        # Vite resuelve esta variable AL COMPILAR: no es configuracion de
+        # ejecucion y cambiarla exige reconstruir la imagen. Es la consecuencia de
         # servir archivos estaticos, y conviene saberla antes de buscar por que un
         # cambio en el .env no se nota.
+        #
+        # Las de la puerta de sesion no se pasan: sus valores por omision en el
+        # Dockerfile —`/kc/realms/sgtm` y `sgtm-backoffice`— ya son los de este
+        # despliegue, y son RUTAS del mismo origen. Escribir aqui el dominio las
+        # hornearia en el paquete estatico, que es justo lo que no se quiere.
         VITE_SGTM_API: /api/v1
-        VITE_SGTM_OIDC_CLIENTE: sgtm-backoffice
-        VITE_SGTM_OIDC_AUTORIZACION: ${SGTM_OIDC_EMISOR:-http://localhost:8180}/realms/sgtm/protocol/openid-connect/auth
-        VITE_SGTM_OIDC_TOKEN: ${SGTM_OIDC_EMISOR:-http://localhost:8180}/realms/sgtm/protocol/openid-connect/token
-        VITE_SGTM_OIDC_FIN_DE_SESION: ${SGTM_OIDC_EMISOR:-http://localhost:8180}/realms/sgtm/protocol/openid-connect/logout
-        # Y las del portal, que apuntan al OTRO realm (ADR-0020). Reutilizar las
-        # de arriba mandaria al ciudadano al formulario de los funcionarios y le
-        # devolveria un token que el portal no puede usar: la cadena que sirve
-        # `/api/v1/portal/**` valida contra el emisor del ciudadano.
-        VITE_SGTM_PORTAL_OIDC_CLIENTE: sgtm-portal
-        VITE_SGTM_PORTAL_OIDC_AUTORIZACION: ${SGTM_OIDC_EMISOR:-http://localhost:8180}/realms/sgtm-ciudadano/protocol/openid-connect/auth
-        VITE_SGTM_PORTAL_OIDC_TOKEN: ${SGTM_OIDC_EMISOR:-http://localhost:8180}/realms/sgtm-ciudadano/protocol/openid-connect/token
-        VITE_SGTM_PORTAL_OIDC_FIN_DE_SESION: ${SGTM_OIDC_EMISOR:-http://localhost:8180}/realms/sgtm-ciudadano/protocol/openid-connect/logout
     depends_on:
       aplicacion:
         condition: service_healthy

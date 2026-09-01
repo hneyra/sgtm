@@ -34,17 +34,46 @@ command -v kubectl >/dev/null 2>&1 || { echo "Falta kubectl." >&2; exit 1; }
 echo "── Lo que el nodo de kind reparte"
 CPU="$(kubectl get nodes -o jsonpath='{.items[0].status.allocatable.cpu}')"
 MEM="$(kubectl get nodes -o jsonpath='{.items[0].status.allocatable.memory}')"
-echo "   ${CPU} CPU / ${MEM}"
+echo "   ${CPU} CPU / ${MEM} asignables"
+
+# Y lo que YA esta pedido en el, que es lo que hay que descontar antes de preguntar.
+#
+# El nodo de kind no llega vacio: trae su propio plano de control —etcd, apiserver,
+# controller-manager, scheduler, los dos coredns, kindnet— y esos pods PIDEN CPU.
+# Preguntarle a `capacidad.ts` por lo asignable a secas es preguntarle por un nodo
+# que no existe, y cuando el stack no cabia el guion acusaba al modulo de ser
+# optimista siendo el propio guion quien media mal. La aritmetica de `capacidad.ts`
+# es la misma que usa el planificador; lo que faltaba era darle el nodo de verdad.
+PEDIDO_M="$(kubectl get pods --all-namespaces \
+    --field-selector "spec.nodeName=$(kubectl get nodes -o jsonpath='{.items[0].metadata.name}'),status.phase!=Succeeded,status.phase!=Failed" \
+    -o json | node -e '
+        const pods = JSON.parse(require("fs").readFileSync(0, "utf8")).items ?? [];
+        const enMili = (v) => (v ? (String(v).endsWith("m") ? parseInt(v) : Math.round(parseFloat(v) * 1000)) : 0);
+        let total = 0;
+        for (const p of pods) {
+            for (const c of [...(p.spec.initContainers ?? []), ...(p.spec.containers ?? [])]) {
+                total += enMili(c.resources?.requests?.cpu);
+            }
+        }
+        process.stdout.write(String(total));
+      ')"
+LIBRE_M="$(node -e '
+    const [cpu, pedido] = process.argv.slice(1);
+    const enMili = (v) => (String(v).endsWith("m") ? parseInt(v) : Math.round(parseFloat(v) * 1000));
+    process.stdout.write(String(Math.max(enMili(cpu) - Number(pedido), 0)));
+  ' "$CPU" "$PEDIDO_M")"
+echo "   ya pedido por el plano de control: ${PEDIDO_M}m · libre para el stack: ${LIBRE_M}m"
 
 echo
-echo "── Caso A: el veredicto de capacidad.ts contra ESE nodo"
-VEREDICTO="$(cd "$INFRA" && yarn --silent capacidad --ambiente "$AMBIENTE" --cpu "$CPU" --memoria "$MEM")"
+echo "── Caso A: el veredicto de capacidad.ts contra lo que queda LIBRE en ese nodo"
+VEREDICTO="$(cd "$INFRA" && yarn --silent capacidad --ambiente "$AMBIENTE" --cpu "${LIBRE_M}m" --memoria "$MEM")"
 echo "   veredicto: ${VEREDICTO}"
 
 if [ "$VEREDICTO" != "cabe" ]; then
-    echo "::error::El nodo de kind es demasiado pequeño para «${AMBIENTE}», asi que el caso A" \
-         "no puede comprobar nada. Este trabajo necesita un runner con mas CPU, o un" \
-         "ambiente mas pequeño. No se da por bueno en silencio."
+    echo "::error::El nodo de kind reparte ${CPU} CPU y su plano de control ya pide ${PEDIDO_M}m," \
+         "asi que a «${AMBIENTE}» le quedan ${LIBRE_M}m y no le bastan. El caso A —la direccion" \
+         "peligrosa, decir «cabe» cuando no— NO se ha comprobado. Hace falta un runner con mas" \
+         "CPU. No se da por bueno en silencio."
     exit 1
 fi
 

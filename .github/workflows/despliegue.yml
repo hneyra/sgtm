@@ -595,11 +595,26 @@ jobs:
           set -euo pipefail
           curl --fail --silent http://localhost:8081/ | grep -qi "<div id=\"raiz\"\|<div id=\"root\"\|<body" \
             || { echo "La interfaz no devolvio una pagina"; exit 1; }
-          # El emisor entra al compilar, asi que tiene que estar DENTRO del paquete.
-          # Si no esta, la imagen se construyo sin la configuracion de identidad y la
-          # pantalla de acceso no llevaria a ninguna parte.
-          if ! docker compose exec -T interfaz grep -rq "realms/sgtm/protocol/openid-connect/token" /usr/share/nginx/html/assets; then
-            echo "El paquete de la interfaz no lleva el emisor configurado"
+          # La puerta de sesion entra al compilar —Vite resuelve las `VITE_*` ahi—,
+          # asi que tiene que estar DENTRO del paquete: sin ella la pantalla de
+          # acceso no llevaria a ninguna parte.
+          #
+          # Se buscan las DOS MITADES por separado, y no la ruta entera, porque la
+          # interfaz no las escribe juntas: el realm es una variable de compilacion
+          # y el resto se le concatena en ejecucion. Y es a proposito —`/kc/realms/
+          # sgtm` es una RUTA del mismo origen, no un dominio: la imagen se
+          # construye una vez y se despliega en varios sitios, y un dominio horneado
+          # aqui dejaria las dos mitades apuntando a servidores distintos, en verde y
+          # sin un solo sintoma—. Por eso la mitad del realm se exige SIN dominio.
+          assets=/usr/share/nginx/html/assets
+          for trozo in "/kc/realms/sgtm" "protocol/openid-connect/token" "code_challenge_method"; do
+            docker compose exec -T interfaz grep -rq -- "$trozo" "$assets" || {
+              echo "El paquete de la interfaz no lleva la puerta de sesion: falta «$trozo»"
+              exit 1
+            }
+          done
+          if docker compose exec -T interfaz grep -rqE 'https?://[^"]*/realms/sgtm' "$assets"; then
+            echo "El paquete lleva el emisor con dominio horneado: la imagen solo serviria en ese host"
             exit 1
           fi
 

@@ -87,6 +87,77 @@ El guión de conversión **se comprueba a sí mismo** (`--autoprueba`) y esa com
 que es lo que su hermano de aranceles no tiene: una verificación escrita que nunca se ejecuta no
 protege nada (#188).
 
+### Cómo entra el padrón que la municipalidad ya tiene, en Excel
+
+```bash
+# 1. Ver qué trae el libro, que es lo primero que hay que saber
+python3 ../../scripts/catastro/importar_padron_armonizacion.py PADRON.xlsx --listar
+
+# 2. Convertir, y LEER el resumen antes de cargar nada
+python3 ../../scripts/catastro/importar_padron_armonizacion.py PADRON.xlsx \
+    --ubigeo 200105 --salida ./carga
+cat ./carga/resumen.txt
+
+# 3. Cargar, en este orden y no en otro
+./cargar-catalogo-vial.sh       --ambiente stg --municipalidad-id 9 --archivo ./carga/vias.csv
+./cargar-sectores.sh            --ambiente stg --municipalidad-id 9 --archivo ./carga/sectores.csv
+./cargar-manzanas.sh            --ambiente stg --municipalidad-id 9 --archivo ./carga/manzanas.csv
+./cargar-contribuyentes-demo.sh --ambiente stg --municipalidad-id 9 --archivo ./carga/contribuyentes.csv
+./cargar-fichas-demo.sh         --ambiente stg --municipalidad-id 9 --archivo ./carga/fichas.csv
+```
+
+En la marcha blanca local no hay clúster, así que los cinco pasos son el mismo artefacto con el
+perfil `batch` y las mismas propiedades, lanzado con compose (una variable por propiedad, con los
+guiones del nombre quitados):
+
+```bash
+cd ../../despliegue
+docker compose run --rm --no-deps -v /ruta/al/carga:/datos:ro -e SPRING_PROFILES_ACTIVE=batch \
+    -e SGTM_CARGAVIAL_MUNICIPALIDADID=9 -e SGTM_CARGAVIAL_ARCHIVO=/datos/vias.csv \
+    -e SGTM_CARGAVIAL_USUARIODELPROCESO=carga-padron -e 'SGTM_CARGAVIAL_OBSERVACION=…' \
+    aplicacion
+```
+
+Se corre sobre el servicio `aplicacion` y no sobre `implantacion`, y no es indiferente: aquel trae
+en su entorno las `SGTM_IMPLANTACION_*` del `.env`, así que la carga arrastraría de paso una
+reimplantación de **otra** municipalidad —la del archivo, no la del `--municipalidad-id`—.
+
+El plano (`importar_predios_gpkg.py`) da el lote; **el padrón da a quién se le cobra**, y llega
+siempre en la misma hoja de cálculo: el «Formato Padrón Municipal Armonización» del MEF, con sus
+hojas `CONTRIBUYENTE `, `PREDIO URBANO` y `CONSTRUCCIONES`. `ImportarContribuyentes` e
+`ImportarFichas` saben leer un CSV desde #290 y entre las dos cosas no había nada.
+
+Cuatro cosas de este camino que conviene entender antes de correrlo:
+
+- **El código del predio se conserva, y eso decide todo lo demás.** El código de referencia
+  catastral se **compone** de las diez columnas de tramo, así que lo que llega a la base es la
+  concatenación de esas columnas. El código que trae el padrón también son 23 dígitos y también
+  empieza por el ubigeo, pero por dentro es `ubigeo(6) + correlativo(8) + uso(6) + sufijo(3)`: sus
+  posiciones 7-8 **no** son el sector. Aun así el guion parte ese código, porque dejar en blanco
+  las columnas de sector y manzana no deja el dato fuera —**lo cambia**: `componer` rellena con
+  ceros y miles de predios distintos colapsarían en el mismo código—. La consecuencia hay que
+  decirla en voz alta: los sectores y manzanas que salen **no son los levantados en campo**, son
+  tramos del código, y `sectores.csv` lo dice de sí mismo. La sectorización de verdad está en el
+  padrón como texto —96 habilitaciones urbanas, con su cruce contra el catálogo oficial a
+  medias— y conciliarla es otro trabajo.
+- **Un predio sin titular se carga; un titular inventado, no.** `InscribirFicha` admite la ficha
+  sin titular —en un levantamiento catastral fichar antes de identificar al propietario es lo
+  normal—, pero rechaza la ficha **entera** si el `codigoContribuyente` no existe. Así que el guion
+  simula qué contribuyentes va a aceptar el importador y solo referencia esos: lo demás sale con
+  las cuatro columnas de titular vacías, y el resumen dice cuántos y por qué.
+- **Lo que no es ninguna de las palabras del dominio no se traduce a la parecida** (la lección de
+  #427 con «ACTIVA» y VIGENTE). `NO ESPECIFICADO`, `OTROS` y `LITIGIO` no son ninguna de las seis
+  de `CondicionDeTitularidad`: esos predios entran sin titular en vez de con un `POSEEDOR` puesto
+  por comodidad, que afirmaría una posesión que nadie declaró.
+- **Las construcciones no entran, y no es un descuido.** `Construccion.anioConstruccion` es un
+  `Ejercicio` y `Ejercicio` va de 1990 a 2100 —es el tipo del ejercicio *tributario* reutilizado
+  como año de construcción—, y el adobe de los setenta es lo más corriente del distrito. Cargar
+  solo las posteriores a 1990 dejaría fichas con la mitad de sus pisos y ninguna cifra lo diría.
+
+El guion **se comprueba a sí mismo** (`--autoprueba`), con un XLSX que construye él mismo con la
+forma real del formato: la cabecera en la fila 8, el nombre de hoja con el espacio final, y las
+cuatro decisiones de arriba medidas una a una.
+
 ### Cómo nace un `area` y una `caja` (#430)
 
 **El paso 4 lo añadió #430, y no es un adorno.** Hasta entonces *nada* creaba una `caja` ni un
