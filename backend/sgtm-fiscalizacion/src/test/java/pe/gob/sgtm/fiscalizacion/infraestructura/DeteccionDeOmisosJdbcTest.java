@@ -151,10 +151,21 @@ class DeteccionDeOmisosJdbcTest {
             sembrarConforme(sector, titular, "F2c");
             sembrarOmiso(sector, titular, "F2d");
 
+            // Por `codRefCatastral`, que es el nombre que la fila PUBLICA (#546). Hasta
+            // entonces esta prueba ordenaba por `predioId`, un campo que ninguna fila lleva:
+            // la lista blanca lo admitia y ningun cliente podia verlo. El orden sigue siendo
+            // total —cada predio sembrado tiene su codigo— y `predio_id` sigue rompiendo los
+            // empates, ahora como desempate y no como campo ofrecido.
             Pagina<FilaDeOmisos> primera =
-                    detectar(sector, CondicionFiscalizada.OMISO, Paginacion.de(0, 1, "predioId"));
+                    detectar(
+                            sector,
+                            CondicionFiscalizada.OMISO,
+                            Paginacion.de(0, 1, "codRefCatastral"));
             Pagina<FilaDeOmisos> segunda =
-                    detectar(sector, CondicionFiscalizada.OMISO, Paginacion.de(1, 1, "predioId"));
+                    detectar(
+                            sector,
+                            CondicionFiscalizada.OMISO,
+                            Paginacion.de(1, 1, "codRefCatastral"));
 
             assertThat(primera.contenido())
                     .as("la primera pagina de un filtro trae la primera fila que lo cumple")
