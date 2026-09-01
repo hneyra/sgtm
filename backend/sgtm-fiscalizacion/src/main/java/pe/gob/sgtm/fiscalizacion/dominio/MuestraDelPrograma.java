@@ -67,6 +67,12 @@ public record MuestraDelPrograma(
     /**
      * La fila sorteada a partir de lo que la detección concluyó, sin recomponer nada: todo lo que
      * lleva sale de {@link FilaDeOmisos}, que es la única fuente de la condición en el sistema.
+     *
+     * <p>De los titulares de la fila toma <b>el principal</b> —el de mayor porcentaje—, porque
+     * {@code programa_muestra.contribuyente_id} es una columna sola (V60) y visitar es visitar a
+     * alguien; es la misma elección que {@code TitularPrincipalRepository} hace para cobrar el
+     * arbitrio. Un predio <b>sin titular vigente</b> no llega hasta aquí: {@code GenerarMuestra} lo
+     * aparta antes, y por qué está escrito allí.
      */
     public static MuestraDelPrograma sorteada(
             long programaId, FilaDeOmisos fila, LocalDate fechaSorteo) {
@@ -75,7 +81,12 @@ public record MuestraDelPrograma(
                 programaId,
                 fila.predioId(),
                 fila.codigoReferenciaCatastral(),
-                fila.contribuyenteId(),
+                fila.titularPrincipal()
+                        .orElseThrow(
+                                () ->
+                                        new IllegalArgumentException(
+                                                "Una fila de la muestra sin titular no se sortea:"
+                                                        + " no hay a quien visitar")),
                 fila.condicion(),
                 fila.areaCatastral(),
                 fila.areaDeclarada(),

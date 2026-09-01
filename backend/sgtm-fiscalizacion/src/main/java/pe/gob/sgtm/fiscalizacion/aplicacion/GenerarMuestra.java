@@ -170,8 +170,18 @@ public class GenerarMuestra {
     // ------------------------------------------------------------------
 
     /**
-     * Las dos exclusiones de #481, resueltas por página y no fila a fila: un predio no entra si
-     * otro programa que admite visitas ya se lo llevó, ni si ya tiene acta dentro del ejercicio.
+     * Las dos exclusiones de #481 —resueltas por página y no fila a fila: un predio no entra si
+     * otro programa que admite visitas ya se lo llevó, ni si ya tiene acta dentro del ejercicio— y
+     * una tercera que #545 hizo necesaria.
+     *
+     * <p><b>La tercera: un predio sin titular vigente se detecta pero no se sortea.</b> Desde #545
+     * la detección los enseña —un predio que nadie reclama es exactamente el que hay que
+     * fiscalizar, y eran el 34,5 % del padrón de Catacaos—, pero {@code
+     * programa_muestra.contribuyente_id} es {@code NOT NULL} (V60) y una visita se dirige a
+     * alguien. Apartarlos aquí es lo único honesto que se puede hacer hoy: la alternativa sería
+     * inventar un titular para poder imputar, que es justo lo que la detección existe para no
+     * hacer. Lo que falta —que la muestra admita un predio sin titular, y que el acta sepa
+     * levantarse contra él— es de la muestra, no de la detección.
      */
     private List<MuestraDelPrograma> admisibles(
             List<FilaDeOmisos> filas, long programaId, Ejercicio ejercicio, LocalDate fechaSorteo) {
@@ -187,7 +197,8 @@ public class GenerarMuestra {
         List<MuestraDelPrograma> admitidas = new ArrayList<>();
         for (FilaDeOmisos fila : filas) {
             if (yaProgramados.contains(fila.predioId())
-                    || yaFiscalizados.contains(fila.predioId())) {
+                    || yaFiscalizados.contains(fila.predioId())
+                    || fila.titularPrincipal().isEmpty()) {
                 continue;
             }
             admitidas.add(MuestraDelPrograma.sorteada(programaId, fila, fechaSorteo));

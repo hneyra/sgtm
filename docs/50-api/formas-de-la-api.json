@@ -1534,6 +1534,13 @@
       {
         "codRefCatastral": "texto",
         "titular": "texto",
+        "codigoDelTitular": "texto",
+        "titulares": [
+          {
+            "codigo": "texto",
+            "nombre": "texto"
+          }
+        ],
         "sector": "texto",
         "condicion": "texto",
         "declaroFueraDePlazo": "booleano",

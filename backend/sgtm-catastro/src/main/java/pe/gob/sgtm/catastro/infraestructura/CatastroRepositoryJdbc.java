@@ -4,6 +4,7 @@ import java.sql.ResultSet;
 import java.sql.SQLException;
 import java.time.LocalDate;
 import java.util.ArrayList;
+import java.util.Collection;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
@@ -195,50 +196,6 @@ public class CatastroRepositoryJdbc extends RepositorioJdbc implements CatastroR
 
     private static final OrdenSeguro ORDEN_CATASTRO =
             OrdenSeguro.sobre("cod_ref_catastral", "direccion", "predio_id");
-
-    /**
-     * El padron con su titular y su ficha vigentes (#49, RF-055).
-     *
-     * <p>El {@code JOIN} con {@code titularidad} es interno a proposito: un predio sin titular
-     * vigente no sale. La fila de omisos es «este contribuyente no declaro», y sin titular no hay a
-     * quien imputarla; un predio sin titularidad es un defecto del padron y su sitio es el
-     * saneamiento catastral, no una esquela.
-     *
-     * <p>El de {@code ficha_catastral} es externo, y tambien a proposito: un predio inscrito sin
-     * ficha es el caso <b>mas</b> interesante para la deteccion, no el que hay que esconder. Sale
-     * con area y uso en {@code null}.
-     *
-     * <p>El filtro de sector se escribe con la bandera {@code :conSector} en vez de con {@code
-     * :sector IS NULL}: PostgreSQL no puede inferir el tipo de un parametro que solo aparece en un
-     * {@code IS NULL}, y falla con «could not determine data type».
-     */
-    private static final String PADRON_DESDE =
-            """
-             FROM predio p
-             JOIN titularidad t
-               ON t.municipalidad_id = p.municipalidad_id
-              AND t.predio_id = p.id
-              AND t.vigencia_desde <= :fecha
-              AND (t.vigencia_hasta IS NULL OR t.vigencia_hasta >= :fecha)
-             LEFT JOIN sector s
-               ON s.municipalidad_id = p.municipalidad_id
-              AND s.id = p.sector_id
-             LEFT JOIN ficha_catastral f
-               ON f.municipalidad_id = p.municipalidad_id
-              AND f.predio_id = p.id
-              AND f.tipo = 'UNICA'
-              AND f.vigencia_desde <= :fecha
-              AND (f.vigencia_hasta IS NULL OR f.vigencia_hasta >= :fecha)
-            WHERE p.estado = :activo
-              AND (NOT :conSector OR s.codigo = :sector)
-            """;
-
-    private static final String COLUMNAS_PADRON =
-            "p.id AS predio_id, p.codigo_ref_catastral, p.direccion, s.codigo AS sector_codigo,"
-                    + " t.contribuyente_id, f.area_terreno, f.uso, f.id AS ficha_id";
-
-    private static final OrdenSeguro ORDEN_PADRON =
-            OrdenSeguro.sobre("codigo_ref_catastral", "direccion", "predio_id");
 
     /** Rige en la fecha; los dos extremos entran, igual que {@code Titularidad.rigeEn}. */
     private static final String VIGENTE_A_LA_FECHA =
@@ -532,30 +489,6 @@ public class CatastroRepositoryJdbc extends RepositorioJdbc implements CatastroR
     }
 
     @Override
-    public Pagina<pe.gob.sgtm.catastro.PredioDelPadron> padron(
-            @Nullable String sectorCodigo, LocalDate aLaFecha, Paginacion paginacion) {
-
-        Map<String, Object> parametros =
-                Map.of(
-                        "fecha",
-                        aLaFecha,
-                        "activo",
-                        EstadoPredio.ACTIVO.name(),
-                        "sector",
-                        sectorCodigo == null ? "" : sectorCodigo,
-                        "conSector",
-                        sectorCodigo != null);
-
-        return paginar(
-                "SELECT " + COLUMNAS_PADRON + PADRON_DESDE,
-                "SELECT count(*)" + PADRON_DESDE,
-                parametros,
-                paginacion,
-                ORDEN_PADRON,
-                CatastroRepositoryJdbc::mapearFilaDelPadron);
-    }
-
-    @Override
     public void asignarGeometria(long predioId, String wkt) {
         // ST_GeogFromText interpreta el WKT como WGS84, que es el SRID de la columna. Si el texto
         // no es un MULTIPOLYGON valido, falla aqui y no guarda medio poligono.
@@ -645,6 +578,46 @@ public class CatastroRepositoryJdbc extends RepositorioJdbc implements CatastroR
                 .param("fecha", fecha)
                 .query(CatastroRepositoryJdbc::mapearTitularidad)
                 .list();
+    }
+
+    /**
+     * Los titulares vigentes de un lote de predios, en una sola consulta (#545).
+     *
+     * <p>{@code predio_id = ANY(:predios)} y no {@code IN (:predios)}: con la primera forma el lote
+     * viaja como <b>un</b> parametro y el plan se cachea igual para paginas de veinte y de cien;
+     * con {@code IN}, cada tamano de lote produce una consulta distinta. Es el mismo criterio que
+     * {@code DeclaracionJuradaRepositoryJdbc.vigentesDePredios}.
+     *
+     * <p>El orden es el de {@link #titularesDe}: mayor porcentaje primero. Quien tenga que elegir
+     * uno —la muestra de un programa, que solo puede visitar a alguien— toma el primero, y esa es
+     * la misma eleccion que {@code TitularPrincipalRepository} hace para el arbitrio.
+     */
+    @Override
+    public Map<Long, List<Titularidad>> titularesDeVarios(
+            Collection<Long> predioIds, LocalDate fecha) {
+        Objects.requireNonNull(fecha, "De quien es el predio se pregunta a una fecha (regla 9)");
+        if (predioIds.isEmpty()) {
+            return Map.of();
+        }
+        Map<Long, List<Titularidad>> porPredio = new HashMap<>();
+        List<Titularidad> filas =
+                jdbc().sql(
+                                "SELECT "
+                                        + COLUMNAS_TITULARIDAD
+                                        + " FROM titularidad"
+                                        + " WHERE predio_id = ANY(:predios) AND"
+                                        + VIGENTE_A_LA_FECHA
+                                        + " ORDER BY predio_id, porcentaje DESC, id")
+                        .param("predios", predioIds.toArray(Long[]::new))
+                        .param("fecha", fecha)
+                        .query(CatastroRepositoryJdbc::mapearTitularidad)
+                        .list();
+        for (Titularidad titularidad : filas) {
+            porPredio
+                    .computeIfAbsent(titularidad.predioId(), predio -> new ArrayList<>())
+                    .add(titularidad);
+        }
+        return Map.copyOf(porPredio);
     }
 
     @Override
@@ -849,20 +822,6 @@ public class CatastroRepositoryJdbc extends RepositorioJdbc implements CatastroR
                 fila.getString("lote"),
                 fila.getString("ubigeo"),
                 EstadoPredio.valueOf(fila.getString("estado")));
-    }
-
-    private static pe.gob.sgtm.catastro.PredioDelPadron mapearFilaDelPadron(
-            ResultSet fila, int numeroDeFila) throws SQLException {
-        java.math.BigDecimal area = fila.getBigDecimal("area_terreno");
-        return new pe.gob.sgtm.catastro.PredioDelPadron(
-                fila.getLong("predio_id"),
-                fila.getString("codigo_ref_catastral"),
-                fila.getString("direccion"),
-                fila.getString("sector_codigo"),
-                fila.getLong("contribuyente_id"),
-                area == null ? null : new pe.gob.sgtm.dominio.AreaM2(area),
-                fila.getString("uso"),
-                largoOpcional(fila, "ficha_id"));
     }
 
     private static Titularidad mapearTitularidad(ResultSet fila, int numeroDeFila)

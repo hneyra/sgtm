@@ -281,6 +281,17 @@ class PrediosDeRentasControllerTest {
                     new TitularDelPredio(JUAN, "COPROPIETARIO", Porcentaje.de("50")),
                     new TitularDelPredio(MARIA, "SUCESION", Porcentaje.de("50")));
         }
+
+        /** No lo usa esta pantalla, pero el puerto lo declara desde #545. */
+        @Override
+        public java.util.Map<Long, List<TitularDelPredio>> deVarios(
+                java.util.Collection<Long> predioIds, LocalDate fecha) {
+            java.util.Map<Long, List<TitularDelPredio>> porPredio = new java.util.LinkedHashMap<>();
+            for (Long predioId : predioIds) {
+                porPredio.put(predioId, de(predioId, fecha));
+            }
+            return porPredio;
+        }
     }
 
     private static final class DirectorioDePrueba implements DirectorioDeContribuyentes {

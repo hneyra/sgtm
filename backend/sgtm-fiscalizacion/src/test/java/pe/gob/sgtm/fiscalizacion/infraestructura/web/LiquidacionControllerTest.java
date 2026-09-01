@@ -18,7 +18,6 @@ import org.springframework.http.converter.json.JacksonJsonHttpMessageConverter;
 import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.test.web.servlet.MvcResult;
 import org.springframework.test.web.servlet.setup.MockMvcBuilders;
-import pe.gob.sgtm.catastro.PredioDelPadron;
 import pe.gob.sgtm.contribuyentes.DirectorioDeContribuyentes;
 import pe.gob.sgtm.contribuyentes.ResumenDeContribuyente;
 import pe.gob.sgtm.dominio.AreaM2;
@@ -32,10 +31,12 @@ import pe.gob.sgtm.fiscalizacion.aplicacion.LiquidarFiscalizacion;
 import pe.gob.sgtm.fiscalizacion.aplicacion.ReliquidarFiscalizacion;
 import pe.gob.sgtm.fiscalizacion.dobles.ActasEnMemoria;
 import pe.gob.sgtm.fiscalizacion.dobles.DeclaracionesDeMentira;
+import pe.gob.sgtm.fiscalizacion.dobles.DeteccionDeMentira;
 import pe.gob.sgtm.fiscalizacion.dobles.LiquidacionesEnMemoria;
 import pe.gob.sgtm.fiscalizacion.dobles.MovimientosDeLiquidacionEnMemoria;
 import pe.gob.sgtm.fiscalizacion.dobles.PadronDeMentira;
 import pe.gob.sgtm.fiscalizacion.dobles.ParametrosDeMentira;
+import pe.gob.sgtm.fiscalizacion.dobles.TitularesDeMentira;
 import pe.gob.sgtm.fiscalizacion.dominio.ActaFiscalizacion;
 import pe.gob.sgtm.fiscalizacion.dominio.Hallazgo;
 import pe.gob.sgtm.rentas.DeclaracionDelEjercicio;
@@ -72,17 +73,7 @@ class LiquidacionControllerTest {
                         .conFicha(FICHA_DECLARADA, AreaM2.de("120.00"))
                         .conFicha(FICHA_VIGENTE, AreaM2.de("300.00"))
                         .conCaracteristicas(
-                                PREDIO, "CASA_HABITACION", AreaM2.de("300.00"), FICHA_VIGENTE)
-                        .con(
-                                new PredioDelPadron(
-                                        PREDIO,
-                                        "000000000000000020",
-                                        "Jr. Union 100",
-                                        "S-01",
-                                        CONTRIBUYENTE,
-                                        AreaM2.de("300.00"),
-                                        "CASA_HABITACION",
-                                        FICHA_VIGENTE));
+                                PREDIO, "CASA_HABITACION", AreaM2.de("300.00"), FICHA_VIGENTE);
         DeclaracionesDeMentira rentas =
                 new DeclaracionesDeMentira()
                         .con(
@@ -139,7 +130,13 @@ class LiquidacionControllerTest {
                                         directorio,
                                         reloj),
                                 new OmisosController(
-                                        new DeteccionDeOmisos(catastro, catastro, rentas),
+                                        // La deteccion se mide contra PostgreSQL
+                                        // (DeteccionDeOmisosJdbcTest); aqui solo hace falta una
+                                        // fila para ver como sale por HTTP.
+                                        new DeteccionDeOmisos(
+                                                new DeteccionDeMentira().con(filaDetectada()),
+                                                new TitularesDeMentira()
+                                                        .con(PREDIO, CONTRIBUYENTE)),
                                         new EstadoDeCuentaDeFiscalizacion(
                                                 liquidaciones,
                                                 (contribuyenteId, fecha) -> java.util.List.of()),
@@ -283,7 +280,11 @@ class LiquidacionControllerTest {
                 .contains("\"valorCatastralS\":null")
                 .contains("\"valorDeclaradoS\":null")
                 .contains("\"impuestoOmitidoS\":null")
-                .contains("\"declaroFueraDePlazo\":false");
+                .contains("\"declaroFueraDePlazo\":false")
+                // #545: la columna «Titular» ensena el NOMBRE, y el codigo viaja aparte.
+                .contains("\"titular\":\"TITULAR, PRUEBA\"")
+                .contains("\"codigoDelTitular\":\"C-0001\"")
+                .doesNotContain("\"titular\":\"C-0001\"");
     }
 
     @Test
@@ -320,6 +321,23 @@ class LiquidacionControllerTest {
                                                 + "\"tipoDeFiscalizacion\":\"CIERTA\","
                                                 + "\"motivoDeterminante\":\"Ampliacion detectada\"}"))
                 .andReturn();
+    }
+
+    /** Una fila detectada, sin titulares: los pone {@code DeteccionDeOmisos} al leer la pagina. */
+    private static pe.gob.sgtm.fiscalizacion.dominio.FilaDeOmisos filaDetectada() {
+        return new pe.gob.sgtm.fiscalizacion.dominio.FilaDeOmisos(
+                PREDIO,
+                "000000000000000020",
+                "01",
+                java.util.List.of(),
+                new Ejercicio(2024),
+                pe.gob.sgtm.fiscalizacion.dominio.CondicionFiscalizada.OMISO,
+                false,
+                AreaM2.de("300.00"),
+                null,
+                null,
+                null,
+                null);
     }
 
     /** El padron de mentira: un solo contribuyente, con el codigo que la pantalla teclea. */
