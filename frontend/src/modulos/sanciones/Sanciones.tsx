@@ -21,9 +21,13 @@ import {
   type IdDeActo,
 } from '../../datos/sanciones';
 import { useRebote, useRecurso, type Estado } from '../../api/useRecurso';
+import { Descargas, type FormatoDeDocumento } from '../../api/descarga';
 import { ErrorDeApi, fijarToken } from '../../api/cliente';
 import { cuentaActual, hayPuerta } from '../../api/sesion';
 import {
+  descargarPadronDeNotificaciones,
+  descargarRecaudacionAdministrativa,
+  descargarReporteAdministrativo,
   dictarResolucionAdministrativa,
   emitirReporteAdministrativo,
   estadoDeCuentaAdministrativo,
@@ -44,6 +48,7 @@ import {
   type ProcedimientoSancionador,
   type ResultadoDeNotificacion,
   type SentidoDelFallo,
+  type AgrupacionDelResumen,
 } from '../../api/sanciones';
 
 /* ══════════ Los estilos que el artboard declara una vez y repite ══════════ */
@@ -521,6 +526,25 @@ export default function Sanciones({ dest, onDest }: PantallaProps) {
   const c = (k: string) => texto('rep_' + k, CRITERIOS[k]?.v ?? '');
   const llavesDelReporte = [h.k, c('desde'), c('hasta'), c('estadoNotificacion'), c('vencidasAl'), c('fiscalizador'), c('infraccion'), c('conPapeleta'), c('codContribuyente'), c('ano'), c('soloPendientes'), c('papeleta'), c('codigo'), c('descripcionContiene'), c('agrupadoPor')];
   const reporte = useRecurso((s) => pedirReporte(h.k, c, s), llavesDelReporte, dest === 'reportes');
+
+  /* ── El mismo reporte, como documento ────────────────────────
+     Tres de las siete hojas lo sirven; las otras cuatro no declaran `?formato`
+     y devolverían el JSON de siempre. `descargarReporteAdministrativo` es un
+     POST —el tipo de reporte y el formato van en el cuerpo— y los otros dos son
+     GET con `?formato`. */
+  const criteriosDelDocumento = criteriosDescargables(h.k, c);
+  const traerDocumento =
+    criteriosDelDocumento === null
+      ? null
+      : (f: FormatoDeDocumento) =>
+          h.k === 'padron_notificaciones'
+            ? descargarPadronDeNotificaciones(criteriosDelDocumento, f)
+            : h.k === 'resumen_recaudacion'
+              ? descargarRecaudacionAdministrativa(criteriosDelDocumento.ano, f)
+              : descargarReporteAdministrativo(
+                  { reporte: 'RESUMEN_PAPELETAS', ...criteriosDelDocumento, agrupadoPor: criteriosDelDocumento.agrupadoPor as AgrupacionDelResumen | undefined },
+                  f,
+                );
 
   /* ── El estado de los tres actos ─────────────────────────────
      Sale de la FASE que el backend derivó, no de si hay algo tecleado. Un
@@ -1330,6 +1354,24 @@ export default function Sanciones({ dest, onDest }: PantallaProps) {
                     Los criterios que esta hoja no usa no se dibujan; los que el contrato declara y ningún controlador lee —agrupación del
                     padrón, fecha de cálculo del estado de cuenta, ordenación del reporte de códigos— tampoco.
                   </p>
+                  <div style={{ padding: '12px 16px', borderTop: '1px solid var(--line)' }}>
+                    {traerDocumento !== null ? (
+                      <Descargas
+                        traer={traerDocumento}
+                        que="este reporte"
+                        acceso={ACCESO_DEL_REPORTE[h.k] ?? 'adm_reportes'}
+                        privilegio="impresion"
+                        impedimento={reporte.datos === null ? 'No hay hoja leída: no hay qué descargar' : undefined}
+                      />
+                    ) : (
+                      <p style={{ margin: 0, fontSize: 12, lineHeight: 1.55, color: 'var(--ink-3)', textWrap: 'pretty' }}>
+                        <strong style={{ fontWeight: 600 }}>Esta hoja no se puede descargar.</strong> Su endpoint no declara{' '}
+                        <code style={{ fontFamily: 'var(--font-mono)' }}>?formato</code>: pedírselo devuelve el mismo JSON que se está
+                        viendo, así que el archivo se llamaría <code style={{ fontFamily: 'var(--font-mono)' }}>.pdf</code> y no lo sería.
+                        La hoja se saca por la impresora con Ctrl+P.
+                      </p>
+                    )}
+                  </div>
                 </section>
 
                 <Lectura estado={reporte} que="el reporte" acceso={ACCESO_DEL_REPORTE[h.k] ?? 'adm_reportes'} ruta={RUTA_DEL_REPORTE[h.k] ?? ''}>
@@ -1450,15 +1492,33 @@ const ACCESO_DEL_REPORTE: Record<string, string> = {
  * multas— **no tiene lectura propia**: se le pide al emisor de reportes, que
  * es un `POST` que no escribe nada (su cuerpo ni siquiera declara observación).
  */
+
+/**
+ * Los criterios de las tres hojas que ADEMÁS se descargan, en un solo sitio.
+ *
+ * La lectura y el archivo tienen que llevar los mismos: un PDF con otros
+ * filtros que la hoja de al lado no falla en voz alta —sale, se ve bien y dice
+ * otra cosa—, y quien lo detecta es el administrado con el papel en la mano.
+ *
+ * Las otras cuatro hojas del carril no están aquí porque su endpoint **no
+ * declara `?formato`**: contesta el JSON de siempre e ignora el parámetro
+ * (medido: `/infracciones/administrativas/reportes/vencidas?formato=PDF` →
+ * `200 application/json`).
+ */
+function criteriosDescargables(k: string, c: (llave: string) => string): Record<string, string | undefined> | null {
+  const v = (llave: string) => c(llave) || undefined;
+  if (k === 'padron_notificaciones') return { desde: v('desde'), hasta: v('hasta'), estado: v('estadoNotificacion') };
+  if (k === 'resumen_recaudacion') return { ano: v('ano') };
+  if (k === 'resumen_papeletas') return { desde: v('desde'), hasta: v('hasta'), agrupadoPor: v('agrupadoPor') };
+  return null;
+}
+
 async function pedirReporte(k: string, c: (llave: string) => string, senal: AbortSignal): Promise<HojaResuelta> {
   const pag = { tamano: 50 };
 
   if (k === 'padron_notificaciones') {
-    const p = await padronDeNotificaciones(
-      { desde: c('desde') || undefined, hasta: c('hasta') || undefined, estado: (c('estadoNotificacion') || undefined) as EstadoDeNotificacion | undefined },
-      pag,
-      senal,
-    );
+    const cr = criteriosDescargables(k, c)!;
+    const p = await padronDeNotificaciones({ ...cr, estado: cr.estado as EstadoDeNotificacion | undefined }, pag, senal);
     return {
       aLaFecha: p.contenido[0]?.actualizadoA ?? '',
       meta: [['Notificaciones', miles(p.totalElementos)], ['En esta hoja', String(p.contenido.length)]],
@@ -1546,7 +1606,8 @@ async function pedirReporte(k: string, c: (llave: string) => string, senal: Abor
   }
 
   if (k === 'resumen_recaudacion') {
-    const r = await recaudacionAdministrativa(c('ano') ? Number(c('ano')) : undefined, senal);
+    const ano = criteriosDescargables(k, c)!.ano;
+    const r = await recaudacionAdministrativa(ano === undefined ? undefined : Number(ano), senal);
     return {
       aLaFecha: r.actualizadoA,
       meta: [['Periodo', `${r.desde} — ${r.hasta}`], ['Recaudado', 'S/ ' + r.total], ['Abonos', miles(r.abonos)]],
@@ -1559,13 +1620,9 @@ async function pedirReporte(k: string, c: (llave: string) => string, senal: Abor
 
   /* El resumen de multas es la única hoja del módulo sin lectura propia: se le
      pide al emisor, que devuelve JSON cuando no se le manda `formato`. */
+  const cr = criteriosDescargables('resumen_papeletas', c)!;
   const e = await emitirReporteAdministrativo(
-    {
-      reporte: 'RESUMEN_PAPELETAS',
-      desde: c('desde') || undefined,
-      hasta: c('hasta') || undefined,
-      agrupadoPor: (c('agrupadoPor') || undefined) as 'ESTADO' | 'ANO' | 'MES' | 'CODIGO' | 'PLACA' | undefined,
-    },
+    { reporte: 'RESUMEN_PAPELETAS', ...cr, agrupadoPor: cr.agrupadoPor as AgrupacionDelResumen | undefined },
     senal,
   );
   const r = e.resumenDePapeletas;

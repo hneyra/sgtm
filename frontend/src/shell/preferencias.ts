@@ -31,7 +31,16 @@ export const DENSIDADES: Record<Densidad, string> = {
 export const PreferenciasCtx = createContext<{
   pref: Preferencias;
   fijar: (p: Partial<Preferencias>) => void;
-  toast: (t: string) => void;
+  /**
+   * El aviso efímero de lo que acaba de pasar.
+   *
+   * `tono` es opcional y por omisión vale `bien`, que es lo que era antes: los
+   * avisos existentes no cambian. Existe porque el aviso dibuja un **visto**, y
+   * un visto sobre «El ejercicio 2026 no tiene un conjunto de parametros
+   * sellado» dice que la operación salió bien encima del texto que dice que no
+   * (#547). Con `mal` sale el aspa y el color de error.
+   */
+  toast: (t: string, tono?: 'bien' | 'mal') => void;
   ir: (modulo: string, dest?: string) => void;
 }>({
   pref: { entidad: 'Municipalidad', acento: '#1F3A5F', densidad: 'Normal', tema: 'claro', ejercicio: '2026' },

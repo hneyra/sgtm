@@ -70,6 +70,10 @@ jobs:
       - name: Tipos
         run: yarn verificar
 
+      # No necesita navegador: compila los dos modulos del arbol y los compara.
+      - name: Los vocabularios cerrados cuadran con lo que la pantalla ofrece
+        run: yarn vocabularios
+
       - name: Compilar para producción
         run: yarn build
 

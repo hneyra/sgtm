@@ -3,6 +3,10 @@
    maqueta. El acrónimo de los números de documento es `MDC` —Municipalidad
    Distrital de Catacaos—, que es la entidad del piloto. */
 
+/* `Fiscalizacion.tsx` tiene el suyo: aquí no se exporta para no dejar dos
+   nombres iguales viajando entre los dos archivos. */
+const SIN_DATO = '—';
+
 /** Una columna de tabla: rótulo y si es numérica (alineada a la derecha). */
 export type ColDef = [string, 0 | 1];
 
@@ -293,25 +297,37 @@ export const VERSIONES: { n: string; titulo: string; detalle: string; fecha: str
 
 /* ══════════ Resolución de determinación ══════════ */
 
+/**
+ * La hoja de la resolución, VACÍA.
+ *
+ * Traía la resolución entera del artboard —«000418-2026-SGFT/MDC»,
+ * «INVERSIONES DEL NORTE SAC», R.U.C. 20525118447 y seis ejercicios con sus
+ * importes al céntimo, 2 680.60 de 2021 al 2 962.00 de 2026— y la pantalla la
+ * mandaba a la impresora con su membrete, su artículo 137º y sus dos líneas de
+ * firma. Con la red cortada salía **exactamente igual**, que es la prueba de
+ * que ninguna de esas cifras venía de ningún sitio: era una resolución de
+ * determinación falsa, con un R.U.C. real de por medio, lista para entregar.
+ *
+ * `sin-red.mjs` no lo veía porque enumera sólo `m.destinos` y este destino es el
+ * `documento` del módulo, que sólo mira `mirar.mjs`.
+ *
+ * Se quedan los rótulos —son los que el manual imprime y dicen qué llevará la
+ * hoja— y se va el contenido. Conectarla es otra cosa: la resolución la sirve
+ * `GET /fiscalizacion/resoluciones/{numero}`, que pide un número que esta
+ * pantalla no tiene dónde teclear.
+ */
 export const REP_META: { k: string; v: string }[] = [
-  { k: 'Nº de resolución', v: '000418-2026-SGFT/MDC' },
-  { k: 'Contribuyente', v: 'INVERSIONES DEL NORTE SAC' },
-  { k: 'R.U.C.', v: '20525118447' },
-  { k: 'Predio', v: '02-016-A-09-00 — AV. JOSÉ DE LAMA 1180' },
-  { k: 'Periodo fiscalizado', v: '2021 — 2026' },
-  { k: 'Tipo de fiscalización', v: 'CIERTA' },
+  { k: 'Nº de resolución', v: SIN_DATO },
+  { k: 'Contribuyente', v: SIN_DATO },
+  { k: 'R.U.C.', v: SIN_DATO },
+  { k: 'Predio', v: SIN_DATO },
+  { k: 'Periodo fiscalizado', v: SIN_DATO },
+  { k: 'Tipo de fiscalización', v: SIN_DATO },
 ];
 
 export const REP_COLS: ColDef[] = [['Ejercicio', 0], ['Determinado S/', 1], ['Declarado S/', 1], ['Diferencia S/', 1], ['Interés S/', 1], ['Total S/', 1]];
 
-export const REP_FILAS: string[][] = [
-  ['2021', '3,182.00', '1,120.00', '2,062.00', '618.60', '2,680.60'],
-  ['2022', '3,410.00', '1,180.00', '2,230.00', '556.00', '2,786.00'],
-  ['2023', '3,618.00', '1,240.00', '2,378.00', '441.00', '2,819.00'],
-  ['2024', '3,880.00', '1,310.00', '2,570.00', '318.00', '2,888.00'],
-  ['2025', '4,120.00', '1,380.00', '2,740.00', '164.40', '2,904.40'],
-  ['2026', '4,412.00', '1,450.00', '2,962.00', '0.00', '2,962.00'],
-];
+export const REP_FILAS: string[][] = [];
 
 /* ══════════ Paleta de comandos ══════════ */
 

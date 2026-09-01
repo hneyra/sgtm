@@ -11,7 +11,8 @@
     "mirar": "node verificaciones/mirar.mjs",
     "flujos": "node verificaciones/flujos.mjs",
     "sin-red": "node verificaciones/sin-red.mjs",
-    "paleta": "node verificaciones/paleta.mjs"
+    "paleta": "node verificaciones/paleta.mjs",
+    "vocabularios": "node verificaciones/vocabularios.mjs"
   },
   "dependencies": {
     "react": "^19.1.0",
