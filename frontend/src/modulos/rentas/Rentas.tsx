@@ -1,7 +1,15 @@
 import { useEffect, useRef, useState, type CSSProperties, type ReactNode } from 'react';
 import { Shell, type Contexto, type EntradaDePaleta } from '../../shell/Shell';
 import type { PantallaProps } from '../../App';
-import { buscarContribuyentes } from '../../api/rentas';
+import {
+  altaDeDeuda,
+  bajaDeDeuda,
+  buscarContribuyentes,
+  transferirPredio,
+  transferirVehiculo,
+} from '../../api/rentas';
+import { listarPredios } from '../../api/catastro';
+import { ErrorDeApi } from '../../api/cliente';
 import { useRebote, useRecurso } from '../../api/useRecurso';
 import { Icono } from '../../ds/Icono';
 import { ICO } from '../../ds/iconos';
@@ -468,6 +476,117 @@ export default function Rentas({ dest, onDest }: PantallaProps) {
   const trDef = TRANSFERENCIAS[trTipo];
   const paso = Math.min(trPaso, trDef.pasos.length - 1);
   const pasoActual = trDef.pasos[paso];
+
+  const [registrando, setRegistrando] = useState(false);
+  /* La observación del acto. El manual no le dibuja campo y toda escritura la
+     exige (regla 10), así que es un control añadido con su propio rótulo. */
+  const [observacionDelActo, setObservacionDelActo] = useState('');
+
+  /**
+   * Registra la transferencia contra el backend.
+   *
+   * El `predioId` **no se teclea**: la pantalla pide el código predial y aquí se
+   * resuelve contra el padrón, que es lo que su propia ayuda promete. Si el
+   * código no existe, se dice —y no se manda una transferencia sobre ningún
+   * predio—.
+   */
+  const registrarTransferencia = async () => {
+    setRegistrando(true);
+    try {
+      const esPredio = trTipo === 'predio';
+      /* El formulario del manual pide el DOCUMENTO de cada parte y el backend
+         quiere su CODIGO de contribuyente. Resolverlo aquí es lo que evita el
+         404 sobre una persona que sí está en el padrón —el mismo defecto que
+         #427 encontró con «Solicitante»—. */
+      const adquiriente = await codigoDelContribuyente(texto(esPredio ? 'adDoc' : 'vAdDoc'));
+      if (adquiriente === null) {
+        toast('Ese documento de adquirente no está en el padrón de contribuyentes.');
+        return;
+      }
+
+      if (esPredio) {
+        const transferente = await codigoDelContribuyente(texto('trDoc'));
+        if (transferente === null) {
+          toast('Ese documento de transferente no está en el padrón de contribuyentes.');
+          return;
+        }
+        const codigo = texto('codPredial').trim();
+        const encontrados = await listarPredios({ codRefCatastral: codigo }, { tamano: 2 });
+        const exacto = encontrados.contenido.find((x) => x.codRefCatastral === codigo);
+        if (!exacto) {
+          toast(`No hay ningún predio con el código ${codigo} en el padrón.`);
+          return;
+        }
+        await transferirPredio({
+          observacion: observacionDelActo.trim(),
+          predioId: exacto.predioId,
+          codTransferente: transferente,
+          codAdquiriente: adquiriente,
+          tipoTransferencia: texto('tipoActo'),
+          fechaTransferencia: texto('fechaActo'),
+          valorTransferencia: texto('valorTransf'),
+          porcentajeTransferido: texto('pctTransf'),
+          afectaAlcabala: texto('genAlcabala') !== 'No',
+          documentoOrigen: texto('minuta'),
+        });
+      } else {
+        await transferirVehiculo({
+          observacion: observacionDelActo.trim(),
+          placa: texto('vPlaca').trim(),
+          codAdquiriente: adquiriente,
+          tipoTransferencia: texto('vTipo'),
+          fechaTransferencia: texto('vFecha'),
+          valorTransferencia: texto('vValor'),
+          afectaAlcabala: true,
+          documentoOrigen: texto('vNumDoc'),
+        });
+      }
+      setTrPaso(0);
+      setObservacionDelActo('');
+      toast('Transferencia registrada.');
+    } catch (error) {
+      toast(error instanceof ErrorDeApi ? error.mensaje : 'No se pudo registrar la transferencia.');
+    } finally {
+      setRegistrando(false);
+    }
+  };
+
+  /**
+   * Da de alta o de baja una cuota, contra `POST /rentas/deuda/{altas,bajas}`.
+   *
+   * **Una cuota por acto.** El formulario del manual pide un rango y el `record`
+   * del backend declara `cuota` en singular; `cuotaDesde`/`cuotaHasta` no están
+   * en su lista blanca, así que Jackson los descartaría sin decir nada y el
+   * asiento quedaría con `periodo: 0`. Se manda «Cuota desde» y se dice en
+   * pantalla que el rango no viaja.
+   */
+  const moverDeuda = async () => {
+    setRegistrando(true);
+    try {
+      const contribuyente = await codigoDelContribuyente(texto('altaDoc'));
+      const cuerpo = {
+        observacion: observacionDelActo.trim(),
+        codContribuyente: contribuyente ?? texto('altaDoc').trim(),
+        tributo: texto('altaConcepto'),
+        ano: texto('altaAnio'),
+        cuota: Number.parseInt(texto('altaCuotaD') || '1', 10) || 1,
+        insoluto: texto('altaInsoluto') || undefined,
+        reajuste: texto('altaReajuste') || undefined,
+        interes: texto('altaInteres') || undefined,
+        gasto: texto('altaGastos') || undefined,
+        documentoOrigen: texto('altaNumDoc') || undefined,
+      };
+      if (hoja === 'alta') await altaDeDeuda(cuerpo);
+      else await bajaDeDeuda(cuerpo);
+      setSucio(false);
+      setObservacionDelActo('');
+      toast(hoja === 'alta' ? 'Alta registrada en la cuenta corriente.' : 'Baja registrada.');
+    } catch (error) {
+      toast(error instanceof ErrorDeApi ? error.mensaje : 'No se pudo registrar el movimiento.');
+    } finally {
+      setRegistrando(false);
+    }
+  };
 
   const esExpediente = (dest === 'padron' && sujeto !== null) || esNuevo;
   const esDeuda = dest === 'deuda';
@@ -1229,20 +1348,38 @@ export default function Rentas({ dest, onDest }: PantallaProps) {
                 <Icono d={ICO.flechaIzq} tam={14} grosor={1.8} />
                 Anterior
               </button>
-              <p style={{ margin: 0, flex: 1, minWidth: 170, fontSize: 12, color: 'var(--ink-3)', textWrap: 'pretty' }}>
-                {paso >= trDef.pasos.length - 1
-                  ? 'Al registrar, el transferente queda afecto hasta el 31/12/2026 y el adquirente desde el 01/01/2027.'
-                  : 'Nada se escribe hasta el último paso: los datos viajan en el borrador.'}
-              </p>
+              {paso >= trDef.pasos.length - 1 ? (
+                <label style={{ flex: 1, minWidth: 220 }}>
+                  <span style={{ display: 'block', fontSize: 11, fontWeight: 500, color: 'var(--ink-3)', marginBottom: 4 }}>
+                    Observación · obligatoria
+                  </span>
+                  <input
+                    value={observacionDelActo}
+                    onChange={(e) => setObservacionDelActo(e.target.value)}
+                    placeholder="Por qué se registra, y con qué documento"
+                    style={{ width: '100%', border: '1px solid var(--line-2)', borderRadius: 6, padding: '8px 10px', background: 'var(--bg-card)', fontSize: 13 }}
+                  />
+                </label>
+              ) : (
+                <p style={{ margin: 0, flex: 1, minWidth: 170, fontSize: 12, color: 'var(--ink-3)', textWrap: 'pretty' }}>
+                  Nada se escribe hasta el último paso: los datos viajan en el borrador.
+                </p>
+              )}
               <button
                 onClick={() => {
-                  if (paso >= trDef.pasos.length - 1) {
-                    toast('Transferencia registrada. El adquirente queda afecto desde 01/01/2027.');
-                    setTrPaso(0);
-                  } else setTrPaso(paso + 1);
+                  if (paso >= trDef.pasos.length - 1) void registrarTransferencia();
+                  else setTrPaso(paso + 1);
                 }}
+                disabled={registrando || (paso >= trDef.pasos.length - 1 && observacionDelActo.trim() === '')}
+                title={observacionDelActo.trim() === '' ? 'Falta la observación: sin motivo no se guarda' : undefined}
                 className="hov-acento-2"
-                style={{ ...BOTON_PRIMARIO, display: 'flex', alignItems: 'center', gap: 7 }}
+                style={{
+                  ...BOTON_PRIMARIO,
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: 7,
+                  opacity: registrando || (paso >= trDef.pasos.length - 1 && observacionDelActo.trim() === '') ? 0.55 : 1,
+                }}
               >
                 {paso >= trDef.pasos.length - 1 ? 'Registrar transferencia' : 'Continuar'}
                 <Icono d={ICO.flechaDer} tam={14} grosor={1.8} />
@@ -1395,23 +1532,26 @@ export default function Rentas({ dest, onDest }: PantallaProps) {
             <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>
               <p style={{ margin: 0, flex: 1, minWidth: 180, fontSize: 12, color: 'var(--ink-3)', textWrap: 'pretty' }}>
                 {hoja === 'alta'
-                  ? 'Un alta manual entra en la cuenta corriente y se cobra como cualquier otra deuda. Queda en la bitácora con tu usuario.'
+                  ? 'Un alta manual entra en la cuenta corriente y se cobra como cualquier otra deuda. Queda en la bitácora con tu usuario. Se registra UNA cuota por acto: el backend no admite rango todavía, así que «Cuota hasta» no viaja.'
                   : 'Marca arriba las cuotas que se extinguen. Sin resolución no se puede dar de baja.'}
               </p>
-              <button className="hov-linea" style={BOTON_SECUNDARIO}>
-                {hoja === 'alta' ? 'Validar' : 'Previsualizar'}
-              </button>
+              <label style={{ flex: 1, minWidth: 220 }}>
+                <span style={{ display: 'block', fontSize: 11, fontWeight: 500, color: 'var(--ink-3)', marginBottom: 4 }}>
+                  Observación · obligatoria
+                </span>
+                <input
+                  value={observacionDelActo}
+                  onChange={(e) => setObservacionDelActo(e.target.value)}
+                  placeholder={hoja === 'alta' ? 'Por qué se da de alta esta deuda' : 'Por qué se extingue'}
+                  style={{ width: '100%', border: '1px solid var(--line-2)', borderRadius: 6, padding: '8px 10px', background: 'var(--bg-card)', fontSize: 13 }}
+                />
+              </label>
               <button
-                onClick={() => {
-                  toast(
-                    hoja === 'alta'
-                      ? `Alta registrada por ${soles(altaTotal)} en la cuenta de DÍAZ MADRID.`
-                      : `Baja registrada: ${marcadasDeLaBaja.length} cuotas extinguidas.`,
-                  );
-                  setSucio(false);
-                }}
+                onClick={() => void moverDeuda()}
+                disabled={registrando || observacionDelActo.trim() === ''}
+                title={observacionDelActo.trim() === '' ? 'Falta la observación: sin motivo no se guarda' : undefined}
                 className="hov-acento-2"
-                style={BOTON_PRIMARIO}
+                style={{ ...BOTON_PRIMARIO, opacity: registrando || observacionDelActo.trim() === '' ? 0.55 : 1 }}
               >
                 {hoja === 'alta' ? 'Dar de alta' : 'Dar de baja'}
               </button>
@@ -1661,3 +1801,20 @@ const COLUMNAS_DEL_PADRON: ColDef[] = [
   ['Persona', 0],
   ['Condicion especial', 0],
 ];
+
+/**
+ * El codigo de contribuyente de un documento.
+ *
+ * El formulario del manual pide el documento —«Transferente — documento»— y las
+ * peticiones del backend quieren el codigo del padron. Sin esta traduccion, lo
+ * tecleado viaja como codigo y produce un 404 sobre una persona que SI esta
+ * registrada, que es de los errores mas dificiles de leer en ventanilla.
+ */
+async function codigoDelContribuyente(documento: string): Promise<string | null> {
+  const limpio = documento.replace(/[^0-9]/g, '');
+  if (limpio === '') return null;
+  const filtro = limpio.length === 11 ? { rUC: limpio } : { dNI: limpio };
+  const r = await buscarContribuyentes(filtro, { tamano: 2 });
+  const exacto = r.contenido.find((c) => c.numeroDocumento === limpio);
+  return exacto ? exacto.codigo : null;
+}
