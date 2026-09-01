@@ -26,8 +26,14 @@ public record ClaveDeSaldo(
         @Nullable Long predioId,
         @Nullable Long vehiculoId) {
 
-    /** {@code periodo smallint}: 0 (anual) a 12 (mensual), igual que en el asiento. */
-    private static final int PERIODO_MAXIMO = 12;
+    /**
+     * {@code periodo smallint}: 0 (anual) a 12 (mensual), igual que en el asiento.
+     *
+     * <p>Publico porque {@link RangoDeCuotas} acota contra el mismo limite (#538): un rango de
+     * cuotas y la clave que identifica cada una tienen que admitir exactamente los mismos periodos,
+     * y dos copias del 12 son dos sitios donde se puede corregir uno solo.
+     */
+    public static final int PERIODO_MAXIMO = 12;
 
     public ClaveDeSaldo {
         if (contribuyenteId <= 0) {
