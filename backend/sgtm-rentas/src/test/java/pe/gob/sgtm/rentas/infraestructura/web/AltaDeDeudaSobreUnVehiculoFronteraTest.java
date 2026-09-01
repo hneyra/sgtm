@@ -372,6 +372,105 @@ class AltaDeDeudaSobreUnVehiculoFronteraTest {
                                 + " entonces: bloquear sin salida dejaria ese acto sin poder"
                                 + " registrarse")
                 .isEqualTo(201);
+
+        // #653: mirar solo el 201 dejaba pasar la mitad que faltaba. La declaracion tiene que
+        // quedar ESCRITA, y se compara contra un alta identica sobre la unidad PROPIA: si las dos
+        // filas salen iguales, el acto legitimo y el error de teclear el predio equivocado son
+        // indistinguibles para quien audite el circuito manana.
+        mvc.perform(
+                        post("/api/v1/rentas/deuda/altas")
+                                .contentType(MediaType.APPLICATION_JSON)
+                                .content(cuerpoDelAlta(CODIGO, vehiculo, "RES-2026-6357")))
+                .andReturn();
+
+        assertThat(declaracionDe("RES-2026-6354"))
+                .as("la fila del libro dice que se declaro")
+                .containsOnly(true);
+        assertThat(declaracionDe("RES-2026-6357"))
+                .as("y la del alta sobre la unidad propia dice que nadie declaro nada")
+                .containsOnly(false);
+        assertThat(auditadoDe("RES-2026-6354"))
+                .as("y la bitacora lo lleva dentro, que es donde se lee despues")
+                // `datos_nuevos` es jsonb: PostgreSQL lo devuelve reserializado y con espacios
+                // detras de los dos puntos, asi que se compara sin ellos.
+                .allMatch(
+                        descripcion ->
+                                descripcion
+                                        .replace(" ", "")
+                                        .contains("\"unidadDeTitularAnterior\":true"));
+        assertThat(auditadoDe("RES-2026-6357"))
+                .allMatch(
+                        descripcion ->
+                                descripcion
+                                        .replace(" ", "")
+                                        .contains("\"unidadDeTitularAnterior\":false"));
+    }
+
+    @Test
+    @DisplayName("#653 — la marca sin ninguna unidad no declara nada, y no rompe el CHECK")
+    void laMarcaSinUnidadNoDeclaraNada() throws Exception {
+        // El cuerpo declara la unidad y la marca por separado, asi que la marca puede llegar sola.
+        // Grabarla entonces afirmaria de una obligacion sin predio ni vehiculo que «su unidad es de
+        // otro», que no significa nada — y ademas violaria `asiento_titular_anterior_ck` (V71), que
+        // es lo que la convierte en una invariante y no en una restriccion que el propio sistema
+        // puede romper. Se carga sobre AJENO y no sobre CODIGO porque las obligaciones de este
+        // ultimo las cuenta `elAltaQuedaAsentadaConElVehiculo`, y las pruebas comparten la base.
+        MvcResult resultado =
+                mvc.perform(
+                                post("/api/v1/rentas/deuda/altas")
+                                        .contentType(MediaType.APPLICATION_JSON)
+                                        .content(
+                                                cuerpoSinUnidad(AJENO, "RES-2026-6360")
+                                                        .replace(
+                                                                "\"observacion\"",
+                                                                "\"deudaDeTitularAnterior\":true,"
+                                                                        + "\"observacion\"")))
+                        .andReturn();
+
+        assertThat(resultado.getResponse().getStatus())
+                .as("respuesta: %s", resultado.getResponse().getContentAsString())
+                .isEqualTo(201);
+        assertThat(declaracionDe("RES-2026-6360"))
+                .as("sin unidad no hay nada que declarar")
+                .containsOnly(false);
+    }
+
+    @Test
+    @DisplayName("#653 — la baja declarada tambien deja la declaracion escrita")
+    void laBajaDeclaradaTambienLaDeja() throws Exception {
+        // Primero hay deuda que dar de baja, sobre la unidad ajena y declarandolo.
+        mvc.perform(
+                        post("/api/v1/rentas/deuda/altas")
+                                .contentType(MediaType.APPLICATION_JSON)
+                                .content(
+                                        cuerpoDelAlta(AJENO, vehiculo, "RES-2026-6358")
+                                                .replace(
+                                                        "\"observacion\"",
+                                                        "\"deudaDeTitularAnterior\":true,"
+                                                                + "\"observacion\"")))
+                .andReturn();
+
+        MvcResult baja =
+                mvc.perform(
+                                post("/api/v1/rentas/deuda/bajas")
+                                        .contentType(MediaType.APPLICATION_JSON)
+                                        .content(
+                                                cuerpoDelAlta(AJENO, vehiculo, "RES-2026-6359")
+                                                        .replace(
+                                                                "\"observacion\"",
+                                                                "\"deudaDeTitularAnterior\":true,"
+                                                                        + "\"observacion\"")))
+                        .andReturn();
+
+        assertThat(baja.getResponse().getStatus())
+                .as("respuesta: %s", baja.getResponse().getContentAsString())
+                .isEqualTo(201);
+        assertThat(declaracionDe("RES-2026-6359"))
+                .as(
+                        "arreglar solo el alta dejaria la baja admitiendo la unidad ajena sin"
+                                + " decirlo: los dos caminos reciben la misma ComprobacionDeUnidad"
+                                + " y ninguno la propagaba")
+                .containsOnly(true);
     }
 
     @Test
@@ -394,6 +493,43 @@ class AltaDeDeudaSobreUnVehiculoFronteraTest {
                                 + " codigo no distingue las dos guardas")
                 .contains(CODIGO)
                 .doesNotContain("solo se deben");
+    }
+
+    @Test
+    @DisplayName("#653 — y la baja REPARTIDA, que va por el otro camino, tambien")
+    void laBajaRepartidaTambienLaDeja() throws Exception {
+        mvc.perform(
+                        post("/api/v1/rentas/deuda/altas")
+                                .contentType(MediaType.APPLICATION_JSON)
+                                .content(
+                                        cuerpoDelAlta(AJENO, vehiculo, "RES-2026-6361")
+                                                .replace(
+                                                        "\"observacion\"",
+                                                        "\"deudaDeTitularAnterior\":true,"
+                                                                + "\"observacion\"")))
+                .andReturn();
+
+        // `repartir` manda la peticion a `registrarRepartido`, que es un camino DISTINTO de
+        // `registrar` y recibe la misma ComprobacionDeUnidad. Sin una prueba que pase por aqui,
+        // arreglar solo `registrar` deja la mitad sin arreglar y nada lo dice: la baja repartida es
+        // la que la pantalla usa para una fila de la grilla que agrega varios periodos (#598).
+        MvcResult baja =
+                mvc.perform(
+                                post("/api/v1/rentas/deuda/bajas")
+                                        .contentType(MediaType.APPLICATION_JSON)
+                                        .content(
+                                                cuerpoDelAlta(AJENO, vehiculo, "RES-2026-6362")
+                                                        .replace(
+                                                                "\"observacion\"",
+                                                                "\"repartir\":true,"
+                                                                        + "\"deudaDeTitularAnterior\":true,"
+                                                                        + "\"observacion\"")))
+                        .andReturn();
+
+        assertThat(baja.getResponse().getStatus())
+                .as("respuesta: %s", baja.getResponse().getContentAsString())
+                .isEqualTo(201);
+        assertThat(declaracionDe("RES-2026-6362")).containsOnly(true);
     }
 
     @Test
@@ -439,6 +575,17 @@ class AltaDeDeudaSobreUnVehiculoFronteraTest {
                 + "\"documentoOrigen\":\""
                 + documento
                 + "\",\"observacion\":\"Alta de prueba de la unidad\"}";
+    }
+
+    /** El mismo alta, sin ninguna unidad: ni predio ni vehiculo. */
+    private static String cuerpoSinUnidad(String codigo, String documento) {
+        return "{\"codContribuyente\":\""
+                + codigo
+                + "\",\"tributo\":\"VEHICULAR\",\"ano\":\"2026\",\"cuota\":8,"
+                + "\"insoluto\":\"10.00\",\"fechaValor\":\"2026-05-10\","
+                + "\"documentoOrigen\":\""
+                + documento
+                + "\",\"observacion\":\"Alta de prueba sin unidad\"}";
     }
 
     // ------------------------------------------------------------------
@@ -512,6 +659,49 @@ class AltaDeDeudaSobreUnVehiculoFronteraTest {
         fabrica.addAdvice(
                 new TransactionInterceptor(gestor, new AnnotationTransactionAttributeSource()));
         return (T) fabrica.getProxy();
+    }
+
+    /** Lo que la fila del libro dice de la declaracion de #653, por documento de origen. */
+    private static List<Boolean> declaracionDe(String documento) throws SQLException {
+        try (Connection app = base.conexion(BaseDeDatosDePrueba.APP)) {
+            ContextoDeTenant.fijar(app, municipalidad);
+            try (PreparedStatement sentencia =
+                    app.prepareStatement(
+                            "SELECT unidad_de_titular_anterior FROM cuenta_corriente_asiento"
+                                    + " WHERE documento_origen = ?")) {
+                sentencia.setString(1, documento);
+                try (ResultSet filas = sentencia.executeQuery()) {
+                    List<Boolean> declaraciones = new java.util.ArrayList<>();
+                    while (filas.next()) {
+                        declaraciones.add(filas.getBoolean(1));
+                    }
+                    return declaraciones;
+                }
+            }
+        }
+    }
+
+    /** Lo que la bitacora guardo de cada asiento de ese documento. */
+    private static List<String> auditadoDe(String documento) throws SQLException {
+        try (Connection app = base.conexion(BaseDeDatosDePrueba.APP)) {
+            ContextoDeTenant.fijar(app, municipalidad);
+            try (PreparedStatement sentencia =
+                    app.prepareStatement(
+                            "SELECT a.datos_nuevos::text FROM auditoria a"
+                                    + " JOIN cuenta_corriente_asiento c"
+                                    + "   ON c.id::text = a.clave"
+                                    + " WHERE a.tabla = 'cuenta_corriente_asiento'"
+                                    + "   AND c.documento_origen = ?")) {
+                sentencia.setString(1, documento);
+                try (ResultSet filas = sentencia.executeQuery()) {
+                    List<String> descripciones = new java.util.ArrayList<>();
+                    while (filas.next()) {
+                        descripciones.add(filas.getString(1));
+                    }
+                    return descripciones;
+                }
+            }
+        }
     }
 
     private static long crearMunicipalidad(String ubigeo, String nombre) throws SQLException {

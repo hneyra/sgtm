@@ -57,7 +57,7 @@ public class AsientoRepositoryJdbc extends RepositorioJdbc implements AsientoRep
             "a.id, a.ejercicio, a.contribuyente_id, a.tributo, a.concepto, a.tipo, a.fase,"
                     + " a.periodo, a.predio_id, a.vehiculo_id, a.referencia_externa, a.monto,"
                     + " a.fecha_valor, a.documento_origen, a.asiento_reversado_id, a.usuario_id,"
-                    + " a.motivo, a.acto";
+                    + " a.motivo, a.acto, a.unidad_de_titular_anterior";
 
     private static final String DESDE = " FROM cuenta_corriente_asiento a";
 
@@ -710,14 +710,14 @@ public class AsientoRepositoryJdbc extends RepositorioJdbc implements AsientoRep
                                         + "  tributo, concepto, tipo, fase, periodo, predio_id,"
                                         + "  vehiculo_id, referencia_externa, monto, fecha_valor,"
                                         + "  documento_origen, asiento_reversado_id, usuario_id,"
-                                        + "  motivo, acto)"
+                                        + "  motivo, acto, unidad_de_titular_anterior)"
                                         + " VALUES ("
                                         + MUNICIPALIDAD_ACTUAL
                                         + ", :ejercicio, :contribuyenteId, :tributo, :concepto,"
                                         + "  :tipo, :fase, :periodo, :predioId, :vehiculoId,"
                                         + "  :referenciaExterna, :monto, :fechaValor,"
                                         + "  :documentoOrigen, :asientoReversadoId, :usuario,"
-                                        + "  :motivo, :acto)"
+                                        + "  :motivo, :acto, :deTitularAnterior)"
                                         + " RETURNING id")
                         .param("ejercicio", asiento.ejercicio().valor())
                         .param("contribuyenteId", asiento.contribuyenteId())
@@ -736,6 +736,7 @@ public class AsientoRepositoryJdbc extends RepositorioJdbc implements AsientoRep
                         .param("usuario", usuario)
                         .param("motivo", asiento.motivo())
                         .param("acto", asiento.acto() == null ? null : asiento.acto().name())
+                        .param("deTitularAnterior", asiento.unidadDeTitularAnterior())
                         .query(Long.class)
                         .single();
 
@@ -757,7 +758,8 @@ public class AsientoRepositoryJdbc extends RepositorioJdbc implements AsientoRep
                 asiento.asientoReversadoId(),
                 usuario,
                 asiento.motivo(),
-                asiento.acto());
+                asiento.acto(),
+                asiento.unidadDeTitularAnterior());
     }
 
     private static Asiento mapear(ResultSet fila, int numeroDeFila) throws SQLException {
@@ -788,7 +790,8 @@ public class AsientoRepositoryJdbc extends RepositorioJdbc implements AsientoRep
                 asientoReversadoId,
                 fila.getString("usuario_id"),
                 fila.getString("motivo"),
-                actoDe(fila.getString("acto")));
+                actoDe(fila.getString("acto")),
+                fila.getBoolean("unidad_de_titular_anterior"));
     }
 
     /**

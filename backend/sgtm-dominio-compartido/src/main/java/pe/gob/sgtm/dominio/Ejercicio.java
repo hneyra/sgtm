@@ -46,6 +46,25 @@ public record Ejercicio(int valor) implements Comparable<Ejercicio> {
         return new Ejercicio(fecha.getYear());
     }
 
+    /**
+     * El 1 de enero del ejercicio.
+     *
+     * <p>No es un detalle de formato: es <b>la fecha del ejercicio</b> en este dominio. El caracter
+     * de sujeto del impuesto se atribuye con arreglo a la situacion juridica configurada al 1 de
+     * enero del año al que corresponde la obligacion (TUO LTM, art. 10), y el minimo imponible del
+     * predial se calcula sobre «la UIT vigente al 1 de enero del año al que corresponde el
+     * impuesto» (art. 13, ultimo parrafo). Cuando hay que resolver que valor normativo rige un
+     * ejercicio, este es el dia contra el que se compara.
+     */
+    public LocalDate primerDia() {
+        return LocalDate.of(valor, 1, 1);
+    }
+
+    /** El 31 de diciembre del ejercicio. */
+    public LocalDate ultimoDia() {
+        return LocalDate.of(valor, 12, 31);
+    }
+
     public Ejercicio anterior() {
         return new Ejercicio(valor - 1);
     }
