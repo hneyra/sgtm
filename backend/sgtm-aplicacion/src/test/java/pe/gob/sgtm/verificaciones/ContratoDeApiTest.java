@@ -196,6 +196,10 @@ class ContratoDeApiTest {
                     "GET /seguridad/auditoria",
                     "POST /seguridad/respaldos",
                     "GET /seguridad/parametros",
+                    // #605 — si un ejercicio tiene conjunto sellado, para poder decirlo ANTES
+                    // de calcular. Es una ruta que la pantalla `parametros` no declara —declara
+                    // su listado— y entra por OPERACIONES_ADICIONALES del generador.
+                    "GET /seguridad/parametros/ejercicios/{ejercicio}",
                     "GET /transito/codigos",
                     "GET /infracciones/cuis",
                     "GET /infracciones/administrativas/codigos/reporte",

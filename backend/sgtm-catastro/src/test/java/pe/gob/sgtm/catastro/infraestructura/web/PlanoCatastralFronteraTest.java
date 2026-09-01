@@ -7,6 +7,7 @@ import java.io.IOException;
 import java.sql.Connection;
 import java.sql.PreparedStatement;
 import java.sql.SQLException;
+import java.util.List;
 import java.util.Set;
 import org.junit.jupiter.api.AfterAll;
 import org.junit.jupiter.api.AfterEach;
@@ -264,6 +265,67 @@ class PlanoCatastralFronteraTest {
         assertThat(cabe.has("truncado"))
                 .as("no hay marca de truncado porque no hay nada truncado (ADR-0022 §2)")
                 .isFalse();
+    }
+
+    @Test
+    @DisplayName("#611 — «acercate» trae su propio codigo; los otros tres 422 no lo traen")
+    void elMarcoLlenoSeDistingueSinLeerElMensaje() throws Exception {
+        sembrar(municipalidadA, "20010500000000000000001", "CALLE 1", LOTE_DE_DENTRO);
+        sembrar(municipalidadA, "20010500000000000000002", "CALLE 2", LOTE_DE_DENTRO);
+        sembrar(municipalidadA, "20010500000000000000003", "CALLE 3", LOTE_DE_DENTRO);
+
+        String lleno = codigoDe(mvc.perform(get(RUTA).param("bbox", MARCO).param("limite", "2")));
+        String sinMarco = codigoDe(mvc.perform(get(RUTA)));
+        String delReves =
+                codigoDe(mvc.perform(get(RUTA).param("bbox", "-80.67,-5.25,-80.69,-5.27")));
+        String sobreElTope =
+                codigoDe(
+                        mvc.perform(
+                                get(RUTA)
+                                        .param("bbox", MARCO)
+                                        .param(
+                                                "limite",
+                                                String.valueOf(
+                                                        PlanoCatastralController.TOPE_DEL_SERVIDOR
+                                                                + 1))));
+
+        assertThat(lleno)
+                .as(
+                        "los otros tres dicen «corrige la peticion» y este dice «la peticion esta"
+                                + " bien, acercate»: es lo unico que el plano puede ofrecer"
+                                + " resolver solo, y con VALIDACION en los cuatro solo lo separaba"
+                                + " el texto")
+                .isEqualTo("MARCO_CON_DEMASIADOS_LOTES");
+        assertThat(List.of(sinMarco, delReves, sobreElTope))
+                .as(
+                        "y hay que medirlo en las dos direcciones: darselo tambien a un rechazo"
+                                + " deja la comparacion del marco lleno en verde y no distingue"
+                                + " nada")
+                .containsExactly("VALIDACION", "VALIDACION", "VALIDACION");
+    }
+
+    @Test
+    @DisplayName("#611 — las dos cifras viajan como dato, no dentro de la frase")
+    void lasDosCifrasViajanComoDato() throws Exception {
+        sembrar(municipalidadA, "20010500000000000000001", "CALLE 1", LOTE_DE_DENTRO);
+        sembrar(municipalidadA, "20010500000000000000002", "CALLE 2", LOTE_DE_DENTRO);
+        sembrar(municipalidadA, "20010500000000000000003", "CALLE 3", LOTE_DE_DENTRO);
+
+        JsonNode error =
+                JSON.readTree(
+                        mvc.perform(get(RUTA).param("bbox", MARCO).param("limite", "2"))
+                                .andReturn()
+                                .getResponse()
+                                .getContentAsString());
+        List<String> detalles = new java.util.ArrayList<>();
+        error.get("properties").get("detalles").forEach(d -> detalles.add(d.asText()));
+
+        assertThat(detalles)
+                .as(
+                        "leerlas de la frase obliga a analizar castellano, y la frase se reescribe:"
+                                + " reescribir el mensaje de MarcoConDemasiadosLotes sin tocar las"
+                                + " cifras tiene que dejar esta prueba en verde")
+                .containsExactly("lotes=3", "tope=2");
     }
 
     @Test
@@ -532,6 +594,19 @@ class PlanoCatastralFronteraTest {
                         pe.gob.sgtm.autorizacion.RequiereAcceso.class);
         assertThat(anotacion).as("el controlador tiene que declarar @RequiereAcceso").isNotNull();
         return new RequiereAccesoDelPlano(anotacion.acceso(), anotacion.privilegio());
+    }
+
+    /**
+     * El codigo del catalogo, que es el discriminador estable (#611).
+     *
+     * <p>Se lee del campo y <b>nunca</b> del mensaje: comparar el texto es exactamente el defecto
+     * que este issue existe para cerrar — con el discriminador quitado, una asercion sobre la frase
+     * seguiria en verde.
+     */
+    private static String codigoDe(org.springframework.test.web.servlet.ResultActions peticion)
+            throws Exception {
+        JsonNode cuerpo = JSON.readTree(peticion.andReturn().getResponse().getContentAsString());
+        return cuerpo.get("properties").get("codigo").asText();
     }
 
     private static JsonNode pedir(String marco) throws Exception {
