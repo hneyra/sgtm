@@ -2,6 +2,7 @@ package pe.gob.sgtm.rentas.infraestructura.web;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 
 import java.io.IOException;
 import java.math.RoundingMode;
@@ -24,6 +25,7 @@ import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.springframework.aop.framework.ProxyFactory;
+import org.springframework.http.MediaType;
 import org.springframework.http.converter.json.JacksonJsonHttpMessageConverter;
 import org.springframework.jdbc.core.simple.JdbcClient;
 import org.springframework.jdbc.datasource.DriverManagerDataSource;
@@ -37,8 +39,11 @@ import pe.gob.sgtm.auditoria.AuditoriaJdbc;
 import pe.gob.sgtm.auditoria.Origen;
 import pe.gob.sgtm.auditoria.OrigenContext;
 import pe.gob.sgtm.autorizacion.GuardiaDeAcceso;
+import pe.gob.sgtm.catastro.aplicacion.TitularesDelPredioCatastro;
+import pe.gob.sgtm.catastro.infraestructura.CatastroRepositoryJdbc;
 import pe.gob.sgtm.compartido.TenantContext;
 import pe.gob.sgtm.cuentacorriente.aplicacion.ConsultarDeuda;
+import pe.gob.sgtm.cuentacorriente.aplicacion.ConsultasDelLibro;
 import pe.gob.sgtm.cuentacorriente.aplicacion.RegistrarAsiento;
 import pe.gob.sgtm.cuentacorriente.aplicacion.RegistrarMovimientoDeDeuda;
 import pe.gob.sgtm.cuentacorriente.dominio.CalculoDeDeuda;
@@ -50,6 +55,7 @@ import pe.gob.sgtm.cuentacorriente.dominio.SentidoDelMovimiento;
 import pe.gob.sgtm.cuentacorriente.infraestructura.AsientoRepositoryJdbc;
 import pe.gob.sgtm.cuentacorriente.infraestructura.SaldoRepositoryJdbc;
 import pe.gob.sgtm.cuentacorriente.infraestructura.SinAcumulacion;
+import pe.gob.sgtm.cuentacorriente.infraestructura.web.MovimientosDeDeudaController;
 import pe.gob.sgtm.documentos.DocumentoRepositoryJdbc;
 import pe.gob.sgtm.documentos.EmitirDocumento;
 import pe.gob.sgtm.documentos.GeneradorDeDocumentos;
@@ -67,6 +73,7 @@ import pe.gob.sgtm.esquema.BaseDeDatosDePrueba;
 import pe.gob.sgtm.esquema.ContextoDeTenant;
 import pe.gob.sgtm.plataforma.tenant.TenantTransactionManager;
 import pe.gob.sgtm.rentas.aplicacion.ConsultaDeVehiculos;
+import pe.gob.sgtm.rentas.aplicacion.TitularesDeLaUnidadRentas;
 import pe.gob.sgtm.rentas.dominio.Vehiculo;
 import pe.gob.sgtm.rentas.infraestructura.VehiculoRepositoryJdbc;
 import pe.gob.sgtm.web.ConfiguracionDeJson;
@@ -101,6 +108,10 @@ class AltaDeDeudaSobreUnVehiculoFronteraTest {
             Clock.fixed(Instant.parse("2026-09-01T10:00:00Z"), ZoneId.of("America/Lima"));
 
     private static final String CODIGO = "C-VEH-554";
+
+    /** Otro contribuyente del mismo padron, para poder medir la unidad ajena (#635). */
+    private static final String AJENO = "C-VEH-635";
+
     private static final String PLACA = "V5D-554";
     private static final Ejercicio EJERCICIO = new Ejercicio(2026);
     private static final LocalDate FECHA = LocalDate.of(2026, 5, 10);
@@ -109,6 +120,7 @@ class AltaDeDeudaSobreUnVehiculoFronteraTest {
     private static long municipalidad;
     private static long contribuyente;
     private static long vehiculo;
+    private static long ajeno;
     private static MockMvc mvc;
     private static RegistrarMovimientoDeDeuda movimientos;
     private static ConsultarDeuda deuda;
@@ -119,6 +131,7 @@ class AltaDeDeudaSobreUnVehiculoFronteraTest {
         base = BaseDeDatosDePrueba.provisionar();
         municipalidad = crearMunicipalidad("220554", "Municipalidad del alta vehicular");
         contribuyente = crearContribuyente();
+        ajeno = crearAjeno();
 
         DriverManagerDataSource pool = new DriverManagerDataSource();
         pool.setUrl(base.url());
@@ -160,7 +173,14 @@ class AltaDeDeudaSobreUnVehiculoFronteraTest {
                                         gestor),
                                 new CalculoDeDeuda(new SinAcumulacion()),
                                 new PoliticaDeRedondeo(2, RoundingMode.HALF_UP),
-                                documentos),
+                                documentos,
+                                envolver(
+                                        new TitularesDeLaUnidadRentas(
+                                                new TitularesDelPredioCatastro(
+                                                        new CatastroRepositoryJdbc(jdbc)),
+                                                vehiculos,
+                                                new DirectorioDeUno()),
+                                        gestor)),
                         gestor);
         deuda =
                 envolver(
@@ -181,7 +201,11 @@ class AltaDeDeudaSobreUnVehiculoFronteraTest {
                         new ConsultaDeVehiculos(vehiculos, (quien, cuando) -> List.of()), gestor);
         mvc =
                 MockMvcBuilders.standaloneSetup(
-                                new VehiculoController(consulta, new DirectorioDeUno(), RELOJ))
+                                new VehiculoController(consulta, new DirectorioDeUno(), RELOJ),
+                                new MovimientosDeDeudaController(
+                                        movimientos,
+                                        envolver(new ConsultasDelLibro(asientos), gestor),
+                                        RELOJ))
                         .addInterceptors(
                                 new GuardiaDeAcceso(
                                         (usuario, acceso, privilegio, fecha) -> true, RELOJ))
@@ -274,6 +298,149 @@ class AltaDeDeudaSobreUnVehiculoFronteraTest {
         assertThat(delVehiculo.ejercicio()).isEqualTo(sinUnidad.ejercicio());
     }
 
+    // ------------------- la unidad es del contribuyente (#635)
+
+    @Test
+    @DisplayName("un vehiculoId que no esta en el padron es 422 nombrandolo, no 201")
+    void unVehiculoInexistenteEs422() throws Exception {
+        MvcResult resultado = alta("{\"vehiculoId\":999999,", "RES-2026-6351");
+
+        assertThat(resultado.getResponse().getStatus())
+                .as(
+                        "un identificador que no apunta a nada deja el cargo sobre una clave que"
+                                + " ninguna consulta va a mirar")
+                .isEqualTo(422);
+        assertThat(resultado.getResponse().getContentAsString())
+                .as(
+                        "y por el motivo que es: «no tiene titular» y no «es de otro». Sin"
+                                + " comprobar la existencia, la lista vacia cae en la rama del"
+                                + " titular ajeno y contesta 422 igual — con un mensaje que habla"
+                                + " de un titular que no existe")
+                .contains("999999")
+                .contains("no tiene titular");
+    }
+
+    @Test
+    @DisplayName("un predioId que no esta en el padron contesta lo mismo")
+    void unPredioInexistenteEs422() throws Exception {
+        MvcResult resultado = alta("{\"predioId\":999999,", "RES-2026-6352");
+
+        assertThat(resultado.getResponse().getStatus()).isEqualTo(422);
+        assertThat(resultado.getResponse().getContentAsString())
+                .contains("999999")
+                .contains("no tiene titular");
+    }
+
+    @Test
+    @DisplayName("la unidad de OTRO contribuyente es 422, y dice de quien es")
+    void laUnidadDeOtroEs422() throws Exception {
+        MvcResult resultado =
+                mvc.perform(
+                                post("/api/v1/rentas/deuda/altas")
+                                        .contentType(MediaType.APPLICATION_JSON)
+                                        .content(cuerpoDelAlta(AJENO, vehiculo, "RES-2026-6353")))
+                        .andReturn();
+
+        assertThat(resultado.getResponse().getStatus())
+                .as(
+                        "sin esto, el cargo cae sobre una clave invisible desde la ficha del"
+                                + " vehiculo y sin sumarse a la deuda de quien paga")
+                .isEqualTo(422);
+        assertThat(resultado.getResponse().getContentAsString())
+                .as("y el mensaje dice de quien es, que es lo que quien atiende necesita saber")
+                .contains(CODIGO);
+    }
+
+    @Test
+    @DisplayName("declarando que es deuda de un titular anterior, se registra")
+    void declarandoloSeRegistra() throws Exception {
+        MvcResult resultado =
+                mvc.perform(
+                                post("/api/v1/rentas/deuda/altas")
+                                        .contentType(MediaType.APPLICATION_JSON)
+                                        .content(
+                                                cuerpoDelAlta(AJENO, vehiculo, "RES-2026-6354")
+                                                        .replace(
+                                                                "\"observacion\"",
+                                                                "\"deudaDeTitularAnterior\":true,"
+                                                                        + "\"observacion\"")))
+                        .andReturn();
+
+        assertThat(resultado.getResponse().getStatus())
+                .as(
+                        "la deuda de un ejercicio anterior a una transferencia ES del titular de"
+                                + " entonces: bloquear sin salida dejaria ese acto sin poder"
+                                + " registrarse")
+                .isEqualTo(201);
+    }
+
+    @Test
+    @DisplayName("la baja lo contesta igual que el alta")
+    void laBajaLoContestaIgual() throws Exception {
+        MvcResult resultado =
+                mvc.perform(
+                                post("/api/v1/rentas/deuda/bajas")
+                                        .contentType(MediaType.APPLICATION_JSON)
+                                        .content(cuerpoDelAlta(AJENO, vehiculo, "RES-2026-6355")))
+                        .andReturn();
+
+        assertThat(resultado.getResponse().getStatus())
+                .as("arreglar solo el alta deja la baja aceptando la unidad ajena")
+                .isEqualTo(422);
+        assertThat(resultado.getResponse().getContentAsString())
+                .as(
+                        "y por el motivo que es: una baja sobre una obligacion sin deuda tambien"
+                                + " contesta 422 —«solo se deben 0.00»—, asi que mirar solo el"
+                                + " codigo no distingue las dos guardas")
+                .contains(CODIGO)
+                .doesNotContain("solo se deben");
+    }
+
+    @Test
+    @DisplayName("la unidad propia sigue pasando, que es el camino de todos los dias")
+    void laUnidadPropiaPasa() throws Exception {
+        MvcResult resultado =
+                mvc.perform(
+                                post("/api/v1/rentas/deuda/altas")
+                                        .contentType(MediaType.APPLICATION_JSON)
+                                        .content(cuerpoDelAlta(CODIGO, vehiculo, "RES-2026-6356")))
+                        .andReturn();
+
+        assertThat(resultado.getResponse().getStatus())
+                .as("respuesta: %s", resultado.getResponse().getContentAsString())
+                .isEqualTo(201);
+    }
+
+    private static MvcResult alta(String unidad, String documento) throws Exception {
+        return mvc.perform(
+                        post("/api/v1/rentas/deuda/altas")
+                                .contentType(MediaType.APPLICATION_JSON)
+                                .content(
+                                        unidad
+                                                + "\"codContribuyente\":\""
+                                                + CODIGO
+                                                + "\",\"tributo\":\"VEHICULAR\",\"ano\":\"2026\","
+                                                + "\"cuota\":9,\"insoluto\":\"10.00\","
+                                                + "\"fechaValor\":\"2026-05-10\","
+                                                + "\"documentoOrigen\":\""
+                                                + documento
+                                                + "\",\"observacion\":\"Alta de prueba de la"
+                                                + " unidad\"}"))
+                .andReturn();
+    }
+
+    private static String cuerpoDelAlta(String codigo, long vehiculoId, String documento) {
+        return "{\"vehiculoId\":"
+                + vehiculoId
+                + ",\"codContribuyente\":\""
+                + codigo
+                + "\",\"tributo\":\"VEHICULAR\",\"ano\":\"2026\",\"cuota\":9,"
+                + "\"insoluto\":\"10.00\",\"fechaValor\":\"2026-05-10\","
+                + "\"documentoOrigen\":\""
+                + documento
+                + "\",\"observacion\":\"Alta de prueba de la unidad\"}";
+    }
+
     // ------------------------------------------------------------------
 
     private static long vehiculoIdDe(String cuerpo) {
@@ -364,6 +531,28 @@ class AltaDeDeudaSobreUnVehiculoFronteraTest {
         }
     }
 
+    private static long crearAjeno() throws SQLException {
+        try (Connection app = base.conexion(BaseDeDatosDePrueba.APP)) {
+            ContextoDeTenant.fijar(app, municipalidad);
+            try (PreparedStatement sentencia =
+                    app.prepareStatement(
+                            "INSERT INTO contribuyente (municipalidad_id, codigo_contribuyente,"
+                                    + " tipo_documento, numero_documento, tipo_persona,"
+                                    + " nombre_razon_social, usuario_registro)"
+                                    + " VALUES (?, ?, 'DNI', '40555635', 'NATURAL',"
+                                    + "         'NO ES SU VEHICULO', 'prueba') RETURNING id")) {
+                sentencia.setLong(1, municipalidad);
+                sentencia.setString(2, AJENO);
+                try (ResultSet fila = sentencia.executeQuery()) {
+                    fila.next();
+                    long id = fila.getLong(1);
+                    app.commit();
+                    return id;
+                }
+            }
+        }
+    }
+
     private static long crearContribuyente() throws SQLException {
         try (Connection app = base.conexion(BaseDeDatosDePrueba.APP)) {
             ContextoDeTenant.fijar(app, municipalidad);
@@ -399,17 +588,36 @@ class AltaDeDeudaSobreUnVehiculoFronteraTest {
         @Override
         public java.util.Optional<pe.gob.sgtm.contribuyentes.ResumenDeContribuyente> porCodigo(
                 String codigo) {
-            return CODIGO.equals(codigo)
+            if (CODIGO.equals(codigo)) {
+                return java.util.Optional.of(
+                        new pe.gob.sgtm.contribuyentes.ResumenDeContribuyente(
+                                contribuyente, CODIGO, "TITULAR DE LA PLACA", "DNI 40555554"));
+            }
+            return AJENO.equals(codigo)
                     ? java.util.Optional.of(
                             new pe.gob.sgtm.contribuyentes.ResumenDeContribuyente(
-                                    contribuyente, CODIGO, "TITULAR DE LA PLACA", "DNI 40555554"))
+                                    ajeno, AJENO, "NO ES SU VEHICULO", "DNI 40555635"))
                     : java.util.Optional.empty();
         }
 
         @Override
         public java.util.Map<Long, pe.gob.sgtm.contribuyentes.ResumenDeContribuyente> porIds(
                 java.util.Set<Long> ids) {
-            return java.util.Map.of();
+            java.util.Map<Long, pe.gob.sgtm.contribuyentes.ResumenDeContribuyente> encontrados =
+                    new java.util.LinkedHashMap<>();
+            if (ids.contains(contribuyente)) {
+                encontrados.put(
+                        contribuyente,
+                        new pe.gob.sgtm.contribuyentes.ResumenDeContribuyente(
+                                contribuyente, CODIGO, "TITULAR DE LA PLACA", "DNI 40555554"));
+            }
+            if (ids.contains(ajeno)) {
+                encontrados.put(
+                        ajeno,
+                        new pe.gob.sgtm.contribuyentes.ResumenDeContribuyente(
+                                ajeno, AJENO, "NO ES SU VEHICULO", "DNI 40555635"));
+            }
+            return encontrados;
         }
 
         @Override
