@@ -334,7 +334,7 @@ public class AsientoRepositoryJdbc extends RepositorioJdbc implements AsientoRep
 
     /**
      * El filtro que separa una baja de deuda de un cobro, <b>por el acto y no por el signo</b>
-     * (#601, V67).
+     * (#601, V68).
      *
      * <p>Los cuatro {@link #CONCEPTOS_DE_COBRANZA} no bastan: el abono de una baja de deuda es un
      * {@code ABONO} de concepto {@code INSOLUTO}, columna a columna el mismo asiento que el de una
@@ -446,10 +446,10 @@ public class AsientoRepositoryJdbc extends RepositorioJdbc implements AsientoRep
      * llevaria por delante los <b>cobros</b>, y «lo cargado» acabaria valiendo la cartera
      * pendiente: el avance de cobranza saltaria al 100 % en cuanto alguien pagara. El abono de una
      * cobranza es columna a columna el mismo asiento que el de una baja, y lo unico que los separa
-     * es {@link ActoDelLibro} (V67).
+     * es {@link ActoDelLibro} (V68).
      *
      * <p>{@code cargos} cuenta solo las filas de {@code CARGO}: son los asientos que pusieron deuda
-     * a cobrar, y un acto que la quita no es «un cargo mas». Una baja anterior a V67 no lleva acto
+     * a cobrar, y un acto que la quita no es «un cargo mas». Una baja anterior a V68 no lleva acto
      * y no se puede reconocer —el libro no admite {@code UPDATE} (V7) y no se reescribe (regla 4)—:
      * lo que este filtro arregla es de aqui en adelante.
      *
@@ -675,7 +675,7 @@ public class AsientoRepositoryJdbc extends RepositorioJdbc implements AsientoRep
 
     /**
      * El acto del asiento, si el libro lo sabe. Nulo es «no nacio de un alta ni de una baja de
-     * deuda» —una emision, una cobranza, una reversion—, no «se desconoce» (#601, V67).
+     * deuda» —una emision, una cobranza, una reversion—, no «se desconoce» (#601, V68).
      */
     private static @Nullable ActoDelLibro actoDe(@Nullable String columna) {
         return columna == null ? null : ActoDelLibro.valueOf(columna);

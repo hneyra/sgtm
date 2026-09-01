@@ -412,7 +412,7 @@ class BajaDeDeudaYLoCargadoJdbcTest {
             // Por SQL directo y no por el caso de uso, que es lo que #188 y #435 dejaron
             // escrito: `ActoDelLibro` ya impide escribir «XXXX» desde Java, asi que pasar
             // por el caso de uso mediria la guarda de Java otra vez y no la de la base. Lo
-            // que esta prueba mide es que el CHECK de V67 esta puesto: sin el, la columna
+            // que esta prueba mide es que el CHECK de V68 esta puesto: sin el, la columna
             // admite cualquier palabra y una baja escrita como «BAJA» a secas dejaria de
             // restarse de «lo cargado» sin que nada lo dijera.
             try (Connection app = base.conexion(BaseDeDatosDePrueba.APP)) {

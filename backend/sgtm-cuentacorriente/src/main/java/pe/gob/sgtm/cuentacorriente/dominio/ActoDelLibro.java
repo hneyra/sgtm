@@ -1,7 +1,7 @@
 package pe.gob.sgtm.cuentacorriente.dominio;
 
 /**
- * De que acto nace un asiento, cuando el libro lo sabe (#601, V67).
+ * De que acto nace un asiento, cuando el libro lo sabe (#601, V68).
  *
  * <p>No es el {@link Concepto}. El concepto dice <b>contra que parte</b> se imputa —insoluto,
  * reajuste, interes, gasto— y es lo que netean {@link CalculoDeDeuda} y {@link ProyeccionDelSaldo};

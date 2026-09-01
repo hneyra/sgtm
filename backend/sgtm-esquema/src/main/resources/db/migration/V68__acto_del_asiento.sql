@@ -1,5 +1,5 @@
 -- ============================================================================
---  V67 — El libro dice de que ACTO nace cada asiento (#601)
+--  V68 — El libro dice de que ACTO nace cada asiento (#601)
 --
 --  Dar de alta una deuda y darla de baja despues dejaba la cartera pendiente
 --  correcta y «lo cargado» inflado. Medido contra la instalacion de
@@ -101,4 +101,4 @@ COMMENT ON COLUMN cuenta_corriente_asiento.acto IS
     'permite que «lo cargado» del panel reste las bajas sin restar los cobros: '
     'el abono de una baja y el de una cobranza son el mismo asiento columna a '
     'columna, y la distincion se hace por el acto, nunca por el signo '
-    '(V67, #601).';
+    '(V68, #601).';
