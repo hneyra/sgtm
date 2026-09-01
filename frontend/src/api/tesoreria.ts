@@ -1,4 +1,5 @@
-import { solicitar, type RespuestaPaginada } from './cliente';
+import { descargar, solicitar, type RespuestaPaginada } from './cliente';
+import type { FormatoDeDocumento } from './descarga';
 import type { Paginacion } from './catastro';
 
 /**
@@ -230,6 +231,27 @@ export type DuplicadoDeRecibo = {
 
 export function duplicadoDeRecibo(numero: string, senal?: AbortSignal): Promise<DuplicadoDeRecibo> {
   return solicitar(`/tesoreria/recibos/${encodeURIComponent(numero)}/duplicado`, { senal });
+}
+
+/**
+ * El duplicado **como papel**: `?formato=PDF|XLS|RTF` (RF-082, RF-132).
+ *
+ * <b>Escribe, aunque sea un `GET`.</b> Lo dice `ReciboController`: el verbo lo
+ * fija el prototipo y el manual exige que cada reimpresión quede registrada con
+ * quien la generó, así que la misma ruta que sin `formato` sólo mira, con
+ * `formato` numera un duplicado más y pide la `observacion` (regla 10). Y pide
+ * `IMPRESION`, no `LECTURA`: mirar el recibo y sacarlo por la impresora son dos
+ * permisos distintos a propósito (cap. 4, RF-121).
+ *
+ * Por eso la pantalla no lo ofrece hasta que hay observación escrita: aquí no
+ * hay «descargar y ya veremos», hay un acto.
+ */
+export function descargarDuplicadoDeRecibo(
+  numero: string,
+  formato: FormatoDeDocumento,
+  observacion: string,
+): Promise<void> {
+  return descargar(`/tesoreria/recibos/${encodeURIComponent(numero)}/duplicado`, { formato, observacion });
 }
 
 /** El acta de anulación. Es `AnulacionResource`. */

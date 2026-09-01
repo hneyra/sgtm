@@ -13,6 +13,7 @@ import {
   type Arancel,
   type Depreciacion,
   type ValorUnitario,
+  descargarFichaDelContribuyente,
   fichaDelContribuyente,
   listarAranceles,
   listarDepreciacion,
@@ -30,6 +31,7 @@ import {
 import { useRebote, useRecurso } from '../../api/useRecurso';
 import { ErrorDeApi, fijarToken } from '../../api/cliente';
 import { FalloDeLectura } from '../../api/Fallo';
+import { Descargas } from '../../api/descarga';
 import { hayPuerta } from '../../api/sesion';
 import {
   BASE,
@@ -551,7 +553,7 @@ export default function Catastro({ dest, onDest }: PantallaProps) {
   /* ── El documento: la ficha del contribuyente ────────────────
      `GET /catastro/contribuyentes/{codigo}/ficha.pdf` SIN `formato` devuelve
      JSON, que es con lo que se dibuja la hoja. Con `?formato=PDF|XLS|RTF`
-     devolveria el documento, y hoy contesta 500. */
+     devuelve el documento, y desde #535 los tres contestan 200. */
   const [codigoDeLaFicha, setCodigoDeLaFicha] = useState('');
   const codigoReposado = useRebote(codigoDeLaFicha.trim());
   const ficha = useRecurso(
@@ -3208,14 +3210,20 @@ export default function Catastro({ dest, onDest }: PantallaProps) {
                 aria-label="Código del contribuyente"
                 style={{ flex: 1, minWidth: 200, border: '1px solid var(--line-2)', borderRadius: 6, padding: '9px 11px', background: 'var(--bg-card)', fontFamily: 'var(--font-mono)', fontSize: 13 }}
               />
-              <button
-                onClick={() => toast('La descarga en PDF, XLS y RTF contesta 500 hoy: el generador consulta el régimen fuera de transacción.')}
-                className="hov-linea"
-                style={{ border: '1px solid var(--line-2)', borderRadius: 6, padding: '9px 16px', background: 'var(--bg-card)', fontSize: 13, cursor: 'not-allowed', opacity: 0.55 }}
-                title="El backend contesta 500 en los tres formatos"
-              >
-                Descargar PDF
-              </button>
+              {/* Los tres formatos salen de la MISMA ruta con `?formato`, y se
+                  piden con `descargar()` porque el token va en una cabecera: un
+                  enlace bajaría un 401 con nombre de PDF. Apagados mientras no
+                  haya ficha leída, por lo mismo que «Imprimir». */}
+              <Descargas
+                traer={(f) => descargarFichaDelContribuyente(codigoReposado, f)}
+                que="la ficha del contribuyente"
+                acceso="ficha_contribuyente_reporte"
+                impedimento={
+                  ficha.datos === null
+                    ? 'No hay ninguna ficha leída: no hay qué descargar'
+                    : undefined
+                }
+              />
               {/* Imprimir sin ficha leída sacaba por la impresora la hoja entera
                   —membrete, «Ficha del contribuyente», la fórmula de emisión y las
                   dos líneas de firma— con todos los datos en «—». Un papel oficial

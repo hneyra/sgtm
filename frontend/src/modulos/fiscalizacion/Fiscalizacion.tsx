@@ -1968,20 +1968,40 @@ export default function Fiscalizacion({ dest, onDest }: PantallaProps) {
         {/* ══════════ RESOLUCIÓN ══════════ */}
         {esResolucion && (
           <div style={{ display: 'flex', flexDirection: 'column', gap: 16, alignItems: 'center' }}>
+            {/* Los dos botones nacen apagados, y no por precaución: no hay
+                resolución que emitir. «Descargar PDF» estaba encendido y era
+                INERTE —ni petición, ni navegación, ni aviso: se pulsaba y no
+                pasaba nada—, y «Imprimir» sí funcionaba, que era peor: sacaba
+                por la impresora una resolución de determinación entera con las
+                cifras del artboard. */}
             <div data-noprint="1" style={{ width: '100%', maxWidth: 820, display: 'flex', gap: 8, justifyContent: 'flex-end' }}>
               <button
-                className="hov-linea"
-                style={{ border: '1px solid var(--line-2)', borderRadius: 6, padding: '9px 16px', background: 'var(--bg-card)', fontSize: 13, cursor: 'pointer' }}
+                disabled
+                aria-disabled="true"
+                title="El contrato no publica ningún formato para esta resolución: GET /fiscalizacion/resoluciones/{numero} devuelve JSON y no admite ?formato."
+                style={{ border: '1px solid var(--line-2)', borderRadius: 6, padding: '9px 16px', background: 'var(--bg-card)', fontSize: 13, cursor: 'not-allowed', opacity: 0.5 }}
               >
                 Descargar PDF
               </button>
               <button
-                onClick={() => window.print()}
-                className="hov-acento-2"
-                style={{ border: 0, borderRadius: 6, padding: '9px 20px', background: 'var(--accent)', color: '#fff', fontSize: 13, fontWeight: 500, cursor: 'pointer' }}
+                disabled
+                aria-disabled="true"
+                title="No hay ninguna resolución leída: no hay qué imprimir."
+                style={{ border: 0, borderRadius: 6, padding: '9px 20px', background: 'var(--accent)', color: '#fff', fontSize: 13, fontWeight: 500, cursor: 'not-allowed', opacity: 0.5 }}
               >
                 Imprimir
               </button>
+            </div>
+
+            <div data-noprint="1" style={{ width: '100%', maxWidth: 820 }}>
+              <Aviso tono="warn" titulo="Esta hoja está vacía a propósito">
+                Traía la resolución completa del prototipo —número, contribuyente, R.U.C. y seis ejercicios con sus importes al céntimo— y
+                se imprimía igual con la red cortada: ninguna de esas cifras venía del servidor. La resolución de verdad la sirve{' '}
+                <code style={{ fontFamily: 'var(--font-mono)' }}>GET /fiscalizacion/resoluciones/{'{numero}'}</code>, que exige un número
+                que esta pantalla no tiene dónde teclear, y ese endpoint <strong style={{ fontWeight: 600 }}>no emite documento</strong>:
+                no declara <code style={{ fontFamily: 'var(--font-mono)' }}>?formato</code>, al revés que la ficha del contribuyente o los
+                padrones de tránsito. Lo que falta es de las dos partes, y está en el issue #593.
+              </Aviso>
             </div>
             <section style={{ width: '100%', maxWidth: 820, background: '#fff', borderRadius: 6, boxShadow: 'var(--shadow-2)', padding: '40px 44px' }}>
               <div style={{ display: 'flex', alignItems: 'flex-start', gap: 20, paddingBottom: 12, borderBottom: '2px solid var(--ink)' }}>
@@ -1989,9 +2009,12 @@ export default function Fiscalizacion({ dest, onDest }: PantallaProps) {
                   <p style={{ margin: 0, fontFamily: 'var(--font-serif)', fontSize: 15, fontWeight: 600 }}>{pref.entidad}</p>
                   <p style={{ margin: '3px 0 0', fontSize: 11, color: 'var(--ink-3)' }}>Sub Gerencia de Fiscalización Tributaria</p>
                 </div>
+                {/* El número y la fecha eran del artboard, y son lo que
+                    identifica un acto administrativo: un número de resolución
+                    inventado sobre un membrete es peor que ninguno. */}
                 <div style={{ textAlign: 'right', fontFamily: 'var(--font-mono)', fontSize: 11, color: 'var(--ink-3)' }}>
-                  <p style={{ margin: 0 }}>RD-2026-000418</p>
-                  <p style={{ margin: '3px 0 0' }}>13 de agosto de 2026</p>
+                  <p style={{ margin: 0 }}>{SIN_DATO}</p>
+                  <p style={{ margin: '3px 0 0' }}>{SIN_DATO}</p>
                 </div>
               </div>
               <div style={{ borderTop: '1px solid var(--ink)', marginTop: 2, paddingTop: 26, textAlign: 'center' }}>

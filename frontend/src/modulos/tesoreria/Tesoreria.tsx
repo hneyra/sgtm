@@ -7,7 +7,9 @@ import { usarPreferencias } from '../../shell/preferencias';
 import { ErrorDeApi, fijarToken } from '../../api/cliente';
 import { cuentaActual, hayPuerta } from '../../api/sesion';
 import { useRebote, useRecurso } from '../../api/useRecurso';
+import { Descargas } from '../../api/descarga';
 import {
+  descargarDuplicadoDeRecibo,
   anularRecibo,
   avanceDeRecaudacion,
   cerrarConvenio,
@@ -313,6 +315,9 @@ export default function Tesoreria({ dest, onDest }: PantallaProps) {
   const [numeroDeRecibo, setNumeroDeRecibo] = useState('');
   const numeroReposado = useRebote(numeroDeRecibo.trim());
   const [actoRecibo, setActoRecibo] = useState<'duplicado' | 'anulacion'>('duplicado');
+  /* Reimprimir un recibo es un ACTO: numera un duplicado y queda con quien lo
+     generó, así que exige observación (regla 10) igual que la anulación. */
+  const [obsDuplicado, setObsDuplicado] = useState('');
   const [motivoAnul, setMotivoAnul] = useState(MOTIVOS_DE_ANULACION[0] ?? '');
   const [autorizadoPor, setAutorizadoPor] = useState('');
   const [memoAnul, setMemoAnul] = useState('');
@@ -1996,12 +2001,40 @@ export default function Tesoreria({ dest, onDest }: PantallaProps) {
                   privilegio de impresión, pide observación y queda registrado con quien lo generó — el recibo lleva{' '}
                   {d.duplicados} reimpresión{d.duplicados === 1 ? '' : 'es'} hasta ahora.
                 </p>
-                <p style={NOTA_PIE}>
-                  Ese botón todavía no está: la única puerta de salida de esta interfaz devuelve JSON, y un documento
-                  binario no cabe por ella. Descargarlo con un <code style={{ fontFamily: 'var(--font-mono)' }}>fetch</code>{' '}
-                  suelto está prohibido —es lo que permite cambiar el origen y el token en un solo sitio—, así que se
-                  dice aquí en vez de dibujar un botón que no descarga.
-                </p>
+                <div style={{ padding: '0 16px' }}>
+                  <label style={{ display: 'block' }}>
+                    <span style={ETIQUETA}>Observación</span>
+                    <textarea
+                      value={obsDuplicado}
+                      onChange={(e) => setObsDuplicado(e.target.value)}
+                      rows={2}
+                      placeholder="Por qué se reimprime. Queda registrado con quien lo generó."
+                      style={{ ...IN, fontFamily: 'var(--font-sans)', resize: 'vertical' }}
+                    />
+                    <span style={AYUDA}>
+                      El servidor la exige: sin ella responde 422, porque reimprimir es una escritura y la regla 10 no
+                      tiene excepciones para las pequeñas.
+                    </span>
+                  </label>
+                </div>
+                <div style={{ padding: '12px 16px 16px' }}>
+                  {/* Antes esto decía que la descarga «todavía no está» porque la
+                      puerta de la interfaz sólo devolvía JSON. Ya no es cierto:
+                      `descargar()` firma la petición y entrega el binario, y
+                      desde #535 los tres formatos contestan 200. Lo que queda es
+                      lo del acto: sin observación no se pide. */}
+                  <Descargas
+                    traer={(f) => descargarDuplicadoDeRecibo(numeroReposado, f, obsDuplicado.trim())}
+                    que="el duplicado del recibo"
+                    acceso="duplicado_recibo"
+                    privilegio="impresion"
+                    impedimento={
+                      obsDuplicado.trim() === ''
+                        ? 'Falta la observación: reimprimir queda registrado y sin ella el servidor responde 422 (regla 10)'
+                        : undefined
+                    }
+                  />
+                </div>
               </section>
             )}
 

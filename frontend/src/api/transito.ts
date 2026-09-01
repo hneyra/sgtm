@@ -1,4 +1,5 @@
-import { solicitar, type RespuestaPaginada } from './cliente';
+import { descargar, solicitar, type RespuestaPaginada } from './cliente';
+import type { FormatoDeDocumento } from './descarga';
 
 /**
  * Lo que `sanciones` publica de la familia de tránsito.
@@ -533,6 +534,56 @@ export type RecaudacionDeMultas = {
  */
 export function resumenDeRecaudacion(ano?: number, senal?: AbortSignal): Promise<RecaudacionDeMultas> {
   return solicitar('/transito/reportes/resumen-recaudacion', { parametros: { ano }, senal });
+}
+
+/* ══════════ Los mismos reportes, como documento ══════════ */
+
+/**
+ * Qué reporte se puede además descargar, y por qué ruta (RF-132).
+ *
+ * **La lista no son todos**, y esa es la razón de que exista. `?formato` no es
+ * un parámetro genérico: cada `@GetMapping(params = "formato")` lo declara uno a
+ * uno, y el que no lo declara **devuelve el JSON de siempre e ignora el
+ * parámetro sin decir nada** —medido: `/transito/estado-cuenta?formato=PDF`
+ * contesta `200 application/json`—. Ofrecer ahí una descarga bajaría un archivo
+ * llamado `.pdf` con JSON dentro, que es peor que no ofrecerla: parece que
+ * funcionó.
+ *
+ * Fuera se quedan, y a propósito, «Estado de cuenta de infracciones» y «Actos y
+ * notificaciones».
+ */
+export const REPORTES_DESCARGABLES: Record<string, string> = {
+  record_conductor: '/transito/reportes/record-conductor',
+  record_vehicular: '/transito/reportes/record-vehicular',
+  padron_constancias: '/transito/reportes/padron-constancias',
+  padron: '/transito/reportes/padron',
+  padron_coactiva: '/transito/reportes/padron-coactiva',
+  resumen_recaudacion: '/transito/reportes/resumen-recaudacion',
+  resumen_papeletas: '/transito/reportes/resumen-papeletas',
+  resumen_codigo: '/transito/reportes/resumen-por-codigo',
+  resumen_placa: '/transito/reportes/resumen-por-placa',
+};
+
+/**
+ * El reporte, en PDF, XLS o RTF, con **los mismos criterios** que la hoja.
+ *
+ * Los padrones de #53 piden `IMPRESION`, no `LECTURA`: sacan del sistema un
+ * listado que en pantalla nadie llegó a ver entero. La interfaz no sabe hoy qué
+ * privilegios tiene la sesión —no lee `GET /seguridad/sesion/permisos`—, así
+ * que el botón no se puede apagar por adelantado y lo que se hace es **decir**
+ * el 403 nombrando el acceso y el privilegio que falta.
+ */
+export function descargarReporteDeTransito(
+  ruta: string,
+  parametros: Record<string, string | number | undefined>,
+  formato: FormatoDeDocumento,
+): Promise<void> {
+  return descargar(ruta, { ...parametros, formato });
+}
+
+/** La hoja informativa de UNA papeleta, como documento. El número va en la ruta. */
+export function descargarHojaInformativa(numero: string, formato: FormatoDeDocumento): Promise<void> {
+  return descargar(`/transito/papeletas/${encodeURIComponent(numero)}/hoja-informativa`, { formato });
 }
 
 /* ══════════ Las tres escrituras que la pantalla puede componer ══════════ */

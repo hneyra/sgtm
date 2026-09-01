@@ -1,4 +1,5 @@
-import { solicitar, type RespuestaPaginada } from './cliente';
+import { descargar, solicitar, type RespuestaPaginada } from './cliente';
+import type { FormatoDeDocumento } from './descarga';
 
 /**
  * Lo que el módulo de **Consultas** lee del backend.
@@ -533,6 +534,24 @@ export function constanciaDeNoAdeudo(
   senal?: AbortSignal,
 ): Promise<Constancia> {
   return solicitar('/consultas/constancias/no-adeudo', { parametros: { ...filtro }, senal });
+}
+
+/**
+ * La misma constancia, como archivo (RF-132, RNF-081).
+ *
+ * La hoja A4 que dibuja la pantalla se puede mandar a la impresora con Ctrl+P,
+ * y ahi se acaba: **no produce `.xls` ni `.rtf`**, que es lo que el manual
+ * promete y lo que el generador comun del servidor si sabe hacer.
+ *
+ * Sigue sin numerarse: `ConstanciaController` lo dice —«es una consulta: se
+ * mira, se guarda y se imprime, pero no se numera»— y por eso basta `LECTURA`,
+ * el mismo privilegio con el que la hoja ya esta en pantalla.
+ */
+export function descargarConstancia(
+  filtro: { codContribuyente: string; fecha?: string },
+  formato: FormatoDeDocumento,
+): Promise<void> {
+  return descargar('/consultas/constancias/no-adeudo', { ...filtro, formato });
 }
 
 /* ══════════ Lo que hace falta para buscar en los otros padrones ══════════ */

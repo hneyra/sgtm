@@ -219,7 +219,7 @@ export const HOJAS: Hoja[] = [
     crit: [],
     cierre: 'Se expide a solicitud del interesado. Si a la fecha verificada hay una sola papeleta pendiente, el servidor la niega y dice cuáles lo impiden.',
     sinLectura:
-      'Es una escritura que devuelve el documento en PDF, XLS o RTF, no un JSON que se pueda dibujar aquí. Emitirla desde esta pantalla exigiría descargar un archivo, y esta interfaz todavía no tiene por dónde.',
+      'Es una escritura, no una consulta: numera la constancia, exige la placa y la observación de quien la emite (regla 10), y si a la fecha verificada hay una sola papeleta pendiente la niega con 409 y la lista de las que lo impiden. Aquí no hay ni un campo para nada de eso: la hoja del carril no declara ninguno. Bajar el archivo sí se sabe —el emisor es un POST y `descargar()` los admite—, lo que falta es el formulario del acto. Lo que sí se ve, ya emitida, es en «Relación de constancias emitidas» (#589).',
   },
   {
     k: 'padron_constancias', g: 'Constancias', label: 'Relación de constancias emitidas',

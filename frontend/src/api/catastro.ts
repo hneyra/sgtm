@@ -1,4 +1,5 @@
-import { solicitar, type RespuestaPaginada } from './cliente';
+import { descargar, solicitar, type RespuestaPaginada } from './cliente';
+import type { FormatoDeDocumento } from './descarga';
 
 /**
  * Lo que `catastro` publica sobre predios. Los tipos son los `record` del
@@ -349,8 +350,9 @@ export function contarFichas(
  *
  * Que la ruta acabe en `.pdf` y conteste JSON es deliberado del backend: es el
  * mismo recurso, y `?formato=PDF|XLS|RTF` devuelve el documento. Ese camino
- * contesta 500 hoy —el generador consulta el regimen fuera de transaccion—, asi
- * que la pantalla dibuja la hoja con este JSON y lo dice.
+ * **funciona desde #535** —el generador ya consulta el regimen en su propia
+ * transaccion—, asi que la pantalla dibuja la hoja con este JSON y ofrece los
+ * tres archivos con {@link descargarFichaDelContribuyente}.
  */
 export type FichaDelContribuyente = {
   aLaFecha: string;
@@ -382,4 +384,21 @@ export function fichaDelContribuyente(
     parametros: { fecha },
     senal,
   });
+}
+
+/**
+ * La misma ficha, como archivo (RF-132).
+ *
+ * Es la MISMA ruta con `?formato`: el backend no publica una por formato, y
+ * pedirla desde aqui en vez de con un enlace es lo que le pone la cabecera
+ * `Authorization` —un `<a href>` saldria sin ella y bajaria un 401 con nombre
+ * de PDF—. El privilegio es `LECTURA`, el mismo con el que se dibuja la hoja:
+ * `ReporteController` lo razona en su javadoc.
+ */
+export function descargarFichaDelContribuyente(
+  codigo: string,
+  formato: FormatoDeDocumento,
+  fecha?: string,
+): Promise<void> {
+  return descargar(`/catastro/contribuyentes/${encodeURIComponent(codigo)}/ficha.pdf`, { formato, fecha });
 }

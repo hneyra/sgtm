@@ -241,11 +241,23 @@ export function claveDeIdempotencia(): string {
  * `solicitar()` no sirve: parsea JSON y un PDF no cabe por ahi. Va aparte —y no
  * con un `fetch` suelto en la pantalla— para que el token, la raiz de la API y
  * el trato de los errores sigan estando en un solo sitio.
+ *
+ * **Y no vale un `<a href>`.** El token viaja en una cabecera, asi que un enlace
+ * a la misma ruta sale sin `Authorization` y el navegador se baja el 401 con
+ * nombre de PDF. Por eso la peticion se firma aqui y el archivo se entrega desde
+ * un `blob:`.
+ *
+ * `metodo` y `cuerpo` existen porque **no todos los emisores son GET**: el de
+ * reportes administrativos es `POST /infracciones/administrativas/reportes` y
+ * lleva el tipo de reporte y el formato en el cuerpo. Sin esto, esa hoja se
+ * quedaria sin descargar por un limite de esta funcion y no del servidor, que es
+ * justo la clase de motivo que no se le puede contar a quien atiende.
  */
 export async function descargar(
   ruta: string,
   parametros: Record<string, string | number | undefined> = {},
   nombre?: string,
+  opciones: { metodo?: 'GET' | 'POST'; cuerpo?: unknown } = {},
 ): Promise<void> {
   const url = new URL(RAIZ + ruta, window.location.origin);
   for (const [clave, valor] of Object.entries(parametros)) {
@@ -253,10 +265,17 @@ export async function descargar(
     url.searchParams.set(clave, String(valor));
   }
   const jwt = token();
+  const cabeceras: Record<string, string> = {};
+  if (jwt) cabeceras.Authorization = `Bearer ${jwt}`;
+  if (opciones.cuerpo !== undefined) cabeceras['Content-Type'] = 'application/json';
 
   let respuesta: Response;
   try {
-    respuesta = await fetch(url, { headers: jwt ? { Authorization: `Bearer ${jwt}` } : {} });
+    respuesta = await fetch(url, {
+      method: opciones.metodo ?? 'GET',
+      headers: cabeceras,
+      body: opciones.cuerpo === undefined ? undefined : JSON.stringify(opciones.cuerpo),
+    });
   } catch {
     throw new ErrorDeApi('SIN_RESPUESTA', 'No se pudo contactar con el servidor', 0);
   }
@@ -265,6 +284,22 @@ export async function descargar(
        un 500 de aqui tiene que decir lo mismo que un 500 de cualquier lectura. */
     const texto = await respuesta.text();
     throw errorDe(respuesta.status, texto ? intentarLeer(texto) : null);
+  }
+
+  /* Un 200 que trae JSON no es un documento. Pasa de verdad: `?formato` no es
+     un parametro generico —cada endpoint lo declara uno a uno— y el que no lo
+     declara devuelve su JSON de siempre e IGNORA el parametro sin decir nada
+     (medido: `/transito/estado-cuenta?formato=PDF` contesta `200
+     application/json`). Sin esta guarda el navegador se baja un archivo llamado
+     `.pdf` con JSON dentro: el peor desenlace de los tres, porque parece que
+     funciono y el error aparece al abrirlo, lejos de aqui. */
+  const tipo = respuesta.headers.get('Content-Type') ?? '';
+  if (tipo.includes('json')) {
+    throw new ErrorDeApi(
+      'SIN_RESPUESTA',
+      'El servidor devolvio datos y no un documento: esta ruta no emite archivo en ese formato.',
+      respuesta.status,
+    );
   }
 
   const blob = await respuesta.blob();
