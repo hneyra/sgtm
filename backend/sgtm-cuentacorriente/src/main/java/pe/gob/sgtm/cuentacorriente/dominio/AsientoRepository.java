@@ -5,6 +5,7 @@ import java.util.List;
 import java.util.Optional;
 import pe.gob.sgtm.compartido.Pagina;
 import pe.gob.sgtm.compartido.Paginacion;
+import pe.gob.sgtm.dominio.Ejercicio;
 
 /**
  * El libro de asientos (ADR-0006). Ningun metodo recibe la municipalidad (regla 2): sale del token
@@ -177,6 +178,24 @@ public interface AsientoRepository {
      * contribuyente nuevo.
      */
     List<Long> contribuyentesConAsientos(long despuesDe, int cuantos);
+
+    /**
+     * Los ejercicios en los que el libro <b>puede</b> asentar, de menor a mayor (#597).
+     *
+     * <p>{@code cuenta_corriente_asiento} esta particionada por ejercicio (V2) y las particiones se
+     * declaran una a una en las migraciones. Un {@code INSERT} de un ejercicio sin particion no
+     * devuelve vacio ni escribe en ningun sitio: <b>falla</b>, con «no partition of relation found
+     * for row» y SQLSTATE {@code 23514} —el mismo que una violacion de {@code CHECK}, asi que
+     * atraparlo por el codigo de error confundiria las dos—.
+     *
+     * <p>Se pregunta antes de escribir para que el borde pueda contestar {@code 422} nombrando el
+     * ejercicio en vez de un {@code 500} con incidencia, que dice «vuelve a intentarlo» sobre algo
+     * que no va a cambiar hasta que alguien escriba una migracion.
+     *
+     * <p>No es «el ejercicio esta abierto» en sentido tributario —eso es otra cosa, y no vive
+     * aqui—: es literalmente donde hay sitio en el libro.
+     */
+    List<Ejercicio> ejerciciosAsentables();
 
     /** Inserta el asiento y devuelve la fila guardada, con su {@code id} y su {@code usuarioId}. */
     Asiento registrar(Asiento asiento);
