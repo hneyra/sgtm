@@ -7,6 +7,8 @@ import { personaDeLaSesion } from '../../shell/persona';
 import { hayPuerta, salir } from '../../api/sesion';
 import { EJERCICIOS, soles, usarPreferencias } from '../../shell/preferencias';
 import { AVANCE, DEUDA, PAGOS, PARADO, UNIDADES } from '../../datos/inicio';
+import { indicadores } from '../../api/rentas';
+import { useRecurso } from '../../api/useRecurso';
 
 /**
  * Inicio no es un módulo: es la respuesta a «a quién atiendes». Trae su propio
@@ -55,6 +57,13 @@ export default function Inicio() {
   }, []);
 
   const paradoTotal = PARADO.reduce((a, p) => a + p[5], 0);
+
+  /* ── El panel de recaudacion, contra `GET /indicadores/recaudacion` ──
+     Es la unica lectura de indicadores del sistema (ARQ-01 §3.13). Sus cuatro
+     KPI y sus dos paneles vienen ya compuestos, con su fecha: aqui no se suma
+     nada (RNF-083). */
+  const panel = useRecurso((s2) => indicadores(pref.ejercicio, s2), [pref.ejercicio], esMuni);
+  const porTributo = panel.datos?.paneles.find((x) => /tributo/i.test(x.title));
 
   /* La sesión de verdad es la del personal. La del contribuyente NO se sustituye:
      el ciudadano entra por otro realm —`sgtm-ciudadano`, con su propio emisor
@@ -478,7 +487,9 @@ export default function Inicio() {
               </p>
 
               <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit,minmax(200px,1fr))', gap: 13 }}>
-                {[
+                {(panel.datos
+                  ? panel.datos.kpis.map((k) => ({ valor: k.value, etiqueta: k.label, nota: k.note }))
+                  : [
                   { valor: `S/ ${(rec.recaudado / 1000000).toFixed(2)} M`, etiqueta: 'Recaudado del ejercicio', nota: `De ${soles(rec.emitido)} emitidos.` },
                   { valor: `${rec.pct.toFixed(1)} %`, etiqueta: 'Avance de la recaudación', nota: `Faltan ${soles(rec.emitido - rec.recaudado)} por cobrar.` },
                   { valor: '62,418', etiqueta: 'Contribuyentes en el padrón', nota: '18,412 predios y 8,844 vehículos afectos.' },
@@ -486,7 +497,8 @@ export default function Inicio() {
                      27 px parte en dos líneas justo después de «S/». La cifra exacta
                      va en la nota. */
                   { valor: `S/ ${(paradoTotal / 1000000).toFixed(2)} M`, etiqueta: 'Parado por falta de un acto', nota: `${soles(paradoTotal)} en notificaciones, RECs y determinaciones sin emitir.` },
-                ].map((k) => (
+                    ]
+                ).map((k) => (
                   <div
                     key={k.etiqueta}
                     style={{ background: 'var(--bg-card)', border: '1px solid var(--line)', borderRadius: 10, boxShadow: 'var(--shadow-1)', padding: '17px 18px' }}
@@ -505,23 +517,44 @@ export default function Inicio() {
                   <h2 style={{ margin: 0, flex: 1, fontFamily: 'var(--font-serif)', fontSize: 16, fontWeight: 600 }}>
                     Emitido contra recaudado · ejercicio {pref.ejercicio}
                   </h2>
-                  <span style={{ fontFamily: 'var(--font-mono)', fontSize: 11, color: 'var(--ink-3)' }}>al 13/08</span>
+                  <span style={{ fontFamily: 'var(--font-mono)', fontSize: 11, color: 'var(--ink-3)' }}>
+                    {panel.datos ? `al ${panel.datos.fechaCalculo}` : 'al 13/08'}
+                  </span>
                 </div>
-                {AVANCE.map((a) => {
-                  const p = (a[2] / a[1]) * 100;
-                  const color = p < 50 ? 'var(--bad-fg)' : p < 80 ? 'var(--warn-fg)' : 'var(--ok-fg)';
-                  const relleno = p < 50 ? 'var(--bad-fg)' : p < 80 ? 'var(--warn-fg)' : 'var(--accent)';
+                {(porTributo
+                  ? porTributo.rows.map((r) => ({
+                      etiqueta: r.label,
+                      pct: r.pct,
+                      conocido: r.avanceConocido,
+                      valor: r.value,
+                      sub: r.sub,
+                    }))
+                  : AVANCE.map((a) => ({
+                      etiqueta: a[0],
+                      pct: (a[2] / a[1]) * 100,
+                      conocido: true,
+                      valor: soles(a[2]),
+                      sub: soles(a[1] - a[2]),
+                    }))
+                ).map((a) => {
+                  const color = !a.conocido ? 'var(--ink-4)' : a.pct < 50 ? 'var(--bad-fg)' : a.pct < 80 ? 'var(--warn-fg)' : 'var(--ok-fg)';
+                  const relleno = a.pct < 50 ? 'var(--bad-fg)' : a.pct < 80 ? 'var(--warn-fg)' : 'var(--accent)';
                   return (
-                    <div key={a[0]} style={{ display: 'flex', alignItems: 'center', gap: 14, padding: '12px 16px', borderBottom: '1px solid var(--line)' }}>
-                      <span style={{ flex: '0 0 196px', minWidth: 0, fontSize: 13, color: 'var(--ink)' }}>{a[0]}</span>
+                    <div key={a.etiqueta} style={{ display: 'flex', alignItems: 'center', gap: 14, padding: '12px 16px', borderBottom: '1px solid var(--line)' }}>
+                      <span style={{ flex: '0 0 196px', minWidth: 0, fontSize: 13, color: 'var(--ink)' }}>{a.etiqueta}</span>
                       <span style={{ flex: 1, minWidth: 60, height: 10, borderRadius: 999, background: 'var(--accent-soft)', overflow: 'hidden', position: 'relative' }}>
-                        <span style={{ position: 'absolute', inset: '0 auto 0 0', width: `${p.toFixed(1)}%`, borderRadius: 999, background: relleno }} />
+                        {/* Sin base sobre la que calcular, NO se dibuja barra: un
+                            0 % y un «no se sabe» no son lo mismo, y el backend
+                            los distingue con `avanceConocido`. */}
+                        {a.conocido && (
+                          <span style={{ position: 'absolute', inset: '0 auto 0 0', width: `${a.pct.toFixed(1)}%`, borderRadius: 999, background: relleno }} />
+                        )}
                       </span>
                       <span style={{ flex: '0 0 60px', whiteSpace: 'nowrap', textAlign: 'right', fontFamily: 'var(--font-mono)', fontSize: 12.5, color }}>
-                        {p.toFixed(1)} %
+                        {a.conocido ? `${a.pct.toFixed(1)} %` : '—'}
                       </span>
-                      <span data-sm-hide="1" style={{ flex: '0 0 124px', textAlign: 'right', fontFamily: 'var(--font-mono)', fontSize: 12, color: 'var(--ink-3)' }}>
-                        {soles(a[1] - a[2])}
+                      <span data-sm-hide="1" style={{ flex: '0 0 210px', textAlign: 'right', fontFamily: 'var(--font-mono)', fontSize: 11.5, color: 'var(--ink-3)' }}>
+                        {a.sub}
                       </span>
                     </div>
                   );

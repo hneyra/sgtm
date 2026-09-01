@@ -127,6 +127,20 @@ export type Indicadores = {
   ejercicio: number;
   fechaCalculo: string;
   kpis: { label: string; value: string; note: string; importe: { importe: string; actualizadoA: string } | null }[];
+  /** «Recaudacion por tributo» y «por mes», cada uno con sus filas y su barra. */
+  paneles: {
+    title: string;
+    note: string;
+    rows: {
+      label: string;
+      sub: string;
+      value: string;
+      pct: number;
+      /** `false` cuando no hay base sobre la que calcular el avance: la barra
+       *  no se dibuja, porque un 0 % y un «no se sabe» no son lo mismo. */
+      avanceConocido: boolean;
+    }[];
+  }[];
 };
 
 /**
