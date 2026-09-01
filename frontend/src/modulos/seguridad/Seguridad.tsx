@@ -1,17 +1,16 @@
-import { useMemo, useState, type CSSProperties } from 'react';
+import { useEffect, useMemo, useState, type CSSProperties } from 'react';
 import { Icono } from '../../ds/Icono';
+import { listarAuditoria } from '../../api/seguridad';
+import { useRebote, useRecurso } from '../../api/useRecurso';
 import { ICO } from '../../ds/iconos';
 import { Shell, type EntradaDePaleta } from '../../shell/Shell';
 import { usarPreferencias } from '../../shell/preferencias';
 import type { PantallaProps } from '../../App';
 import {
   ACCESOS,
-  AUDITORIA,
-  COLUMNAS_DE_AUDITORIA,
   GRUPOS,
   NIVELES,
   OPCIONES_DE_PALETA,
-  REGISTROS_DE_AUDITORIA,
   USUARIOS,
   panelesDeSistema,
   type Acceso,
@@ -341,14 +340,46 @@ export default function Seguridad({ dest, onDest }: PantallaProps) {
   ];
 
   /* ── Auditoría ─────────────────────────────────────────────── */
+  /* Los cinco filtros del artboard se sustituyen por los que la bitacora
+     admite de verdad: `usuario`, `tabla`, `operacion`, `desde` y `hasta`.
+     «Modulo» y «Buscar en el detalle» no existen en el backend. */
   const audFiltros: { k: string; label: string; tipo: 'sel' | 'fecha' | 'texto'; valor: string; opts?: string[]; ph?: string }[] = [
-    { k: 'audUsuario', label: 'Usuario', tipo: 'sel', valor: 'Todos', opts: ['Todos'].concat(Object.keys(USUARIOS)) },
-    { k: 'audModulo', label: 'Módulo', tipo: 'sel', valor: 'Todos', opts: ['Todos'].concat(modulosUnicos) },
-    { k: 'audDesde', label: 'Desde', tipo: 'fecha', valor: '2026-08-01' },
-    { k: 'audHasta', label: 'Hasta', tipo: 'fecha', valor: '2026-08-13' },
-    { k: 'audTexto', label: 'Buscar en el detalle', tipo: 'texto', valor: '', ph: 'Nº de recibo, expediente…' },
+    { k: 'audUsuario', label: 'Usuario', tipo: 'texto', valor: '', ph: 'jperez' },
+    { k: 'audTabla', label: 'Tabla', tipo: 'texto', valor: '', ph: 'recibo, permiso, predio…' },
+    { k: 'audOperacion', label: 'Operación', tipo: 'sel', valor: 'Todas', opts: ['Todas', 'ALTA', 'MODIFICACION', 'ELIMINACION', 'ACCESO'] },
+    { k: 'audDesde', label: 'Desde', tipo: 'fecha', valor: '' },
+    { k: 'audHasta', label: 'Hasta', tipo: 'fecha', valor: '' },
   ];
-  const audFiltrada = audChip === 'Todos' ? AUDITORIA : AUDITORIA.filter((r) => r[6] === audChip);
+
+  const [paginaAud, setPaginaAud] = useState(0);
+  const usuarioAud = useRebote(String(val('audUsuario', '')).trim());
+  const tablaAud = useRebote(String(val('audTabla', '')).trim());
+  const operacionAud = String(val('audOperacion', 'Todas'));
+  const desdeAud = String(val('audDesde', ''));
+  const hastaAud = String(val('audHasta', ''));
+
+  useEffect(() => setPaginaAud(0), [usuarioAud, tablaAud, operacionAud, desdeAud, hastaAud, pref.ejercicio]);
+
+  /* `ejercicio` es obligatorio: la bitacora esta particionada por el, y sin el
+     el backend contesta 422. Sale del selector de la cabecera. */
+  const auditoria = useRecurso(
+    (senal) =>
+      listarAuditoria(
+        {
+          ejercicio: pref.ejercicio,
+          usuario: usuarioAud || undefined,
+          tabla: tablaAud || undefined,
+          operacion: operacionAud === 'Todas' ? undefined : operacionAud,
+          desde: desdeAud || undefined,
+          hasta: hastaAud || undefined,
+        },
+        { pagina: paginaAud, tamano: 20 },
+        senal,
+      ),
+    [pref.ejercicio, usuarioAud, tablaAud, operacionAud, desdeAud, hastaAud, paginaAud],
+    dest === 'auditoria' || dest === 'panel',
+  );
+  const filasDeAuditoria = auditoria.datos?.contenido ?? [];
 
   /* ── Sistema ───────────────────────────────────────────────── */
   const SIS = panelesDeSistema(pref.ejercicio);
@@ -455,18 +486,27 @@ export default function Seguridad({ dest, onDest }: PantallaProps) {
                   Ver auditoría
                 </button>
               </div>
-              {AUDITORIA.slice(0, 4).map((r) => (
-                <div key={r[0] + r[1]} style={{ display: 'flex', alignItems: 'flex-start', gap: 14, padding: '12px 16px', borderBottom: '1px solid var(--line)' }}>
-                  <span style={INS[tono(r[6])]}>{r[6]}</span>
+              {auditoria.cargando && (
+                <p style={{ margin: 0, padding: '14px 16px', fontSize: 12.5, color: 'var(--ink-3)' }}>Leyendo la bitácora…</p>
+              )}
+              {filasDeAuditoria.slice(0, 4).map((r) => (
+                <div key={r.id} style={{ display: 'flex', alignItems: 'flex-start', gap: 14, padding: '12px 16px', borderBottom: '1px solid var(--line)' }}>
+                  <span style={INS[r.operacion === 'ELIMINACION' ? 'bad' : r.operacion === 'ACCESO' ? 'neutro' : 'warn']}>
+                    {r.operacion}
+                  </span>
                   <span style={{ flex: 1, minWidth: 0 }}>
                     <span style={{ display: 'block', fontSize: 13, color: 'var(--ink)' }}>
-                      {r[3]} · {r[2]}
+                      {r.tabla} · {r.clave}
                     </span>
-                    <span style={{ display: 'block', fontSize: 12, color: 'var(--ink-3)', marginTop: 2, textWrap: 'pretty' }}>{r[4]}</span>
+                    <span style={{ display: 'block', fontSize: 12, color: 'var(--ink-3)', marginTop: 2, textWrap: 'pretty' }}>
+                      {r.observacion ?? 'Sin observación'}
+                    </span>
                   </span>
                   <span style={{ textAlign: 'right', flex: '0 0 auto' }}>
-                    <span style={{ display: 'block', fontFamily: 'var(--font-mono)', fontSize: 12, color: 'var(--ink-2)' }}>{r[0]}</span>
-                    <span style={{ display: 'block', fontSize: 11, color: 'var(--ink-4)', marginTop: 2 }}>{r[1]}</span>
+                    <span style={{ display: 'block', fontFamily: 'var(--font-mono)', fontSize: 11.5, color: 'var(--ink-3)' }}>
+                      {r.fecha.replace('T', ' ').slice(0, 16)}
+                    </span>
+                    <span style={{ display: 'block', fontSize: 11, color: 'var(--ink-4)', marginTop: 2 }}>{r.usuario}</span>
                   </span>
                 </div>
               ))}
@@ -792,34 +832,34 @@ export default function Seguridad({ dest, onDest }: PantallaProps) {
                   );
                 })}
                 <span style={{ marginLeft: 'auto', fontFamily: 'var(--font-mono)', fontSize: 11, color: 'var(--ink-3)' }}>
-                  {audFiltrada.length} de {REGISTROS_DE_AUDITORIA} registros
+                  {filasDeAuditoria.length} de {(auditoria.datos?.totalElementos ?? 0).toLocaleString('es-PE')} registros
                 </span>
               </div>
               <div style={{ overflowX: 'auto' }}>
                 <table style={{ width: '100%', borderCollapse: 'collapse', minWidth: 940 }}>
                   <thead>
                     <tr>
-                      {COLUMNAS_DE_AUDITORIA.map((c) => (
-                        <th key={c[0]} style={c[1] ? THN : TH}>
-                          {c[0]}
+                      {COLUMNAS_DE_LA_BITACORA.map((c) => (
+                        <th key={c} style={TH}>
+                          {c}
                         </th>
                       ))}
                     </tr>
                   </thead>
                   <tbody>
-                    {audFiltrada.map((r) => (
-                      <tr key={r[0] + r[1]} className="hov-elev" style={{ borderTop: '1px solid var(--line)' }}>
-                        {r.map((c, j) =>
-                          j === 6 ? (
-                            <td key={j} style={{ padding: '11px 14px' }}>
-                              <span style={INS[tono(c)]}>{c}</span>
-                            </td>
-                          ) : (
-                            <td key={j} style={j === 0 ? TD1 : COLUMNAS_DE_AUDITORIA[j][1] ? TDN : TD}>
-                              {c}
-                            </td>
-                          ),
-                        )}
+                    {filasDeAuditoria.map((r) => (
+                      <tr key={r.id} className="hov-elev" style={{ borderTop: '1px solid var(--line)' }}>
+                        <td style={TD1}>{r.fecha.replace('T', ' ').slice(0, 16)}</td>
+                        <td style={TD}>{r.usuario}</td>
+                        <td style={{ ...TD, fontFamily: 'var(--font-mono)', fontSize: 12.5 }}>{r.tabla}</td>
+                        <td style={{ ...TD, fontFamily: 'var(--font-mono)', fontSize: 12.5 }}>{r.clave}</td>
+                        <td style={{ padding: '11px 14px' }}>
+                          <span style={INS[r.operacion === 'ELIMINACION' ? 'bad' : r.operacion === 'ACCESO' ? 'neutro' : 'warn']}>
+                            {r.operacion}
+                          </span>
+                        </td>
+                        <td style={{ ...TD, textWrap: 'pretty' }}>{r.observacion ?? '—'}</td>
+                        <td style={{ ...TD, fontFamily: 'var(--font-mono)', fontSize: 12.5 }}>{r.origenIp ?? '—'}</td>
                       </tr>
                     ))}
                   </tbody>
@@ -1146,3 +1186,15 @@ function CampoDelSistema({
     </label>
   );
 }
+
+/**
+ * Las columnas de la bitacora, en la forma que el recurso publica.
+ *
+ * El artboard dibuja «Modulo» y «Riesgo», y **ninguna de las dos existe en el
+ * backend**: el riesgo es una calificacion que nadie ha escrito, y el modulo
+ * habria que deducirlo de la tabla tocada. Y su «Acto» habla otro idioma que
+ * el enumerado `Operacion`. Se usan las del recurso: la tabla y la clave dicen
+ * sobre que fila se actuo, que es lo que se pregunta cuando desaparece una
+ * deuda.
+ */
+const COLUMNAS_DE_LA_BITACORA = ['Fecha y hora', 'Usuario', 'Tabla', 'Clave', 'Operacion', 'Observacion', 'IP'];
