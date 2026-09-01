@@ -13,18 +13,32 @@ import pe.gob.sgtm.cuentacorriente.PendienteDeUnTributo;
 import pe.gob.sgtm.cuentacorriente.dominio.AsientoRepository;
 import pe.gob.sgtm.cuentacorriente.dominio.CargoAgregado;
 import pe.gob.sgtm.cuentacorriente.dominio.PendienteAgregado;
-import pe.gob.sgtm.cuentacorriente.dominio.SaldoRepository;
 import pe.gob.sgtm.dominio.Ejercicio;
 
 /**
- * Implementa {@link CarteraDelLibro} sobre el libro y la proyeccion del saldo (#56, RF-130).
+ * Implementa {@link CarteraDelLibro} sobre el libro (#56, #639, RF-130).
  *
- * <p><b>Cada mitad lee de donde tiene que leer.</b> Lo cargado sale del libro, que es la verdad; lo
- * pendiente sale de {@code saldo_proyectado}, que es un cache (ADR-0006). Podria salir todo del
- * libro —lo pendiente es cargos menos abonos de insoluto—, y seria una consulta correcta que en
- * produccion no se puede permitir: recorrer el libro entero de un ejercicio en cada carga de la
- * pantalla de inicio. Para eso existe la proyeccion, y por eso la respuesta dice cuando se
- * proyecto.
+ * <h2>Las dos mitades leen del libro, y desde #639 tambien la segunda</h2>
+ *
+ * <p>Lo cargado son los cargos de insoluto del ejercicio; lo pendiente es lo mismo neteado contra
+ * sus abonos <b>hasta la fecha de corte</b>. Hasta #639 lo pendiente salia de {@code
+ * saldo_proyectado} —el cache de #23—, y se cambio porque esa tabla <b>no puede aplicar una fecha
+ * de corte</b>: netea el insoluto de la obligacion entera y no tiene ninguna columna con la fecha
+ * valor de sus asientos. El sintoma era el de #639: el panel decia 13 783,75 de cartera donde la
+ * suma de {@code GET /consultas/deuda} sobre los mismos contribuyentes daba 11 342,20, y los 2
+ * 441,55 de diferencia eran <b>la cuota que aun no vence</b>.
+ *
+ * <h2>Y lo que costo se midio antes de cambiarlo</h2>
+ *
+ * <p>El motivo escrito en #56 para no leer el libro era el coste: «recorrer el libro entero de un
+ * ejercicio en cada carga de la pantalla de inicio». Medido contra PostgreSQL 16 con un padron del
+ * tamano de Catacaos —105 161 asientos y 100 154 filas proyectadas, como {@code sgtm_app}, con RLS
+ * activa y tres repeticiones de cada consulta en la misma sesion (mediana)—: la cartera sobre
+ * {@code saldo_proyectado} tardaba <b>74,6 ms</b> y sobre el libro tarda <b>234,0 ms</b>. Pero
+ * {@link #cargadoPorTributo} <b>ya</b> recorre esa misma particion en cada carga del panel y tarda
+ * <b>178,8 ms</b>: la consulta nueva cuesta 1,3 veces la que el panel ya paga sobre la misma
+ * particion, asi que leer el libro no es una clase de coste nueva. Lo que se gana a cambio es que
+ * no hay dos definiciones de «lo pendiente» que puedan divergir.
  *
  * <p>{@code readOnly = true} y ni un bloqueo, por lo mismo que en {@link
  * RecaudacionDelLibroCuentaCorriente}: un panel se mira mientras la ventanilla cobra. Sin
@@ -38,11 +52,9 @@ import pe.gob.sgtm.dominio.Ejercicio;
 public class CarteraDelLibroCuentaCorriente implements CarteraDelLibro {
 
     private final AsientoRepository asientos;
-    private final SaldoRepository saldos;
 
-    public CarteraDelLibroCuentaCorriente(AsientoRepository asientos, SaldoRepository saldos) {
+    public CarteraDelLibroCuentaCorriente(AsientoRepository asientos) {
         this.asientos = asientos;
-        this.saldos = saldos;
     }
 
     @Override
@@ -61,9 +73,9 @@ public class CarteraDelLibroCuentaCorriente implements CarteraDelLibro {
     @Transactional(readOnly = true)
     public CarteraPendiente pendientePorTributo(Ejercicio ejercicio, LocalDate aLaFecha) {
         Objects.requireNonNull(ejercicio, "La cartera siempre es de un ejercicio");
-        Objects.requireNonNull(aLaFecha, "Toda cifra indica su fecha (RNF-075, regla 9)");
+        Objects.requireNonNull(aLaFecha, "La cartera es a una fecha de corte (regla 9, #639)");
         List<PendienteDeUnTributo> lineas =
-                saldos.pendientePorTributo(ejercicio).stream()
+                asientos.pendientePorTributo(ejercicio, aLaFecha).stream()
                         .map(CarteraDelLibroCuentaCorriente::aPublico)
                         .toList();
         return new CarteraPendiente(lineas, ejercicio, aLaFecha);
@@ -75,9 +87,6 @@ public class CarteraDelLibroCuentaCorriente implements CarteraDelLibro {
 
     private static PendienteDeUnTributo aPublico(PendienteAgregado agregado) {
         return new PendienteDeUnTributo(
-                agregado.tributo(),
-                agregado.pendiente(),
-                agregado.obligaciones(),
-                agregado.proyectadoDesde());
+                agregado.tributo(), agregado.pendiente(), agregado.obligaciones());
     }
 }

@@ -2,6 +2,7 @@ package pe.gob.sgtm.cuentacorriente.infraestructura;
 
 import java.sql.ResultSet;
 import java.sql.SQLException;
+import java.time.LocalDate;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
@@ -25,6 +26,7 @@ import pe.gob.sgtm.cuentacorriente.dominio.CriterioDeConsulta;
 import pe.gob.sgtm.cuentacorriente.dominio.CriterioDeDeuda;
 import pe.gob.sgtm.cuentacorriente.dominio.CriterioDePagos;
 import pe.gob.sgtm.cuentacorriente.dominio.Fase;
+import pe.gob.sgtm.cuentacorriente.dominio.PendienteAgregado;
 import pe.gob.sgtm.cuentacorriente.dominio.RecaudacionAgregada;
 import pe.gob.sgtm.cuentacorriente.dominio.SentidoDelMovimiento;
 import pe.gob.sgtm.cuentacorriente.dominio.TipoAsiento;
@@ -509,6 +511,53 @@ public class AsientoRepositoryJdbc extends RepositorioJdbc implements AsientoRep
                                         fila.getString("tributo"),
                                         new Dinero(fila.getBigDecimal("cargado")),
                                         fila.getLong("cargos")))
+                .list();
+    }
+
+    /**
+     * Lo pendiente del ejercicio a la fecha de corte, agrupado por tributo (#639, RF-130).
+     *
+     * <p><b>Dos agregaciones y no una, y las dos las hace el motor.</b> La de dentro netea el
+     * insoluto de cada <b>obligacion</b> —el mismo grupo con el que {@code consulta_deuda} publica
+     * una fila: contribuyente, tributo, ejercicio y unidad— hasta el corte; la de fuera se queda
+     * con las positivas y las suma por tributo. Devuelve una linea por tributo, no una por
+     * obligacion: la cartera de un padron son decenas de miles de filas y el panel escribe una
+     * docena de numeros (AC 4 de #56).
+     *
+     * <p>{@code fecha_valor <= :aLaFecha} es la condicion que faltaba y que da nombre a #639. Sin
+     * ella la cifra es la misma preguntando por enero que por diciembre, y estampar en ella la
+     * fecha de corte del panel es afirmar que en enero ya se debia la cuota de noviembre. Medido en
+     * la municipalidad de demostracion: PREDIAL 2026 al 2026-09-01 son <b>8 221,05</b> y sin la
+     * condicion salian <b>10 662,60</b>.
+     *
+     * <p>Sin filtro de reversion: ver {@link AsientoRepository#pendientePorTributo}. Netear ya lo
+     * corrige; las dos mitades del filtro son inertes aqui y media resta deuda viva.
+     */
+    @Override
+    public List<PendienteAgregado> pendientePorTributo(Ejercicio ejercicio, LocalDate aLaFecha) {
+        return jdbc().sql(
+                        "SELECT tributo, sum(insoluto) AS pendiente,"
+                                + "       count(*) AS obligaciones"
+                                + " FROM (SELECT a.tributo,"
+                                + "              sum(CASE WHEN a.tipo = 'CARGO' THEN a.monto"
+                                + "                       ELSE -a.monto END) AS insoluto"
+                                + DESDE
+                                + "        WHERE a.ejercicio = :ejercicio"
+                                + "          AND a.concepto = 'INSOLUTO'"
+                                + "          AND a.fecha_valor <= :aLaFecha"
+                                + "        GROUP BY a.contribuyente_id, a.tributo, a.ejercicio,"
+                                + "                 a.predio_id, a.vehiculo_id) obligacion"
+                                + " WHERE insoluto > 0"
+                                + " GROUP BY tributo"
+                                + " ORDER BY tributo")
+                .param("ejercicio", ejercicio.valor())
+                .param("aLaFecha", aLaFecha)
+                .query(
+                        (fila, numeroDeFila) ->
+                                new PendienteAgregado(
+                                        fila.getString("tributo"),
+                                        new Dinero(fila.getBigDecimal("pendiente")),
+                                        fila.getLong("obligaciones")))
                 .list();
     }
 
