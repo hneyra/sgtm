@@ -200,7 +200,15 @@ class ParametrosDeLaConsultaTest {
      * bajan solas segun cada modulo se revisa; la que baja se ajusta en el mismo PR, que es donde
      * se sabe por que.
      */
-    private static final int OPERACIONES_CON_FILTRO_QUE_NADIE_LEE = 64;
+    /**
+     * Baja a 63 con #548: {@code POST /tesoreria/caja/tasas} declaraba {@code partida} y {@code
+     * conceptoTupa}, y su controlador solo enlaza {@code codContribuyente}. Los dos acotan el
+     * catalogo del TUPA —la tabla «Conceptos a cobrar» del prototipo—, que esta operacion no
+     * devuelve: es el POST que COBRA los conceptos que llegan en el cuerpo. Se retiraron del
+     * contrato ({@code SUPRIMIDOS} del generador) en vez de leerlos, porque leerlos aqui no podria
+     * cambiar ni una fila de la respuesta.
+     */
+    private static final int OPERACIONES_CON_FILTRO_QUE_NADIE_LEE = 63;
 
     private static final int OPERACIONES_QUE_LEEN_UN_FILTRO_SIN_PUBLICAR = 19;
 

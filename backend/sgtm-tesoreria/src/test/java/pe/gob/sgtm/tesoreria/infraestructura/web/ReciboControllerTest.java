@@ -37,6 +37,7 @@ import pe.gob.sgtm.dominio.Observacion;
 import pe.gob.sgtm.tesoreria.aplicacion.AbrirCaja;
 import pe.gob.sgtm.tesoreria.aplicacion.AnularRecibo;
 import pe.gob.sgtm.tesoreria.aplicacion.CobrarDeuda;
+import pe.gob.sgtm.tesoreria.aplicacion.ConsultaDeRecibos;
 import pe.gob.sgtm.tesoreria.aplicacion.DuplicadoDeRecibo;
 import pe.gob.sgtm.tesoreria.dobles.CajasEnMemoria;
 import pe.gob.sgtm.tesoreria.dobles.ContribuyentesDeMentira;
@@ -46,6 +47,7 @@ import pe.gob.sgtm.tesoreria.dobles.RecibosEnMemoria;
 import pe.gob.sgtm.tesoreria.dobles.SinConvenios;
 import pe.gob.sgtm.tesoreria.dobles.TurnosEnMemoria;
 import pe.gob.sgtm.tesoreria.dominio.Caja;
+import pe.gob.sgtm.tesoreria.dominio.EstadoDeRecibo;
 import pe.gob.sgtm.tesoreria.dominio.FormaDePago;
 import pe.gob.sgtm.tesoreria.dominio.Recibo;
 import pe.gob.sgtm.tesoreria.dominio.TipoDePago;
@@ -115,6 +117,7 @@ class ReciboControllerTest {
                                             libro,
                                             (RegistroDeAuditoria registro) -> {},
                                             RELOJ),
+                                    new ConsultaDeRecibos(recibos, contribuyentes),
                                     comprobador,
                                     RELOJ))
                     .setControllerAdvice(new ManejadorDeErrores())
@@ -142,6 +145,106 @@ class ReciboControllerTest {
     }
 
     // ------------------------------------------------------------------
+
+    @Test
+    @DisplayName("#548 — sin recibos, 200 con una pagina vacia y totalElementos 0, nunca 404")
+    void elListadoVacioEs200ConTotalCero() throws Exception {
+        MvcResult resultado =
+                mvc.perform(
+                                MockMvcRequestBuilders.get("/api/v1/tesoreria/recibos")
+                                        .param("codContribuyente", "NO-EXISTE"))
+                        .andReturn();
+
+        assertThat(resultado.getResponse().getStatus()).isEqualTo(200);
+        assertThat(resultado.getResponse().getContentAsString())
+                .as("buscar y no encontrar es una respuesta, no un fallo")
+                .contains("\"totalElementos\":0");
+    }
+
+    @Test
+    @DisplayName("#548 — los seis filtros de la consulta llegan al criterio del dominio")
+    void losSeisFiltrosLleganAlCriterio() throws Exception {
+        mvc.perform(
+                        MockMvcRequestBuilders.get("/api/v1/tesoreria/recibos")
+                                .param("codContribuyente", "C-0007")
+                                .param("caja", "c-01")
+                                .param("cajero", "cajero.prueba")
+                                .param("desde", "2026-03-01")
+                                .param("hasta", "2026-03-31")
+                                .param("estado", "anulado")
+                                .param("tamano", "5"))
+                .andReturn();
+
+        assertThat(recibos.ultimoCriterio()).isNotNull();
+        assertThat(recibos.ultimoCriterio().codigoContribuyente()).isEqualTo("C-0007");
+        assertThat(recibos.ultimoCriterio().caja())
+                .as("el codigo de la caja se normaliza a mayusculas, como en el padron")
+                .isEqualTo("C-01");
+        assertThat(recibos.ultimoCriterio().cajero())
+                .as("la cuenta NO: `recibo.cajero` guarda lo que traia el token, en minusculas")
+                .isEqualTo("cajero.prueba");
+        assertThat(recibos.ultimoCriterio().desde()).isEqualTo(LocalDate.of(2026, 3, 1));
+        assertThat(recibos.ultimoCriterio().hasta()).isEqualTo(LocalDate.of(2026, 3, 31));
+        assertThat(recibos.ultimoCriterio().estado()).isEqualTo(EstadoDeRecibo.ANULADO);
+        assertThat(recibos.ultimaPaginacion()).isNotNull();
+        assertThat(recibos.ultimaPaginacion().tamano()).isEqualTo(5);
+        assertThat(recibos.ultimaPaginacion().ordenarPor()).isEqualTo("fecha");
+    }
+
+    @Test
+    @DisplayName("#548 — un estado que no es del enumerado se rechaza; no se lee como «todos»")
+    void unEstadoDesconocidoSeRechaza() throws Exception {
+        MvcResult resultado =
+                mvc.perform(
+                                MockMvcRequestBuilders.get("/api/v1/tesoreria/recibos")
+                                        .param("estado", "Emitido y pagado"))
+                        .andReturn();
+
+        assertThat(resultado.getResponse().getStatus())
+                .as("un filtro que no se entiende y devuelve el listado entero es #544 otra vez")
+                .isEqualTo(422);
+        assertThat(resultado.getResponse().getContentAsString()).contains("EMITIDO o ANULADO");
+    }
+
+    @Test
+    @DisplayName("#548 — un rango al reves se rechaza con 422, no con un listado vacio")
+    void unRangoAlRevesSeRechaza() throws Exception {
+        MvcResult resultado =
+                mvc.perform(
+                                MockMvcRequestBuilders.get("/api/v1/tesoreria/recibos")
+                                        .param("desde", "2026-03-31")
+                                        .param("hasta", "2026-03-01"))
+                        .andReturn();
+
+        assertThat(resultado.getResponse().getStatus()).isEqualTo(422);
+        assertThat(resultado.getResponse().getContentAsString()).contains("al reves");
+    }
+
+    @Test
+    @DisplayName("#548 — el listado declara LECTURA sobre duplicado_recibo, no IMPRESION")
+    void elListadoDeclaraLecturaSobreDuplicadoRecibo() throws Exception {
+        // Se lee la anotacion del METODO y no la de la clase, que es lo que la regla de
+        // ArchUnit no puede: exige la anotacion «en la clase o en cada endpoint», asi que
+        // un listado que la perdiera heredaria la que hubiera y nadie lo diria hasta
+        // integrar (#431, #489). Y el privilegio importa: mirar la lista no emite ningun
+        // papel, imprimir el duplicado si.
+        pe.gob.sgtm.autorizacion.RequiereAcceso requisito =
+                ReciboController.class
+                        .getMethod(
+                                "listar",
+                                String.class,
+                                String.class,
+                                String.class,
+                                String.class,
+                                String.class,
+                                String.class,
+                                pe.gob.sgtm.web.ParametrosDePaginacion.class)
+                        .getAnnotation(pe.gob.sgtm.autorizacion.RequiereAcceso.class);
+
+        assertThat(requisito).isNotNull();
+        assertThat(requisito.acceso()).isEqualTo("duplicado_recibo");
+        assertThat(requisito.privilegio()).isEqualTo(Privilegio.LECTURA);
+    }
 
     @Test
     @DisplayName("anula y devuelve 201 con el estado y lo que deja de estar cobrado, con su fecha")

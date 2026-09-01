@@ -3,21 +3,29 @@ package pe.gob.sgtm.tesoreria.infraestructura;
 import java.sql.ResultSet;
 import java.sql.SQLException;
 import java.sql.Timestamp;
+import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.Objects;
 import java.util.Optional;
 import org.jspecify.annotations.Nullable;
 import org.springframework.jdbc.core.simple.JdbcClient;
 import org.springframework.stereotype.Repository;
+import pe.gob.sgtm.compartido.Pagina;
+import pe.gob.sgtm.compartido.Paginacion;
 import pe.gob.sgtm.dominio.Dinero;
 import pe.gob.sgtm.dominio.Ejercicio;
 import pe.gob.sgtm.dominio.Observacion;
+import pe.gob.sgtm.persistencia.OrdenSeguro;
 import pe.gob.sgtm.persistencia.RepositorioJdbc;
 import pe.gob.sgtm.tesoreria.dominio.Caja;
+import pe.gob.sgtm.tesoreria.dominio.CriterioDeRecibos;
+import pe.gob.sgtm.tesoreria.dominio.EstadoDeRecibo;
 import pe.gob.sgtm.tesoreria.dominio.FormaDePago;
 import pe.gob.sgtm.tesoreria.dominio.LineaDeRecibo;
 import pe.gob.sgtm.tesoreria.dominio.NumeroDeRecibo;
 import pe.gob.sgtm.tesoreria.dominio.Recibo;
+import pe.gob.sgtm.tesoreria.dominio.ReciboEnConsulta;
 import pe.gob.sgtm.tesoreria.dominio.ReciboRepository;
 import pe.gob.sgtm.tesoreria.dominio.TipoDePago;
 
@@ -35,6 +43,28 @@ public class ReciboRepositoryJdbc extends RepositorioJdbc implements ReciboRepos
     private static final String COLUMNAS =
             "id, serie, numero, caja_id, turno_id, cajero, contribuyente_id, fecha, forma_pago,"
                     + " tipo_pago, campania_beneficio, actualizado_a, observacion";
+
+    /**
+     * El estado del recibo, derivado (V30): hay fila de anulacion o no la hay.
+     *
+     * <p>Escrito una vez y usado en el {@code SELECT} y en el {@code WHERE}, para que el filtro y
+     * la columna no puedan divergir. Es la leccion de #397: con dos copias del mismo {@code CASE},
+     * el filtro «Anulado» acaba devolviendo lo que la columna dice emitido, y no lo caza nadie.
+     */
+    private static final String ANULADO =
+            "EXISTS (SELECT 1 FROM recibo_movimiento m"
+                    + "  WHERE m.recibo_id = r.id AND m.tipo = 'ANULACION')";
+
+    /**
+     * Por donde se admite ordenar el listado, con {@code id} de desempate (#543).
+     *
+     * <p>Sin desempate, dos recibos del mismo instante —dos cajas cobrando a la vez— empatan en
+     * {@code fecha} y el plan puede devolverlos en cualquier orden: dos paginas consecutivas
+     * repetirian uno y omitirian el otro, que en una busqueda de recibos significa que el que se
+     * busca no aparece nunca.
+     */
+    private static final OrdenSeguro ORDEN =
+            OrdenSeguro.sobre("fecha", "serie", "numero", "cajero", "total").desempatandoPor("id");
 
     private static final String COLUMNAS_DETALLE =
             "tributo, concepto, ejercicio, periodo, tasa_id, predio_id, vehiculo_id,"
@@ -150,6 +180,74 @@ public class ReciboRepositoryJdbc extends RepositorioJdbc implements ReciboRepos
                 .map(this::conDetalle);
     }
 
+    /**
+     * El listado de recibos (#548), con el estado y los duplicados derivados en la misma consulta.
+     *
+     * <p><b>Sin ningun {@code JOIN}.</b> El codigo del contribuyente y el de la caja entran como
+     * subconsultas escalares, igual que en {@code ConvenioRepositoryJdbc} y por lo mismo: con un
+     * {@code JOIN}, el dia que alguien anada a {@code contribuyente} o a {@code caja} una columna
+     * que se llame como una del {@code ORDER BY}, la paginacion se rompe entera y no se ve en
+     * revision.
+     *
+     * <p>El {@code EXISTS} sobre {@code recibo_movimiento} y el {@code count} de duplicados van los
+     * dos por {@code recibo_movimiento_recibo_ix} (V30), que es {@code (municipalidad_id,
+     * recibo_id, tipo)}: el indice que V30 declaro para esto.
+     */
+    @Override
+    public Pagina<ReciboEnConsulta> buscar(CriterioDeRecibos criterio, Paginacion paginacion) {
+
+        StringBuilder donde = new StringBuilder(" WHERE 1 = 1");
+        Map<String, Object> parametros = new LinkedHashMap<>();
+
+        if (criterio.codigoContribuyente() != null) {
+            donde.append(
+                    " AND r.contribuyente_id = (SELECT t.id FROM contribuyente t"
+                            + " WHERE t.codigo_contribuyente = :codigo)");
+            parametros.put("codigo", criterio.codigoContribuyente());
+        }
+        if (criterio.caja() != null) {
+            donde.append(" AND r.caja_id = (SELECT c.id FROM caja c WHERE c.codigo = :caja)");
+            parametros.put("caja", criterio.caja());
+        }
+        if (criterio.cajero() != null) {
+            donde.append(" AND r.cajero = :cajero");
+            parametros.put("cajero", criterio.cajero());
+        }
+        // `recibo.fecha` es timestamptz y el rango del filtro es de dias: se compara
+        // sobre la fecha, no sobre el instante, o un recibo de las 09:14 quedaria fuera
+        // de un «hasta» que es su mismo dia.
+        if (criterio.desde() != null) {
+            donde.append(" AND r.fecha >= :desde");
+            parametros.put("desde", criterio.desde().atStartOfDay());
+        }
+        if (criterio.hasta() != null) {
+            donde.append(" AND r.fecha < :hasta");
+            parametros.put("hasta", criterio.hasta().plusDays(1).atStartOfDay());
+        }
+        if (criterio.estado() != null) {
+            donde.append(criterio.estado() == EstadoDeRecibo.ANULADO ? " AND " : " AND NOT ")
+                    .append(ANULADO);
+        }
+
+        String desde = " FROM recibo r" + donde;
+        String seleccion =
+                "SELECT r.id, r.serie, r.numero, r.contribuyente_id, r.fecha, r.cajero,"
+                        + " r.forma_pago, r.total, r.actualizado_a, "
+                        + ANULADO
+                        + " AS anulado,"
+                        + " (SELECT count(*) FROM recibo_movimiento m"
+                        + "   WHERE m.recibo_id = r.id AND m.tipo = 'DUPLICADO') AS duplicados"
+                        + desde;
+
+        return paginar(
+                seleccion,
+                "SELECT count(*)" + desde,
+                parametros,
+                paginacion,
+                ORDEN,
+                ReciboRepositoryJdbc::mapearFilaDeConsulta);
+    }
+
     // ------------------------------------------------------------------
 
     private void insertarLinea(long reciboId, LineaDeRecibo linea) {
@@ -247,6 +345,21 @@ public class ReciboRepositoryJdbc extends RepositorioJdbc implements ReciboRepos
                 fila.getString("campania_beneficio"),
                 fila.getDate("actualizado_a").toLocalDate(),
                 Observacion.de(fila.getString("observacion")));
+    }
+
+    private static ReciboEnConsulta mapearFilaDeConsulta(ResultSet fila, int numeroDeFila)
+            throws SQLException {
+        return new ReciboEnConsulta(
+                fila.getLong("id"),
+                new NumeroDeRecibo(fila.getString("serie"), fila.getLong("numero")),
+                fila.getLong("contribuyente_id"),
+                fila.getTimestamp("fecha").toInstant(),
+                fila.getString("cajero"),
+                FormaDePago.valueOf(fila.getString("forma_pago").strip()),
+                new Dinero(fila.getBigDecimal("total")),
+                fila.getDate("actualizado_a").toLocalDate(),
+                EstadoDeRecibo.deLaAnulacion(fila.getBoolean("anulado")),
+                fila.getLong("duplicados"));
     }
 
     private static LineaDeRecibo mapearLinea(ResultSet fila, int numeroDeFila) throws SQLException {

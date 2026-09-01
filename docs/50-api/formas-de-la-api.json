@@ -2887,6 +2887,28 @@
       "actualizadoA": "fecha"
     }
   },
+  "GET /tesoreria/recibos": {
+    "contenido": [
+      {
+        "numero": "texto",
+        "emitidoEn": "texto",
+        "codContribuyente": "texto",
+        "contribuyente": "texto",
+        "importe": {
+          "importe": "texto",
+          "actualizadoA": "fecha"
+        },
+        "medioDePago": "texto",
+        "duplicados": "entero",
+        "estado": "texto"
+      }
+    ],
+    "pagina": "entero",
+    "tamano": "entero",
+    "totalElementos": "entero",
+    "totalPaginas": "entero",
+    "hayMas": "booleano"
+  },
   "GET /tesoreria/recibos/{nro}/duplicado": {
     "estado": "texto",
     "duplicados": "entero",

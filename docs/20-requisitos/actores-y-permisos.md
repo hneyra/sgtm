@@ -57,7 +57,7 @@ instalación crea los suyos; estos son la plantilla inicial.
 | **Jefe de Rentas** | Todo el módulo de rentas, valores y consultas. Autoriza altas y bajas de deuda |
 | **Registrador de catastro** | Fichas catastrales, catálogos catastrales. Sin acceso a caja |
 | **Fiscalizador** | Módulo de fiscalización y consultas. No modifica el padrón de rentas directamente: solo por transferencia |
-| **Cajero** | Caja tributaria y de tasas, duplicado de recibo, cierre de su caja. **No** anula recibos de otro cajero ni ve coactiva |
+| **Cajero** | Caja tributaria y de tasas, duplicado de recibo, cierre de su caja. **No** anula recibos de otro cajero ni ve coactiva. No necesita `consulta_deuda`: la grilla de deuda que se marca para cobrar la cubre su propia opción (§5, «Una lectura que dos opciones cubren») |
 | **Tesorero** | Cierre de caja, anulación de recibos, recaudación por área, convenios |
 | **Ejecutor coactivo** | Expedientes, actos, REC, notificaciones, fraccionamiento coactivo |
 | **Auxiliar coactivo** | Registro dentro de los expedientes asignados; no emite REC |
@@ -88,3 +88,45 @@ Independientes de cómo se configuren los grupos; se verifican en el servidor:
   restringidos por la vigencia de la autorización y por el estado de habilitación.
 - **El aislamiento entre municipalidades no depende de este modelo.** Lo garantiza RLS en la base
   de datos. Un fallo de permisos deja ver algo de más *dentro* de la municipalidad; nunca de otra.
+
+### Una lectura que dos opciones cubren (#548)
+
+Hay lecturas que **dos pantallas necesitan por igual**. La que lo destapó: la grilla de deuda que
+se marca para cobrar la sirve `GET /api/v1/consultas/deuda` —la operación de `consulta_deuda`—, y
+es la única del contrato que publica la deuda **obligación por obligación**, que es justo lo que
+`POST /api/v1/tesoreria/caja/cobranza` exige en su cuerpo. Con el acceso a secas, un **perfil de
+cajero puro** podía *cobrar y no ver qué cobrar*: la pantalla de cobro se abre y su grilla contesta
+403.
+
+Se resuelve declarándolo, no otorgando la opción ajena en cada implantación:
+
+```java
+@RequiereAcceso(acceso = "consulta_deuda", oTambien = "caja_tributaria",
+                privilegio = Privilegio.LECTURA)
+```
+
+`GuardiaDeAcceso` pregunta primero por la opción propia y solo si niega por la alternativa, con el
+**mismo** privilegio: `oTambien` cambia la *opción*, nunca el poder —quien solo tiene `REGISTRO`
+sobre la caja sigue sin poder leer—.
+
+**Por qué así, y no otorgando `consulta_deuda` al grupo de cajero.** Por dos motivos:
+
+1. **No hay grupo de cajero que otorgar.** `ImplantarMunicipalidad` deja exactamente dos grupos
+   —«Administración del sistema» y «Seguridad»—, y los grupos de §3 son una plantilla que cada
+   municipalidad crea a mano. Un usuario con solo `caja_tributaria` seguiría recibiendo 403.
+2. **Es estructural, no configurable.** Sin la deuda marcada no hay nada que cobrar. Dejarlo a que
+   cada implantación se acuerde de otorgar una opción de **otro módulo** convierte un
+   no-negociable en algo que se olvida, y el síntoma —una grilla en 403 dentro de la pantalla de
+   cobro— no se parece a su causa.
+
+Es el reparto **contrario** al que #366 eligió para `GET /catastro/predios/{predioId}/titulares`:
+allí el acceso es el del **padrón** y no el de la pantalla desde la que se hace clic, porque lo que
+se pide no es catastro y su público es más estrecho. Aquí lo que se pide **es** la caja.
+
+**Y por eso está censado.** Una línea de más en una anotación amplía el público de una lectura sin
+tocar el catálogo de permisos, sin migración y sin que ninguna pantalla cambie.
+`AccesosCompartidosTest` enumera todo lo que el sistema comparte —hoy, esta única entrada— con su
+motivo escrito, y falla en las dos direcciones: un endpoint que declare alternativas sin estar en
+la lista, y una entrada de la lista cuyo endpoint ya no las declare. Comprueba además que la opción
+alternativa **exista en el catálogo de las 134**: un acceso inventado no lo tiene nadie, así que no
+autorizaría a nadie y el endpoint parecería compartido sin estarlo.

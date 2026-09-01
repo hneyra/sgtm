@@ -738,6 +738,13 @@ class CajaJdbcTest {
         public java.util.Optional<Recibo> porNumero(NumeroDeRecibo numero) {
             return real.porNumero(numero);
         }
+
+        @Override
+        public pe.gob.sgtm.compartido.Pagina<pe.gob.sgtm.tesoreria.dominio.ReciboEnConsulta> buscar(
+                pe.gob.sgtm.tesoreria.dominio.CriterioDeRecibos criterio,
+                pe.gob.sgtm.compartido.Paginacion paginacion) {
+            return real.buscar(criterio, paginacion);
+        }
     }
 
     /** El fallo que la prueba provoca a mitad de la cobranza. */

@@ -199,6 +199,24 @@ const SUPRIMIDOS = {
   // Asi que el que se va es el nombre, no el filtro: `operacion` sube a
   // DEL_BACKEND con el vocabulario del enumerado, y la pantalla manda ese.
   auditoria: ['accion'],
+  // `POST /tesoreria/caja/tasas?partida=…&conceptoTupa=…` se teclea y no filtra
+  // NADA, y aqui ni siquiera es un filtro sin implementar (#548).
+  //
+  // Los dos acotan la tabla «Conceptos a cobrar» del prototipo, que es el
+  // CATALOGO DEL TUPA: `partida` es `tasa.partida_presupuestal` y `conceptoTupa`
+  // es la descripcion del concepto (V3). Esa tabla no la publica ninguna
+  // operacion del contrato —#430 lo midio y decidio no publicarla: nada en
+  // produccion escribe `tasa`, y sus cifras son D-02b fila 29— y, sobre todo,
+  // no la publica ESTA: `caja_tasas` es el POST que COBRA los conceptos que
+  // llegan en el cuerpo (`conceptos[].conceptoTupa`), no la lectura que los
+  // lista. Leerlos aqui no podria cambiar ni una fila de la respuesta.
+  //
+  // `codContribuyente` se queda, y la diferencia es exactamente la que #425
+  // dejo escrita: ese identifica A QUIEN se le cobra —el controlador lo lee de
+  // la consulta y del cuerpo— y estos dos acotan una lista que esta operacion
+  // no devuelve. El dia que exista `GET /tesoreria/tasas` seran sus filtros, y
+  // se declararan alli.
+  caja_tasas: ['partida', 'conceptoTupa'],
 };
 
 /**
@@ -1978,6 +1996,77 @@ const OPERACIONES_ADICIONALES = {
         ' con el mismo número. Escribe —cuenta la reimpresión y deja su traza—, así que el cuerpo' +
         ' lleva la observación del usuario, obligatoria (RNF-052). Es la acción «Imprimir' +
         ' certificado» de la pantalla.',
+    },
+  ],
+  // `duplicado_recibo` declara «GET /api/v1/tesoreria/recibos/{nro}/duplicado»
+  // como su unico endpoint, y esa ruta EXIGE el numero impreso. Su pantalla, en
+  // cambio, dibuja una grilla —«Recibos localizados»— con filtros por
+  // contribuyente, fecha y caja: la busqueda de quien PERDIO el papel, que es
+  // exactamente la persona que viene a pedir un duplicado. Hasta #548 esa
+  // grilla no tenia con que llenarse.
+  //
+  // No declara `nroDeRecibo`, y es deliberado: el numero exacto ya resuelve por
+  // la otra ruta. Este listado existe para quien no lo tiene.
+  //
+  // Mismo reparto que `costas_procesales` y `fisc_programa`: verbo aparte y no
+  // el mismo, porque la operacion de la pantalla ESCRIBE cuando lleva `formato`
+  // —cada reimpresion queda registrada— y abrir la pantalla no puede reimprimir.
+  duplicado_recibo: [
+    {
+      operationId: 'recibos_listado',
+      metodo: 'get',
+      antes: true,
+      ruta: '/api/v1/tesoreria/recibos',
+      parametros: [
+        {
+          nombre: 'codContribuyente',
+          descripcion: 'Filtro «Cod. Contribuyente» de la pantalla; el codigo exacto del padron',
+        },
+        {
+          nombre: 'caja',
+          ejemplo: 'C-01',
+          descripcion: 'Filtro «Caja» de la pantalla: el codigo de la ventanilla que emitio',
+        },
+        {
+          nombre: 'cajero',
+          ejemplo: 'jperez',
+          descripcion:
+            'La cuenta de quien cobro. Del backend: la pantalla no lo dibuja, y sin el no se' +
+            ' puede reconstruir lo que emitio un turno',
+        },
+        {
+          nombre: 'desde',
+          descripcion: 'Primer dia del rango de emision, inclusive. La pantalla dibuja una sola' +
+            ' «Fecha»; el rango es del backend, porque quien perdio el recibo recuerda la semana' +
+            ' y no el dia',
+        },
+        {
+          nombre: 'hasta',
+          descripcion: 'Ultimo dia del rango, inclusive',
+        },
+        {
+          nombre: 'estado',
+          ejemplo: 'EMITIDO',
+          esquema: '{ type: string, enum: [EMITIDO, ANULADO] }',
+          descripcion:
+            'Columna «Estado» de la grilla, usada como filtro. Se DERIVA del movimiento de' +
+            ' anulacion (V30): el recibo no guarda ninguna columna de estado, porque no se' +
+            ' actualiza. Un valor fuera de las dos palabras se rechaza con 422 en vez de leerse' +
+            ' como «todos»',
+        },
+      ],
+      paginacion: true,
+      titulo: 'Recibos emitidos',
+      descripcion:
+        'La grilla «Recibos localizados» de la pantalla de duplicado de recibo: los recibos que' +
+        ' cuadran con los filtros, con su número impreso, el instante de emisión, a quién se le' +
+        ' cobró, el importe **con la fecha a la que estaba actualizado** (regla 9, RNF-075), el' +
+        ' medio de pago, cuántos duplicados se han sacado y si sigue en pie. Agregada por #548:' +
+        ' hasta entonces un recibo sólo se podía pedir por su número impreso, así que quien' +
+        ' perdía el papel no tenía forma de encontrarlo. No trae el desglose —una página de' +
+        ' veinte filas no puede costar veinte lecturas del detalle: para eso está la otra ruta,' +
+        ' que ya recibe el número—. Un contribuyente sin recibos devuelve una página vacía con' +
+        ' `totalElementos: 0`, no un 404.',
     },
   ],
   // `fraccionamiento_coactivo` declara «POST /coactiva/convenios» —fraccionar—

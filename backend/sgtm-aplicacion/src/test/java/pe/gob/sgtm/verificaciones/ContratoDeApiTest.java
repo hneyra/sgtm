@@ -230,6 +230,11 @@ class ContratoDeApiTest {
                     "POST /valores/{numero}/movimientos",
                     "POST /tesoreria/caja/cobranza",
                     "POST /tesoreria/caja/tasas",
+                    // #548: el listado de recibos emitidos. Hasta aqui la unica puerta a
+                    // un recibo era su numero impreso, asi que quien perdia el papel —el
+                    // que viene a pedir un duplicado— no lo podia encontrar, y la grilla
+                    // «Recibos localizados» del manual no tenia con que llenarse.
+                    "GET /tesoreria/recibos",
                     "GET /tesoreria/recibos/{nro}/duplicado",
                     "POST /tesoreria/recibos/{nro}/anulacion",
                     "POST /tesoreria/fraccionamientos",

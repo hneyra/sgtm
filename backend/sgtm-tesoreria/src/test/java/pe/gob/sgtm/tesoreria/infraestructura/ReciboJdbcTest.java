@@ -43,6 +43,8 @@ import pe.gob.sgtm.auditoria.Auditoria;
 import pe.gob.sgtm.auditoria.AuditoriaJdbc;
 import pe.gob.sgtm.auditoria.Origen;
 import pe.gob.sgtm.auditoria.OrigenContext;
+import pe.gob.sgtm.compartido.Pagina;
+import pe.gob.sgtm.compartido.Paginacion;
 import pe.gob.sgtm.compartido.TenantContext;
 import pe.gob.sgtm.contribuyentes.DirectorioDeContribuyentes;
 import pe.gob.sgtm.contribuyentes.ResumenDeContribuyente;
@@ -75,8 +77,11 @@ import pe.gob.sgtm.plataforma.tenant.TenantTransactionManager;
 import pe.gob.sgtm.tesoreria.aplicacion.AbrirCaja;
 import pe.gob.sgtm.tesoreria.aplicacion.AnularRecibo;
 import pe.gob.sgtm.tesoreria.aplicacion.CobrarDeuda;
+import pe.gob.sgtm.tesoreria.aplicacion.ConsultaDeRecibos;
 import pe.gob.sgtm.tesoreria.aplicacion.DuplicadoDeRecibo;
 import pe.gob.sgtm.tesoreria.dobles.SinConvenios;
+import pe.gob.sgtm.tesoreria.dominio.CriterioDeRecibos;
+import pe.gob.sgtm.tesoreria.dominio.EstadoDeRecibo;
 import pe.gob.sgtm.tesoreria.dominio.FormaDePago;
 import pe.gob.sgtm.tesoreria.dominio.MovimientoDeRecibo;
 import pe.gob.sgtm.tesoreria.dominio.MovimientoDeReciboRepository;
@@ -133,6 +138,8 @@ class ReciboJdbcTest {
     private static CobrarDeuda cobrarDeuda;
     private static GeneradorDeDocumentos generador;
     private static DirectorioDeContribuyentes padron;
+    private static ConsultaDeRecibos listado;
+    private static ConsultaDeRecibos listadoSinTransaccion;
 
     private static final AtomicInteger CONTADOR = new AtomicInteger();
 
@@ -187,8 +194,18 @@ class ReciboJdbcTest {
                         RegimenDeLaInstalacion.REAL);
         padron = new PadronDeLaPrueba();
 
+        // El listado de #548. Se envuelve con `AnnotationTransactionAttributeSource`, o sea
+        // OBEDECIENDO a la anotacion como hace el contenedor: un TransactionTemplate
+        // incondicional dejaria la prueba pasando con el @Transactional quitado, que es el
+        // modo de fallo que existe para impedir (#486).
+        listadoSinTransaccion = new ConsultaDeRecibos(recibos, padron);
+        listado = envolver(listadoSinTransaccion);
+
         areaId = crearArea(municipalidad, "A-34");
         crearCaja(municipalidad, "C-34", "R34", areaId);
+        // La segunda ventanilla existe para poder medir el filtro por caja: con una sola,
+        // filtrar por ella devuelve lo mismo que no filtrar y la prueba no diria nada.
+        crearCaja(municipalidad, "C-548", "R548", areaId);
         crearArea(otraMunicipalidad, "A-34");
         crearCaja(otraMunicipalidad, "C-34", "R34", null);
     }
@@ -590,6 +607,335 @@ class ReciboJdbcTest {
         }
     }
 
+    @Nested
+    @DisplayName("#548 — El listado de recibos: encontrar el recibo sin tener el papel")
+    class DelListado {
+
+        /**
+         * Cuantos recibos empatados se siembran: doce, los mismos que #543 midio sobre los modulos.
+         *
+         * <p>El numero <b>no</b> es lo que hace visible la falta de desempate —medido en el motor,
+         * con cinco filas empatadas ya devuelve «2,1» pidiendo dos y «1..5» pidiendo cinco—. Lo que
+         * la hace visible es <b>por que columna</b> se ordena; eso esta en {@link
+         * #ORDEN_SIN_INDICE}.
+         */
+        private static final int DOCE = 12;
+
+        /**
+         * Columna admitida por la que <b>si</b> hay que ordenar de verdad, y con empates.
+         *
+         * <p>Los doce recibos cobran 100,00 exactos, no hay indice sobre {@code total} y la
+         * consulta no lo acota: el motor tiene que ordenar, y ahi es donde se ve la falta de
+         * desempate.
+         */
+        private static final String ORDEN_SIN_INDICE = "total";
+
+        @Test
+        @DisplayName("un contribuyente sin recibos da una pagina vacia, no un error")
+        void unContribuyenteSinRecibosDaPaginaVacia() {
+            // El caso literal del AC: se busca a alguien que no tiene ninguno. Ni 404 ni
+            // excepcion: una busqueda sin resultados es una respuesta, no un fallo.
+            Pagina<ConsultaDeRecibos.FilaDeRecibo> pagina =
+                    listar(new CriterioDeRecibos("NO-EXISTE-548", null, null, null, null, null));
+
+            assertThat(pagina.totalElementos()).isZero();
+            assertThat(pagina.contenido()).isEmpty();
+        }
+
+        @Test
+        @DisplayName("filtra por contribuyente, y la fila trae su nombre resuelto del padron")
+        void filtraPorContribuyente() {
+            long buscado = contribuyenteConDeuda("LST-BUSCADO", Dinero.de("120.00"));
+            long otro = contribuyenteConDeuda("LST-OTRO", Dinero.de("90.00"));
+            Recibo suyo = cobrar(buscado);
+            cobrar(otro);
+
+            Pagina<ConsultaDeRecibos.FilaDeRecibo> pagina =
+                    listar(new CriterioDeRecibos("LST-BUSCADO", null, null, null, null, null));
+
+            assertThat(pagina.totalElementos()).isEqualTo(1);
+            ConsultaDeRecibos.FilaDeRecibo fila = pagina.contenido().get(0);
+            assertThat(fila.recibo().numero()).isEqualTo(suyo.numero());
+            assertThat(fila.contribuyente()).isNotNull();
+            assertThat(fila.contribuyente().nombre())
+                    .as("el nombre lo pone el padron, no la tabla de recibos")
+                    .isEqualTo("TITULAR, PRUEBA");
+        }
+
+        @Test
+        @DisplayName("filtra por caja y por cajero, que es como se reconstruye un turno")
+        void filtraPorCajaYPorCajero() {
+            long contribuyente = contribuyenteConDeuda("LST-TURNO", Dinero.de("300.00"));
+            Recibo enLaOtraCaja = cobrarEn(contribuyente, "C-548", "cajera.548");
+            // Cada cobranza paga la deuda ENTERA de la obligacion, asi que el segundo
+            // recibo necesita deuda nueva: sin ella `CobrarDeuda` rechaza con «nada que
+            // cobrar», que es lo correcto y no lo que esta prueba mide.
+            asentarCargo(contribuyente, Dinero.de("300.00"), LocalDate.of(2026, 1, 2));
+            cobrar(contribuyente);
+
+            Pagina<ConsultaDeRecibos.FilaDeRecibo> porCaja =
+                    listar(new CriterioDeRecibos(null, "C-548", null, null, null, null));
+            Pagina<ConsultaDeRecibos.FilaDeRecibo> porCajero =
+                    listar(new CriterioDeRecibos(null, null, "cajera.548", null, null, null));
+
+            assertThat(numerosDe(porCaja)).containsExactly(enLaOtraCaja.numero().impreso());
+            assertThat(numerosDe(porCajero)).containsExactly(enLaOtraCaja.numero().impreso());
+        }
+
+        @Test
+        @DisplayName("el rango incluye el dia ENTERO del «hasta», no hasta su medianoche")
+        void elRangoIncluyeElDiaEnteroDelHasta() {
+            // `recibo.fecha` es timestamptz y el filtro es de dias. Con `fecha <= :hasta`
+            // —la fecha leida como medianoche— este recibo de las 14:37 se quedaria fuera
+            // de su propio dia, y quien lo busca por «hoy» no lo encontraria nunca.
+            long contribuyente = contribuyenteConDeuda("LST-HORA", Dinero.de("77.00"));
+            Recibo deLaTarde =
+                    cobrarA(
+                            contribuyente,
+                            PAGO.atTime(14, 37).toInstant(ZoneOffset.UTC),
+                            "cajero.tarde");
+
+            assertThat(
+                            numerosDe(
+                                    listar(
+                                            new CriterioDeRecibos(
+                                                    null, null, "cajero.tarde", PAGO, PAGO, null))))
+                    .as("emitido a las 14:37 de ese mismo dia: entra")
+                    .containsExactly(deLaTarde.numero().impreso());
+            assertThat(
+                            listar(
+                                            new CriterioDeRecibos(
+                                                    null,
+                                                    null,
+                                                    "cajero.tarde",
+                                                    null,
+                                                    PAGO.minusDays(1),
+                                                    null))
+                                    .totalElementos())
+                    .as("y con el rango cerrado la vispera, no")
+                    .isZero();
+            assertThat(
+                            listar(
+                                            new CriterioDeRecibos(
+                                                    null,
+                                                    null,
+                                                    "cajero.tarde",
+                                                    PAGO.plusDays(1),
+                                                    null,
+                                                    null))
+                                    .totalElementos())
+                    .isZero();
+        }
+
+        @Test
+        @DisplayName("el estado se DERIVA del movimiento de anulacion, y filtra por el")
+        void elEstadoSeDerivaYFiltra() {
+            long contribuyente = contribuyenteConDeuda("LST-ESTADO", Dinero.de("200.00"));
+            Recibo anulado = cobrarEn(contribuyente, "C-34", "cajero.estado");
+            anular(anulado, PAGO);
+            Recibo vivo = cobrarEn(contribuyente, "C-548", "cajero.estado");
+
+            Pagina<ConsultaDeRecibos.FilaDeRecibo> todos =
+                    listar(new CriterioDeRecibos(null, null, "cajero.estado", null, null, null));
+            assertThat(todos.totalElementos()).isEqualTo(2);
+            assertThat(estadoDe(todos, anulado)).isEqualTo(EstadoDeRecibo.ANULADO);
+            assertThat(estadoDe(todos, vivo)).isEqualTo(EstadoDeRecibo.EMITIDO);
+
+            assertThat(
+                            numerosDe(
+                                    listar(
+                                            new CriterioDeRecibos(
+                                                    null,
+                                                    null,
+                                                    "cajero.estado",
+                                                    null,
+                                                    null,
+                                                    EstadoDeRecibo.ANULADO))))
+                    .containsExactly(anulado.numero().impreso());
+            assertThat(
+                            numerosDe(
+                                    listar(
+                                            new CriterioDeRecibos(
+                                                    null,
+                                                    null,
+                                                    "cajero.estado",
+                                                    null,
+                                                    null,
+                                                    EstadoDeRecibo.EMITIDO))))
+                    .as("el filtro y la columna salen de la MISMA expresion: no pueden discrepar")
+                    .containsExactly(vivo.numero().impreso());
+        }
+
+        @Test
+        @DisplayName("el importe viaja con la fecha que el recibo congelo, y cuenta duplicados")
+        void elImporteVieneConSuFechaYSeCuentanLosDuplicados() {
+            long contribuyente = contribuyenteConDeuda("LST-CIFRA", Dinero.de("123.00"));
+            Recibo cobrado = cobrarEn(contribuyente, "C-34", "cajero.cifra");
+
+            ConsultaDeRecibos.FilaDeRecibo antes = unicaFilaDe("cajero.cifra");
+            assertThat(antes.recibo().total()).isEqualTo(Dinero.de("123.00"));
+            assertThat(antes.recibo().actualizadoA())
+                    .as("la fecha del cobro, no la de la consulta (regla 9, RNF-075)")
+                    .isEqualTo(PAGO);
+            assertThat(antes.recibo().duplicados()).isZero();
+
+            duplicado(cobrado, PAGO);
+            duplicado(cobrado, PAGO);
+
+            assertThat(unicaFilaDe("cajero.cifra").recibo().duplicados())
+                    .as("la columna «Duplicados» se deriva de recibo_movimiento, como el estado")
+                    .isEqualTo(2);
+        }
+
+        @Test
+        @DisplayName("el orden no depende del tamano de pagina, y recorrerlas no repite ni omite")
+        void elOrdenNoDependeDelTamanoDePagina() {
+            // Los doce se emiten con el MISMO reloj y por el MISMO cajero, asi que empatan
+            // en las dos columnas. Sin el desempate por `id` (#543), el ORDER BY no es un
+            // orden total: dos paginas consecutivas pueden repetir un recibo y omitir otro
+            // —o sea, el que se busca no aparece nunca—.
+            //
+            // Se ordena por `total`, y por que se ordena por ahi lo decidieron DOS
+            // mutaciones que pasaron en VERDE antes de esta:
+            //
+            //  - Por `fecha` no muerde: `recibo_fecha_ix` (V3) cubre (municipalidad_id,
+            //    fecha), asi que el planificador resuelve ese orden con un Index Scan y
+            //    sale determinista por accidente —solo mientras el plan siga siendo ese—.
+            //  - Por `cajero` tampoco: es la columna del propio filtro, y con
+            //    `cajero = 'cajero.orden'` el motor sabe que la clave de orden es
+            //    constante y SUPRIME el Sort entero.
+            //
+            // `total` no tiene indice y no esta acotado, asi que hay seq scan mas sort de
+            // verdad. Medido en el motor con doce filas empatadas: «ORDER BY total LIMIT
+            // 3» devuelve 2,3,1 —top-N heapsort— donde «LIMIT 12» devuelve 1..12.
+            long contribuyente = contribuyenteConDeuda("LST-ORDEN", Dinero.de("100.00"));
+            for (int i = 0; i < DOCE; i++) {
+                if (i > 0) {
+                    asentarCargo(contribuyente, Dinero.de("100.00"), LocalDate.of(2026, 1, 2));
+                }
+                cobrarEn(contribuyente, i % 2 == 0 ? "C-34" : "C-548", "cajero.orden");
+            }
+
+            List<String> deTres = recorrer("cajero.orden", ORDEN_SIN_INDICE, 3);
+            List<String> deCinco = recorrer("cajero.orden", ORDEN_SIN_INDICE, 5);
+            List<String> deDoce = recorrer("cajero.orden", ORDEN_SIN_INDICE, DOCE);
+
+            assertThat(deDoce).hasSize(DOCE).doesNotHaveDuplicates();
+            assertThat(deTres).isEqualTo(deDoce);
+            assertThat(deCinco).isEqualTo(deDoce);
+        }
+
+        @Test
+        @DisplayName("desde B, los recibos de A no existen")
+        void desdeBLosRecibosDeANoExisten() {
+            long contribuyente = contribuyenteConDeuda("LST-RLS", Dinero.de("64.00"));
+            cobrarEn(contribuyente, "C-34", "cajero.rls");
+
+            assertThat(
+                            listar(
+                                            new CriterioDeRecibos(
+                                                    null, null, "cajero.rls", null, null, null))
+                                    .totalElementos())
+                    .isEqualTo(1);
+
+            // El contexto se fija ANTES de abrir la transaccion: el SET LOCAL lo emite el
+            // gestor al abrirla.
+            TenantContext.fijar(new MunicipalidadId(otraMunicipalidad));
+            long desdeB =
+                    transaccion.execute(
+                            estado -> {
+                                TenantContext.fijar(new MunicipalidadId(otraMunicipalidad));
+                                return recibos.buscar(
+                                                new CriterioDeRecibos(
+                                                        null, null, "cajero.rls", null, null, null),
+                                                new Paginacion(
+                                                        0,
+                                                        20,
+                                                        "fecha",
+                                                        Paginacion.Direccion.ASCENDENTE))
+                                        .totalElementos();
+                            });
+
+            assertThat(desdeB)
+                    .as("con el superusuario del cluster —que omite RLS— esto seria 1 (#537)")
+                    .isZero();
+        }
+
+        @Test
+        @DisplayName("sin transaccion la consulta no devuelve vacio: revienta (#486)")
+        void sinTransaccionLaConsultaRevienta() {
+            TenantContext.fijar(new MunicipalidadId(municipalidad));
+
+            assertThatThrownBy(
+                            () ->
+                                    listadoSinTransaccion.listar(
+                                            CriterioDeRecibos.todos(),
+                                            new Paginacion(
+                                                    0,
+                                                    20,
+                                                    "fecha",
+                                                    Paginacion.Direccion.ASCENDENTE)))
+                    .as(
+                            "sin @Transactional no hay SET LOCAL, y la politica RLS no contesta"
+                                    + " una lista vacia: falla, con el 500 que la marcha blanca de"
+                                    + " #400 encontro en catorce rutas")
+                    .hasStackTraceContaining("app.municipalidad_id");
+        }
+
+        // --------------------------------------------------------------
+
+        private Pagina<ConsultaDeRecibos.FilaDeRecibo> listar(CriterioDeRecibos criterio) {
+            TenantContext.fijar(new MunicipalidadId(municipalidad));
+            return listado.listar(
+                    criterio, new Paginacion(0, 20, "fecha", Paginacion.Direccion.ASCENDENTE));
+        }
+
+        private List<String> numerosDe(Pagina<ConsultaDeRecibos.FilaDeRecibo> pagina) {
+            return pagina.contenido().stream()
+                    .map(fila -> fila.recibo().numero().impreso())
+                    .toList();
+        }
+
+        private EstadoDeRecibo estadoDe(
+                Pagina<ConsultaDeRecibos.FilaDeRecibo> pagina, Recibo recibo) {
+            return pagina.contenido().stream()
+                    .filter(fila -> fila.recibo().numero().equals(recibo.numero()))
+                    .findFirst()
+                    .orElseThrow()
+                    .recibo()
+                    .estado();
+        }
+
+        private ConsultaDeRecibos.FilaDeRecibo unicaFilaDe(String cajero) {
+            Pagina<ConsultaDeRecibos.FilaDeRecibo> pagina =
+                    listar(new CriterioDeRecibos(null, null, cajero, null, null, null));
+            assertThat(pagina.contenido()).hasSize(1);
+            return pagina.contenido().get(0);
+        }
+
+        /** Los numeros de todas las paginas de ese tamano, en el orden en que salen. */
+        private List<String> recorrer(String cajero, String ordenarPor, int tamano) {
+            List<String> numeros = new ArrayList<>();
+            CriterioDeRecibos criterio =
+                    new CriterioDeRecibos(null, null, cajero, null, null, null);
+            for (int pagina = 0; ; pagina++) {
+                TenantContext.fijar(new MunicipalidadId(municipalidad));
+                Pagina<ConsultaDeRecibos.FilaDeRecibo> leida =
+                        listado.listar(
+                                criterio,
+                                new Paginacion(
+                                        pagina,
+                                        tamano,
+                                        ordenarPor,
+                                        Paginacion.Direccion.ASCENDENTE));
+                numeros.addAll(numerosDe(leida));
+                if (!leida.hayMas()) {
+                    return numeros;
+                }
+            }
+        }
+    }
+
     // ------------------------------------------------------------------
     // Utilidades
     // ------------------------------------------------------------------
@@ -613,6 +959,50 @@ class ReciboJdbcTest {
                         null,
                         null),
                 Observacion.de("Cobranza en ventanilla, prueba de #34"));
+    }
+
+    /** La misma cobranza, en otra ventanilla y con otro cajero (#548). */
+    private static Recibo cobrarEn(long contribuyenteId, String caja, String cajero) {
+        return cobrarCon(cobrarDeuda, contribuyenteId, caja, cajero);
+    }
+
+    /** Y la misma, emitida a otra hora del dia: el reloj decide `recibo.fecha`. */
+    private static Recibo cobrarA(long contribuyenteId, java.time.Instant instante, String cajero) {
+        Clock reloj = Clock.fixed(instante, ZoneOffset.UTC);
+        AbrirCaja abrir =
+                envolver(
+                        new AbrirCaja(
+                                new CajaRepositoryJdbc(jdbc),
+                                turnos,
+                                new AuditoriaJdbc(jdbc, reloj),
+                                reloj));
+        CobrarDeuda cobranza =
+                envolver(
+                        new CobrarDeuda(
+                                abrir,
+                                abonos,
+                                recibos,
+                                SinConvenios.formalizador(reloj),
+                                new AuditoriaJdbc(jdbc, reloj),
+                                reloj));
+        return cobrarCon(cobranza, contribuyenteId, "C-34", cajero);
+    }
+
+    private static Recibo cobrarCon(
+            CobrarDeuda cobranza, long contribuyenteId, String caja, String cajero) {
+        return cobranza.cobrar(
+                new CobrarDeuda.Cobranza(
+                        caja,
+                        cajero,
+                        contribuyenteId,
+                        List.of(new SeleccionDeObligacion("PREDIAL", EJERCICIO_DEUDA, null, null)),
+                        FormaDePago.EFECTIVO,
+                        TipoDePago.NORMAL,
+                        null,
+                        PAGO,
+                        null,
+                        null),
+                Observacion.de("Cobranza en ventanilla, prueba de #548"));
     }
 
     private static AnularRecibo.Anulado anular(Recibo recibo, LocalDate dia) {
