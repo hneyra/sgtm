@@ -1147,23 +1147,33 @@ paths:
         - name: codigoDeVia
           in: query
           required: false
-          description: "Filtro «Código de vía» de la pantalla"
+          description: "Filtro «Código de vía» de la pantalla. Por PREFIJO del codigo (#565)."
           schema: { type: string }
         - name: nombreDeCalle
           in: query
           required: false
-          description: "Filtro «Nombre de calle» de la pantalla"
+          description: "Filtro «Nombre de calle» de la pantalla. Por PREFIJO del nombre, sin distinguir mayusculas ni tildes: el catalogo real guarda «Cayetano Heredia» y en ventanilla se teclea «cayetano» (#565)."
           schema: { type: string }
         - name: tipoDeVia
           in: query
           required: false
-          description: "Filtro «Tipo de vía» de la pantalla"
+          description: "Filtro «Tipo de vía» de la pantalla. Por igualdad contra el enumerado TipoVia; un tipo que no existe es 422 nombrandolo, no una pagina vacia (#565)."
           schema: { type: string }
         - name: sector
           in: query
           required: false
-          description: "Filtro «Sector» de la pantalla"
+          description: "Filtro «Sector» de la pantalla. NO SE SIRVE: se rechaza con 422 con cualquier valor. La tabla `via` (V1) no guarda el sector y `ViaResource` no lo publica —Track 2 de #290—, asi que no hay contra que comparar; ignorarlo devolveria el catalogo entero bajo un filtro tecleado (#565)."
           schema: { type: string }
+        - name: activa
+          in: query
+          required: false
+          description: >-
+            Solo las vigentes («true»), solo las dadas de baja («false») o las dos (ausente).
+            Cualquier otra palabra es 422: un «si» tecleado que se leyera como «no filtres»
+            devolveria a la lista las vias que se dieron de baja, que es lo que este filtro existe
+            para impedir.
+          schema: { type: string, enum: [true, false] }
+          example: "true"
         - name: pagina
           in: query
           required: false

@@ -22,7 +22,18 @@ public interface ViaRepository {
 
     Optional<Via> findByCodigo(String codigo);
 
-    Pagina<Via> findAll(Paginacion paginacion);
+    /** El catalogo entero, paginado. Es {@link #buscar} sin acotar. */
+    default Pagina<Via> findAll(Paginacion paginacion) {
+        return buscar(CriterioDeVia.todas(), paginacion);
+    }
+
+    /**
+     * Las vias que pide el criterio (#565).
+     *
+     * <p>Es la unica puerta: {@link #findAll} delega aqui para que no haya dos consultas que puedan
+     * apartarse la una de la otra.
+     */
+    Pagina<Via> buscar(CriterioDeVia criterio, Paginacion paginacion);
 
     /** Inserta la via nueva o actualiza la existente, y devuelve la via con su identificador. */
     Via save(Via via);

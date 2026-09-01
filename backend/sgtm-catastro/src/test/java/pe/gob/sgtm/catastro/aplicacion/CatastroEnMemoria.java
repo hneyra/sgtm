@@ -9,6 +9,7 @@ import java.util.Optional;
 import java.util.Set;
 import pe.gob.sgtm.catastro.dominio.CatastroRepository;
 import pe.gob.sgtm.catastro.dominio.Construccion;
+import pe.gob.sgtm.catastro.dominio.CriterioDeVia;
 import pe.gob.sgtm.catastro.dominio.DetalleDeLaFicha;
 import pe.gob.sgtm.catastro.dominio.EstadoPredio;
 import pe.gob.sgtm.catastro.dominio.FichaCatastral;
@@ -328,7 +329,7 @@ final class CatastroEnMemoria
     }
 
     @Override
-    public Pagina<Via> findAll(Paginacion paginacion) {
+    public Pagina<Via> buscar(CriterioDeVia criterio, Paginacion paginacion) {
         throw new UnsupportedOperationException("La carga desde archivo no pagina vias");
     }
 
