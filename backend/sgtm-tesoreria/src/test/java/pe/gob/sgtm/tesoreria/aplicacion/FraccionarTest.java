@@ -87,7 +87,7 @@ class FraccionarTest {
         @Test
         @DisplayName("acoge lo que dice el libro, no lo que diga la pantalla")
         void acogeLoQueDiceElLibro() {
-            Convenio convenio = registrar.registrar(peticion(6, "20"), porQue());
+            Convenio convenio = registrar.registrar(peticion(6, "20"), null, porQue());
 
             assertThat(convenio.montoTotal())
                     .as("300 de predial mas 200 de arbitrios: los dijo el libro")
@@ -102,7 +102,7 @@ class FraccionarTest {
         @Test
         @DisplayName("el interes y el maximo salen del conjunto sellado, con su identificador")
         void elInteresSaleDelConjuntoSellado() {
-            Convenio convenio = registrar.registrar(peticion(6, "20"), porQue());
+            Convenio convenio = registrar.registrar(peticion(6, "20"), null, porQue());
 
             CondicionesDelConvenio condiciones = convenio.condiciones();
             assertThat(condiciones.interesMensual()).isEqualTo(Alicuota.de("1"));
@@ -117,7 +117,7 @@ class FraccionarTest {
         @Test
         @DisplayName("no escribe ningun movimiento: lo que sale de aqui es un preconvenio")
         void noEscribeNingunMovimiento() {
-            Convenio convenio = registrar.registrar(peticion(6, "20"), porQue());
+            Convenio convenio = registrar.registrar(peticion(6, "20"), null, porQue());
 
             assertThat(movimientos.deConvenio(convenio.idGuardado()))
                     .as("sin cuota inicial pagada en caja no hay convenio: es estructural")
@@ -139,7 +139,7 @@ class FraccionarTest {
             // Y el primer convenio que se registre de verdad se lleva el numero 1: si la
             // simulacion hubiera numerado, la pantalla habria impreso un papel con un
             // numero que no existe.
-            Convenio convenio = registrar.registrar(peticion(6, "20"), porQue());
+            Convenio convenio = registrar.registrar(peticion(6, "20"), null, porQue());
             assertThat(convenio.numero()).isEqualTo(new NumeroDeConvenio(EJERCICIO, 1));
         }
 
@@ -149,7 +149,7 @@ class FraccionarTest {
             acogimiento.vaciar(PREDIAL);
             acogimiento.vaciar(ARBITRIOS);
 
-            assertThatThrownBy(() -> registrar.registrar(peticion(6, "20"), porQue()))
+            assertThatThrownBy(() -> registrar.registrar(peticion(6, "20"), null, porQue()))
                     .isInstanceOf(RegistrarPreconvenio.SinDeudaQueFraccionar.class)
                     .hasMessageContaining("Un convenio sobre cero no es un convenio");
         }
@@ -157,7 +157,7 @@ class FraccionarTest {
         @Test
         @DisplayName("mas cuotas de las que admite la ordenanza se rechazan")
         void masCuotasDeLasAdmitidasSeRechazan() {
-            assertThatThrownBy(() -> registrar.registrar(peticion(24, "20"), porQue()))
+            assertThatThrownBy(() -> registrar.registrar(peticion(24, "20"), null, porQue()))
                     .isInstanceOf(CondicionesDelConvenio.DemasiadasCuotas.class);
             assertThat(convenios.registrados()).isEmpty();
         }
@@ -170,7 +170,7 @@ class FraccionarTest {
         @Test
         @DisplayName("acoge la deuda y deja el convenio vigente")
         void acogeYDejaVigente() {
-            Convenio convenio = registrar.registrar(peticion(6, "20"), porQue());
+            Convenio convenio = registrar.registrar(peticion(6, "20"), null, porQue());
 
             FormalizarConvenio.Formalizado formalizado =
                     formalizar.formalizar(
@@ -186,7 +186,7 @@ class FraccionarTest {
         @Test
         @DisplayName("lo cobrado tiene que ser la cuota inicial del cronograma, al centimo")
         void loCobradoTieneQueSerLaInicial() {
-            Convenio convenio = registrar.registrar(peticion(6, "20"), porQue());
+            Convenio convenio = registrar.registrar(peticion(6, "20"), null, porQue());
 
             assertThatThrownBy(
                             () ->
@@ -209,7 +209,7 @@ class FraccionarTest {
                 "si la deuda se pago entre la firma y el cobro, no se acoge un saldo que no"
                         + " existe")
         void siLaDeudaSePagoNoSeAcoge() {
-            Convenio convenio = registrar.registrar(peticion(6, "20"), porQue());
+            Convenio convenio = registrar.registrar(peticion(6, "20"), null, porQue());
             acogimiento.vaciar(PREDIAL);
             acogimiento.vaciar(ARBITRIOS);
 
@@ -242,7 +242,7 @@ class FraccionarTest {
         @Test
         @DisplayName("formalizar dos veces se rechaza: acogeria la deuda por segunda vez")
         void formalizarDosVecesSeRechaza() {
-            Convenio convenio = registrar.registrar(peticion(6, "20"), porQue());
+            Convenio convenio = registrar.registrar(peticion(6, "20"), null, porQue());
             formalizar.formalizar(convenio.numero(), 9L, Dinero.de("100.00"), HOY, porQue());
 
             assertThatThrownBy(

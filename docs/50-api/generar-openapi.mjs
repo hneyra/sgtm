@@ -839,6 +839,37 @@ const DESCRIPCIONES = {
     Lo recaudado por multas administrativas, según el libro (#53, RF-074). Mismo criterio que
     el de tránsito: la suma exacta de los abonos vivos.
   `),
+  // Tesoreria · Convenios (#606)
+  fraccionamiento: bloque(`
+    Acoge la deuda marcada a pago fraccionado, o solo **simula** su cronograma: lo decide
+    \`simular\` en el cuerpo. Lo que sale de aquí es siempre un **preconvenio**; no acoge deuda ni
+    toca el libro hasta que su cuota inicial se cobre en caja (\`POST /tesoreria/caja/cobranza\`
+    con \`tipoDePago = PRECONVENIO\`).
+
+    **La cabecera \`Idempotency-Key\` se lee** (#606). Reenviar el mismo intento —el doble clic, el
+    reintento tras un tiempo de espera agotado— devuelve **201 con el convenio de la primera vez**,
+    con su mismo número, en vez de abrir un segundo preconvenio sobre la misma deuda. Con una clave
+    ya usada para **otro contribuyente** responde 409: devolver el convenio de la primera vez
+    imprimiría en ventanilla el acuerdo de otra persona. Simular no consume la clave, porque no
+    escribe nada. Sin la cabecera, dos envíos siguen siendo dos convenios.
+
+    El interés, el máximo de cuotas y la política con que se redondea cada cuota salen del conjunto
+    sellado del ejercicio: ninguno viaja en el cuerpo, y si falta alguno la respuesta es 422
+    nombrando la llave o el ejercicio (#547).
+  `),
+  // Tesoreria · Convenios (#606)
+  anulacion_convenio: bloque(`
+    Anula, quiebra o reformula un convenio: las tres por la misma ruta, porque en el libro son el
+    mismo acto —lo pendiente vuelve a la fase de la que salió, con asientos y no con un \`UPDATE\`
+    de fase—. El motivo es obligatorio y queda en el acta. Anular exige además que el recibo de la
+    cuota inicial ya esté anulado; quebrar no, porque ese dinero sí entró.
+
+    **La cabecera \`Idempotency-Key\` se lee** (#606). Sin ella, reenviar el mismo intento chocaba
+    con \`convenio_movimiento_cierre_uq\` y respondía **409**, que se lee como un fallo nuevo y no
+    como «ya estaba hecho»; con ella devuelve **201 con el convenio ya cerrado** y su acta. En una
+    reformulación la clave la reclama el acta de cierre, así que el reenvío no abre un segundo
+    preconvenio. Con una clave que cerró **otro** convenio responde 409.
+  `),
 };
 
 /**
