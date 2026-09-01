@@ -94,8 +94,18 @@ let vistas = 0;
 
 for (const m of MODULOS) {
   if (soloModulo && m.k !== soloModulo) continue;
-  const destinos = m.destinos.length ? m.destinos.map((d) => d.k) : [''];
-  for (const d of destinos) {
+  /* Los destinos del carril **y** la accion del panel y su documento.
+     Enumerando solo `m.destinos` esto era ciego a trece pantallas —las altas y
+     las hojas imprimibles—, y son justo donde mas cifras hay: `mirar.mjs` ya las
+     recorria y esto no, asi que devolver las cifras del artboard a la hoja de
+     una resolucion de determinacion la dejaba ensenandolas con la red cortada y
+     este arnes informando «ninguna ensenia una cifra», en verde. */
+  const paradas = [
+    ...m.destinos.map((d) => d.k),
+    ...(m.accion ? [m.accion.k] : []),
+    ...(m.documento ? [m.documento.k] : []),
+  ];
+  for (const d of paradas.length ? paradas : ['']) {
     const ruta = d ? `#/${m.k}/${d}` : `#/${m.k}`;
     await pagina.goto(`${BASE}/${ruta}`, { waitUntil: 'domcontentloaded' });
     await pagina.waitForTimeout(900);
