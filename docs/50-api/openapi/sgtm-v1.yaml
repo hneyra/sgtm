@@ -5332,7 +5332,22 @@ paths:
     post:
       operationId: fraccionamiento
       summary: "Fraccionamiento tributario"
-      description: "Acogimiento de la deuda a pago fraccionado. El sistema simula el cronograma antes de generar el convenio; dos cuotas consecutivas impagas producen la pérdida del beneficio."
+      description: >-
+        Acoge la deuda marcada a pago fraccionado, o solo **simula** su cronograma: lo decide
+        `simular` en el cuerpo. Lo que sale de aquí es siempre un **preconvenio**; no acoge deuda ni
+        toca el libro hasta que su cuota inicial se cobre en caja (`POST /tesoreria/caja/cobranza`
+        con `tipoDePago = PRECONVENIO`).
+
+        **La cabecera `Idempotency-Key` se lee** (#606). Reenviar el mismo intento —el doble clic, el
+        reintento tras un tiempo de espera agotado— devuelve **201 con el convenio de la primera vez**,
+        con su mismo número, en vez de abrir un segundo preconvenio sobre la misma deuda. Con una clave
+        ya usada para **otro contribuyente** responde 409: devolver el convenio de la primera vez
+        imprimiría en ventanilla el acuerdo de otra persona. Simular no consume la clave, porque no
+        escribe nada. Sin la cabecera, dos envíos siguen siendo dos convenios.
+
+        El interés, el máximo de cuotas y la política con que se redondea cada cuota salen del conjunto
+        sellado del ejercicio: ninguno viaja en el cuerpo, y si falta alguno la respuesta es 422
+        nombrando la llave o el ejercicio (#547).
       tags: ["Tesorería"]
       requestBody:
         required: true
@@ -5598,7 +5613,17 @@ paths:
     post:
       operationId: anulacion_convenio
       summary: "Anulación de convenio"
-      description: "Anula, reforma o quiebra un convenio de fraccionamiento. La deuda acogida retorna a su estado original y el sistema conserva el motivo y el responsable de la anulación."
+      description: >-
+        Anula, quiebra o reformula un convenio: las tres por la misma ruta, porque en el libro son el
+        mismo acto —lo pendiente vuelve a la fase de la que salió, con asientos y no con un `UPDATE`
+        de fase—. El motivo es obligatorio y queda en el acta. Anular exige además que el recibo de la
+        cuota inicial ya esté anulado; quebrar no, porque ese dinero sí entró.
+
+        **La cabecera `Idempotency-Key` se lee** (#606). Sin ella, reenviar el mismo intento chocaba
+        con `convenio_movimiento_cierre_uq` y respondía **409**, que se lee como un fallo nuevo y no
+        como «ya estaba hecho»; con ella devuelve **201 con el convenio ya cerrado** y su acta. En una
+        reformulación la clave la reclama el acta de cierre, así que el reenvío no abre un segundo
+        preconvenio. Con una clave que cerró **otro** convenio responde 409.
       tags: ["Tesorería"]
       parameters:
         - name: numero
@@ -6041,7 +6066,24 @@ paths:
     get:
       operationId: consulta_altas_bajas
       summary: "Consulta de altas y bajas"
-      description: "Movimientos de alta y baja de deuda de un contribuyente, automáticos o manuales, con el documento que los aprueba y el detalle de las deudas afectadas."
+      description: >-
+        Los **actos** de alta y de baja de deuda de un contribuyente (RF-043, RF-044), con el documento
+        que los aprueba y el motivo con que se registraron.
+
+        **No es todo el movimiento del libro.** Un cobro de ventanilla no sale aquí —es un pago, y lo
+        lista `GET /consultas/pagos`— ni el cargo de la emisión, aunque los tres se escriban con los
+        mismos conceptos del desglose: el abono de una baja y el de una cobranza son, columna a
+        columna, el mismo asiento. Lo que los separa es de qué acto nace la fila.
+
+        **Los movimientos anteriores a la migración que estampa ese dato no aparecen**, y no se pueden
+        recuperar: el libro no admite corrección —se anula, se da de baja o se reversa— y las filas ya
+        escritas nacieron sin él. Para una instalación con historia previa, esta relación empieza el día
+        en que se aplicó esa migración; lo anterior se consulta como movimientos de la cuenta corriente.
+
+        **«Auto / Manual» no se sirve** y se rechaza con 422 en vez de ignorarse: hoy todo lo que este
+        sistema registra como alta o baja viene de las dos pantallas que lo hacen a mano, así que
+        «AUTOMÁTICA» devolvería la tabla vacía, que se lee como «no hay ninguna» y no como «este sistema
+        todavía no las produce».
       tags: ["Consultas"]
       parameters:
         - name: tipoDeConsulta
@@ -8892,6 +8934,65 @@ paths:
       summary: "Parámetros del sistema"
       description: "Valores que gobiernan el cálculo tributario del ejercicio. Cambiarlos afecta a todas las liquidaciones posteriores."
       tags: ["Seguridad"]
+      responses:
+        200:
+          description: Operacion realizada
+          content:
+            application/json:
+              schema: { type: object }
+        "403":
+          $ref: "#/components/responses/SinMunicipalidad"
+        "422":
+          $ref: "#/components/responses/ErrorDeValidacion"
+  "/seguridad/parametros/ejercicios/{ejercicio}":
+    get:
+      operationId: ejercicio_parametrizado
+      summary: "Si el ejercicio tiene parámetros sellados"
+      description: |
+        Si un ejercicio tiene conjunto de parámetros **sellado**, y cuál — para poder
+        decirlo **antes** de calcular (#605, ADR-0007).
+
+        Hasta aquí ninguna ruta lo publicaba, así que toda pantalla que calcula tenía que
+        fallar para enterarse: se rellenaba el formulario entero —y en «Registrar
+        preconvenio» también la observación que exige la regla 10— para recibir al final
+        el 422 «El ejercicio 2026 no tiene un conjunto de parámetros sellado», que con
+        D-02a abierta es lo que contestan hoy **todas** las municipalidades. El mismo
+        agujero tienen la determinación predial, la valorización del FUE, la liquidación de
+        fiscalización y el resumen anual de licencias.
+
+        **Ninguna cifra.** Sale `sellado` y la identidad del conjunto —`conjuntoId` y
+        `version`—, que es lo que `ConvenioResource.conjuntoDeParametros` ya publica
+        cuando el convenio existe. Los valores siguen detrás del permiso de `parametros`
+        (REQ-03: quien opera el sistema no publica ni consulta las cifras con las que se
+        calcula).
+
+        **«No hay conjunto sellado» es 200 diciendo que no**, no un 404: la pregunta es si
+        **hay conjunto sellado** y la respuesta puede ser que no. Conviene no leerla como
+        «se puede calcular»: sin conjunto sellado seguro que **no** se puede, pero con él
+        el cálculo puede fallar igual si falta dentro alguna llave que la regla pida —el
+        422 que nombra la llave (#547, #562)—. Esta lectura adelanta la primera mitad, que
+        es la que hoy falla en todas las municipalidades. Un ejercicio **fuera del rango
+        1990 a 2100** sí es distinto, y sale 422 nombrando el rango.
+
+        **No deja fila en la bitácora**, a diferencia de las demás lecturas que registran
+        `ACCESO`: es la única fuera del catálogo, y auditarla pondría una escritura sin
+        cota, sobre una tabla que no se poda, al alcance de cualquier token válido.
+
+        Autenticada, pero **no es una opción del catálogo**: exigir `parametros` —del
+        módulo Seguridad— dejaría esta lectura fuera del alcance de quien la necesita, y
+        otorgárselo en cada implantación invertiría la separación de funciones de REQ-03
+        para poder leer un booleano. El criterio es el de `permisos_de_la_sesion`
+        (ADR-0013, REQ-03 §5) y aquí es literal: el 422 de cualquier operación que calcule
+        ya dice lo mismo. Lo que sí deja, y las otras lecturas de sesión no, es su fila de
+        `ACCESO`: ésta admite un parámetro, así que quien recorra 1990 a 2100 deja su
+        nombre en cada intento.
+      tags: ["Seguridad"]
+      parameters:
+        - name: ejercicio
+          in: path
+          required: true
+          description: "El año que se pregunta, de 1990 a 2100"
+          schema: { type: string }
       responses:
         200:
           description: Operacion realizada

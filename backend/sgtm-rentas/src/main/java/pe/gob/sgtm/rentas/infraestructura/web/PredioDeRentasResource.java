@@ -22,6 +22,12 @@ import pe.gob.sgtm.dominio.AreaM2;
  * <p>El porcentaje viaja como texto y no como {@code Porcentaje} por lo mismo que en los demas
  * recursos: lo que sale al JSON es la cifra que se dibuja, sin arrastrar el tipo del dominio.
  *
+ * <p><b>Las areas viajan tipadas</b> (#607). Las escribe el serializador que {@code
+ * ConfiguracionDeJson} registra para {@code AreaM2}, o sea la cifra sola —{@code "360.00"}—, y la
+ * unidad la pone la cabecera de la columna. Metida dentro del dato obliga a cada consumidor a
+ * recortarla antes de comparar, y era la diferencia por la que el mismo predio decia «360.00 m2»
+ * aqui y «360.00» en fiscalizacion.
+ *
  * @param predioId el identificador interno, que es con el que se declara el autovaluo al determinar
  * @param codigoReferenciaCatastral el codigo con el que se le nombra en el padron
  * @param tipo URBANO o RUSTICO
@@ -39,7 +45,7 @@ public record PredioDeRentasResource(
         String direccion,
         @Nullable String uso,
         @Nullable String sector,
-        @Nullable String areaTerreno,
+        @Nullable AreaM2 areaTerreno,
         String porcentajePropiedad,
         @Nullable String condicion) {
 
@@ -62,7 +68,7 @@ public record PredioDeRentasResource(
                 predio.direccion(),
                 rasgos == null ? null : rasgos.uso(),
                 rasgos == null ? null : rasgos.sectorCodigo(),
-                area == null ? null : area.valor().toPlainString(),
+                area,
                 predio.porcentajeTitularidad().valor().toPlainString(),
                 condicion);
     }

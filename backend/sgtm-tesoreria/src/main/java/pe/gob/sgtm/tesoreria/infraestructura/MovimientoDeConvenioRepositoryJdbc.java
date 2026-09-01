@@ -44,7 +44,8 @@ public class MovimientoDeConvenioRepositoryJdbc extends RepositorioJdbc
     }
 
     @Override
-    public MovimientoDeConvenio registrar(MovimientoDeConvenio movimiento) {
+    public MovimientoDeConvenio registrar(
+            MovimientoDeConvenio movimiento, @Nullable String claveDeIdempotencia) {
         if (!movimiento.esNuevo()) {
             throw new IllegalArgumentException(
                     "Un movimiento ya registrado no se vuelve a insertar ni se corrige: se registra"
@@ -60,13 +61,13 @@ public class MovimientoDeConvenioRepositoryJdbc extends RepositorioJdbc
                                             + "  recibo_id, cuota, motivo, autorizado_por,"
                                             + "  documento_autorizacion, importe, asientos,"
                                             + "  convenio_nuevo_id, usuario_registro,"
-                                            + "  fecha_registro, observacion)"
+                                            + "  fecha_registro, observacion, clave_idempotencia)"
                                             + " VALUES ("
                                             + MUNICIPALIDAD_ACTUAL
                                             + ", :convenio, :tipo, :fecha, :recibo, :cuota,"
                                             + "  :motivo, :autorizado, :documento, :importe,"
                                             + "  :asientos, :nuevo, :usuario, :registrado,"
-                                            + "  :observacion)"
+                                            + "  :observacion, :clave)"
                                             + " RETURNING id")
                             .param("convenio", movimiento.convenioId())
                             .param("tipo", movimiento.tipo().name())
@@ -82,9 +83,19 @@ public class MovimientoDeConvenioRepositoryJdbc extends RepositorioJdbc
                             .param("usuario", UsuarioDeLaSesion.actual())
                             .param("registrado", Timestamp.from(movimiento.registradoEn()))
                             .param("observacion", movimiento.observacion().texto())
+                            .param("clave", claveDeIdempotencia)
                             .query(Long.class)
                             .single();
         } catch (DuplicateKeyException yaEstaba) {
+            // Los tres indices unicos de la tabla significan cosas distintas. El de la clave de
+            // idempotencia NO es un defecto —es la carrera de dos envios del mismo intento—, y se
+            // traduce aparte para que quien opera no acabe mirando el estado del convenio.
+            if (choqueDe(yaEstaba, "convenio_movimiento_idempotencia_uq")) {
+                throw new ClaveRepetida(
+                        "Ya se registro un acto con esa clave de idempotencia: el reenvio del"
+                                + " mismo intento no cierra el convenio dos veces",
+                        yaEstaba);
+            }
             if (movimiento.tipo() == TipoDeMovimientoDeConvenio.FORMALIZACION) {
                 throw new ConvenioYaFormalizado(
                         "Ese convenio ya esta formalizado: su deuda ya se acogio a fase de"
@@ -130,6 +141,17 @@ public class MovimientoDeConvenioRepositoryJdbc extends RepositorioJdbc
     }
 
     @Override
+    public Optional<MovimientoDeConvenio> porClaveDeIdempotencia(String clave) {
+        return jdbc().sql(
+                        "SELECT "
+                                + COLUMNAS
+                                + " FROM convenio_movimiento WHERE clave_idempotencia = :clave")
+                .param("clave", clave)
+                .query(MovimientoDeConvenioRepositoryJdbc::mapear)
+                .optional();
+    }
+
+    @Override
     public Optional<MovimientoDeConvenio> cierreDe(long convenioId) {
         return jdbc().sql(
                         "SELECT "
@@ -143,6 +165,21 @@ public class MovimientoDeConvenioRepositoryJdbc extends RepositorioJdbc
     }
 
     // ------------------------------------------------------------------
+
+    /**
+     * De cual de los indices unicos vino el choque. Mismo mecanismo que {@code
+     * ConvenioRepositoryJdbc} y que {@code AnuncioRepositoryJdbc}: el nombre del indice esta en la
+     * cadena de causas, y nunca sale al cliente (RNF-033).
+     */
+    private static boolean choqueDe(RuntimeException fallo, String indice) {
+        for (Throwable causa = fallo; causa != null; causa = causa.getCause()) {
+            String mensaje = causa.getMessage();
+            if (mensaje != null && mensaje.contains(indice)) {
+                return true;
+            }
+        }
+        return false;
+    }
 
     private Optional<MovimientoDeConvenio> leer(long id) {
         return jdbc().sql("SELECT " + COLUMNAS + " FROM convenio_movimiento WHERE id = :id")

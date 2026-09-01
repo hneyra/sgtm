@@ -12,6 +12,12 @@ dependencies {
     testImplementation(testFixtures(project(":sgtm-esquema")))
     testImplementation("org.springframework.boot:spring-boot-starter-jdbc")
     testImplementation("org.springframework:spring-aop")
+
+    // MockMvc para la lectura de #605: transporte y guardia sin base de datos. Lo que se
+    // mide aqui no es la consulta —eso va contra PostgreSQL— sino que el ejercicio viaje
+    // por la ruta, que fuera de rango salga 422 y no 500, y que el guardia real deje pasar
+    // al que no tiene ningun permiso del catalogo.
+    testImplementation("org.springframework:spring-test")
     testRuntimeOnly(libs.postgresql)
 }
 

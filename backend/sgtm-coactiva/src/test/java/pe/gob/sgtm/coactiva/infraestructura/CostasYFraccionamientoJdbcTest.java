@@ -1377,6 +1377,7 @@ class CostasYFraccionamientoJdbcTest {
                         "EJECUTOR COACTIVO",
                         "MEMO-2026-042",
                         null),
+                null,
                 Observacion.de("Se quiebra el convenio coactivo, prueba de #42"));
     }
 

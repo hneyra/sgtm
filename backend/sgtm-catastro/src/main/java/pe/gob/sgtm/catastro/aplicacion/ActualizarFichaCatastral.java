@@ -241,7 +241,11 @@ public class ActualizarFichaCatastral {
         return "{\"version\":"
                 + ficha.version()
                 + ",\"areaTerreno\":\""
-                + ficha.areaTerreno()
+                // Sin la unidad dentro (#607): la concatenacion llama a AreaM2.toString(),
+                // que anade « m2», y esta cadena se publica VERBATIM por
+                // GET /seguridad/auditoria. Era la tercera convencion, y el escaner de
+                // fuentes no la ve porque aqui no hay ningun `.toString()` escrito.
+                + ficha.areaTerreno().valor().toPlainString()
                 + "\",\"uso\":\""
                 + ficha.uso().replace("\"", "\\\"")
                 + "\",\"construcciones\":"
