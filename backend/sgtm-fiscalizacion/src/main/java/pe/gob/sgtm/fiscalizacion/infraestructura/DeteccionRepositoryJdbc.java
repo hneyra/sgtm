@@ -122,15 +122,22 @@ public class DeteccionRepositoryJdbc extends RepositorioJdbc implements Deteccio
      * <ul>
      *   <li>Sin uno de los dos lados no hay diferencia: {@code NULL}. Devolver cero diria que se
      *       midio y coincidio, que es lo contrario de lo que pasa —el caso mayoritario es el omiso,
-     *       que no declaro nada—.
+     *       que no declaro nada—. <b>Esta rama es explicita y no operativa</b>: con cualquiera de
+     *       los dos lados nulo, la comparacion de la rama siguiente ya es {@code NULL} y no se
+     *       toma, y la resta del {@code ELSE} da {@code NULL} igual. Se escribe para que las tres
+     *       preguntas de la funcion pura esten a la vista una a una; quitarla no cambia ninguna
+     *       fila, y por eso ninguna mutacion la caza.
      *   <li>Un area hallada <b>menor o igual</b> que la declarada da cero: declarar de mas no es un
      *       hallazgo contra el contribuyente, y una diferencia negativa no existe.
      *   <li>Lo demas, lo que el catastro tiene de mas sobre lo declarado.
      * </ul>
      *
      * <p>Que esta transcripcion no se separe de la funcion pura tampoco lo garantiza este
-     * comentario: lo garantiza {@code OrdenDeLaDeteccionFronteraTest}, que compara el orden que
-     * produce el motor con el que produce la funcion pura sobre las mismas filas.
+     * comentario: lo garantiza {@code OrdenDeLaDeteccionFronteraTest}, que compara el <b>orden</b>
+     * que produce el motor con el que produce la funcion pura sobre las mismas filas. Conviene no
+     * subir la apuesta: compara el orden, no la cifra de cada fila caso por caso — eso es lo que
+     * {@code LaCondicionCoincideConLaFuncionPura} hace para la condicion, y aqui no hay equivalente
+     * porque la cifra que la fila enseña no sale de esta columna.
      */
     private static final String DIFERENCIA_DE_AREA =
             """

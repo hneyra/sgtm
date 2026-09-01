@@ -311,8 +311,20 @@ class OrdenDeLaDeteccionFronteraTest {
             assertThat(codigos.get(codigos.size() - 1)).isEqualTo(P3);
         }
 
+        /**
+         * El ascendente entero, y <b>no</b> por el nulo.
+         *
+         * <p>Conviene decir lo que esta prueba NO guarda, porque su sitio invita a lo contrario: en
+         * PostgreSQL {@code ASC} ya implica {@code NULLS LAST}, asi que quitar el {@code
+         * conNulosAlFinal("diferencia_de_area")} la deja en <b>verde</b> — la que caza esa rotura
+         * es la del descendente, que es ademas el sentido que la pantalla usa.
+         *
+         * <p>Lo que si guarda es la rama {@code <=} de la transcripcion: es una de las dos unicas
+         * que la cazan, porque un negativo cae detras de los ceros en el descendente y alli no se
+         * distingue de un cero.
+         */
         @Test
-        @DisplayName("ascendente tambien deja el nulo al final: la regla no depende del sentido")
+        @DisplayName("el ascendente completo: los seis en orden, con el nulo detras")
         void ascendenteDejaElNuloAlFinal() throws Exception {
             assertThat(codigosDe(omisos("diferenciaDeArea", "ASCENDENTE")))
                     .containsExactly(P1, P5, P6, P2, P4, P3);
@@ -384,7 +396,12 @@ class OrdenDeLaDeteccionFronteraTest {
         @DisplayName("y los dos nombres nuevos tampoco traen su nombre interno de regalo")
         void losDosNombresNuevosNoTraenSuInterno() throws Exception {
             assertThat(omisos("sectorCodigo", "ASCENDENTE").getResponse().getStatus())
-                    .as("sector_codigo se publica como «sector», y solo como «sector»")
+                    .as(
+                            "«sectorCodigo» es el camelCase automatico que publicandoComo retira, y"
+                                    + " es el nombre que ninguna fila lleva. La columna cruda"
+                                    + " —«sector_codigo»— SI sigue admitida, como en sobre(...) y como"
+                                    + " su javadoc dice: lo que se retira es el camelCase, no la"
+                                    + " columna")
                     .isEqualTo(422);
         }
     }
