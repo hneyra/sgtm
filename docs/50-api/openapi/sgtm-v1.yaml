@@ -6041,7 +6041,24 @@ paths:
     get:
       operationId: consulta_altas_bajas
       summary: "Consulta de altas y bajas"
-      description: "Movimientos de alta y baja de deuda de un contribuyente, automáticos o manuales, con el documento que los aprueba y el detalle de las deudas afectadas."
+      description: >-
+        Los **actos** de alta y de baja de deuda de un contribuyente (RF-043, RF-044), con el documento
+        que los aprueba y el motivo con que se registraron.
+
+        **No es todo el movimiento del libro.** Un cobro de ventanilla no sale aquí —es un pago, y lo
+        lista `GET /consultas/pagos`— ni el cargo de la emisión, aunque los tres se escriban con los
+        mismos conceptos del desglose: el abono de una baja y el de una cobranza son, columna a
+        columna, el mismo asiento. Lo que los separa es de qué acto nace la fila.
+
+        **Los movimientos anteriores a la migración que estampa ese dato no aparecen**, y no se pueden
+        recuperar: el libro no admite corrección —se anula, se da de baja o se reversa— y las filas ya
+        escritas nacieron sin él. Para una instalación con historia previa, esta relación empieza el día
+        en que se aplicó esa migración; lo anterior se consulta como movimientos de la cuenta corriente.
+
+        **«Auto / Manual» no se sirve** y se rechaza con 422 en vez de ignorarse: hoy todo lo que este
+        sistema registra como alta o baja viene de las dos pantallas que lo hacen a mano, así que
+        «AUTOMÁTICA» devolvería la tabla vacía, que se lee como «no hay ninguna» y no como «este sistema
+        todavía no las produce».
       tags: ["Consultas"]
       parameters:
         - name: tipoDeConsulta
