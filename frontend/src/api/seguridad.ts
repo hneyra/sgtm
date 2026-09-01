@@ -327,6 +327,89 @@ export function municipalidadDeLaSesion(senal?: AbortSignal): Promise<Municipali
   return solicitar('/seguridad/sesion/municipalidad', { senal });
 }
 
+/**
+ * Quien es la sesion (#559). Es `IdentidadResource`, campo por campo.
+ *
+ * <h2>El `usuarioId` es el dato, no un campo mas</h2>
+ *
+ * `PUT /seguridad/usuarios/{id}/clave` solo admite la clave PROPIA —el servidor
+ * compara la cuenta del token con la del usuario que ese `id` nombra— y hasta
+ * esta lectura la interfaz no sabia cual era el suyo: las dos unicas
+ * operaciones que publican un `usuario.id` son el listado de usuarios y la
+ * matriz de otro, las dos detras de un permiso de administracion mucho mayor
+ * que «cambiar mi propia contrasena». Deducirlo cruzando la cuenta del token
+ * contra el listado obligaria a otorgarlo.
+ *
+ * Y es el de ESTA municipalidad: la misma persona con la misma cuenta en dos
+ * municipalidades son dos filas de `usuario` y dos identificadores distintos,
+ * asi que no puede salir del token —que trae la cuenta— sino de la consulta.
+ *
+ * <h2>`ejercicioDeTrabajo` nulo no quiere decir «el corriente»</h2>
+ *
+ * Quiere decir que nadie lo ha fijado con `PUT /seguridad/sesion/ejercicio`, y
+ * las dos cosas se distinguen a proposito (#557): el año del reloj ahi afirmaria
+ * que alguien lo eligio. El selector de la cabecera no lo escribe — solo acota
+ * lo que las consultas piden.
+ */
+export type IdentidadDeLaSesion = {
+  usuarioId: number;
+  cuenta: string;
+  nombre: string;
+  ejercicioDeTrabajo: number | null;
+};
+
+/**
+ * La sesion preguntando quien es.
+ *
+ * **Sin ningun parametro**, igual que `municipalidadDeLaSesion`: el sujeto sale
+ * del token. Con un identificador seria el padron de usuarios sin su permiso, y
+ * devolveria el `id` de otro — justo lo que la guarda del cambio de clave
+ * existe para rechazar. Uno de mas ni siquiera se ignora: el servidor contesta
+ * 422 nombrandolo.
+ *
+ * La lee cualquier sesion valida, tenga los permisos que tenga: leer quien es
+ * uno mismo no revela nada que no revele el token que ya se presento (ADR-0013).
+ */
+export function identidadDeLaSesion(senal?: AbortSignal): Promise<IdentidadDeLaSesion> {
+  return solicitar('/seguridad/sesion', { senal });
+}
+
+/**
+ * Lo que contesta el cambio de clave: quien la gestiona y a donde hay que ir.
+ *
+ * `destino` es una ruta RELATIVA del proveedor —hoy `/account/password`—, no una
+ * URL completa: el emisor concreto es configuracion del ambiente (ADR-0005). La
+ * base la pone `enElProveedorDeIdentidad`, que es la misma con la que se pide el
+ * token.
+ */
+export type CambioDeClaveIniciado = { gestionadaPor: string; destino: string };
+
+/**
+ * Inicia el cambio de la contrasena PROPIA.
+ *
+ * <h2>No viaja ninguna contrasena, y esa ausencia es la garantia</h2>
+ *
+ * El cuerpo lleva la observacion y nada mas: `SolicitudDeCambioDeClave` no
+ * declara ni la vieja, ni la nueva, ni la repetida. La credencial no vive en
+ * este sistema —la guarda el proveedor de identidad (ADR-0005)—, asi que no hay
+ * donde ponerla y lo tecleado en una caja de contrasena se quedaria en el estado
+ * de React. Lo que el backend hace es registrar el acto en la bitacora y decir a
+ * donde mandar a quien lo pide.
+ *
+ * <h2>Solo la propia</h2>
+ *
+ * `AdministrarSesion` compara la cuenta del token con la del usuario que el `id`
+ * nombra y contesta 403 si no son la misma: cambiar la clave de otro no es
+ * administrar, es suplantar. Por eso el `id` que se manda es el de
+ * `identidadDeLaSesion` y no uno elegido en ninguna lista.
+ */
+export function iniciarCambioDeClave(usuarioId: number, observacion: string): Promise<CambioDeClaveIniciado> {
+  return solicitar(`/seguridad/usuarios/${usuarioId}/clave`, {
+    metodo: 'PUT',
+    cuerpo: { observacion },
+  });
+}
+
 export function fijarPermisosDelGrupo(
   grupoId: number,
   niveles: { acceso: string; privilegios: Privilegio[] }[],

@@ -3,6 +3,8 @@ import { Icono } from '../../ds/Icono';
 import {
   fijarPermisosDelGrupo,
   gruposDelUsuario,
+  identidadDeLaSesion,
+  iniciarCambioDeClave,
   listarAccesos,
   listarAuditoria,
   listarConjuntosDeParametros,
@@ -16,12 +18,14 @@ import {
   PRIVILEGIOS,
   ROTULO_DEL_PRIVILEGIO,
   type Acceso,
+  type CambioDeClaveIniciado,
   type PermisoEfectivo,
   type Privilegio,
 } from '../../api/seguridad';
 import { FalloDeLectura } from '../../api/Fallo';
 import { Aviso } from '../../ds/componentes';
 import { ErrorDeApi } from '../../api/cliente';
+import { enElProveedorDeIdentidad } from '../../api/sesion';
 import { useRebote, useRecurso } from '../../api/useRecurso';
 import { ICO } from '../../ds/iconos';
 import { Shell, type EntradaDePaleta } from '../../shell/Shell';
@@ -149,6 +153,13 @@ export default function Seguridad({ dest, onDest }: PantallaProps) {
   const [errorAlGuardar, setErrorAlGuardar] = useState<ErrorDeApi | null>(null);
   const [sisTab, setSisTab] = useState(0);
   const [vals, setVals] = useState<Record<string, string | boolean>>({});
+  /* El cambio de contraseña, que es la otra escritura de esta pantalla (#559).
+     `cambioIniciado` no es un rótulo de éxito: es lo que el servidor contestó
+     —quién gestiona la credencial y a qué ruta suya hay que ir—, y se guarda
+     porque ese destino no se puede inventar. */
+  const [cambiandoClave, setCambiandoClave] = useState(false);
+  const [errorAlCambiar, setErrorAlCambiar] = useState<ErrorDeApi | null>(null);
+  const [cambioIniciado, setCambioIniciado] = useState<CambioDeClaveIniciado | null>(null);
 
   const val = (k: string, d: string | boolean) => (vals[k] === undefined ? d : vals[k]);
   const set = (k: string, v: string | boolean) => setVals((s) => ({ ...s, [k]: v }));
@@ -588,6 +599,68 @@ export default function Seguridad({ dest, onDest }: PantallaProps) {
      este ejercicio», y esa sólo tiene respuesta a nivel de conjunto. */
   const enParametros = dest === 'sistema' && sisIdx === 1;
   const conjuntos = useRecurso((s) => listarConjuntosDeParametros({ tamano: 20, ordenarPor: 'ejercicio', direccion: 'DESCENDENTE' }, s), [], enParametros);
+
+  /* ── Mi contraseña: la segunda escritura de esta pantalla (#559) ──
+     La pestaña se reconoce por su rótulo y no por su índice como las dos de
+     arriba, y la diferencia importa porque de aquí cuelga un acto: un panel
+     insertado delante movería el cambio de contraseña a otra pestaña —dejaría
+     «Cambiar el ejercicio» habilitado y, al pulsarlo, mandaría el `PUT` de la
+     clave—. Un índice movido en «Parámetros» o en «Copias» sólo dibuja una
+     tabla donde no toca. */
+  const enClave = dest === 'sistema' && sisDef.label === 'Mi contraseña';
+  /* Quién eres, que hasta #559 no lo publicaba ninguna lectura al alcance de
+     esta pantalla: `usuario.id` sólo salía del padrón de usuarios y de la matriz
+     de otro, las dos detrás de un permiso de administración mucho mayor que
+     «cambiar mi propia contraseña». */
+  const identidad = useRecurso((s) => identidadDeLaSesion(s), [], enClave);
+  const observacionDelCambio = String(val('cMotivo', '')).trim();
+
+  /* Lo que impide el acto es de ejecución, no estructural: por eso se calcula
+     aquí y `panelesDeSistema` deja el impedimento de esta pestaña vacío. */
+  const impedimentoDelCambioDeClave =
+    identidad.error !== null
+      ? 'No se ha podido leer quién eres en esta municipalidad, y sin tu identificador la petición no puede salir.'
+      : identidad.datos === null
+        ? 'Todavía no se ha leído quién eres en esta municipalidad.'
+        : cambioIniciado !== null
+          ? 'El cambio ya está iniciado: la contraseña se termina de cambiar en el proveedor de identidad, con el enlace de aquí arriba.'
+          : observacionDelCambio === ''
+            ? 'Falta el motivo: toda modificación se registra con el motivo de quien la hace (RNF-052).'
+            : '';
+  const impedimentoDeSistema = enClave ? impedimentoDelCambioDeClave : sisDef.impedimento;
+  const puedeCambiarLaClave = enClave && impedimentoDeSistema === '' && !cambiandoClave;
+
+  /* Al salir de la pestaña se olvida lo que pasó en ella. La confirmación de un
+     cambio ya iniciado, leída al volver, diría de un acto de hace una hora lo
+     mismo que del de hace un segundo. */
+  useEffect(() => {
+    if (enClave) return;
+    setCambioIniciado(null);
+    setErrorAlCambiar(null);
+  }, [enClave]);
+
+  const cambiarLaClave = async () => {
+    const yo = identidad.datos;
+    if (!puedeCambiarLaClave || yo === null) return;
+    setCambiandoClave(true);
+    setErrorAlCambiar(null);
+    try {
+      /* El id sale de la lectura de la sesión y nunca de una lista: el servidor
+         compara la cuenta del token con la del usuario que ese id nombra y
+         contesta 403 si no son la misma. Cambiar la de otro no es administrar,
+         es suplantar. */
+      const iniciado = await iniciarCambioDeClave(yo.usuarioId, observacionDelCambio);
+      setCambioIniciado(iniciado);
+      set('cMotivo', '');
+      toast('Cambio iniciado. Queda en la auditoría con tu usuario.');
+    } catch (fallo) {
+      setErrorAlCambiar(
+        fallo instanceof ErrorDeApi ? fallo : new ErrorDeApi('ERROR_INTERNO', 'No se pudo iniciar el cambio', 0),
+      );
+    } finally {
+      setCambiandoClave(false);
+    }
+  };
 
   /* ── Shell ─────────────────────────────────────────────────── */
   const labelDest = (DESTINOS.find((d) => d[0] === dest) || ['', 'Seguridad'])[1];
@@ -1627,13 +1700,71 @@ export default function Seguridad({ dest, onDest }: PantallaProps) {
                 </div>
               )}
 
+              {/* Quién eres, que es lo único que la petición lleva además del
+                  motivo. El artboard no dibujaba nada de esto: daba por hecho
+                  que la pantalla sabía a quién estaba cambiando la contraseña, y
+                  hasta #559 no lo sabía. */}
+              {enClave && (
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 12, padding: '14px 16px', borderTop: '1px solid var(--line)' }}>
+                  {identidad.error !== null && (
+                    <FalloDeLectura error={identidad.error} que="quién eres en esta municipalidad" alReintentar={identidad.reintentar} />
+                  )}
+                  {identidad.cargando && (
+                    <p style={{ margin: 0, fontSize: 12.5, color: 'var(--ink-3)' }}>Leyendo quién eres…</p>
+                  )}
+                  {identidad.datos !== null && (
+                    <p style={{ margin: 0, fontSize: 12.5, lineHeight: 1.55, color: 'var(--ink-3)', textWrap: 'pretty' }}>
+                      Se cambia la contraseña de{' '}
+                      <strong style={{ fontWeight: 600, color: 'var(--ink-2)' }}>{identidad.datos.nombre}</strong>{' '}
+                      <span style={{ fontFamily: 'var(--font-mono)' }}>({identidad.datos.cuenta})</span>, el usuario n.º{' '}
+                      <span style={{ fontFamily: 'var(--font-mono)' }}>{identidad.datos.usuarioId}</span> de esta municipalidad. Sólo
+                      la propia: el servidor compara la cuenta de tu token con la de ese identificador y rechaza cualquier otro.
+                    </p>
+                  )}
+                  {errorAlCambiar !== null && (
+                    <Aviso tono="bad" titulo="No se inició ningún cambio">
+                      {errorAlCambiar.mensaje}
+                    </Aviso>
+                  )}
+                  {cambioIniciado !== null && (
+                    <Aviso tono="ok" titulo="Cambio iniciado, y anotado en la bitácora">
+                      El backend no ha recibido ninguna contraseña: registró el acto con tu motivo y contestó quién la guarda
+                      —<span style={{ fontFamily: 'var(--font-mono)' }}>{cambioIniciado.gestionadaPor}</span>— y a qué ruta suya
+                      hay que ir —<span style={{ fontFamily: 'var(--font-mono)' }}>{cambioIniciado.destino}</span>—. La ruta es la
+                      que contestó el servidor; lo único que pone esta pantalla es la base, que es el mismo emisor con el que
+                      entraste.
+                      <span style={{ display: 'block', marginTop: 9 }}>
+                        <a
+                          href={enElProveedorDeIdentidad(cambioIniciado.destino)}
+                          className="hov-acento-2"
+                          style={{
+                            display: 'inline-block',
+                            borderRadius: 6,
+                            padding: '9px 18px',
+                            background: 'var(--accent)',
+                            color: '#fff',
+                            fontSize: 12.5,
+                            fontWeight: 500,
+                            textDecoration: 'none',
+                          }}
+                        >
+                          Ir a {enElProveedorDeIdentidad(cambioIniciado.destino)}
+                        </a>
+                      </span>
+                    </Aviso>
+                  )}
+                </div>
+              )}
+
               <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap', padding: '13px 16px', borderTop: '1px solid var(--line)', background: 'var(--bg-elev)' }}>
-                <p style={{ margin: 0, flex: 1, minWidth: 170, fontSize: 12, color: 'var(--ink-3)', textWrap: 'pretty' }}>
-                  {sisDef.impedimento === '' ? sisDef.pie : sisDef.impedimento}
+                <p id="motivo-de-la-primaria" style={{ margin: 0, flex: 1, minWidth: 170, fontSize: 12, color: 'var(--ink-3)', textWrap: 'pretty' }}>
+                  {impedimentoDeSistema === '' ? sisDef.pie : impedimentoDeSistema}
                 </p>
                 <button
-                  disabled={sisDef.impedimento !== ''}
-                  title={sisDef.impedimento || undefined}
+                  onClick={() => void cambiarLaClave()}
+                  disabled={impedimentoDeSistema !== '' || cambiandoClave}
+                  title={impedimentoDeSistema || undefined}
+                  aria-describedby="motivo-de-la-primaria"
                   style={{
                     border: 0,
                     borderRadius: 6,
@@ -1642,11 +1773,11 @@ export default function Seguridad({ dest, onDest }: PantallaProps) {
                     color: '#fff',
                     fontSize: 13,
                     fontWeight: 500,
-                    cursor: sisDef.impedimento === '' ? 'pointer' : 'not-allowed',
-                    opacity: sisDef.impedimento === '' ? 1 : 0.5,
+                    cursor: impedimentoDeSistema === '' && !cambiandoClave ? 'pointer' : 'not-allowed',
+                    opacity: impedimentoDeSistema === '' && !cambiandoClave ? 1 : 0.5,
                   }}
                 >
-                  {sisDef.primaria}
+                  {cambiandoClave ? 'Iniciando…' : sisDef.primaria}
                 </button>
               </div>
             </section>
