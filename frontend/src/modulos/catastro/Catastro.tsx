@@ -6,7 +6,7 @@ import { moduloDe } from '../../shell/modulos';
 import { usarPreferencias } from '../../shell/preferencias';
 import type { PantallaProps } from '../../App';
 import {
-  catalogoVial,
+  filtroDeViaPorCriterio,
   comoBbox,
   darDeBaja,
   inscribirPredio,
@@ -686,16 +686,21 @@ export default function Catastro({ dest, onDest }: PantallaProps) {
    * predio puede no poder leerlo, y entonces la dirección se escribe a mano —que
    * es como está el padrón importado— en vez de perder el campo.
    */
-  const catalogo = useRecurso((senal) => catalogoVial(senal), [], esNuevo);
+  /* La via la busca el SERVIDOR desde #565.
+     Antes esta pantalla se traia el catalogo entero al abrirse —tres peticiones
+     de 500 para las 1 110 vias de Catacaos— porque la operacion no admitia
+     ningun filtro y un buscador no lo podia resolver el servidor. Ahora es una
+     peticion por pausa de tecleo, y ninguna al abrir.
+
+     Y siempre `activa: true`: una via dada de baja no se puede elegir para un
+     predio nuevo, y hasta ahora salia en la lista. */
   const viaBuscada = useRebote(busquedaDeVia.trim());
-  const viasQueCasan = useMemo(() => {
-    const todas = catalogo.datos?.vias ?? [];
-    const aguja = viaBuscada.toLocaleLowerCase('es-PE');
-    if (aguja === '') return [];
-    return todas
-      .filter((v) => (v.nombre + ' ' + v.tipo + ' ' + v.codigo).toLocaleLowerCase('es-PE').includes(aguja))
-      .slice(0, 8);
-  }, [catalogo.datos, viaBuscada]);
+  const catalogo = useRecurso(
+    (senal) => listarVias({ ...filtroDeViaPorCriterio(viaBuscada), activa: true }, { pagina: 0, tamano: 8 }, senal),
+    [viaBuscada],
+    esNuevo && viaBuscada !== '',
+  );
+  const viasQueCasan = catalogo.datos?.contenido ?? [];
 
   /**
    * La dirección que va a viajar, compuesta de lo que se eligió.
@@ -883,7 +888,7 @@ export default function Catastro({ dest, onDest }: PantallaProps) {
      ubigeo, no de un sector—, así que se trae entero y paginado. */
   const [paginaVias, setPaginaVias] = useState(0);
   const vias = useRecurso(
-    (senal) => listarVias({ pagina: paginaVias, tamano: 20 }, senal),
+    (senal) => listarVias({}, { pagina: paginaVias, tamano: 20 }, senal),
     [paginaVias],
     dest === 'territorio',
   );
@@ -1335,21 +1340,25 @@ export default function Catastro({ dest, onDest }: PantallaProps) {
           <input
             value={busquedaDeVia}
             onChange={(e) => setBusquedaDeVia(e.target.value)}
-            placeholder={catalogo.cargando ? 'Trayendo el catálogo vial…' : 'Escribe parte del nombre: cayetano, comercio…'}
+            placeholder="Escribe parte del nombre —cayetano, comercio— o su código"
             aria-label="Buscar una vía del catálogo"
-            disabled={catalogo.cargando}
             style={IN}
           />
-          {catalogo.datos && !catalogo.datos.completo && (
-            <span style={{ fontSize: 11.5, color: 'var(--warn-fg)', textWrap: 'pretty' }}>
-              El catálogo tiene {catalogo.datos.total.toLocaleString('es-PE')} vías y aquí solo hay{' '}
-              {catalogo.datos.vias.length.toLocaleString('es-PE')}: la búsqueda no las mira todas.
-            </span>
+          {/* Ya no hace falta avisar de que la búsqueda «no las mira todas»: las
+              mira el servidor, y mira las 1 110. */}
+          {catalogo.error !== null && (
+            <FalloDeLectura
+              error={catalogo.error}
+              que="el catálogo vial"
+              acceso="calles"
+              alReintentar={catalogo.reintentar}
+            />
           )}
-          {viaBuscada !== '' && viasQueCasan.length === 0 && catalogo.datos && (
+          {catalogo.cargando && <span style={{ fontSize: 12, color: 'var(--ink-3)' }}>Buscando…</span>}
+          {viaBuscada !== '' && !catalogo.cargando && catalogo.error === null && viasQueCasan.length === 0 && (
             <span style={{ fontSize: 12, color: 'var(--ink-3)' }}>
-              Ninguna de las {catalogo.datos.total.toLocaleString('es-PE')} vías del catálogo dice «{viaBuscada}». Si el
-              predio no da a una vía del catálogo, escribe la dirección abajo.
+              Ninguna vía activa del catálogo dice «{viaBuscada}». Si el predio no da a una vía del catálogo, escribe la
+              dirección abajo.
             </span>
           )}
           {viasQueCasan.map((v) => (

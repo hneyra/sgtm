@@ -355,49 +355,50 @@ export type Via = {
 };
 
 /**
- * El catalogo vial.
+ * Lo que el catalogo vial deja acotar (#565).
  *
- * **No acota por sector**: `ViaController` no tiene ese filtro, y una via no
- * pertenece a un sector en el modelo —es del ubigeo—. La pantalla lo dice en
- * vez de dibujar un filtro que no filtra.
+ * `sector` esta declarado en el contrato y **se rechaza con 422 diciendo por
+ * que**: una via no pertenece a un sector en el modelo —es del ubigeo, y
+ * atraviesa varios—, asi que no se manda.
  */
-export function listarVias(paginacion: Paginacion, senal?: AbortSignal): Promise<RespuestaPaginada<Via>> {
-  return solicitar('/catastro/vias', { parametros: { ...paginacion }, senal });
-}
-
-/** Lo que `Paginacion` del backend admite por pagina. Mas que esto es un 422. */
-const TAMANO_MAXIMO_DE_PAGINA = 500;
-
-/** Tope de peticiones del catalogo. Con 500 por pagina son 3 000 vias. */
-const PAGINAS_MAXIMAS_DEL_CATALOGO = 6;
+export type FiltroDeVias = {
+  nombreDeCalle?: string;
+  codigoDeVia?: string;
+  tipoDeVia?: string;
+  /** `true` deja fuera las dadas de baja. El alta de un predio siempre lo pide. */
+  activa?: boolean;
+};
 
 /**
- * El catalogo vial ENTERO, en tantas peticiones como paginas haga falta.
+ * El catalogo vial, acotado por el servidor.
  *
- * Existe porque `ViaController.listar` **no busca por nombre**: solo recibe la
- * paginacion. Un buscador de vias, entonces, no lo puede resolver el servidor —o
- * se trae el catalogo y se filtra aqui, o no hay buscador—, y sin buscador la
- * unica salida que quedaba era el desplegable de cinco calles del prototipo, que
- * es lo que metia en el padron una via que no existe.
- *
- * `completo` dice si se trajo todo. Un catalogo mas grande que el tope se corta y
- * la pantalla lo dice: buscar sobre una parte y llamarlo «el catalogo» es
- * exactamente la clase de mentira que esto viene a quitar.
+ * Hasta #565 esta operacion **no admitia ningun filtro**, asi que un buscador de
+ * vias no lo podia resolver el servidor: o se traia el catalogo entero y se
+ * filtraba aqui —tres peticiones de 500 al abrir el alta, para las 1 110 vias de
+ * Catacaos— o no habia buscador. Ahora busca el servidor, y la busqueda por
+ * prefijo llega al indice: se escribe como rango y no con `LIKE`, porque bajo
+ * RLS un `LIKE 'prefijo%'` no lo alcanza (DAT-01 §0, tercer hallazgo).
  */
-export async function catalogoVial(
+export function listarVias(
+  filtro: FiltroDeVias,
+  paginacion: Paginacion,
   senal?: AbortSignal,
-): Promise<{ vias: Via[]; total: number; completo: boolean }> {
-  const vias: Via[] = [];
-  let total = 0;
-  for (let pagina = 0; pagina < PAGINAS_MAXIMAS_DEL_CATALOGO; pagina++) {
-    const r = await listarVias({ pagina, tamano: TAMANO_MAXIMO_DE_PAGINA }, senal);
-    total = r.totalElementos;
-    vias.push(...r.contenido);
-    if (!r.hayMas) return { vias, total, completo: true };
-  }
-  return { vias, total, completo: vias.length >= total };
+): Promise<RespuestaPaginada<Via>> {
+  return solicitar('/catastro/vias', { parametros: { ...filtro, ...paginacion }, senal });
 }
 
+/**
+ * Como se busca una via con lo que se teclea.
+ *
+ * El codigo es todo digitos —«010128»— y el nombre no, asi que la forma de lo
+ * tecleado decide por cual de los dos se pregunta. Es el mismo criterio con que
+ * el padron enruta un DNI, un RUC o un nombre, y por lo mismo: quien atiende
+ * teclea lo que tiene delante, no elige el campo.
+ */
+export function filtroDeViaPorCriterio(criterio: string): FiltroDeVias {
+  const limpio = criterio.trim();
+  return /^\d+$/.test(limpio) ? { codigoDeVia: limpio } : { nombreDeCalle: limpio };
+}
 
 /* ══════════ Las tres tablas con que se valoriza un predio ══════════
    Devuelven una LISTA suelta, no el sobre paginado: son cuadros completos de un
