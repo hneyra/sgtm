@@ -308,6 +308,34 @@ public class AdministracionRepositoryJdbc extends RepositorioJdbc
     }
 
     /**
+     * Quien esta en un grupo (#582).
+     *
+     * <p>La inversa exacta de {@link #gruposDeUsuario}: el mismo {@code JOIN} interno con {@code
+     * miembro} y el mismo {@code m.activo}, cambiando de lado la clave. Se ordena por {@code
+     * ORDEN_USUARIO}, que ya desempata por {@code id}: sin ese desempate, dos usuarios con el mismo
+     * nombre dejan de tener un orden total y dos paginas consecutivas pueden repetir a uno y omitir
+     * a otro (#548).
+     *
+     * <p>Ninguna de las dos consultas nombra la municipalidad: la ponen las politicas RLS de {@code
+     * usuario} y {@code miembro}, cada una por su lado, con el contexto de la transaccion.
+     */
+    @Override
+    public Pagina<Usuario> usuariosDeGrupo(long grupoId, Paginacion paginacion) {
+        return paginar(
+                "SELECT u.id, u.cuenta, u.sujeto_oidc, u.nombre, u.correo, u.habilitado,"
+                        + " u.vigencia_desde, u.vigencia_hasta FROM usuario u"
+                        + " JOIN miembro m ON m.usuario_id = u.id AND m.activo"
+                        + " WHERE m.grupo_id = :grupo",
+                "SELECT count(*) FROM usuario u"
+                        + " JOIN miembro m ON m.usuario_id = u.id AND m.activo"
+                        + " WHERE m.grupo_id = :grupo",
+                Map.of("grupo", grupoId),
+                paginacion,
+                ORDEN_USUARIO,
+                AdministracionRepositoryJdbc::mapearUsuario);
+    }
+
+    /**
      * Alta o baja de la pertenencia, en una sola sentencia.
      *
      * <p>{@code ON CONFLICT ... DO UPDATE} y no un {@code DELETE} seguido de un {@code INSERT}: la
