@@ -10,7 +10,6 @@ import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 import pe.gob.sgtm.autorizacion.Privilegio;
 import pe.gob.sgtm.autorizacion.RequiereAcceso;
-import pe.gob.sgtm.compartido.Pagina;
 import pe.gob.sgtm.compartido.Paginacion;
 import pe.gob.sgtm.contribuyentes.ResumenDeContribuyente;
 import pe.gob.sgtm.valores.aplicacion.ConsultaDeValores;
@@ -79,6 +78,7 @@ public class ConsultaValoresController {
     public RespuestaPaginada<ValorConsultadoResource> consultar(
             @RequestParam(required = false) @Nullable String nroDeValor,
             @RequestParam(required = false) @Nullable String codContribuyente,
+            @RequestParam(required = false) @Nullable String contribuyente,
             @RequestParam(required = false) @Nullable String tipo,
             @RequestParam(required = false) @Nullable String estado,
             ParametrosDePaginacion parametros) {
@@ -87,14 +87,14 @@ public class ConsultaValoresController {
         LocalDate hoy = LocalDate.now(reloj);
 
         Long contribuyenteId = null;
-        if (codContribuyente != null && !codContribuyente.isBlank()) {
-            Optional<ResumenDeContribuyente> encontrado =
-                    consulta.contribuyentePorCodigo(codContribuyente);
+        String codigo = primeroNoVacio(codContribuyente, contribuyente);
+        if (codigo != null) {
+            Optional<ResumenDeContribuyente> encontrado = consulta.contribuyentePorCodigo(codigo);
             if (encontrado.isEmpty()) {
-                // Un codigo que no existe es un padron sin ese contribuyente, no una peticion mal
-                // formada. Devolver la pagina vacia es la respuesta; ignorar el filtro devolveria
-                // todos los valores de la municipalidad.
-                return RespuestaPaginada.de(Pagina.vacia(paginacion));
+                // Hasta #622 esto devolvia la pagina vacia, y esa respuesta se lee como «este
+                // contribuyente no tiene ningun valor». Un codigo que no esta en el padron es
+                // 404 nombrandolo, igual que en las otras seis lecturas del expediente.
+                throw noEstaEnElPadron(codigo);
             }
             contribuyenteId = encontrado.get().id();
         }
@@ -174,5 +174,34 @@ public class ConsultaValoresController {
     private static String mensajeDe(RuntimeException excepcion) {
         String mensaje = excepcion.getMessage();
         return mensaje == null ? "El filtro recibido no es valido" : mensaje;
+    }
+
+    /**
+     * Un codigo que no esta en el padron es {@code 404} nombrandolo, no una pagina vacia (#622).
+     *
+     * <p>Es el defecto que #541 y #595 cerraron en las dos lecturas de Rentas, en la pantalla de al
+     * lado: el expediente de Consultas pedia siete lecturas con el mismo codigo, una contestaba 404
+     * y las otras seis «existe y no tiene nada». Las dos que listan padron —esta y su gemela—
+     * contradecian ademas a la pantalla de Rentas sobre la misma persona.
+     */
+    private static RuntimeException noEstaEnElPadron(String codigo) {
+        return new ProblemaDeNegocio(
+                CodigoDeError.NO_ENCONTRADO,
+                "En el padron de esta municipalidad no hay ningun contribuyente con codigo '"
+                        + codigo
+                        + "'");
+    }
+
+    private static @Nullable String primeroNoVacio(@Nullable String uno, @Nullable String otro) {
+        String primero = limpio(uno);
+        return primero != null ? primero : limpio(otro);
+    }
+
+    private static @Nullable String limpio(@Nullable String texto) {
+        if (texto == null) {
+            return null;
+        }
+        String sinBlancos = texto.strip();
+        return sinBlancos.isEmpty() ? null : sinBlancos;
     }
 }

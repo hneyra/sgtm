@@ -15,7 +15,9 @@ import pe.gob.sgtm.cuentacorriente.aplicacion.ConsultarDeuda;
 import pe.gob.sgtm.cuentacorriente.dominio.CriterioDeDeudaPorContribuyente;
 import pe.gob.sgtm.cuentacorriente.dominio.Fase;
 import pe.gob.sgtm.web.Api;
+import pe.gob.sgtm.web.CodigoDeError;
 import pe.gob.sgtm.web.ParametrosDePaginacion;
+import pe.gob.sgtm.web.ProblemaDeNegocio;
 import pe.gob.sgtm.web.RespuestaPaginada;
 
 /**
@@ -81,20 +83,20 @@ public class ConsultaDeudaController {
 
     @GetMapping
     public RespuestaPaginada<ObligacionConDeudaResource> deuda(
-            @RequestParam String codContribuyente,
+            @RequestParam(required = false) @Nullable String codContribuyente,
+            @RequestParam(required = false) @Nullable String contribuyente,
             @RequestParam(required = false) @Nullable String fechaDeCorte,
             @RequestParam(required = false) @Nullable String fase,
             @RequestParam(required = false) @Nullable String incluyeConvenios,
             ParametrosDePaginacion parametros) {
 
-        if (codContribuyente.isBlank()) {
-            throw new IllegalArgumentException(
-                    "codContribuyente es obligatorio para consultar la deuda");
+        String codigo = exigirContribuyente(codContribuyente, contribuyente, "contribuyente");
+        if (consulta.contribuyentePorCodigo(codigo).isEmpty()) {
+            throw noEstaEnElPadron(codigo);
         }
 
         CriterioDeDeudaPorContribuyente criterio =
-                new CriterioDeDeudaPorContribuyente(
-                        codContribuyente, fechaDe(fechaDeCorte), faseDe(fase));
+                new CriterioDeDeudaPorContribuyente(codigo, fechaDe(fechaDeCorte), faseDe(fase));
 
         return RespuestaPaginada.de(
                 consulta.porContribuyente(criterio, paginacionDe(parametros)),
@@ -142,5 +144,56 @@ public class ConsultaDeudaController {
                 parametros.direccion() == null
                         ? Paginacion.Direccion.DESCENDENTE
                         : parametros.direccion());
+    }
+
+    /**
+     * Lo que la peticion diga de quien es la consulta, con los dos nombres (#622).
+     *
+     * <p>Uno de los dos es <b>obligatorio</b>: sin ninguno, 422. Sin esa exigencia esto seria una
+     * puerta al padron entero.
+     */
+    private static String exigirContribuyente(
+            @Nullable String canonico, @Nullable String alias, String nombreDelAlias) {
+        String codigo = primeroNoVacio(canonico, alias);
+        if (codigo == null) {
+            throw new ProblemaDeNegocio(
+                    CodigoDeError.VALIDACION,
+                    "Hay que decir de quien es la consulta: falta «codContribuyente» (o su otro"
+                            + " nombre, «"
+                            + nombreDelAlias
+                            + "»)");
+        }
+        return codigo;
+    }
+
+    private static @Nullable String primeroNoVacio(@Nullable String uno, @Nullable String otro) {
+        String primero = limpio(uno);
+        return primero != null ? primero : limpio(otro);
+    }
+
+    private static @Nullable String limpio(@Nullable String texto) {
+        if (texto == null) {
+            return null;
+        }
+        String sinBlancos = texto.strip();
+        return sinBlancos.isEmpty() ? null : sinBlancos;
+    }
+
+    /**
+     * Un codigo que no esta en el padron es {@code 404} nombrandolo, no una pagina vacia (#622).
+     *
+     * <p>Es el mismo defecto que #541 y #595 cerraron en las dos lecturas de Rentas: el expediente
+     * pide siete lecturas con el mismo codigo, una contestaba 404 y las otras seis «existe y no
+     * tiene nada». Quien atiende leia seis afirmaciones de que la persona existe debajo de una que
+     * decia que no — y la que mas cuesta es la de deuda, porque «no tiene deuda pendiente» sobre
+     * alguien que el padron no reconoce es lo que se dice antes de emitir una constancia de no
+     * adeudo.
+     */
+    private static RuntimeException noEstaEnElPadron(String codigo) {
+        return new ProblemaDeNegocio(
+                CodigoDeError.NO_ENCONTRADO,
+                "En el padron de esta municipalidad no hay ningun contribuyente con codigo '"
+                        + codigo
+                        + "'");
     }
 }

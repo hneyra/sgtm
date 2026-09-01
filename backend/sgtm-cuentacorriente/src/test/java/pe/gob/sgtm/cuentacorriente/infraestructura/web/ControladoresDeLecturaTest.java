@@ -26,6 +26,7 @@ import pe.gob.sgtm.dominio.MunicipalidadId;
 import pe.gob.sgtm.esquema.BaseDeDatosDePrueba;
 import pe.gob.sgtm.plataforma.tenant.TenantTransactionManager;
 import pe.gob.sgtm.web.ParametrosDePaginacion;
+import pe.gob.sgtm.web.ProblemaDeNegocio;
 
 /**
  * Los GET de solo lectura de este contexto exigen un caso de uso {@code @Transactional(readOnly =
@@ -46,6 +47,10 @@ class ControladoresDeLecturaTest {
 
     private static BaseDeDatosDePrueba base;
     private static long municipalidad;
+
+    /** Un contribuyente que existe y no tiene ni un asiento: el unico «cero filas» legitimo. */
+    private static final String CODIGO = "C-LECTURA";
+
     private static CuentaCorrienteController cuentaCorrienteSinProxy;
     private static AltasBajasController altasBajasSinProxy;
     private static ConsultaPagosController pagosSinProxy;
@@ -57,6 +62,11 @@ class ControladoresDeLecturaTest {
     static void provisionar() throws SQLException, IOException {
         base = BaseDeDatosDePrueba.provisionar();
         municipalidad = crearMunicipalidad();
+        // Un contribuyente de verdad, SIN movimientos. Desde #622 estas lecturas contestan 404
+        // ante un codigo que no esta en el padron, asi que «NO-EXISTE» ya no sirve para medir
+        // la transaccion: la peticion moriria antes de llegar a la base y la prueba pasaria en
+        // verde sin haber comprobado nada.
+        crearContribuyente();
 
         DriverManagerDataSource pool = new DriverManagerDataSource();
         pool.setUrl(base.url());
@@ -132,14 +142,14 @@ class ControladoresDeLecturaTest {
         assertThatThrownBy(
                         () ->
                                 altasBajasSinProxy.altasYBajas(
-                                        "NO-EXISTE", null, null, null, paginacion()))
+                                        CODIGO, null, null, null, null, paginacion()))
                 .isInstanceOf(RuntimeException.class);
     }
 
     @Test
     @DisplayName("con @Transactional, el GET de altas y bajas funciona")
     void conProxyAltasBajasFunciona() {
-        var pagina = altasBajasConProxy.altasYBajas("NO-EXISTE", null, null, null, paginacion());
+        var pagina = altasBajasConProxy.altasYBajas(CODIGO, null, null, null, null, paginacion());
 
         assertThat(pagina.totalElementos()).isZero();
     }
@@ -147,16 +157,93 @@ class ControladoresDeLecturaTest {
     @Test
     @DisplayName("sin el proxy transaccional, el GET de pagos falla por falta de contexto")
     void sinProxyPagosFalla() {
-        assertThatThrownBy(() -> pagosSinProxy.pagos("NO-EXISTE", null, null, paginacion()))
+        assertThatThrownBy(() -> pagosSinProxy.pagos(CODIGO, null, null, null, paginacion()))
                 .isInstanceOf(RuntimeException.class);
     }
 
     @Test
     @DisplayName("con @Transactional, el GET de pagos funciona")
     void conProxyPagosFunciona() {
-        var pagina = pagosConProxy.pagos("NO-EXISTE", null, null, paginacion());
+        var pagina = pagosConProxy.pagos(CODIGO, null, null, null, paginacion());
 
         assertThat(pagina.totalElementos()).isZero();
+    }
+
+    // ---------------- el codigo que no esta en el padron (#622)
+
+    @Test
+    @DisplayName("altas y bajas: un codigo que no esta en el padron es 404, no cero filas")
+    void altasYBajasConCodigoInventadoEs404() {
+        assertThatThrownBy(
+                        () ->
+                                altasBajasConProxy.altasYBajas(
+                                        "NO-EXISTE", null, null, null, null, paginacion()))
+                .as(
+                        "«existe y no tiene movimientos» y «ese codigo no esta en el padron» se"
+                                + " decian igual, y una de las dos es falsa")
+                .isInstanceOf(ProblemaDeNegocio.class)
+                .hasMessageContaining("NO-EXISTE");
+    }
+
+    @Test
+    @DisplayName("pagos: lo mismo")
+    void pagosConCodigoInventadoEs404() {
+        assertThatThrownBy(() -> pagosConProxy.pagos("NO-EXISTE", null, null, null, paginacion()))
+                .isInstanceOf(ProblemaDeNegocio.class)
+                .hasMessageContaining("NO-EXISTE");
+    }
+
+    @Test
+    @DisplayName("y el contribuyente que SI esta y no tiene nada sigue siendo cero filas")
+    void elQueExisteYNoTieneNadaSigueSiendoCeroFilas() {
+        assertThat(
+                        altasBajasConProxy
+                                .altasYBajas(CODIGO, null, null, null, null, paginacion())
+                                .totalElementos())
+                .as("es el unico caso que de verdad significa «no tiene»")
+                .isZero();
+        assertThat(pagosConProxy.pagos(CODIGO, null, null, null, paginacion()).totalElementos())
+                .isZero();
+    }
+
+    @Test
+    @DisplayName("«codigoCont» sigue valiendo: es el nombre que el contrato trae")
+    void elAliasSigueValiendo() {
+        assertThat(
+                        altasBajasConProxy
+                                .altasYBajas(null, CODIGO, null, null, null, paginacion())
+                                .totalElementos())
+                .isZero();
+    }
+
+    @Test
+    @DisplayName("sin ninguno de los dos nombres, 422: no es una puerta al padron entero")
+    void sinNingunNombreEs422() {
+        assertThatThrownBy(
+                        () ->
+                                altasBajasConProxy.altasYBajas(
+                                        null, null, null, null, null, paginacion()))
+                .isInstanceOf(ProblemaDeNegocio.class);
+        assertThatThrownBy(() -> pagosConProxy.pagos(null, null, null, null, paginacion()))
+                .isInstanceOf(ProblemaDeNegocio.class);
+    }
+
+    private static void crearContribuyente() throws java.sql.SQLException {
+        try (java.sql.Connection app = base.conexion(BaseDeDatosDePrueba.APP)) {
+            pe.gob.sgtm.esquema.ContextoDeTenant.fijar(app, municipalidad);
+            try (java.sql.PreparedStatement sentencia =
+                    app.prepareStatement(
+                            "INSERT INTO contribuyente (municipalidad_id, codigo_contribuyente,"
+                                    + " tipo_documento, numero_documento, tipo_persona,"
+                                    + " nombre_razon_social, usuario_registro)"
+                                    + " VALUES (?, ?, 'DNI', '40622622', 'NATURAL',"
+                                    + "         'SIN MOVIMIENTOS, ALGUIEN', 'prueba')")) {
+                sentencia.setLong(1, municipalidad);
+                sentencia.setString(2, CODIGO);
+                sentencia.executeUpdate();
+                app.commit();
+            }
+        }
     }
 
     private static ParametrosDePaginacion paginacion() {
