@@ -11,6 +11,7 @@ import {
   correrPredialMasivo,
   determinarPredial,
   fichaDelContribuyente,
+  hojaDeDeclaracion,
   indicadores,
   listarPrediosDelContribuyente,
   listarVehiculosDelContribuyente,
@@ -25,7 +26,9 @@ import {
   type CorridaDePredial,
   type DeterminacionPredial,
   type FichaDelContribuyente,
+  type HojaDeDeclaracion,
   type PeticionDeMovimientoDeDeuda,
+  type PredioDeLaHoja,
   type PredioDelContribuyente,
   type VehiculoDelContribuyente,
 } from '../../api/rentas';
@@ -53,9 +56,6 @@ import {
   COLS_DE_LA_BAJA,
   DEFECTOS,
   DETERMINACIONES,
-  DJ_COLS,
-  DJ_META,
-  DJ_TOTALES,
   EXPEDIENTE,
   OPCIONES_DE_RENTAS,
   TIPOS_DE_DETERMINACION,
@@ -1145,7 +1145,16 @@ export default function Rentas({ dest, onDest }: PantallaProps) {
      que la tabla elige una fila y no un conjunto. Antes eran cuatro casillas
      premarcadas sobre filas de la maqueta que además nadie leía al mandar. */
   const [obligacionMarcada, setObligacionMarcada] = useState<number | null>(null);
-  const [dj, setDj] = useState<Record<string, boolean>>({ HR: true, PU: true, PR: false });
+  /* La hoja resumen es la de UNA declaración jurada, y hasta ahora la pantalla no
+     preguntaba por ninguna: dibujaba la de la maqueta con cualquier sesión y sin
+     haber abierto a nadie. El número lo teclea quien atiende —es el que lleva
+     impreso el cargo— y el año es el del selector del shell, que es el mismo que
+     la hoja imprime bajo el título. */
+  const [djNro, setDjNro] = useState('');
+  /* Vacía es hoy, y lo resuelve el servidor: escribir aquí `LocalDate.now()` del
+     navegador daría una fecha distinta de la que el backend usa para resolver el
+     domicilio y la titularidad, y la hoja iría fechada con una y compuesta con otra. */
+  const [djFecha, setDjFecha] = useState('');
 
   /* El expediente se abre sobre el destino «Contribuyentes», como en el
      artboard. Al cambiar de destino se suelta el sujeto, salvo cuando es la
@@ -1592,6 +1601,42 @@ export default function Rentas({ dest, onDest }: PantallaProps) {
   const censoDelPadron = useRecurso((s2) => buscarContribuyentes({}, { tamano: 1 }, s2), [], enPanel);
   const kpisDeRecaudacion = useRecurso((s2) => indicadores(pref.ejercicio, s2), [pref.ejercicio], enPanel);
   const corrida = useRecurso((s2) => ultimaCorridaPredial(s2), [], enPanel);
+
+  /* ── La hoja resumen de la declaración jurada ─────────────────
+     `GET /rentas/declaraciones/{n}/hoja` (#563). Es el único documento del
+     módulo pensado para imprimirse y firmarse, y todo lo que consignaba venía
+     del juego de datos de la maqueta: el nombre, el código y el DNI de una
+     persona, dos predios que no son de nadie y cuatro totales. Una vez impresa
+     bajo «Declaro bajo juramento» y firmada, una hoja así no se distingue de
+     una correcta, y a diferencia de una pantalla nadie la vuelve a mirar contra
+     la base.
+
+     El número se rebota como cualquier otro buscador —una lectura por pausa de
+     tecleo, no por pulsación— y la lectura no se hace sin número: pedir
+     `/declaraciones//hoja` sería preguntar por una declaración vacía. */
+  const djBuscada = useRebote(djNro.trim());
+  const hojaDj = useRecurso(
+    (s2) => hojaDeDeclaracion(djBuscada, pref.ejercicio, djFecha === '' ? undefined : djFecha, s2),
+    [djBuscada, pref.ejercicio, djFecha],
+    dest === 'reporte' && djBuscada !== '',
+  );
+  /* Lo que impide imprimir, dicho. Es la hoja RESUELTA y no «que no haya error»:
+     mientras se está consultando tampoco hay nada que sacar por la impresora, y
+     la respuesta anterior a otro número ya no está —`useRecurso` la suelta al
+     cambiar la pregunta—. Y un declarante nulo tampoco imprime: sería un papel
+     que se firma con el nombre en blanco. */
+  const impedimentoDeImprimirLaDj =
+    djBuscada === ''
+      ? 'Escribe el número de la declaración: sin ella no hay hoja que imprimir'
+      : hojaDj.cargando
+        ? 'Todavía se está consultando la declaración'
+        : hojaDj.error !== null
+          ? `No se pudo leer esta declaración, así que no hay hoja: ${hojaDj.error.mensaje}`
+          : hojaDj.datos === null
+            ? 'No hay ninguna hoja leída: no hay qué imprimir'
+            : hojaDj.datos.declarante === null
+              ? 'El contribuyente de esta declaración ya no está en el padrón: la hoja saldría sin nombre ni documento'
+              : undefined;
   /* La observación del acto. El manual no le dibuja campo y toda escritura la
      exige (regla 10), así que es un control añadido con su propio rótulo. */
   const [observacionDelActo, setObservacionDelActo] = useState('');
@@ -3889,150 +3934,243 @@ export default function Rentas({ dest, onDest }: PantallaProps) {
         {/* ══════════ DECLARACIÓN JURADA ══════════ */}
         {dest === 'reporte' && (
           <div style={{ display: 'flex', flexDirection: 'column', gap: 16, alignItems: 'center' }}>
-            <div data-noprint="1" style={{ width: '100%', maxWidth: 820, display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
-              <p style={{ margin: 0, flex: 1, minWidth: 200, fontSize: 12.5, color: 'var(--ink-3)', textWrap: 'pretty' }}>
-                Hoja resumen (HR), predio urbano (PU) y predio rústico (PR). Se imprimen para la firma del contribuyente y quedan como
-                sustento del cálculo.
-              </p>
-              {['HR', 'PU', 'PR'].map((k) => {
-                const on = dj[k] === true;
-                return (
-                  <button
-                    key={k}
-                    onClick={() => setDj((x) => ({ ...x, [k]: !on }))}
-                    aria-pressed={on}
-                    style={{
-                      border: `1px solid ${on ? 'var(--accent)' : 'var(--line-2)'}`,
-                      borderRadius: 6,
-                      padding: '8px 14px',
-                      cursor: 'pointer',
-                      fontFamily: 'var(--font-mono)',
-                      fontSize: 12,
-                      background: on ? 'var(--accent-soft)' : 'var(--bg-card)',
-                      color: on ? 'var(--accent-ink)' : 'var(--ink-4)',
-                    }}
-                  >
-                    {k}
-                  </button>
-                );
-              })}
-              {/* La hoja es un documento que se firma —«Declaro bajo
-                  juramento»— y sus cifras no las produce nadie: eran las de la
-                  maqueta. Imprimir queda apagado con su motivo hasta que haya de
-                  dónde sacarlas (#563). */}
+            <div data-noprint="1" style={{ width: '100%', maxWidth: 820, display: 'flex', alignItems: 'flex-end', gap: 10, flexWrap: 'wrap' }}>
+              <label style={{ flex: 1, minWidth: 190 }}>
+                <span style={ROTULO_DE_LA_HOJA}>N.º de declaración</span>
+                <input
+                  value={djNro}
+                  onChange={(e) => setDjNro(e.target.value)}
+                  placeholder="el número que lleva impreso el cargo"
+                  style={{ ...IN, fontFamily: 'var(--font-mono)' }}
+                />
+              </label>
+              <label>
+                <span style={ROTULO_DE_LA_HOJA}>Fecha de corte</span>
+                <input type="date" value={djFecha} onChange={(e) => setDjFecha(e.target.value)} style={IN} />
+              </label>
+              {/* El año es el del selector del shell, que es el mismo que la hoja
+                  imprime bajo el título: la ruta pide número Y año, y tener aquí
+                  un segundo campo de ejercicio dejaría la cabecera diciendo uno
+                  y la lectura preguntando por otro. */}
+              <label>
+                <span style={ROTULO_DE_LA_HOJA}>Ejercicio</span>
+                <input value={pref.ejercicio} disabled title="Es el ejercicio de trabajo: se cambia en la cabecera" style={{ ...IN, ...APAGADO, width: 90 }} />
+              </label>
+              {/* «Imprimir» saca por la impresora LO QUE HAY EN PANTALLA. Sin la
+                  guarda, un 404, un 403 o la respuesta que aún no ha llegado
+                  sacarían el membrete, el «Declaro bajo juramento» y las dos
+                  líneas de firma con las celdas en blanco: un papel oficial en
+                  blanco sigue siendo un papel oficial, y éste además afirma algo
+                  (#563 AC 4). Es la misma guarda que la constancia de Consultas. */}
               <button
-                disabled
-                aria-disabled="true"
-                title={NO_SE_PUEDE_EMITIR_LA_DJ}
-                style={{ border: 0, borderRadius: 6, padding: '9px 20px', background: 'var(--accent)', color: '#fff', fontSize: 13, fontWeight: 500, opacity: 0.55, cursor: 'not-allowed' }}
+                onClick={() => window.print()}
+                disabled={impedimentoDeImprimirLaDj !== undefined}
+                title={impedimentoDeImprimirLaDj}
+                className={impedimentoDeImprimirLaDj === undefined ? 'hov-acento-2' : undefined}
+                style={{ ...BOTON_PRIMARIO, ...(impedimentoDeImprimirLaDj !== undefined ? { opacity: 0.55, cursor: 'not-allowed' } : null) }}
               >
                 Imprimir
               </button>
             </div>
 
-            <div data-noprint="1" style={{ width: '100%', maxWidth: 820 }}>
-              <Aviso tono="warn" titulo="Esta hoja no se puede emitir todavía">
-                {NO_SE_PUEDE_EMITIR_LA_DJ}
-              </Aviso>
+            <div data-noprint="1" style={{ width: '100%', maxWidth: 820, display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
+              <p style={{ margin: 0, flex: 1, minWidth: 200, fontSize: 12.5, color: 'var(--ink-3)', textWrap: 'pretty' }}>
+                El manual emite tres formularios con la declaración: hoja resumen (HR), predio urbano (PU) y predio rústico (PR). Aquí se
+                emite <strong>la HR</strong>, que es la que resume la declaración y la que se firma.
+              </p>
+              {/* Los tres eran CONMUTADORES, dos de ellos encendidos, y no
+                  cambiaban nada: prometían que al pulsar «Imprimir» saldrían tres
+                  hojas. Ahora son tres rótulos de lo que hay, que es lo que de
+                  verdad son —sólo la HR tiene de dónde salir; PU y PR llevan la
+                  ficha del predio campo a campo y ninguna lectura la publica en
+                  esa forma—, y desmarcar la única que se emite tampoco cambiaría
+                  lo que sale por la impresora. El motivo de cada una va en su
+                  `title` Y en el pie de abajo, porque un `title` solo no lo lee
+                  nadie (RNF-082). */}
+              {(['HR', 'PU', 'PR'] as const).map((k) => {
+                const hay = k === 'HR';
+                return (
+                  <span
+                    key={k}
+                    title={hay ? 'Es lo que esta pantalla emite, y lo único que hay' : SIN_FORMULARIO_DE_PREDIO}
+                    style={{
+                      border: `1px solid ${hay ? 'var(--accent)' : 'var(--line-2)'}`,
+                      borderRadius: 6,
+                      padding: '8px 14px',
+                      fontFamily: 'var(--font-mono)',
+                      fontSize: 12,
+                      background: hay ? 'var(--accent-soft)' : 'var(--bg-card)',
+                      color: hay ? 'var(--accent-ink)' : 'var(--ink-4)',
+                      opacity: hay ? 1 : 0.55,
+                      textDecoration: hay ? undefined : 'line-through',
+                    }}
+                  >
+                    {k}
+                  </span>
+                );
+              })}
             </div>
 
-            <section style={{ width: '100%', maxWidth: 820, background: '#fff', borderRadius: 6, boxShadow: 'var(--shadow-2)', padding: '40px 44px' }}>
-              <div style={{ display: 'flex', alignItems: 'flex-start', gap: 20, paddingBottom: 12, borderBottom: '2px solid var(--ink)' }}>
-                <div style={{ flex: 1 }}>
-                  <p style={{ margin: 0, fontFamily: 'var(--font-serif)', fontSize: 15, fontWeight: 600 }}>{pref.entidad}</p>
-                  <p style={{ margin: '3px 0 0', fontSize: 11, color: 'var(--ink-3)' }}>
-                    Gerencia de Administración Tributaria — Unidad de Rentas
+            <p data-noprint="1" style={{ margin: 0, width: '100%', maxWidth: 820, fontSize: 12, lineHeight: 1.5, color: 'var(--ink-3)', textWrap: 'pretty' }}>
+              {SIN_FORMULARIO_DE_PREDIO}
+            </p>
+
+            {/* Las tres respuestas que NO son una hoja, dichas por separado: no se
+                ha preguntado todavía, se está preguntando, y el servidor contestó
+                que no. Ninguna de las tres dibuja el papel. */}
+            {djBuscada === '' && (
+              <div data-noprint="1" style={{ width: '100%', maxWidth: 820 }}>
+                <Aviso tono="neutro" titulo="Escribe el número de la declaración">
+                  La hoja resumen es la de <strong>una</strong> declaración jurada: sale de{' '}
+                  <code>GET /rentas/declaraciones/{'{'}n{'}'}/hoja</code>, que pide el número y el año. Hasta que haya número no hay a quién
+                  consultar, y el papel no se dibuja en blanco.
+                </Aviso>
+              </div>
+            )}
+            {hojaDj.cargando && (
+              <p data-noprint="1" style={{ margin: 0, width: '100%', maxWidth: 820, fontSize: 12.5, color: 'var(--ink-3)' }}>
+                Consultando la declaración…
+              </p>
+            )}
+            {hojaDj.error !== null && (
+              <div data-noprint="1" style={{ width: '100%', maxWidth: 820 }}>
+                <FalloDeLectura
+                  error={hojaDj.error}
+                  que={`la declaración jurada ${djBuscada} del ${pref.ejercicio}`}
+                  acceso="declaracion_jurada"
+                  alReintentar={hojaDj.reintentar}
+                />
+              </div>
+            )}
+
+            {hojaDj.datos && (
+              <section style={{ width: '100%', maxWidth: 820, background: '#fff', borderRadius: 6, boxShadow: 'var(--shadow-2)', padding: '40px 44px' }}>
+                <div style={{ display: 'flex', alignItems: 'flex-start', gap: 20, paddingBottom: 12, borderBottom: '2px solid var(--ink)' }}>
+                  <div style={{ flex: 1 }}>
+                    <p style={{ margin: 0, fontFamily: 'var(--font-serif)', fontSize: 15, fontWeight: 600 }}>{pref.entidad}</p>
+                    <p style={{ margin: '3px 0 0', fontSize: 11, color: 'var(--ink-3)' }}>
+                      Gerencia de Administración Tributaria — Unidad de Rentas
+                    </p>
+                  </div>
+                  <div style={{ textAlign: 'right', fontFamily: 'var(--font-mono)', fontSize: 11, color: 'var(--ink-3)' }}>
+                    <p style={{ margin: 0 }}>{hojaDj.datos.declaracion.numero} · HR</p>
+                    <p style={{ margin: '3px 0 0' }}>{hojaDj.datos.declaracion.fechaPresentacion}</p>
+                  </div>
+                </div>
+                <div style={{ borderTop: '1px solid var(--ink)', marginTop: 2, paddingTop: 26, textAlign: 'center' }}>
+                  <h2 style={{ margin: 0, fontFamily: 'var(--font-serif)', fontSize: 23, fontWeight: 600, letterSpacing: '-.01em' }}>
+                    Declaración jurada — hoja resumen
+                  </h2>
+                  <p style={{ margin: '5px 0 0', fontSize: 12, color: 'var(--ink-3)' }}>
+                    Impuesto predial del ejercicio {hojaDj.datos.declaracion.ejercicio}
                   </p>
                 </div>
-                <div style={{ textAlign: 'right', fontFamily: 'var(--font-mono)', fontSize: 11, color: 'var(--ink-3)' }}>
-                  <p style={{ margin: 0 }}>DJ — — HR</p>
-                  <p style={{ margin: '3px 0 0' }}>—</p>
+                <div
+                  style={{
+                    display: 'grid',
+                    gridTemplateColumns: 'repeat(auto-fit,minmax(186px,1fr))',
+                    gap: '14px 20px',
+                    margin: '24px 0',
+                    padding: '16px 0',
+                    borderTop: '1px solid var(--line)',
+                    borderBottom: '1px solid var(--line)',
+                  }}
+                >
+                  {/* El rótulo es «Documento» y no «D.N.I.» como en el manual: el
+                      padrón publica el documento con su tipo delante —«DNI 03593174»,
+                      «RUC 20100047218»— porque una sucesión indivisa o una empresa
+                      no tienen DNI, y escribir «D.N.I.» encima de un RUC es rotular
+                      un dato con el nombre de otro. */}
+                  {celdasDelDeclarante(hojaDj.datos).map((m) => (
+                    <div key={m[0]}>
+                      <p style={{ margin: '0 0 3px', fontSize: 10, textTransform: 'uppercase', letterSpacing: '.1em', color: 'var(--ink-3)' }}>{m[0]}</p>
+                      <p style={{ margin: 0, fontSize: 13, color: 'var(--ink)' }}>{m[1]}</p>
+                    </div>
+                  ))}
                 </div>
-              </div>
-              <div style={{ borderTop: '1px solid var(--ink)', marginTop: 2, paddingTop: 26, textAlign: 'center' }}>
-                <h2 style={{ margin: 0, fontFamily: 'var(--font-serif)', fontSize: 23, fontWeight: 600, letterSpacing: '-.01em' }}>
-                  Declaración jurada — hoja resumen
-                </h2>
-                <p style={{ margin: '5px 0 0', fontSize: 12, color: 'var(--ink-3)' }}>
-                  Impuesto predial del ejercicio {pref.ejercicio}
+                {/* Un declarante nulo no es un nombre que falte: es que el código de
+                    la DJ ya no está en el padrón. Se dice, porque las cuatro celdas
+                    con un guion se leen como «no consta» y no como «esta persona no
+                    existe». */}
+                {hojaDj.datos.declarante === null && (
+                  <p style={{ margin: '-10px 0 20px', fontSize: 12, color: 'var(--ink-3)', textWrap: 'pretty' }}>
+                    El contribuyente de esta declaración ya no está en el padrón, así que la hoja no puede consignar ni su nombre ni su
+                    documento ni su domicilio. No se imprime hasta que se aclare de quién es.
+                  </p>
+                )}
+                {/* Son TODOS los predios del contribuyente y no sólo el que la
+                    declaración nombra, y así lo compone el servidor: la base del
+                    predial es por contribuyente —los tramos progresivos se aplican
+                    al conjunto de sus predios— y una hoja con uno solo consignaría
+                    una base que no es la que se determina. Con cero filas, el aviso
+                    lo dice: una cabecera sola se lee como «no tiene ninguno». */}
+                <TablaDeDatos
+                  cols={COLS_DE_LA_HOJA}
+                  filas={hojaDj.datos.predios.map(filaDeLaHoja)}
+                  min="640px"
+                  vacia="El contribuyente no tiene ningún predio con titularidad vigente a la fecha de corte, así que no hay ninguno que consignar."
+                />
+                <div
+                  style={{
+                    display: 'grid',
+                    gridTemplateColumns: 'repeat(auto-fit,minmax(150px,1fr))',
+                    gap: 14,
+                    marginTop: 20,
+                    paddingTop: 14,
+                    borderTop: '1px solid var(--ink)',
+                  }}
+                >
+                  {/* Los dos primeros salen de la última determinación del ejercicio
+                      y son nulos cuando no la hay; los dos últimos NO viajan nunca
+                      —el derecho de emisión es `DERECHO_EMISION_PREDIAL` del conjunto
+                      sellado, cifra de ordenanza local (D-02b)—, y el total a pagar
+                      no se compone aquí sumándole el derecho al insoluto (RNF-083).
+                      El porqué de cada guion está abajo, en `faltan`, y sale impreso. */}
+                  {totalesDeLaHoja(hojaDj.datos).map((t) => (
+                    <div key={t[0]}>
+                      <p style={{ margin: '0 0 3px', fontSize: 10, textTransform: 'uppercase', letterSpacing: '.1em', color: 'var(--ink-3)' }}>{t[0]}</p>
+                      <p style={{ margin: 0, fontFamily: 'var(--font-mono)', fontSize: 15, color: 'var(--ink)' }}>{t[1]}</p>
+                    </div>
+                  ))}
+                </div>
+                {/* Regla 9 sobre el papel y no sólo sobre la pantalla: el domicilio,
+                    la titularidad y el % de propiedad son los VIGENTES A ESTA FECHA,
+                    y una hoja reimpresa en otro mes sale distinta sin que nada lo
+                    diga si no lleva la fecha impresa. Es una sola para toda la hoja,
+                    porque el recurso publica una sola. */}
+                <p style={{ margin: '12px 0 0', fontFamily: 'var(--font-mono)', fontSize: 11, color: 'var(--ink-3)' }}>
+                  Valores y titularidad al {hojaDj.datos.aLaFecha}
                 </p>
-              </div>
-              <div
-                style={{
-                  display: 'grid',
-                  gridTemplateColumns: 'repeat(auto-fit,minmax(186px,1fr))',
-                  gap: '14px 20px',
-                  margin: '24px 0',
-                  padding: '16px 0',
-                  borderTop: '1px solid var(--line)',
-                  borderBottom: '1px solid var(--line)',
-                }}
-              >
-                {/* La identidad y el domicilio salían de la maqueta: el nombre,
-                    el código y el DNI de una persona que no es la de nadie, en
-                    la cabecera de un documento que se firma. */}
-                {[...DJ_META.map((m) => ({ k: m.k, v: '—' })), { k: 'Ejercicio', v: pref.ejercicio }].map((m) => (
-                  <div key={m.k}>
-                    <p style={{ margin: '0 0 3px', fontSize: 10, textTransform: 'uppercase', letterSpacing: '.1em', color: 'var(--ink-3)' }}>{m.k}</p>
-                    <p style={{ margin: 0, fontSize: 13, color: 'var(--ink)' }}>{m.v}</p>
+                {/* `faltan` va DENTRO del papel, no en un aviso de pantalla: quien
+                    firma es quien tiene que leer por qué hay guiones donde el manual
+                    dibuja cifras. El servidor lo publica como lista de motivos y no
+                    como un booleano precisamente para esto. */}
+                {hojaDj.datos.faltan.length > 0 && (
+                  <div style={{ marginTop: 14, paddingTop: 12, borderTop: '1px solid var(--line)' }}>
+                    <p style={{ margin: '0 0 5px', fontSize: 10, textTransform: 'uppercase', letterSpacing: '.1em', color: 'var(--ink-3)' }}>
+                      Lo que esta hoja no consigna, y por qué
+                    </p>
+                    <ul style={{ margin: 0, paddingLeft: 18, fontSize: 12, lineHeight: 1.55, color: 'var(--ink-3)', textWrap: 'pretty' }}>
+                      {hojaDj.datos.faltan.map((f) => (
+                        <li key={f}>{f}</li>
+                      ))}
+                    </ul>
                   </div>
-                ))}
-              </div>
-              <table style={{ width: '100%', borderCollapse: 'collapse' }}>
-                <thead>
-                  <tr>
-                    {DJ_COLS.map((c) => (
-                      <th key={c[0]} style={c[1] ? THN : TH}>
-                        {c[0]}
-                      </th>
-                    ))}
-                  </tr>
-                </thead>
-                <tbody>
-                  {/* Los dos predios con su valuación eran de la maqueta.
-                      `DeclaracionJuradaResource` publica el número, el ejercicio,
-                      el tipo, las fechas y el estado: ni el predio con su
-                      ubicación y su uso, ni el % de propiedad, ni el valúo. */}
-                  <tr style={{ borderTop: '1px solid var(--line)' }}>
-                    <td colSpan={DJ_COLS.length} style={{ ...TD, whiteSpace: 'normal', color: 'var(--ink-3)' }}>
-                      Ninguna lectura publica los predios de la declaración con su valúo afecto: la hoja se emitirá cuando los haya.
-                    </td>
-                  </tr>
-                </tbody>
-              </table>
-              <div
-                style={{
-                  display: 'grid',
-                  gridTemplateColumns: 'repeat(auto-fit,minmax(150px,1fr))',
-                  gap: 14,
-                  marginTop: 20,
-                  paddingTop: 14,
-                  borderTop: '1px solid var(--ink)',
-                }}
-              >
-                {/* Los cuatro totales —valúo afecto, insoluto, derecho de
-                    emisión y total a pagar— son el resultado de la determinación
-                    del predial, que hoy no se puede pedir (#540). */}
-                {DJ_TOTALES.map((x) => ({ k: x.k, v: '—' })).map((t) => (
-                  <div key={t.k}>
-                    <p style={{ margin: '0 0 3px', fontSize: 10, textTransform: 'uppercase', letterSpacing: '.1em', color: 'var(--ink-3)' }}>{t.k}</p>
-                    <p style={{ margin: 0, fontFamily: 'var(--font-mono)', fontSize: 15, color: 'var(--ink)' }}>{t.v}</p>
+                )}
+                <p style={{ margin: '22px 0 0', fontFamily: 'var(--font-serif)', fontSize: 14, lineHeight: 1.65, color: 'var(--ink-2)', textWrap: 'pretty' }}>
+                  Declaro bajo juramento que los datos consignados son verdaderos y que conozco que la omisión o falsedad genera las sanciones
+                  previstas en el Código Tributario.
+                </p>
+                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 40, marginTop: 56 }}>
+                  <div style={{ borderTop: '1px solid var(--ink)', paddingTop: 7, fontSize: 11, color: 'var(--ink-3)', textAlign: 'center' }}>
+                    Funcionario receptor
                   </div>
-                ))}
-              </div>
-              <p style={{ margin: '22px 0 0', fontFamily: 'var(--font-serif)', fontSize: 14, lineHeight: 1.65, color: 'var(--ink-2)', textWrap: 'pretty' }}>
-                Declaro bajo juramento que los datos consignados son verdaderos y que conozco que la omisión o falsedad genera las sanciones
-                previstas en el Código Tributario.
-              </p>
-              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 40, marginTop: 56 }}>
-                <div style={{ borderTop: '1px solid var(--ink)', paddingTop: 7, fontSize: 11, color: 'var(--ink-3)', textAlign: 'center' }}>
-                  Funcionario receptor
+                  <div style={{ borderTop: '1px solid var(--ink)', paddingTop: 7, fontSize: 11, color: 'var(--ink-3)', textAlign: 'center' }}>
+                    Contribuyente o representante
+                  </div>
                 </div>
-                <div style={{ borderTop: '1px solid var(--ink)', paddingTop: 7, fontSize: 11, color: 'var(--ink-3)', textAlign: 'center' }}>
-                  Contribuyente o representante
-                </div>
-              </div>
-            </section>
+              </section>
+            )}
           </div>
         )}
       </div>
@@ -4214,21 +4352,118 @@ async function padronPorCriterio(
   };
 }
 
+/* ══════════ La hoja resumen de la declaración jurada (#563) ══════════ */
+
+/** El rótulo de los tres controles de la hoja. Es el de la constancia de Consultas. */
+const ROTULO_DE_LA_HOJA: CSSProperties = {
+  display: 'block',
+  fontSize: 10.5,
+  fontWeight: 500,
+  textTransform: 'uppercase',
+  letterSpacing: '.1em',
+  color: 'var(--ink-3)',
+  marginBottom: 5,
+};
+
 /**
- * Por qué la declaración jurada no se puede emitir.
+ * Por qué PU y PR no se emiten, aunque la HR sí.
  *
- * Es el único documento del módulo que se imprime para que alguien lo firme, y
- * traía dentro el nombre, el DNI, el domicilio, los dos predios con su valúo y
- * los cuatro totales de la maqueta. Ninguno tiene origen: la lectura de la DJ
- * publica su número, su ejercicio, su tipo, sus fechas y su estado, y la cuenta
- * del predial es la determinación, que hoy contesta 422 nombrando el conjunto
- * de parámetros que falta sellar (#540) — no una cuenta que se pueda imprimir.
+ * La hoja resumen tiene lectura desde #563; los dos formularios de predio no, y
+ * no es la misma hoja filtrada: llevan la ficha del predio campo a campo
+ * —construcciones, materiales, estado de conservación, antigüedad—, que es lo
+ * que guarda la ficha catastral y lo que ninguna operación del contrato publica
+ * en esa forma. Decirlo es la mitad del trabajo: un formulario que no sale y no
+ * dice por qué se lee como un formulario que esta declaración no necesita.
  */
-const NO_SE_PUEDE_EMITIR_LA_DJ =
-  'La hoja resumen lleva el contribuyente, sus predios con el valúo afecto de cada uno y el impuesto que resulta, y ninguna lectura ' +
-  'publica eso: «GET /rentas/declaraciones/{n}» da el número, el ejercicio, el tipo, las fechas y el estado de la declaración. La ' +
-  'cuenta la hace la determinación del predial, que ya se puede pedir desde «Determinaciones» y hoy contesta 422 porque el ejercicio ' +
-  'no tiene conjunto de parámetros sellado (#540). Se imprimía con las cifras de la maqueta, bajo un «Declaro bajo juramento» (#563).';
+const SIN_FORMULARIO_DE_PREDIO =
+  'PU y PR no se emiten todavía: no son la hoja resumen filtrada, sino la ficha del predio campo a campo —construcciones, ' +
+  'materiales, estado de conservación, antigüedad— y ninguna lectura del contrato la publica en la forma de esos dos formularios. ' +
+  'Lo que hay de cada predio se ve en Catastro, en su ficha.';
+
+/**
+ * Las columnas de la tabla de predios, cambiadas por las que el recurso publica.
+ *
+ * El manual dibuja cinco y la tercera dice **«Uso»**: `PredioDeLaHojaResource`
+ * publica `tipo`, que es `URBANO` o `RUSTICO`. No es el mismo dato con otro
+ * nombre —el uso es el de la ficha catastral, «Casa habitación», «Terreno sin
+ * construir»— y ninguna lectura de la hoja lo publica, así que la columna se
+ * rotula por lo que lleva dentro (RNF-080, y el precedente de #427: parecerse
+ * no es serlo).
+ *
+ * Y son siete y no cinco porque el recurso publica también el autovalúo y lo
+ * exonerado de cada predio: son las dos cifras que explican de dónde sale el
+ * valúo afecto, y esconderlas dejaría el papel diciendo un resultado sin su
+ * cuenta.
+ */
+const COLS_DE_LA_HOJA: ColDef[] = [
+  ['Código predial', 0],
+  ['Ubicación', 0],
+  ['Tipo', 0],
+  ['% prop.', 1],
+  ['Autovalúo S/', 1],
+  ['Exonerado S/', 1],
+  ['Valuo afecto S/', 1],
+];
+
+/**
+ * Una fila de la tabla, con lo que el servidor publicó y no más.
+ *
+ * Las tres cifras son nulas cuando no hay determinación del ejercicio, y ahí va
+ * el guion: un cero en «Autovalúo» dice que el predio no vale nada, y lo dice
+ * en un papel firmado.
+ */
+function filaDeLaHoja(p: PredioDeLaHoja): string[] {
+  return [
+    p.codRefCatastral,
+    p.direccion,
+    p.tipo,
+    p.porcentajePropiedad,
+    p.autovaluo ?? SIN_DATO,
+    p.valuoExonerado ?? SIN_DATO,
+    p.valuoAfecto ?? SIN_DATO,
+  ];
+}
+
+/**
+ * Las celdas de la cabecera del papel.
+ *
+ * Sin declarante van todas con guion: `declarante` nulo significa que el
+ * contribuyente de la DJ ya no está en el padrón, y ahí no hay nombre que
+ * poner. Las cuatro de la declaración —tipo, ejercicio, presentación y estado—
+ * salen de la propia DJ y siempre están.
+ */
+function celdasDelDeclarante(h: HojaDeDeclaracion): [string, string][] {
+  const quien = h.declarante;
+  return [
+    ['Contribuyente', quien?.nombre ?? SIN_DATO],
+    ['Código', quien?.codigo ?? SIN_DATO],
+    ['Documento', quien?.documento ?? SIN_DATO],
+    ['Domicilio fiscal', quien?.domicilioFiscal ?? SIN_DATO],
+    ['Tipo de declaración', h.declaracion.tipo],
+    ['Ejercicio', String(h.declaracion.ejercicio)],
+    ['Presentada', h.declaracion.fechaPresentacion + (h.declaracion.fueraDePlazo ? ' · fuera de plazo' : '')],
+    ['Estado', h.declaracion.estado],
+  ];
+}
+
+/**
+ * Los cuatro totales del pie, con lo que el servidor publicó y no más.
+ *
+ * Los dos primeros salen de la última determinación predial del ejercicio y son
+ * nulos cuando no la hay. Los dos últimos **no viajan nunca**: el derecho de
+ * emisión es `DERECHO_EMISION_PREDIAL` del conjunto sellado —cifra de ordenanza
+ * local, D-02b— y sin él no hay total a pagar que escribir; componerlo aquí
+ * sumándole un cero al insoluto sería inventar la cifra que se cobra (regla 5,
+ * RNF-083). El motivo de cada guion sale impreso debajo, en `faltan`.
+ */
+function totalesDeLaHoja(h: HojaDeDeclaracion): [string, string][] {
+  return [
+    ['Valuo afecto', h.valuoAfectoTotal ?? SIN_DATO],
+    ['Impuesto insoluto', h.impuestoInsoluto ?? SIN_DATO],
+    ['Derecho de emisión', SIN_DATO],
+    ['Total a pagar', SIN_DATO],
+  ];
+}
 
 /**
  * Lo que la franja dice cuando el alta abarca mas de una cuota (#538).

@@ -860,3 +860,120 @@ export function calcularVehicular(
     senal,
   });
 }
+
+
+/* ══════════ La hoja resumen de la declaración jurada ══════════ */
+
+/**
+ * Una declaración jurada ya presentada. Es `DeclaracionJuradaResource`.
+ *
+ * No lleva ningún importe, y su javadoc lo dice: la DJ no calcula nada. El
+ * valúo y el impuesto de la hoja salen de la determinación del ejercicio, no de
+ * aquí.
+ */
+export type DeclaracionJurada = {
+  id: number;
+  numero: string;
+  ejercicio: number;
+  /** `ORIGINAL` | `RECTIFICATORIA` | … tal como lo nombra `TipoDeDeclaracion`. */
+  tipo: string;
+  predioId: number | null;
+  vehiculoId: number | null;
+  fichaCatastralId: number | null;
+  /** `AAAA-MM-DD`. */
+  fechaPresentacion: string;
+  fechaLimite: string;
+  fueraDePlazo: boolean;
+  estado: string;
+  djRectificaId: number | null;
+};
+
+/**
+ * Quien declara. Es `HojaDeDeclaracionResource.DeclaranteResource`.
+ *
+ * `documento` viene **ya formateado** —«DNI 03593174»—, como lo publica el
+ * padrón: se imprime tal cual, y componerlo aquí sería una segunda forma de
+ * escribir el mismo dato.
+ *
+ * `domicilioFiscal` es el **vigente a la fecha de corte** de la hoja, no «el
+ * último»: la hoja de una DJ de marzo tiene que poder reimprimirse como se
+ * imprimió.
+ */
+export type DeclaranteDeLaHoja = {
+  codigo: string;
+  nombre: string;
+  documento: string;
+  domicilioFiscal: string | null;
+};
+
+/**
+ * Una línea de la tabla de predios. Es `PredioDeLaHojaResource`.
+ *
+ * Las tres cifras son **nulas cuando no hay determinación del ejercicio**, y
+ * eso no es un hueco que rellenar: sin determinación el sistema no tiene
+ * autovalúo que consignar, y un cero en un papel que se firma se lee como «este
+ * predio no vale nada».
+ *
+ * `porcentajePropiedad` sale de la determinación cuando la hay —es el que se
+ * aplicó para calcular— y de la titularidad vigente cuando no.
+ *
+ * `tipo` es `URBANO` o `RUSTICO`, que **no es el «Uso»** que el manual dibuja en
+ * esta columna: aquél es el de la ficha catastral —«Casa habitación»— y ninguna
+ * lectura de la hoja lo publica.
+ */
+export type PredioDeLaHoja = {
+  predioId: number;
+  codRefCatastral: string;
+  direccion: string;
+  tipo: string;
+  porcentajePropiedad: string;
+  autovaluo: string | null;
+  valuoExonerado: string | null;
+  valuoAfecto: string | null;
+};
+
+/**
+ * La hoja resumen entera. Es `HojaDeDeclaracionResource`.
+ *
+ * Los importes viajan como texto (RNF-055) y **la fecha es una sola para toda
+ * la hoja**: `aLaFecha` (regla 9).
+ *
+ * `faltan` es una **lista de motivos y no un booleano**, y el backend lo dejó
+ * escrito: «no se puede imprimir» sin decir por qué es lo que hace que alguien
+ * lo imprima igual desde otro sitio. Trae siempre al menos uno —el derecho de
+ * emisión y el total a pagar no viajan nunca, porque son cifra de ordenanza
+ * local (D-02b)— y trae dos cuando además falta la determinación del ejercicio.
+ */
+export type HojaDeDeclaracion = {
+  declaracion: DeclaracionJurada;
+  /** `AAAA-MM-DD`. A qué día se resolvieron el domicilio y la titularidad. */
+  aLaFecha: string;
+  /** Nulo si el contribuyente ya no está en el padrón: la hoja lo dice en vez de inventar un nombre. */
+  declarante: DeclaranteDeLaHoja | null;
+  predios: PredioDeLaHoja[];
+  valuoAfectoTotal: string | null;
+  impuestoInsoluto: string | null;
+  faltan: string[];
+};
+
+/**
+ * La hoja de esa declaración en ese año.
+ *
+ * Una DJ que no existe es **404**, no una hoja vacía: `DeclaracionJuradaController`
+ * lo devuelve así a propósito, y la pantalla tiene que decirlo en vez de dibujar
+ * el membrete con las celdas en blanco.
+ *
+ * `fecha` en blanco es hoy —el controlador lo resuelve—, y por eso viaja
+ * opcional en vez de con un valor por omisión escrito aquí.
+ */
+export function hojaDeDeclaracion(
+  djNro: string,
+  ano: string,
+  fecha: string | undefined,
+  senal?: AbortSignal,
+): Promise<HojaDeDeclaracion> {
+  return solicitar(`/rentas/declaraciones/${encodeURIComponent(djNro)}/hoja`, {
+    parametros: { ano, fecha },
+    senal,
+  });
+}

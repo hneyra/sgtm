@@ -1396,33 +1396,26 @@ export const CHIPS_DEL_PADRON: [clave: string, label: string][] = [
 
 /* ══════════ Declaración jurada ══════════ */
 
-export const DJ_META: { k: string; v: string }[] = [
-  { k: 'Contribuyente', v: 'SUC. RUFINA MEDINA MEDINA' },
-  { k: 'Código', v: '00000025673' },
-  { k: 'D.N.I.', v: '03593174' },
-  { k: 'Domicilio fiscal', v: 'URB. SANTA ROSA — EL ALTO 116' },
-  { k: 'Tipo de declaración', v: 'RECTIFICATORIA' },
-];
+/* `DJ_META`, `DJ_COLS`, `DJ_FILAS` y `DJ_TOTALES` se han ido (#563).
 
-export const DJ_COLS: ColDef[] = [
-  ['Código predial', 0],
-  ['Ubicación', 0],
-  ['Uso', 0],
-  ['% prop.', 1],
-  ['Valuo afecto S/', 1],
-];
+   Eran la hoja resumen entera: el nombre, el código, el DNI y el domicilio de
+   una persona; dos predios con su código catastral, su uso y su valuo afecto; y
+   los cuatro totales, «Total a pagar S/ 591.94» incluido. La pantalla los
+   dibujaba con cualquier sesión y sin haber abierto ningún contribuyente, bajo
+   un «Declaro bajo juramento que los datos consignados son verdaderos» y dos
+   líneas de firma. Una vez impresa y firmada, esa hoja no se distingue de una
+   correcta, y a diferencia de una pantalla nadie la vuelve a mirar contra la
+   base.
 
-export const DJ_FILAS: string[][] = [
-  ['02-014-D-14-01', 'CALLE SANTA ROSA 116', 'Casa habitación', '100.00', '132,196.75'],
-  ['04-021-B-07-00', 'MZ. B LT. 7 — BELLAVISTA', 'Terreno sin construir', '50.00', '19,210.00'],
-];
+   Ahora la hoja sale de `GET /rentas/declaraciones/{n}/hoja`: el declarante con
+   su domicilio VIGENTE A LA FECHA, sus predios con el % de propiedad que se
+   aplicó al determinar, y las cifras de la última determinación del ejercicio.
+   Lo que no puede consignar lo dice el propio recurso en `faltan`, que es una
+   lista de motivos y no un booleano.
 
-export const DJ_TOTALES: { k: string; v: string }[] = [
-  { k: 'Valuo afecto', v: 'S/ 151,406.75' },
-  { k: 'Impuesto insoluto', v: 'S/ 587.44' },
-  { k: 'Derecho de emisión', v: 'S/ 4.50' },
-  { k: 'Total a pagar', v: 'S/ 591.94' },
-];
+   Las columnas viven ahora en `COLS_DE_LA_HOJA`, dentro de `Rentas.tsx`, por lo
+   mismo que las del vehicular: la tercera decía «Uso» y el recurso publica el
+   TIPO —`URBANO`/`RUSTICO`—, que es otro dato. */
 
 /* ══════════ Las quince opciones del manual que el módulo resume ══════════ */
 
