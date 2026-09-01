@@ -333,13 +333,16 @@ export function Shell({
                   </span>
                 </span>
                 {(() => {
-                  /* La contada gana; y si el módulo sustituyó la nota sin contar
-                     la pastilla, no se dibuja ninguna: dos cifras distintas de
-                     lo mismo en la misma línea es peor que una sola. */
+                  /* La pastilla SÓLO la pone quien contó.
+                     Antes salía del catálogo, y ahí era una cifra del prototipo
+                     que no cambiaba con la municipalidad: «4,036» en rojo junto
+                     a «Detección» decía «hay 4 036 pendientes aquí» en las dos,
+                     con 25 en una y 9 445 en la otra. Un recuento en tono `bad`
+                     es una afirmación sobre el trabajo que espera; sin contarlo,
+                     no se hace. */
                   const contada = pastillasDeDestino?.[d.k];
-                  const notaSustituida = notasDeDestino?.[d.k] !== undefined;
-                  const texto = contada?.texto ?? (notaSustituida ? undefined : d.pastilla);
-                  const tono = contada?.tono ?? d.tono;
+                  const texto = contada?.texto;
+                  const tono = contada?.tono;
                   if (!texto) return null;
                   return (
                     <span

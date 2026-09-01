@@ -5,3 +5,4 @@ dist/
 tsconfig.tsbuildinfo
 .capturas/
 dist-puerta
+dist-shell

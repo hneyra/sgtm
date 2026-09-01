@@ -33,6 +33,17 @@ const VERIFICADOR = 'sgtm.pkce.verificador';
 const ESTADO = 'sgtm.pkce.estado';
 const DESTINO = 'sgtm.pkce.destino';
 const ULTIMO_INTENTO = 'sgtm.pkce.intento';
+const INTENTOS = 'sgtm.pkce.intentos';
+const SALIDA = 'sgtm.pkce.salida';
+
+/** Cuántas idas a la puerta se admiten seguidas antes de parar y explicarse. */
+const TOPE_DE_INTENTOS = 3;
+
+/** Lo que pasó al volver de Keycloak. */
+export type Vuelta =
+  | { estado: 'sin-vuelta' }
+  | { estado: 'canjeado' }
+  | { estado: 'fallo'; motivo: string; detalle?: string };
 
 /**
  * En local no se manda a nadie a Keycloak.
@@ -61,6 +72,8 @@ export async function entrar(): Promise<void> {
   sessionStorage.setItem(ESTADO, estado);
   sessionStorage.setItem(DESTINO, window.location.hash || '#/inicio');
   sessionStorage.setItem(ULTIMO_INTENTO, String(Date.now()));
+  sessionStorage.setItem(INTENTOS, String(intentos() + 1));
+  sessionStorage.removeItem(SALIDA);
 
   const parametros = new URLSearchParams({
     response_type: 'code',
@@ -77,16 +90,19 @@ export async function entrar(): Promise<void> {
 /**
  * Si venimos de Keycloak, canjea el código por un token.
  *
- * Devuelve `true` cuando ha canjeado —quien la llama ya no tiene que decidir
- * nada más— y `false` cuando la URL no traía código, que es el caso corriente.
+ * Devuelve **por qué** no se pudo, y no un `false` mudo. Quien la llama tiene
+ * que decidir entre volver a la puerta y pararse a explicarse, y esas dos cosas
+ * no se distinguen sin el motivo: con un `false` para todo, un `?error=` del
+ * emisor se trataba igual que «esta URL no traía código», y el arranque volvía
+ * a mandar a la puerta —que devolvía el mismo error— sin fin.
  */
-export async function canjearSiVuelve(): Promise<boolean> {
+export async function canjearSiVuelve(): Promise<Vuelta> {
   const url = new URL(window.location.href);
   const codigo = url.searchParams.get('code');
   const estado = url.searchParams.get('state');
   const error = url.searchParams.get('error');
 
-  if (!codigo && !error) return false;
+  if (!codigo && !error) return { estado: 'sin-vuelta' };
 
   const verificador = sessionStorage.getItem(VERIFICADOR);
   const esperado = sessionStorage.getItem(ESTADO);
@@ -102,34 +118,114 @@ export async function canjearSiVuelve(): Promise<boolean> {
 
   if (error) {
     limpia();
-    return false;
+    return {
+      estado: 'fallo',
+      motivo: motivoDelEmisor(error),
+      detalle: url.searchParams.get('error_description') ?? `El emisor contestó «${error}».`,
+    };
   }
   /* El estado es lo único que distingue nuestra vuelta de un código que alguien
      nos hizo llegar. Sin comprobarlo, la puerta acepta cualquier código. */
   if (!codigo || !verificador || !esperado || estado !== esperado) {
     limpia();
-    return false;
+    return {
+      estado: 'fallo',
+      motivo: 'La vuelta no cuadra con la ida',
+      detalle:
+        'El código llegó sin el estado que se guardó al salir. Suele pasar al abrir un enlace de vuelta ' +
+        'antiguo o en otra pestaña; también es lo que se ve si alguien intenta colar un código ajeno.',
+    };
   }
 
-  const respuesta = await fetch(TOKEN, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
-    body: new URLSearchParams({
-      grant_type: 'authorization_code',
-      client_id: CLIENTE,
-      code: codigo,
-      redirect_uri: retorno(),
-      code_verifier: verificador,
-    }),
-  });
+  let respuesta: Response;
+  try {
+    /* Con tope. Sin él, un emisor que no contesta deja la aplicación SIN DIBUJAR
+       NADA para siempre —ni un error ni un esqueleto—, porque el arranque espera
+       aquí antes de montar React. */
+    respuesta = await fetch(TOKEN, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+      body: new URLSearchParams({
+        grant_type: 'authorization_code',
+        client_id: CLIENTE,
+        code: codigo,
+        redirect_uri: retorno(),
+        code_verifier: verificador,
+      }),
+      signal: AbortSignal.timeout(15_000),
+    });
+  } catch {
+    limpia();
+    return {
+      estado: 'fallo',
+      motivo: 'El emisor no contestó',
+      detalle: 'La petición del token no llegó a completarse. Puede estar apagado o no alcanzable desde aquí.',
+    };
+  }
   limpia();
-  if (!respuesta.ok) return false;
+  if (!respuesta.ok) {
+    return {
+      estado: 'fallo',
+      motivo: 'El emisor rechazó el canje',
+      detalle: `La petición del token volvió con ${respuesta.status}. Suele ser la URI de retorno o el cliente.`,
+    };
+  }
 
-  const cuerpo = (await respuesta.json()) as { access_token?: string; id_token?: string };
-  if (!cuerpo.access_token) return false;
+  const cuerpo = (await respuesta.json().catch(() => ({}))) as { access_token?: string; id_token?: string };
+  if (!cuerpo.access_token) {
+    return { estado: 'fallo', motivo: 'El emisor no devolvió ningún token', detalle: 'La respuesta del canje no trae `access_token`.' };
+  }
   localStorage.setItem('sgtm.token', cuerpo.access_token);
   if (cuerpo.id_token) localStorage.setItem('sgtm.id_token', cuerpo.id_token);
-  return true;
+  /* Salió bien: la cuenta de idas vuelve a cero, para que el tope proteja de
+     una racha de fallos y no de haber entrado muchas veces en el día. */
+  sessionStorage.removeItem(INTENTOS);
+  return { estado: 'canjeado' };
+}
+
+function motivoDelEmisor(error: string): string {
+  switch (error) {
+    case 'access_denied':
+      return 'No se completó la entrada';
+    case 'invalid_scope':
+      return 'El alcance que se pide no existe en el emisor';
+    case 'unauthorized_client':
+    case 'invalid_client':
+      return 'El emisor no reconoce a este cliente';
+    case 'temporarily_unavailable':
+    case 'server_error':
+      return 'El emisor tuvo un problema';
+    default:
+      return 'El emisor no dejó entrar';
+  }
+}
+
+function intentos(): number {
+  return Number(sessionStorage.getItem(INTENTOS) ?? 0);
+}
+
+/**
+ * ¿Se puede volver a la puerta, o hay que pararse y explicarse?
+ *
+ * Tres idas seguidas sin canjear son un bucle, no mala suerte. Sin este tope el
+ * arranque rebota sin fin: pantalla en blanco parpadeando, ninguna traza y el
+ * emisor recibiendo la ráfaga. Y sólo se puede dar en despliegue —en local no
+ * hay puerta—, que es donde nadie está mirando.
+ */
+export function puedeIrALaPuerta(): boolean {
+  return intentos() < TOPE_DE_INTENTOS;
+}
+
+/** Se acaba de cerrar la sesión: el arranque NO debe volver a entrar solo. */
+export function vieneDeSalir(): boolean {
+  return sessionStorage.getItem(SALIDA) === '1';
+}
+
+/** Vuelve a permitir la ida a la puerta. Es el «Entrar» de la pantalla parada. */
+export function olvidarLaParada(): void {
+  sessionStorage.removeItem(INTENTOS);
+  sessionStorage.removeItem(ULTIMO_INTENTO);
+  sessionStorage.removeItem(SALIDA);
 }
 
 /**
@@ -155,6 +251,13 @@ export function salir(): void {
   localStorage.removeItem('sgtm.token');
   localStorage.removeItem('sgtm.id_token');
   sessionStorage.removeItem(ULTIMO_INTENTO);
+  sessionStorage.removeItem(INTENTOS);
+  /* La marca es lo que impide volver a entrar solo al instante.
+     `post_logout_redirect_uri` trae de vuelta a la raíz sin token, y el arranque
+     veía eso y llamaba a `entrar()`: con la sesión del emisor viva —o sin
+     `id_token_hint`, que es lo que pasa cuando el token se pegó a mano— el
+     usuario acababa DENTRO OTRA VEZ con la misma cuenta, sin haber hecho nada. */
+  sessionStorage.setItem(SALIDA, '1');
   if (!hayPuerta()) {
     window.location.reload();
     return;
@@ -181,7 +284,34 @@ export function nombreDeLaSesion(): string | null {
   return carga()?.name ?? null;
 }
 
-type Claims = { preferred_username?: string; name?: string };
+/**
+ * De qué municipalidad es la sesión.
+ *
+ * Sólo el número: **ningún endpoint del contrato publica el nombre**, y el token
+ * tampoco lo trae. Lo que hay es este identificador, y con él se puede decir una
+ * cosa cierta —de quién son las cifras que se están mirando— en lugar de
+ * afirmar un nombre concreto y equivocado.
+ */
+export function municipalidadDeLaSesion(): number | null {
+  const id = carga()?.municipalidad_id;
+  return typeof id === 'number' ? id : null;
+}
+
+/**
+ * El rótulo de la entidad, para la cabecera y para las hojas que se imprimen.
+ *
+ * Decía «Municipalidad Distrital de Catacaos» **siempre**, era una constante sin
+ * ninguna interfaz que la cambiara, y se imprimía en siete hojas. Con el token
+ * de otra municipalidad, esa cabecera afirmaba de quién son unas cifras que no
+ * son suyas. Hasta que alguna lectura publique el nombre (#555), se dice lo que
+ * se sabe y ni una palabra más.
+ */
+export function rotuloDeLaEntidad(): string {
+  const id = municipalidadDeLaSesion();
+  return id === null ? 'Municipalidad' : `Municipalidad n.º ${id}`;
+}
+
+type Claims = { preferred_username?: string; name?: string; municipalidad_id?: number };
 
 function carga(): Claims | null {
   const t = token();

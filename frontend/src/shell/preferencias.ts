@@ -34,7 +34,7 @@ export const PreferenciasCtx = createContext<{
   toast: (t: string) => void;
   ir: (modulo: string, dest?: string) => void;
 }>({
-  pref: { entidad: 'Municipalidad Distrital de Catacaos', acento: '#1F3A5F', densidad: 'Normal', tema: 'claro', ejercicio: '2026' },
+  pref: { entidad: 'Municipalidad', acento: '#1F3A5F', densidad: 'Normal', tema: 'claro', ejercicio: '2026' },
   fijar: () => {},
   toast: () => {},
   ir: () => {},

@@ -3,6 +3,7 @@ import { DENSIDADES, PreferenciasCtx, type Preferencias } from './shell/preferen
 import { MODULOS, moduloDe } from './shell/modulos';
 import { Icono } from './ds/Icono';
 import { ICO } from './ds/iconos';
+import { rotuloDeLaEntidad } from './api/sesion';
 
 /* Cada módulo llega en su propio trozo: el arranque no paga los doce. */
 const PANTALLAS: Record<string, React.LazyExoticComponent<React.ComponentType<PantallaProps>>> = {
@@ -35,7 +36,7 @@ export function App() {
   const [ruta, setRuta] = useState(leerRuta);
   const [toast, setToast] = useState('');
   const [pref, setPref] = useState<Preferencias>(() => ({
-    entidad: 'Municipalidad Distrital de Catacaos',
+    entidad: rotuloDeLaEntidad(),
     acento: '#1F3A5F',
     densidad: 'Normal',
     tema: 'claro',
