@@ -227,6 +227,26 @@ class ReporteControllerFronteraTest {
     }
 
     @Test
+    @DisplayName("el area del papel va sin unidad, y la unidad la lleva la cabecera (#607)")
+    void elAreaDelPapelVaSinUnidadYLaCabeceraLaDice() throws Exception {
+        // Esta hoja era la unica de los cuatro modelos de documento del sistema que rotulaba
+        // «Área de terreno» a secas y metia los «m2» DENTRO de la celda: `ModeloDelFue`,
+        // `ModeloDeLaLicencia` y `ModeloDeLaResolucionDeDeterminacion` ya escribian la cifra
+        // sola bajo un rotulo con su unidad. Un numero con la unidad pegada no es un numero
+        // para quien exporta la hoja a un calculo, y de tener dos convenciones salio que el
+        // mismo predio dijera «120.00 m2» aqui y «120.00» en fiscalizacion.
+        String hoja = cuerpo(pedir("XLS"));
+
+        assertThat(hoja)
+                .as("la unidad va en la cabecera de la columna, que es donde se lee una vez")
+                .contains("Área de terreno (m2)");
+        assertThat(hoja)
+                .as("y la celda lleva la cifra sola: 120.00, no «120.00 m2»")
+                .contains("120.00")
+                .doesNotContain("120.00 m2");
+    }
+
+    @Test
     @DisplayName("la municipalidad que ya opera no marca el papel, y la de demostracion si")
     void laMarcaSaleDeLaFilaDeCadaMunicipalidad() throws Exception {
         // Un 200 solo dice que no revento. Esto dice que la consulta del regimen CORRIO y
