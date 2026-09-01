@@ -181,6 +181,11 @@ class ContratoDeApiTest {
                     // que la interfaz lo llevaba compilado y podia poner el membrete de una
                     // municipalidad sobre los datos de otra.
                     "GET /seguridad/sesion/municipalidad",
+                    // #559 — quien es la sesion. Ninguna lectura publicaba el `usuario.id`
+                    // propio, asi que la interfaz no podia llamar a `PUT
+                    // /seguridad/usuarios/{id}/clave` —que solo admite la propia— sin
+                    // deducirlo del listado de usuarios, que exige un permiso mucho mayor.
+                    "GET /seguridad/sesion",
                     "PUT /seguridad/sesion/ejercicio",
                     "PUT /seguridad/usuarios/{id}/clave",
                     "GET /seguridad/auditoria",

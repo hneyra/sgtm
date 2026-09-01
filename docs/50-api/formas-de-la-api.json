@@ -2687,6 +2687,12 @@
     "totalPaginas": "entero",
     "hayMas": "booleano"
   },
+  "GET /seguridad/sesion": {
+    "usuarioId": "entero",
+    "cuenta": "texto",
+    "nombre": "texto",
+    "ejercicioDeTrabajo": "entero"
+  },
   "GET /seguridad/sesion/municipalidad": {
     "id": "entero",
     "ubigeo": "texto",
