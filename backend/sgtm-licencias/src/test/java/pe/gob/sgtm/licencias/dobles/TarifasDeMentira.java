@@ -28,14 +28,32 @@ public final class TarifasDeMentira implements LectorDeParametros {
 
     private final Map<ClaseDeAnuncio, String> tarifas = new LinkedHashMap<>();
 
+    private boolean sinSellar;
+
     /** Declara la tarifa de una clase. Sin llamadas, el conjunto no tarifa nada. */
     public TarifasDeMentira con(ClaseDeAnuncio clase, String importe) {
         tarifas.put(clase, importe);
         return this;
     }
 
+    /**
+     * Ningun conjunto sellado rige el ejercicio, que es lo que ocurre <b>hoy</b> en todas las
+     * municipalidades con D-02a abierta (#562).
+     *
+     * <p>No es lo mismo que un conjunto sin la tarifa —para eso basta no declarar ninguna—: ahi hay
+     * un conjunto y le falta una cifra, y aqui no hay conjunto. Las dos situaciones se distinguen
+     * en el mensaje, una nombra la llave y la otra el ejercicio.
+     */
+    public TarifasDeMentira sinSellar() {
+        this.sinSellar = true;
+        return this;
+    }
+
     @Override
     public ParametrosSellados vigenteEn(Ejercicio ejercicio) {
+        if (sinSellar) {
+            throw new EjercicioSinSellar(ejercicio);
+        }
         ParametrosSellados.Constructor constructor = ParametrosSellados.de(ejercicio, 1);
         for (Map.Entry<ClaseDeAnuncio, String> tarifa : tarifas.entrySet()) {
             constructor.numero(

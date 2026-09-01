@@ -94,6 +94,18 @@ class AnuncioControllerTest {
     /** El mismo controlador con un conjunto sellado que no tarifa NADA. */
     private final MockMvc mvcSinTarifas = montar(new TarifasDeMentira());
 
+    /**
+     * El mismo controlador sin <b>ningun</b> conjunto sellado: lo que ocurre hoy en todas las
+     * municipalidades con D-02a abierta (#562). No es lo mismo que el anterior —ahi hay conjunto y
+     * no tarifa la clase— y hasta este issue salia como 500 con identificador de incidencia.
+     */
+    private final MockMvc mvcSinSellar =
+            montar(
+                    new TarifasDeMentira()
+                            .con(ClaseDeAnuncio.PANEL, "90.00")
+                            .con(ClaseDeAnuncio.LETRERO, "45.00")
+                            .sinSellar());
+
     private MockMvc montar(TarifasDeMentira tarifas) {
         TasaDeAnunciosParametrizada tasas = new TasaDeAnunciosParametrizada(tarifas);
         return MockMvcBuilders.standaloneSetup(
@@ -373,6 +385,45 @@ class AnuncioControllerTest {
             assertThat(cuerpo).contains("\"acto\":\"RENOVACION\"");
             assertThat(cuerpo).contains("\"referenciaDelCargo\":\"ANUNCIO-AN-2026-000001-2027\"");
             assertThat(libro.cuantos()).isEqualTo(2);
+        }
+
+        @Test
+        @DisplayName("#562: registrar sin ningun conjunto sellado es 422, no 500 con incidencia")
+        void registrarSinConjuntoSellado() throws Exception {
+            String cuerpo =
+                    envio(
+                            mvcSinSellar,
+                            "/api/v1/autorizaciones/anuncios",
+                            cuerpoDeRegistro(ClaseDeAnuncio.PANEL, null, "Se autoriza el panel"),
+                            null,
+                            422);
+
+            assertThat(cuerpo)
+                    .as("no es que el servidor este roto: es que nadie ha sellado 2026 (D-02a)")
+                    .contains("VALIDACION")
+                    .contains("2026")
+                    .doesNotContain("incidencia");
+            assertThat(libro.cuantos()).as("y no se asienta ningun cargo").isZero();
+        }
+
+        @Test
+        @DisplayName("#562: y la renovacion tambien, que es la otra que devenga")
+        void renovarSinConjuntoSellado() throws Exception {
+            registrar(mvc, null, 201);
+
+            String cuerpo =
+                    envio(
+                            mvcSinSellar,
+                            "/api/v1/autorizaciones/anuncios/AN-2026-000001/renovacion",
+                            """
+                            {"fecha":"2027-01-15","fecVenc":"2027-12-31",
+                             "observacion":"Se renueva por el ejercicio 2027"}
+                            """,
+                            null,
+                            422);
+
+            assertThat(cuerpo).contains("2027").doesNotContain("incidencia");
+            assertThat(libro.cuantos()).as("el cargo de la renovacion no se asienta").isEqualTo(1);
         }
 
         @Test

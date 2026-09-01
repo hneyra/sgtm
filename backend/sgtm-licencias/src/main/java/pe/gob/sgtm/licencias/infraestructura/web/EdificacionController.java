@@ -43,6 +43,7 @@ import pe.gob.sgtm.licencias.dominio.SeccionDelFue;
 import pe.gob.sgtm.licencias.dominio.TipoDeObra;
 import pe.gob.sgtm.licencias.dominio.TipoDeProfesional;
 import pe.gob.sgtm.licencias.dominio.TipoDeTramiteDeEdificacion;
+import pe.gob.sgtm.parametros.LectorDeParametros;
 import pe.gob.sgtm.web.Api;
 import pe.gob.sgtm.web.CodigoDeError;
 import pe.gob.sgtm.web.ParametrosDePaginacion;
@@ -71,6 +72,21 @@ import pe.gob.sgtm.web.RespuestaPaginada;
  * <p>{@code {expediente}} es el numero de expediente con que el FUE se presento, no el
  * identificador interno de la fila —que ninguna pantalla conoce— ni el numero de la licencia, que
  * puede no existir todavia.
+ *
+ * <h2>Que devuelve 422, y por que no 500 (#562)</h2>
+ *
+ * <p>El concepto del TUPA con que se comprueba el derecho de la licencia y el de la revalidacion
+ * salen del <b>conjunto sellado</b> que rige a la fecha del acto ({@link
+ * DerechosDeTramiteParametrizados}, regla 5). La llave que falta dentro del conjunto ya estaba
+ * traducida desde #48; que <b>no exista ningun conjunto sellado</b> ({@code EjercicioSinSellar})
+ * salia como <b>500 {@code ERROR_INTERNO} con identificador de incidencia</b>, y con D-02a abierta
+ * ese es el estado <i>normal</i> de todas las municipalidades. El razonamiento completo esta en la
+ * cabecera de {@link LicenciaController}.
+ *
+ * <p><b>La valorizacion de la obra no entra en esto</b>, y por diseño: {@link
+ * pe.gob.sgtm.licencias.aplicacion.ValorizacionDelFue} captura sus dos excepciones dentro y
+ * devuelve «—» con la llave que falta (#48), asi que el cuadro de valores unitarios sin cargar no
+ * impide emitir la licencia ni asoma por el borde.
  */
 @RestController
 @RequestMapping(Api.RAIZ + "/licencias/edificacion")
@@ -344,9 +360,11 @@ public class EdificacionController {
             throw new ProblemaDeNegocio(CodigoDeError.VALIDACION, mensajeDe(invalida));
         } catch (ComprobacionDelDerecho.DerechoNoPagado sinPagar) {
             throw new ProblemaDeNegocio(CodigoDeError.VALIDACION, mensajeDe(sinPagar));
-        } catch (DerechosDeTramiteParametrizados.DerechoSinParametrizar sinParametro) {
+        } catch (DerechosDeTramiteParametrizados.DerechoSinParametrizar
+                | LectorDeParametros.EjercicioSinSellar sinParametro) {
             // 422 y no 500: la peticion esta bien y el sistema tampoco esta roto. Lo que falta es
             // un dato de configuracion, y quien opera tiene que enterarse de cual.
+            // `EjercicioSinSellar` es el mismo caso y hasta #562 salia como 500 con incidencia.
             throw new ProblemaDeNegocio(CodigoDeError.VALIDACION, mensajeDe(sinParametro));
         } catch (IllegalArgumentException invalida) {
             throw new ProblemaDeNegocio(CodigoDeError.VALIDACION, mensajeDe(invalida));
@@ -385,7 +403,8 @@ public class EdificacionController {
             throw new ProblemaDeNegocio(CodigoDeError.VALIDACION, mensajeDe(invalida));
         } catch (ComprobacionDelDerecho.DerechoNoPagado sinPagar) {
             throw new ProblemaDeNegocio(CodigoDeError.VALIDACION, mensajeDe(sinPagar));
-        } catch (DerechosDeTramiteParametrizados.DerechoSinParametrizar sinParametro) {
+        } catch (DerechosDeTramiteParametrizados.DerechoSinParametrizar
+                | LectorDeParametros.EjercicioSinSellar sinParametro) {
             throw new ProblemaDeNegocio(CodigoDeError.VALIDACION, mensajeDe(sinParametro));
         } catch (IllegalArgumentException invalida) {
             throw new ProblemaDeNegocio(CodigoDeError.VALIDACION, mensajeDe(invalida));

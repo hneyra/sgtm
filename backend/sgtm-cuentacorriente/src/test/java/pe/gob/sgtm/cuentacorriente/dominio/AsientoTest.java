@@ -72,7 +72,8 @@ class AsientoTest {
                         "EM-2026-0001",
                         null,
                         "cajera.ventanilla",
-                        "insoluto de la primera cuota");
+                        "insoluto de la primera cuota",
+                        null);
 
         Asiento reversion =
                 Asiento.reversionDe(
