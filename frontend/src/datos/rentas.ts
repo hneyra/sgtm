@@ -370,21 +370,58 @@ export type ClaveDeDeterminacion = 'predial' | 'masivo' | 'arbitrios' | 'vehicul
 /** El orden de las pastillas es el del artboard, y no el alfabético. */
 export const TIPOS_DE_DETERMINACION: ClaveDeDeterminacion[] = ['predial', 'masivo', 'arbitrios', 'vehicular', 'alcabala', 'espectaculos'];
 
+/* ── Por qué las seis determinaciones no llevan una sola cifra ───────────────
+   El bloque «De dónde sale la cifra» dibujaba el cálculo entero con un ejemplo:
+   valúo S/ 170,616.75, «Tramo 1 — hasta 15 UIT · 0.2 %», «Tramo 2 — de 15 a 60
+   UIT · 0.6 %», insoluto S/ 587.44, «Mínimo imponible — 0.6 % de la UIT», y la
+   nota decía «UIT vigente 2026: S/ 5,350.00». Lo mismo el vehicular con su
+   1.0 % y su 1.5 % de la UIT, la alcabala con su 3.0 %, sus 10 UIT y un IPM de
+   1.0206, y los espectáculos con su 10 %.
+
+   Son dos cosas a la vez, y la segunda es peor que la primera:
+
+   1. **Es la regla 5**: la UIT, los tramos y las alícuotas no se compilan, viven
+      en datos versionados. En el backend lo caza el escáner de fuentes; aquí lo
+      escribía el catálogo portado del artboard, que ningún escáner mira.
+   2. **Esos tramos no están decididos.** D-02a está firmada pero ningún
+      ejercicio tiene su conjunto sellado, y D-11 sigue abierta —el % de
+      actualización que la alcabala necesita no tiene fuente identificada—. Así
+      que la pantalla le enseñaba a quien atiende una escala que puede no ser la
+      que el sistema aplique, con el aspecto de estar explicándole cómo se
+      calcula lo que va a cobrar.
+
+   Lo que se queda es lo que vale y no es una cifra: **qué pasos tiene el
+   cálculo, en qué orden y de dónde sale cada operando**. Lo que se va es la
+   aritmética. Y los tres tramos se vuelven un solo renglón, porque cuántos son
+   también lo dice el conjunto sellado. */
+
+/** Lo que va donde iría una cifra que ninguna lectura ha dado. */
+const SIN_CIFRA = '—';
+
+/** Lo que va en el recuento de una tabla cuya lectura no existe todavía. */
+const SIN_LECTURA = 'sin lectura';
+
+/** La coletilla de las cuatro memorias: por qué no hay números. */
+const MEMORIA_SIN_CIFRAS =
+  'Los pasos y su orden son los del cálculo; las cifras no se dibujan. Cada operando que multiplica un importe —la UIT, los tramos, las ' +
+  'alícuotas, el mínimo imponible— es un valor normativo del conjunto sellado del ejercicio, y hoy no hay ninguno sellado: enseñar aquí ' +
+  'un ejemplo sería enseñar una escala que puede no ser la que se aplique.';
+
 export const DETERMINACIONES: Record<ClaveDeDeterminacion, DeterminacionDef> = {
   predial: {
     label: 'Predial — individual',
     titulo: 'Cálculo individual del impuesto predial',
     endpoint: 'POST /api/v1/rentas/predial/calculo-individual',
-    desc: 'Determina el impuesto de un contribuyente sobre el autovalúo acumulado de todos sus predios en el distrito, con la escala progresiva acumulativa y el mínimo imponible de 0.6 % de la UIT.',
+    desc: 'Determina el impuesto de un contribuyente sobre el autovalúo acumulado de todos sus predios en el distrito, con la escala progresiva acumulativa y el mínimo imponible del ejercicio.',
     filtros: [
-      { l: 'Cod. Contribuyente', v: '00000025673' },
-      { l: 'DJ N°', v: '000418' },
+      { l: 'Cod. Contribuyente', v: '' },
+      { l: 'DJ N°', v: '' },
       { l: 'Tipo de declaración', t: 'sel', v: 'RECTIFICATORIA', o: ['INSCRIPCIÓN', 'DESCARGO', 'RECTIFICATORIA', 'ANUAL MECANIZADA'] },
-      { l: 'Fecha de declaración', v: '27/02/2026' },
+      { l: 'Fecha de declaración', v: '' },
     ],
     tabla: {
       titulo: 'Predios que integran la base imponible',
-      conteo: '2 predios',
+      conteo: SIN_LECTURA,
       min: '760px',
       cols: [
         ['Código predial', 0],
@@ -395,25 +432,25 @@ export const DETERMINACIONES: Record<ClaveDeDeterminacion, DeterminacionDef> = {
         ['Exonerado S/', 1],
         ['Valuo afecto S/', 1],
       ],
-      filas: [
-        ['02-014-D-14-01', 'CALLE SANTA ROSA 116', 'Casa habitación', '100.00', '132,196.75', '0.00', '132,196.75'],
-        ['04-021-B-07-00', 'MZ. B LT. 7 — BELLAVISTA', 'Terreno sin construir', '50.00', '38,420.00', '0.00', '19,210.00'],
-      ],
+      filas: [],
       nota: 'Fases del cálculo: REGISTRO → HR (hoja resumen) → PU (predio urbano) → PR (predio rústico). No se emite cuponera si alguna fase presenta inconsistencia.',
     },
     memoria: {
       titulo: 'Escala progresiva acumulativa',
       lineas: [
-        ['', 'Valuo total del conjunto', '2 predios, al 100 % y al 50 %', '170,616.75'],
-        ['−', 'Valuo exonerado', 'Sin beneficio aplicado este ejercicio', '0.00'],
-        ['=', 'Valuo afecto', '', '151,406.75', 'sub'],
-        ['×', 'Tramo 1 — hasta 15 UIT · 0.2 %', 'S/ 80,250.00 del afecto', '160.50'],
-        ['×', 'Tramo 2 — de 15 a 60 UIT · 0.6 %', 'S/ 71,156.75 del afecto', '426.94'],
-        ['×', 'Tramo 3 — más de 60 UIT · 1.0 %', 'S/ 0.00 del afecto', '0.00'],
-        ['=', 'Impuesto insoluto anual', '', '587.44', 'total'],
-        ['', 'Mínimo imponible — 0.6 % de la UIT', 'Comprobación: el insoluto lo supera', '32.10'],
+        ['', 'Valuo total del conjunto', 'La suma de sus predios, cada uno ponderado por su % de propiedad', SIN_CIFRA],
+        ['−', 'Valuo exonerado', 'Lo que el beneficio deja fuera de la base', SIN_CIFRA],
+        ['=', 'Valuo afecto', '', SIN_CIFRA, 'sub'],
+        [
+          '×',
+          'Escala progresiva acumulativa',
+          'Un renglón por cada tramo: cuántos son, dónde están sus límites y qué alícuota lleva cada uno son cifras del conjunto sellado del ejercicio',
+          SIN_CIFRA,
+        ],
+        ['=', 'Impuesto insoluto anual', '', SIN_CIFRA, 'total'],
+        ['', 'Mínimo imponible', 'Se compara con el insoluto y gana el mayor; su fracción de la UIT también es del conjunto sellado', SIN_CIFRA],
       ],
-      nota: 'UIT vigente 2026: S/ 5,350.00. La escala y su conjunto sellado los pone el servidor; la pantalla no calcula ninguna de estas cifras.',
+      nota: MEMORIA_SIN_CIFRAS,
     },
     secciones: [
       {
@@ -433,27 +470,33 @@ export const DETERMINACIONES: Record<ClaveDeDeterminacion, DeterminacionDef> = {
             t: 'sel',
             o: ['NINGUNA', 'GOBIERNO CENTRAL', 'ENTIDAD RELIGIOSA', 'CUERPO DE BOMBEROS', 'BENEFICENCIA'],
           },
-          { k: 'montoDed', l: 'Monto deducido (S/)', t: 'ro' },
+          { k: 'montoDed', l: 'Monto deducido (S/)', t: 'ro', ayuda: 'Lo calcula el servidor con la deducción de arriba' },
         ],
       },
       {
         label: 'Emisión y cuotas',
+        /* Los cuatro vencimientos estaban en el ROTULO —«Cuota 1 — vence 28/02»—,
+           y son `PREDIAL_VENCIMIENTO:‹n›` del conjunto sellado: cifras de
+           ordenanza local (D-02b) escritas a mano en una etiqueta, donde ningun
+           escaner las busca. Y los cinco importes salian de `DEFECTOS`: el
+           derecho a S/ 4.50 y las cuotas a S/ 147.98 y S/ 146.86. La seccion
+           nace plegada, asi que nadie los veia hasta abrirla. */
         hint: 'Cómo se cobra',
         campos: [
-          { k: 'modalidad', l: 'Modalidad', t: 'sel', o: ['AL CONTADO', 'FRACCIONADO EN 4 CUOTAS'] },
-          { k: 'derecho', l: 'Derecho de emisión (S/)', t: 'ro' },
-          { k: 'c1', l: 'Cuota 1 — vence 28/02', t: 'ro' },
-          { k: 'c2', l: 'Cuota 2 — vence 31/05', t: 'ro' },
-          { k: 'c3', l: 'Cuota 3 — vence 31/08', t: 'ro' },
-          { k: 'c4', l: 'Cuota 4 — vence 30/11', t: 'ro' },
+          { k: 'modalidad', l: 'Modalidad', t: 'sel', v: 'AL CONTADO', o: ['AL CONTADO', 'FRACCIONADO EN 4 CUOTAS'] },
+          { k: 'derecho', l: 'Derecho de emisión (S/)', t: 'ro', ayuda: 'Del conjunto sellado del ejercicio' },
+          { k: 'c1', l: 'Cuota 1', t: 'ro', ayuda: 'Su vencimiento también es del conjunto sellado (D-02b)' },
+          { k: 'c2', l: 'Cuota 2', t: 'ro' },
+          { k: 'c3', l: 'Cuota 3', t: 'ro' },
+          { k: 'c4', l: 'Cuota 4', t: 'ro' },
         ],
       },
     ],
     totales: [
-      ['Valuo afecto', 'S/ 151,406.75', 0],
-      ['Impuesto insoluto', 'S/ 587.44', 0],
-      ['Derecho de emisión', 'S/ 4.50', 0],
-      ['Total a pagar', 'S/ 591.94', 1],
+      ['Valuo afecto', SIN_CIFRA, 0],
+      ['Impuesto insoluto', SIN_CIFRA, 0],
+      ['Derecho de emisión', SIN_CIFRA, 0],
+      ['Total a pagar', SIN_CIFRA, 1],
     ],
     acciones: [
       ['Buscar', 0],
@@ -471,12 +514,16 @@ export const DETERMINACIONES: Record<ClaveDeDeterminacion, DeterminacionDef> = {
     filtros: [
       { l: 'Alcance', t: 'sel', v: 'TODO EL PADRÓN', o: ['TODO EL PADRÓN', 'POR SECTOR', 'POR RANGO DE CÓDIGO', 'SOLO OBSERVADOS'] },
       { l: 'Sector', t: 'sel', v: 'Todos', o: ['Todos', '01', '02', '03', '04', '05'] },
-      { l: 'UIT del ejercicio (S/)', v: '5,350.00' },
-      { l: 'Derecho de emisión (S/)', v: '4.50' },
+      /* La UIT y el derecho de emisión los pone el conjunto sellado del
+         ejercicio, y no se teclean: escribirlos aquí sería la regla 5 —una cifra
+         normativa compilada— y ademas dejaria que quien corre la emision de
+         62 000 cuentas eligiera con qué UIT se calcula. */
+      { l: 'UIT del ejercicio (S/)', v: SIN_CIFRA },
+      { l: 'Derecho de emisión (S/)', v: SIN_CIFRA },
     ],
     tabla: {
       titulo: 'Resultado de la última corrida',
-      conteo: 'Ejecutada el 28/01/2026 — 02:14 h',
+      conteo: SIN_LECTURA,
       min: '620px',
       cols: [
         ['Etapa', 0],
@@ -485,13 +532,7 @@ export const DETERMINACIONES: Record<ClaveDeDeterminacion, DeterminacionDef> = {
         ['Observados', 1],
         ['Estado', 0],
       ],
-      filas: [
-        ['Lectura del padrón', '62,418', '—', '0', 'Completa'],
-        ['Valuación de predios', '78,204', '1,842,116,420.00', '412', 'Completa'],
-        ['Determinación del impuesto', '61,884', '9,418,204.60', '534', 'Completa'],
-        ['Determinación de arbitrios', '61,884', '5,884,110.20', '188', 'Completa'],
-        ['Generación de cuponeras', '61,350', '—', '534', 'Con observados'],
-      ],
+      filas: [],
       nota: 'Los observados quedan sin emisión hasta que se corrija la inconsistencia: predio sin arancel, ficha no conciliada o titularidad incompleta.',
     },
     secciones: [
@@ -510,7 +551,7 @@ export const DETERMINACIONES: Record<ClaveDeDeterminacion, DeterminacionDef> = {
       ['Ver observados', 0],
       ['Ejecutar proceso', 1],
     ],
-    aviso: 'Un proceso masivo toca 62,418 cuentas. Simular primero no es una formalidad: es la única forma de ver los observados antes de emitir.',
+    aviso: 'Un proceso masivo toca el padrón entero. Simular primero no es una formalidad: es la única forma de ver los observados antes de emitir.',
   },
 
   arbitrios: {
@@ -519,13 +560,13 @@ export const DETERMINACIONES: Record<ClaveDeDeterminacion, DeterminacionDef> = {
     endpoint: 'GET /api/v1/rentas/arbitrios',
     desc: 'Limpieza pública, parques y jardines y serenazgo. La tasa depende del uso del predio, la zona, la frecuencia del servicio y los metros de frontis declarados en la ficha catastral.',
     filtros: [
-      { l: 'Código predial', v: '02-014-D-14-01' },
+      { l: 'Código predial', v: '' },
       { l: 'Zona', t: 'sel', v: 'Zona 2', o: ['Zona 1', 'Zona 2', 'Zona 3', 'Zona 4'] },
       { l: 'Uso', t: 'sel', v: 'CASA HABITACIÓN', o: ['CASA HABITACIÓN', 'COMERCIO', 'INDUSTRIA', 'SERVICIOS', 'TERRENO SIN CONSTRUIR'] },
     ],
     tabla: {
       titulo: 'Determinación por servicio',
-      conteo: '4 servicios · 12 cuotas',
+      conteo: SIN_LECTURA,
       min: '700px',
       cols: [
         ['Servicio', 0],
@@ -535,18 +576,13 @@ export const DETERMINACIONES: Record<ClaveDeDeterminacion, DeterminacionDef> = {
         ['Anual S/', 1],
         ['Condición', 0],
       ],
-      filas: [
-        ['LIMPIEZA PÚBLICA — BARRIDO', 'Metros lineales de frontis', 'DIARIA', '8.40', '100.80', 'Afecto'],
-        ['LIMPIEZA PÚBLICA — RECOLECCIÓN', 'Área construida y uso', 'INTERDIARIA', '14.20', '170.40', 'Afecto'],
-        ['PARQUES Y JARDINES', 'Ubicación del predio', 'PERMANENTE', '6.10', '73.20', 'Afecto'],
-        ['SERENAZGO', 'Uso y peligrosidad de zona', 'PERMANENTE', '11.80', '141.60', 'Afecto'],
-      ],
+      filas: [],
     },
     totales: [
-      ['Arbitrio anual', 'S/ 486.00', 0],
-      ['Descuento pronto pago', '− S/ 48.60', 0],
-      ['Cuotas', '12 mensuales', 0],
-      ['Total 2026', 'S/ 437.40', 1],
+      ['Arbitrio anual', SIN_CIFRA, 0],
+      ['Descuento pronto pago', SIN_CIFRA, 0],
+      ['Cuotas', SIN_CIFRA, 0],
+      ['Total del ejercicio', SIN_CIFRA, 1],
     ],
     acciones: [
       ['Recalcular', 0],
@@ -559,14 +595,14 @@ export const DETERMINACIONES: Record<ClaveDeDeterminacion, DeterminacionDef> = {
     label: 'Vehicular',
     titulo: 'Cálculo del impuesto vehicular',
     endpoint: 'POST /api/v1/rentas/vehicular/calculo',
-    desc: 'Aplica el 1 % sobre la base imponible con un mínimo del 1.5 % de la UIT, por los tres ejercicios en que el vehículo permanece afecto.',
+    desc: 'Aplica la alícuota del ejercicio sobre la base imponible, con el mínimo imponible del conjunto sellado, por los tres ejercicios en que el vehículo permanece afecto.',
     filtros: [
-      { l: 'Placa', v: 'V1H-882' },
-      { l: 'Cod. Contribuyente', v: '00000003541' },
+      { l: 'Placa', v: '' },
+      { l: 'Cod. Contribuyente', v: '' },
     ],
     tabla: {
       titulo: 'Determinación por ejercicio',
-      conteo: '3 ejercicios afectos',
+      conteo: SIN_LECTURA,
       min: '620px',
       cols: [
         ['Ejercicio', 0],
@@ -576,29 +612,27 @@ export const DETERMINACIONES: Record<ClaveDeDeterminacion, DeterminacionDef> = {
         ['Cuotas', 0],
         ['Estado', 0],
       ],
-      filas: [
-        ['2025', '112,800.00', '1.0 %', '1,128.00', '4', 'Cancelado'],
-        ['2026', '112,800.00', '1.0 %', '1,128.00', '4', 'Emitido'],
-        ['2027', '112,800.00', '1.0 %', '1,128.00', '4', 'Proyectado'],
-      ],
+      filas: [],
     },
     memoria: {
       titulo: 'Base imponible del ejercicio',
       lineas: [
-        ['', 'Valor de adquisición', 'Declarado por el titular', '112,400.00'],
-        ['', 'Tabla referencial MEF 2024', 'Publicada para el año de fabricación', '112,800.00'],
-        ['=', 'Base imponible — el mayor de los dos', '', '112,800.00', 'sub'],
-        ['×', 'Tasa', '1.0 %', '1,128.00'],
-        ['=', 'Impuesto anual', '', '1,128.00', 'total'],
-        ['', 'Mínimo imponible — 1.5 % de la UIT', 'Comprobación: el impuesto lo supera', '80.25'],
+        ['', 'Valor de adquisición', 'Declarado por el titular', SIN_CIFRA],
+        ['', 'Valor referencial del MEF', 'El de la tabla del año de fabricación, publicada para el ejercicio', SIN_CIFRA],
+        ['=', 'Base imponible — el mayor de los dos', '', SIN_CIFRA, 'sub'],
+        ['×', 'Alícuota del ejercicio', 'Del conjunto sellado, como todo lo que multiplica un importe', SIN_CIFRA],
+        ['=', 'Impuesto anual', '', SIN_CIFRA, 'total'],
+        ['', 'Mínimo imponible', 'Se compara con el impuesto y gana el mayor; su fracción de la UIT es del conjunto sellado', SIN_CIFRA],
       ],
-      nota: 'La afectación corre tres ejercicios desde el año siguiente a la primera inscripción registral. Al cuarto, el vehículo deja de estar afecto por vencimiento, no por baja.',
+      nota:
+        'La afectación corre tres ejercicios desde el año siguiente a la primera inscripción registral. Al cuarto, el vehículo deja de estar afecto por vencimiento, no por baja. ' +
+        MEMORIA_SIN_CIFRAS,
     },
     totales: [
-      ['Base imponible', 'S/ 112,800.00', 0],
-      ['Impuesto anual', 'S/ 1,128.00', 0],
-      ['Cuota trimestral', 'S/ 282.00', 0],
-      ['Total tres ejercicios', 'S/ 3,384.00', 1],
+      ['Base imponible', SIN_CIFRA, 0],
+      ['Impuesto anual', SIN_CIFRA, 0],
+      ['Cuota trimestral', SIN_CIFRA, 0],
+      ['Total tres ejercicios', SIN_CIFRA, 1],
     ],
     acciones: [
       ['Simular', 0],
@@ -612,31 +646,38 @@ export const DETERMINACIONES: Record<ClaveDeDeterminacion, DeterminacionDef> = {
     label: 'Alcabala',
     titulo: 'Impuesto de alcabala',
     endpoint: 'POST /api/v1/rentas/alcabala',
-    desc: 'Grava la transferencia de propiedad con el 3 % sobre el exceso de las primeras 10 UIT, tomando como base el mayor valor entre el de transferencia y el autovalúo ajustado por el IPM.',
+    desc: 'Grava la transferencia de propiedad sobre el exceso de un tramo inafecto, tomando como base el mayor valor entre el de transferencia y el autovalúo ajustado.',
     filtros: [
-      { l: 'Nº de liquidación', v: 'ALC-2026-00418' },
-      { l: 'Nº de expediente', v: '2026-0918' },
-      { l: 'Fecha de la transferencia', v: '18/07/2026' },
+      { l: 'Nº de liquidación', v: '' },
+      { l: 'Nº de expediente', v: '' },
+      { l: 'Fecha de la transferencia', v: '' },
     ],
     memoria: {
       titulo: 'Liquidación',
       lineas: [
-        ['', 'Valor de transferencia', 'Según minuta EP-2218-2026', '95,000.00'],
-        ['', 'Autovalúo del predio', 'Ejercicio 2026', '76,840.00'],
-        ['×', 'IPM aplicado al autovalúo', 'Índice de precios al por mayor · 1.0206', '78,420.00'],
-        ['=', 'Base de cálculo — el mayor de los dos', '', '95,000.00', 'sub'],
-        ['−', 'Tramo inafecto — 10 UIT', 'S/ 5,350.00 × 10', '53,500.00'],
-        ['=', 'Base imponible', '', '41,500.00', 'sub'],
-        ['×', 'Tasa', '3.0 %', '1,245.00'],
-        ['=', 'Impuesto de alcabala', 'Vence el 31/08/2026, último día hábil del mes siguiente', '1,245.00', 'total'],
+        ['', 'Valor de transferencia', 'El que declara la minuta o la escritura', SIN_CIFRA],
+        ['', 'Autovalúo del predio', 'El del ejercicio de la transferencia', SIN_CIFRA],
+        [
+          '×',
+          'Índice de actualización del autovalúo',
+          'El factor que la norma manda aplicar. No tiene fuente identificada todavía (D-11), y por eso ni siquiera se enseña un ejemplo',
+          SIN_CIFRA,
+        ],
+        ['=', 'Base de cálculo — el mayor de los dos', '', SIN_CIFRA, 'sub'],
+        ['−', 'Tramo inafecto', 'Las primeras UIT que la norma deja fuera; cuántas son y cuánto vale la UIT, del conjunto sellado', SIN_CIFRA],
+        ['=', 'Base imponible', '', SIN_CIFRA, 'sub'],
+        ['×', 'Alícuota', 'Del conjunto sellado del ejercicio', SIN_CIFRA],
+        ['=', 'Impuesto de alcabala', 'Vence el último día hábil del mes siguiente', SIN_CIFRA, 'total'],
       ],
-      nota: 'El adquirente es el contribuyente de la alcabala. Si el vendedor es una empresa constructora y es la primera venta, solo se grava el valor del terreno.',
+      nota:
+        'El adquirente es el contribuyente de la alcabala. Si el vendedor es una empresa constructora y es la primera venta, solo se grava el valor del terreno. ' +
+        MEMORIA_SIN_CIFRAS,
     },
     totales: [
-      ['Base de cálculo', 'S/ 95,000.00', 0],
-      ['Tramo inafecto', 'S/ 53,500.00', 0],
-      ['Base imponible', 'S/ 41,500.00', 0],
-      ['Alcabala a pagar', 'S/ 1,245.00', 1],
+      ['Base de cálculo', SIN_CIFRA, 0],
+      ['Tramo inafecto', SIN_CIFRA, 0],
+      ['Base imponible', SIN_CIFRA, 0],
+      ['Alcabala a pagar', SIN_CIFRA, 1],
     ],
     acciones: [
       ['Liquidar', 0, 'El backend registra el acto; no acepta una marca de solo liquidar'],
@@ -650,10 +691,10 @@ export const DETERMINACIONES: Record<ClaveDeDeterminacion, DeterminacionDef> = {
     label: 'Espectáculos públicos',
     titulo: 'Espectáculos públicos no deportivos',
     endpoint: 'POST /api/v1/rentas/espectaculos',
-    desc: 'Grava el monto que se abona por presenciar el espectáculo. La tasa depende del tipo de evento y el organizador actúa como agente perceptor.',
+    desc: 'Grava el monto que se abona por presenciar el espectáculo. La alícuota depende del tipo de evento y el organizador actúa como agente perceptor.',
     filtros: [
-      { l: 'Nº de expediente', v: '2026-0884' },
-      { l: 'Organizador', v: 'PRODUCCIONES DEL NORTE EIRL' },
+      { l: 'Nº de expediente', v: '' },
+      { l: 'Organizador', v: '' },
       {
         l: 'Tipo de espectáculo',
         t: 'sel',
@@ -663,7 +704,7 @@ export const DETERMINACIONES: Record<ClaveDeDeterminacion, DeterminacionDef> = {
     ],
     tabla: {
       titulo: 'Espectáculos declarados',
-      conteo: '3 de 84',
+      conteo: SIN_LECTURA,
       min: '780px',
       cols: [
         ['Expediente', 0],
@@ -675,24 +716,21 @@ export const DETERMINACIONES: Record<ClaveDeDeterminacion, DeterminacionDef> = {
         ['Tasa', 0],
         ['Impuesto S/', 1],
       ],
-      filas: [
-        ['2026-0884', 'PRODUCCIONES DEL NORTE EIRL', 'Concierto de cumbia', '18/07/2026', '2,400', '84,000.00', '10 %', '8,400.00'],
-        ['2026-0912', 'ASOC. TAURINA CATACAOS', 'Corrida de toros', '02/08/2026', '1,800', '126,000.00', '10 %', '12,600.00'],
-        ['2026-0918', 'CINE PLAZA SAC', 'Función de cine', '10/08/2026', '320', '4,800.00', '0 %', '0.00'],
-      ],
+      filas: [],
       nota: 'El cine, el teatro, los conciertos de música clásica, la ópera, el ballet y el folclore nacional están inafectos por ley.',
     },
     memoria: {
       titulo: 'Liquidación del evento',
       lineas: [
-        ['', 'Entradas vendidas', '2,240 de 2,400 de aforo autorizado', '2,240'],
-        ['×', 'Precio promedio', 'S/ 37.50', '84,000.00'],
-        ['=', 'Recaudación declarada', '', '84,000.00', 'sub'],
-        ['×', 'Tasa del tipo de espectáculo', 'Concierto de música popular · 10 %', '8,400.00'],
-        ['=', 'Impuesto a pagar', '', '8,400.00', 'total'],
-        ['', 'Garantía depositada', 'Se devuelve al liquidar el evento', '8,400.00'],
+        ['', 'Entradas vendidas', 'Las que declara el organizador, dentro del aforo autorizado', SIN_CIFRA],
+        ['×', 'Precio de la entrada', 'El otro operando de la base: el cuerpo del backend no tiene campo para él todavía', SIN_CIFRA],
+        ['=', 'Recaudación declarada', 'Es la base imponible del art. 56, y la compone el servidor: no se multiplica en la pantalla', SIN_CIFRA, 'sub'],
+        ['×', 'Alícuota del tipo de espectáculo', 'Del conjunto sellado. Los rótulos del desplegable de arriba no son sus llaves', SIN_CIFRA],
+        ['=', 'Impuesto a pagar', '', SIN_CIFRA, 'total'],
+        ['', 'Garantía depositada', 'Se devuelve al liquidar el evento', SIN_CIFRA],
       ],
-      nota: 'El organizador es agente perceptor: retiene y entrega. La garantía cubre el impuesto si no lo hace.',
+      nota:
+        'El organizador es agente perceptor: retiene y entrega. La garantía cubre el impuesto si no lo hace. ' + MEMORIA_SIN_CIFRAS,
     },
     secciones: [
       {
@@ -1155,13 +1193,15 @@ export const DEFECTOS: Record<string, string | boolean> = {
   deduccion: 'NO APLICA',
   resBen: '',
   inafectacion: 'NINGUNA',
-  montoDed: '0.00',
-  modalidad: 'FRACCIONADO EN 4 CUOTAS',
-  derecho: '4.50',
-  c1: '147.98',
-  c2: '146.86',
-  c3: '146.86',
-  c4: '146.86',
+  /* Los cinco importes de la determinacion salen «—»: los produce el calculo,
+     y el calculo no se puede pedir. Un «0.00» en «Monto deducido» se lee como
+     «no le corresponde deduccion», que es una afirmacion, no una ausencia. */
+  montoDed: '—',
+  derecho: '—',
+  c1: '—',
+  c2: '—',
+  c3: '—',
+  c4: '—',
   incArbitrios: true,
   recalcula: false,
   cuponera: true,

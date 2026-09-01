@@ -352,7 +352,19 @@ function CampoDeFormulario({
 
 /** La tabla de datos del módulo: la primera columna destaca, las numéricas van
  *  en mono a la derecha. */
-function TablaDeDatos({ cols, filas, min }: { cols: ColDef[]; filas: string[][]; min: string }) {
+function TablaDeDatos({
+  cols,
+  filas,
+  min,
+  vacia,
+}: {
+  cols: ColDef[];
+  filas: string[][];
+  min: string;
+  /** Qué decir cuando no hay filas. Sin esto, una tabla que perdió sus filas de
+   *  muestra se dibuja con la cabecera y nada debajo, que se lee como «no hay». */
+  vacia?: string;
+}) {
   return (
     <div style={{ overflowX: 'auto' }}>
       <table style={{ width: '100%', borderCollapse: 'collapse', minWidth: min }}>
@@ -366,6 +378,13 @@ function TablaDeDatos({ cols, filas, min }: { cols: ColDef[]; filas: string[][];
           </tr>
         </thead>
         <tbody>
+          {filas.length === 0 && vacia !== undefined && (
+            <tr style={{ borderTop: '1px solid var(--line)' }}>
+              <td colSpan={cols.length} style={{ ...TD, whiteSpace: 'normal', color: 'var(--ink-3)', textWrap: 'pretty' }}>
+                {vacia}
+              </td>
+            </tr>
+          )}
           {filas.map((r, i) => (
             <tr key={i} className="hov-elev" style={{ borderTop: '1px solid var(--line)' }}>
               {r.map((celda, j) => (
@@ -1161,6 +1180,12 @@ export default function Rentas({ dest, onDest }: PantallaProps) {
   const altaInteres = numero(texto('altaInteres'));
   const altaGastos = numero(texto('altaGastos'));
   const altaTotal = altaInsoluto + altaReajuste + altaInteres + altaGastos;
+  /* La franja sólo enseña cifras cuando hay un acto del que hablar: un
+     contribuyente elegido y al menos una de las cuatro partes escrita. */
+  const PARTES_DEL_ALTA = ['altaInsoluto', 'altaReajuste', 'altaInteres', 'altaGastos'];
+  const hayAlgoQueSumarEnElAlta = sujetoDeDeuda !== null && PARTES_DEL_ALTA.some((k) => texto(k).trim() !== '');
+  const importeDelAlta = (clave: string, valor: number) =>
+    hayAlgoQueSumarEnElAlta && texto(clave).trim() !== '' ? soles(valor) : '—';
   const obligacionesDelTransferente = deudaDelTransferente.datos?.deudasPendientes.contenido ?? [];
 
   const etiquetaDelDestino = modulo.destinos.find((x) => x.k === dest)?.label ?? 'Rentas';
@@ -1777,7 +1802,12 @@ export default function Rentas({ dest, onDest }: PantallaProps) {
                   <h2 style={H2}>{det.tabla.titulo}</h2>
                   <span style={META}>{det.tabla.conteo}</span>
                 </div>
-                <TablaDeDatos cols={det.tabla.cols} filas={det.tabla.filas} min={det.tabla.min} />
+                <TablaDeDatos
+                  cols={det.tabla.cols}
+                  filas={det.tabla.filas}
+                  min={det.tabla.min}
+                  vacia={VACIA_EN_LA_DETERMINACION[tipo]}
+                />
                 {det.tabla.nota && <p style={PIE}>{det.tabla.nota}</p>}
               </section>
             )}
@@ -1927,6 +1957,7 @@ export default function Rentas({ dest, onDest }: PantallaProps) {
                     key={p.label}
                     onClick={() => setTrPaso(i)}
                     aria-label={`Ir al paso ${i + 1}: ${p.label}`}
+                    aria-current={i === paso ? 'step' : undefined}
                     style={{
                       flex: 1,
                       height: 6,
@@ -1940,9 +1971,15 @@ export default function Rentas({ dest, onDest }: PantallaProps) {
               </div>
               <div style={{ display: 'flex', gap: 14, flexWrap: 'wrap', marginTop: 11 }}>
                 {trDef.pasos.map((p, i) => (
+                  /* `aria-current="step"` es lo que dice CUÁL es el paso
+                     abierto. Sin él, el único que lo decía era el color —una
+                     barrera para quien no lo distingue (RNF-082)— y además
+                     `flujos.mjs` contaba el paso ya activo como un botón inerte:
+                     pulsarlo no hace nada, y hace bien. */
                   <button
                     key={p.label}
                     onClick={() => setTrPaso(i)}
+                    aria-current={i === paso ? 'step' : undefined}
                     style={{
                       border: 0,
                       background: 'transparent',
@@ -1951,6 +1988,8 @@ export default function Rentas({ dest, onDest }: PantallaProps) {
                       fontSize: 11.5,
                       color: i === paso ? 'var(--accent-ink)' : 'var(--ink-4)',
                       fontWeight: i === paso ? 600 : 400,
+                      textDecoration: i === paso ? 'underline' : 'none',
+                      textUnderlineOffset: 3,
                     }}
                   >
                     {i + 1}. {p.label}
@@ -2382,12 +2421,19 @@ export default function Rentas({ dest, onDest }: PantallaProps) {
                   overflow: 'hidden',
                 }}
               >
+                {/* Un total de nada no es cero: es nada. Sobre el formulario en
+                    blanco la franja decía «S/ 0.00» cuatro veces —y debajo,
+                    «Elige primero el contribuyente»—, que es una cifra afirmada
+                    sobre un acto que ni siquiera tiene sujeto. Sale «—» hasta
+                    que haya contribuyente y algo tecleado; y cada casilla dice
+                    «—» por su cuenta mientras su campo esté vacío, para que el
+                    total no parezca completo con tres partes sin escribir. */}
                 {(
                   [
-                    ['Insoluto', soles(altaInsoluto), false],
-                    ['Reajuste', soles(altaReajuste), false],
-                    ['Interés', soles(altaInteres), false],
-                    ['Total del alta', soles(altaTotal), true],
+                    ['Insoluto', importeDelAlta('altaInsoluto', altaInsoluto), false],
+                    ['Reajuste', importeDelAlta('altaReajuste', altaReajuste), false],
+                    ['Interés', importeDelAlta('altaInteres', altaInteres), false],
+                    ['Total del alta', hayAlgoQueSumarEnElAlta ? soles(altaTotal) : '—', true],
                   ] as [string, string, boolean][]
                 ).map((t) => (
                   <div key={t[0]} style={celdaDeTotal(t[2])}>
@@ -2776,6 +2822,25 @@ const NO_SE_PUEDE_GUARDAR_EL_EXPEDIENTE =
  * contribuyente y se queda en la pantalla. Las seis se apagan con su motivo, que
  * no es el mismo para todas.
  */
+/**
+ * Qué dice cada tabla de la determinación mientras no tenga filas.
+ *
+ * Las cinco traían las de la maqueta —dos predios con su valúo, cinco etapas de
+ * una corrida de 62 418 cuentas, cuatro servicios de arbitrios con su tasa
+ * mensual, tres ejercicios vehiculares al 1.0 %, tres espectáculos con su 10 %—.
+ * Una cabecera sola no basta: se lee como «este contribuyente no tiene ninguno».
+ */
+const VACIA_EN_LA_DETERMINACION: Record<ClaveDeDeterminacion, string> = {
+  predial:
+    'Los predios que integran la base salen del cálculo, y el cálculo no se puede pedir todavía. Los del contribuyente se ven mientras tanto en Catastro.',
+  masivo: 'Se llena con el resultado de la última corrida. No hay ninguna del ejercicio, y por eso no hay etapas que enseñar.',
+  arbitrios:
+    'La determinación por servicio depende de las tasas de la ordenanza local con su ratificación provincial, que todavía no están cargadas (D-02b).',
+  vehicular: 'Los tres ejercicios afectos salen del cálculo vehicular, que hoy no se puede pedir.',
+  espectaculos: 'Ninguna lectura del contrato lista los espectáculos declarados: no hay de dónde traer estas filas.',
+  alcabala: 'Sin filas.',
+};
+
 const IMPEDIMENTO_DE_LA_DETERMINACION: Record<ClaveDeDeterminacion, string> = {
   predial:
     'La operación existe (POST /rentas/predial/calculo-individual) y contesta 500 en esta instalación: ningún ejercicio tiene conjunto ' +

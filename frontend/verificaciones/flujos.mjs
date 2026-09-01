@@ -75,10 +75,19 @@ async function botonesInertes(ruta, saltar = []) {
     }
     if (rotulo === '' || saltar.some((s) => rotulo.includes(s))) continue;
     /* Un conmutador que YA esta activo no hace nada al pulsarlo, y eso no es
-       inercia: es lo correcto. Se salta. */
+       inercia: es lo correcto. Se salta.
+
+       `aria-current` NO es booleano, y ahi estaba el falso positivo: ARIA
+       admite `page | step | location | date | time | true`, y el navegador de
+       pasos de una transferencia marca el paso abierto con `step`. Comparandolo
+       con la cadena `'true'` el paso activo no se saltaba y se contaba como un
+       boton inerte —«1 boton(es) inerte(s): 1. El acto»—, que es exactamente el
+       ruido que hace que un arnes deje de leerse. Vale cualquier valor menos la
+       ausencia y el `false` explicito. */
+    const actual = await boton.getAttribute('aria-current');
     const yaActivo =
       (await boton.getAttribute('aria-pressed')) === 'true' ||
-      (await boton.getAttribute('aria-current')) === 'true' ||
+      (actual !== null && actual !== 'false') ||
       (await boton.getAttribute('aria-selected')) === 'true';
     if (yaActivo) continue;
 
