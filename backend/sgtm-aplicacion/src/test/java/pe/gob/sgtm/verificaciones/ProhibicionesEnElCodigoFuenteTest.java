@@ -1095,6 +1095,148 @@ class ProhibicionesEnElCodigoFuenteTest {
                 .anySatisfy(f -> assertThat(f).containsIgnoringCase("delete from papeleta_masivo"));
     }
 
+    @Test
+    @DisplayName("el escaner detecta la muestra que compone el area a mano, en las dos formas")
+    void elEscanerDetectaLaMuestraQueComponeElArea() throws IOException {
+        // #607: hasta aqui habia TRES convenciones vivas para serializar un AreaM2 —el campo
+        // tipado, `valor().toPlainString()` a mano y `toString()` a mano— y la tercera metia la
+        // unidad dentro del dato, asi que el mismo predio decia «360.00» en fiscalizacion y
+        // «360.00 m2» en catastro. Ninguna de las tres fallaba: por eso hace falta un escaner.
+        Path muestra =
+                raizDelBackend()
+                        .resolve("sgtm-aplicacion/src/test/java/pe/gob/sgtm/verificaciones")
+                        .resolve("muestras/web/MuestraDeRecursoQueComponeElArea.java");
+
+        assertThat(muestra).as("la muestra tiene que existir para poder detectarla").exists();
+
+        List<Hallazgo> hallazgos =
+                RevisorDeCodigoFuente.revisarJava(
+                        muestra.getFileName().toString(),
+                        Files.readString(muestra, StandardCharsets.UTF_8));
+
+        assertThat(hallazgos)
+                .as("las dos composiciones a mano, y ninguno de los comentarios que las explican")
+                .hasSize(2);
+        assertThat(hallazgos.stream().map(Hallazgo::fragmento).toList())
+                .anySatisfy(f -> assertThat(f).isEqualTo("areaTerreno().toString()"))
+                .anySatisfy(
+                        f -> assertThat(f).isEqualTo("areaConstruida().valor().toPlainString()"));
+        assertThat(hallazgos.stream().map(Hallazgo::toString).toList())
+                .as("el hallazgo nombra la clase y el campo, para arreglarlo sin buscarlo")
+                .allSatisfy(h -> assertThat(h).startsWith("MuestraDeRecursoQueComponeElArea.java"));
+    }
+
+    @Test
+    @DisplayName("y NO caza las hectareas ni el frontis, que llevan su unidad a proposito")
+    void elEscanerNoCazaLasMedidas() {
+        // El contraste que hace usable la regla, y el que casi la vuelve inservible:
+        // «hectAREAs» contiene «area» por dentro. Si el patron no exigiera que el
+        // identificador EMPIECE por ella, esta prueba seria roja y el bloque rural de
+        // FichaResource —Medida, con «12.5000 HA» dentro a proposito, porque el arancel rural
+        // es por hectarea— habria tenido que reescribirse para callar al escaner.
+        String fuente =
+                """
+                class RuralResource {
+                    static RuralResource de(DetalleRural detalle) {
+                        return new RuralResource(
+                                detalle.hectareasTotales().toString(),
+                                tierra.hectareas().toString(),
+                                tierra.hectareasComunes().toString(),
+                                ficha.frontis().toString(),
+                                instalacion.cantidad().toString());
+                    }
+                }
+                """;
+
+        assertThat(RevisorDeCodigoFuente.revisarAreas("RuralResource.java", fuente)).isEmpty();
+    }
+
+    @Test
+    @DisplayName("el area tipada, que es lo correcto, no es un hallazgo")
+    void elEscanerDejaPasarElAreaTipada() {
+        String fuente =
+                """
+                record FichaEncontradaResource(String codigo, AreaM2 areaTerreno) {
+                    static FichaEncontradaResource de(FichaEncontrada fila) {
+                        return new FichaEncontradaResource(fila.codigo(), fila.areaTerreno());
+                    }
+                }
+                """;
+
+        assertThat(RevisorDeCodigoFuente.revisarAreas("FichaEncontradaResource.java", fuente))
+                .isEmpty();
+    }
+
+    @Test
+    @DisplayName(
+            "las clases de la lista de excepciones componen el area a mano sin ser un hallazgo")
+    void laListaDeExcepcionesExime() {
+        // La misma linea, byte a byte, en dos archivos: en uno es un hallazgo y en el otro no.
+        // Lo que decide es el NOMBRE DE LA CLASE, y por eso la lista se escribe por clase y no
+        // por paquete: anadir una sexta es una linea visible en el diff.
+        String fuente =
+                """
+                final class Modelo {
+                    static Tabla de(Fue fue) {
+                        return Campo.de("Area del terreno (m2)",
+                                fue.areaTerreno().valor().toPlainString());
+                    }
+                }
+                """;
+
+        assertThat(RevisorDeCodigoFuente.revisarAreas("UnRecursoCualquiera.java", fuente))
+                .as("fuera de la lista, la misma linea es un hallazgo")
+                .hasSize(1);
+        assertThat(RevisorDeCodigoFuente.revisarAreas("ModeloDelFue.java", fuente))
+                .as("el papel no tiene serializador y la unidad va en el rotulo de la fila")
+                .isEmpty();
+        assertThat(RevisorDeCodigoFuente.COMPONEN_EL_AREA_A_MANO_CON_MOTIVO)
+                .as(
+                        "las seis de hoy: cuatro modelos de documento y las DOS descripciones de"
+                                + " auditoria. La columna JSON de la bitacora SI sale por HTTP"
+                                + " —`GET /seguridad/auditoria` la publica verbatim—, asi que el"
+                                + " motivo de esas dos no es «no llega al cliente» sino que ahi el"
+                                + " area no es un campo tipado sino texto libre, y se escribe sin"
+                                + " la unidad para que diga lo mismo que el resto")
+                .containsExactlyInAnyOrder(
+                        "ModeloDelFue",
+                        "ModeloDeLaLicencia",
+                        "ModeloDeLaResolucionDeDeterminacion",
+                        "ModeloDeLaFichaDelContribuyente",
+                        "RegistrarAnuncio",
+                        "ActualizarFichaCatastral");
+    }
+
+    @Test
+    @DisplayName("la celda del historial NO esta en la lista porque el escaner no la alcanza")
+    void laCeldaDelHistorialNoLaAlcanzaElEscaner() throws IOException {
+        // La otra excepcion legitima de #607 —«120.00 m2» en `cambios[].antes`, donde la misma
+        // columna lleva un periodo, una condicion o un importe segun la fila, asi que sin la
+        // unidad «120.00 → 164.50» no dice que cambio—. NO esta en la lista de excepciones, y
+        // esta prueba es el motivo: convierte con un `texto(Object)` propio, de modo que en su
+        // codigo no aparece ningun `area…().toString()` que casar. Una entrada muerta en una
+        // lista de excepciones es exactamente el defecto que esa lista existe para no tener.
+        //
+        // Lo que sostiene esa celda son las tres pruebas que afirman «300.00 m2» letra por
+        // letra: LiquidacionControllerTest, LiquidacionYSusVersionesTest y LiquidarYReliquidarTest.
+        Path celda =
+                raizDelBackend()
+                        .resolve("sgtm-fiscalizacion/src/main/java/pe/gob/sgtm/fiscalizacion")
+                        .resolve("dominio/DiferenciaEntreLiquidaciones.java");
+
+        assertThat(celda).as("la clase tiene que existir para poder afirmar esto de ella").exists();
+
+        String fuente = Files.readString(celda, StandardCharsets.UTF_8);
+
+        assertThat(fuente)
+                .as("convierte con un ayudante propio, no con `area…().toString()`")
+                .contains("texto(vieja.areaDeclarada())");
+        assertThat(RevisorDeCodigoFuente.revisarAreas(celda.getFileName().toString(), fuente))
+                .isEmpty();
+        assertThat(RevisorDeCodigoFuente.COMPONEN_EL_AREA_A_MANO_CON_MOTIVO)
+                .doesNotContain("DiferenciaEntreLiquidaciones");
+    }
+
     private static List<Path> fuentesDeProduccion(Path raiz) throws IOException {
         try (Stream<Path> rutas = Files.walk(raiz)) {
             return rutas.filter(Files::isRegularFile)
