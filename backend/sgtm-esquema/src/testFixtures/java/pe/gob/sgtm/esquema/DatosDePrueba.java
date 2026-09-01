@@ -508,7 +508,7 @@ public final class DatosDePrueba {
                         + " adquiriente_id, tipo_transferencia, fecha_transferencia,"
                         + " valor_transferencia, porcentaje_transferido, afecta_alcabala,"
                         + " documento_origen, observacion, usuario_registro)"
-                        + " VALUES (?, 'PREDIO', ?, ?, ?, 'COMPRAVENTA', ?, ?, 100, true,"
+                        + " VALUES (?, 'PREDIO', ?, ?, ?, 'COMPRA_VENTA', ?, ?, 100, true,"
                         + "         'MINUTA-002', 'transferencia de prueba', 'prueba')",
                 muni,
                 predioId,

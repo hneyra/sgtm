@@ -19,6 +19,7 @@ import pe.gob.sgtm.dominio.Observacion;
 import pe.gob.sgtm.dominio.Placa;
 import pe.gob.sgtm.dominio.Porcentaje;
 import pe.gob.sgtm.rentas.dominio.ObjetoDeTransferencia;
+import pe.gob.sgtm.rentas.dominio.TipoTransferencia;
 import pe.gob.sgtm.rentas.dominio.Vehiculo;
 
 /**
@@ -134,7 +135,7 @@ public class ImportarTransferencias {
             long unidadId,
             @Nullable Long transferenteId,
             long adquirienteId,
-            String tipoTransferencia,
+            TipoTransferencia tipoTransferencia,
             LocalDate fecha,
             Dinero valor,
             Porcentaje porcentaje,
@@ -165,7 +166,7 @@ public class ImportarTransferencias {
         String placaTexto = opcional(campos, 2);
         String codTransferente = opcional(campos, 3);
         String codAdquiriente = exigir(campos, 4, "codAdquiriente");
-        String tipo = exigir(campos, 5, "tipoTransferencia");
+        TipoTransferencia tipo = TipoTransferencia.de(exigir(campos, 5, "tipoTransferencia"));
         LocalDate fecha = fecha(campos.get(6));
         Dinero valor = dinero(campos.get(7));
         Porcentaje porcentaje = porcentaje(campos.get(8));

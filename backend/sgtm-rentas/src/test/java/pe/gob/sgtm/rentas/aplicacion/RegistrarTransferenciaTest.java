@@ -46,6 +46,7 @@ import pe.gob.sgtm.dominio.Porcentaje;
 import pe.gob.sgtm.esquema.BaseDeDatosDePrueba;
 import pe.gob.sgtm.esquema.ContextoDeTenant;
 import pe.gob.sgtm.plataforma.tenant.TenantTransactionManager;
+import pe.gob.sgtm.rentas.dominio.TipoTransferencia;
 import pe.gob.sgtm.rentas.dominio.Transferencia;
 import pe.gob.sgtm.rentas.dominio.Vehiculo;
 import pe.gob.sgtm.rentas.infraestructura.TransferenciaRepositoryJdbc;
@@ -162,7 +163,7 @@ class RegistrarTransferenciaTest {
                     predio,
                     a,
                     b,
-                    "compraventa",
+                    TipoTransferencia.COMPRA_VENTA,
                     LocalDate.of(2026, 3, 1),
                     Dinero.de("150000.00"),
                     Porcentaje.total(),
@@ -214,7 +215,7 @@ class RegistrarTransferenciaTest {
                     predio,
                     a,
                     b,
-                    "compraventa",
+                    TipoTransferencia.COMPRA_VENTA,
                     LocalDate.of(2026, 3, 1),
                     Dinero.de("150000.00"),
                     Porcentaje.total(),
@@ -242,7 +243,7 @@ class RegistrarTransferenciaTest {
                     predio,
                     a,
                     b,
-                    "compraventa",
+                    TipoTransferencia.COMPRA_VENTA,
                     LocalDate.of(2026, 3, 1),
                     Dinero.de("150000.00"),
                     Porcentaje.total(),
@@ -273,7 +274,7 @@ class RegistrarTransferenciaTest {
                     predio,
                     a,
                     b,
-                    "compraventa",
+                    TipoTransferencia.COMPRA_VENTA,
                     LocalDate.of(2026, 3, 1),
                     Dinero.de("100000.00"),
                     Porcentaje.total(),
@@ -284,7 +285,7 @@ class RegistrarTransferenciaTest {
                     predio,
                     b,
                     c,
-                    "donacion",
+                    TipoTransferencia.DONACION,
                     LocalDate.of(2027, 6, 1),
                     Dinero.de("0"),
                     Porcentaje.total(),
@@ -318,7 +319,7 @@ class RegistrarTransferenciaTest {
                     predio,
                     a,
                     b,
-                    "compraventa",
+                    TipoTransferencia.COMPRA_VENTA,
                     LocalDate.of(2026, 3, 1),
                     Dinero.de("60000.00"),
                     Porcentaje.de("40"),
@@ -367,7 +368,7 @@ class RegistrarTransferenciaTest {
                                             predio,
                                             a,
                                             b,
-                                            "compraventa",
+                                            TipoTransferencia.COMPRA_VENTA,
                                             LocalDate.of(2026, 3, 1),
                                             Dinero.de("1"),
                                             Porcentaje.de("60"),
@@ -393,7 +394,7 @@ class RegistrarTransferenciaTest {
                                             predio,
                                             a,
                                             b,
-                                            "compraventa",
+                                            TipoTransferencia.COMPRA_VENTA,
                                             LocalDate.of(2026, 3, 1),
                                             Dinero.de("1"),
                                             Porcentaje.total(),
@@ -431,7 +432,7 @@ class RegistrarTransferenciaTest {
                     registrar.transferirVehiculo(
                             vehiculoId,
                             b,
-                            "compraventa",
+                            TipoTransferencia.COMPRA_VENTA,
                             LocalDate.of(2026, 3, 1),
                             Dinero.de("15000.00"),
                             false,
@@ -476,7 +477,7 @@ class RegistrarTransferenciaTest {
                                     registrar.transferirVehiculo(
                                             999_998L,
                                             b,
-                                            "compraventa",
+                                            TipoTransferencia.COMPRA_VENTA,
                                             LocalDate.of(2026, 3, 1),
                                             Dinero.de("1"),
                                             false,

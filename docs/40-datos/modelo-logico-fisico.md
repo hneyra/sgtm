@@ -99,6 +99,19 @@ existentes y **no debilita nada hacia adelante** — la restricción se comprueb
 en cada `UPDATE` desde ese momento. Lo único que queda sin verificar son las filas anteriores, y en
 una tabla vacía no hay ninguna. `VALIDATE CONSTRAINT` después chocaría con lo mismo.
 
+**Un `CHECK` no es una clave foránea, y se midió antes de suponerlo (#542).** Sobre una tabla con
+`FORCE ROW LEVEL SECURITY`, en la **misma sesión sin contexto de tenant** en la que
+`SELECT count(*)` muere con `unrecognized configuration parameter "app.municipalidad_id"`, un
+`ALTER TABLE … ADD CONSTRAINT … CHECK (…)` **validado pasa**: su escaneo de validación no atraviesa
+la política, y lo único que puede pararlo es una fila que de verdad viole la condición
+(`is violated by some row`). Así que **`NOT VALID` en un `CHECK` es una decisión sobre los datos
+que ya hay, no sobre RLS** — se pone cuando no se puede medir qué contienen las instalaciones
+desplegadas, o cuando se sabe que alguna fila no encaja y no se va a reescribir (regla 4).
+
+**Y el migrador tampoco puede reescribir esas filas**, por si acaso: un `UPDATE` sobre una tabla de
+tenant desde una migración muere con el mismo `unrecognized configuration parameter`. «Normalizar el
+vocabulario viejo en la migración» no es una salida disponible, ni siquiera cuando parece la cómoda.
+
 ## 1. Las migraciones
 
 | Migración | Contenido |
