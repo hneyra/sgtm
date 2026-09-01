@@ -79,6 +79,21 @@ public interface DeclaracionJuradaRepository {
             java.util.Collection<Long> predioIds, Ejercicio ejercicio);
 
     /**
+     * <b>Todos</b> los predios con declaracion vigente del ejercicio, sin acotar por una lista
+     * (#631).
+     *
+     * <p>Es el conjunto que la grilla de conciliacion le pasa a catastro para que <b>pagine y
+     * cuente lo filtrado</b>: hasta #631 el filtro se aplicaba sobre la pagina ya devuelta y {@code
+     * totalElementos} seguia siendo el del padron entero —«722 paginas, 14 422 elementos» y cero
+     * filas en todas—.
+     *
+     * <p>Con el mismo predicado que su hermana, y por el mismo motivo que aquella lo toma de {@link
+     * EstadoDeDeclaracion#nombresDeLasVigentes()}: dos copias del estado que hace vigente una
+     * declaracion divergen, y la que se lee en la grilla seria la que nadie compara.
+     */
+    java.util.Set<Long> prediosConDeclaracionVigente(Ejercicio ejercicio);
+
+    /**
      * El siguiente correlativo del ejercicio, ya reservado (#365).
      *
      * <p>Se lee y se incrementa en <b>una</b> sentencia, nunca con {@code SELECT} y despues {@code

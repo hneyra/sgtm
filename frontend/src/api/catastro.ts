@@ -460,13 +460,16 @@ export function listarDepreciacion(anio: number, senal?: AbortSignal): Promise<D
  * `conciliadaConRentas=No` exige ademas el permiso de fiscalizacion: es la lista
  * de quien tiene ficha y no declara, y esa lista no la ve cualquiera.
  *
- * **Su `totalElementos` NO cuenta lo que el filtro dice.** El filtro se aplica
- * sobre la pagina ya devuelta y el total sigue siendo el del padron sin filtrar
- * —lo dice el javadoc de `ConsultaDeConciliacion`—, asi que
- * `contarFichas({conciliadaConRentas:'No'}).totalElementos` es el padron entero:
- * en Catacaos, 14 422 «sin conciliar» sobre 14 422 predios. Por eso el panel de
- * catastro **no la llama** y dice «—» con su motivo. Sirve para RECORRER la lista
- * pagina a pagina; para contarla, no.
+ * **Su `totalElementos` ya cuenta lo que el filtro dice** (#631). Hasta entonces
+ * el filtro se aplicaba sobre la pagina ya devuelta y el total seguia siendo el
+ * del padron sin filtrar: con `conciliadaConRentas=Si` decia «722 paginas, 14 422
+ * elementos» y devolvia cero filas en todas.
+ *
+ * Aun asi, **para contar sigue estando `/conciliacion/resumen`** (#564), y no es
+ * un capricho: cada consulta con `conciliadaConRentas=No` deja una fila `ACCESO`
+ * en la bitacora (ADR-0015 §2.3), asi que pedir la grilla solo para leer su total
+ * ensucia la auditoria con una entrada por pintada de panel. Esta funcion sirve
+ * para RECORRER la lista.
  */
 export function contarFichas(
   parametros: { conciliadaConRentas?: 'Si' | 'No' },

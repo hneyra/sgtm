@@ -439,6 +439,11 @@ class ConsultaUnificadaControllerTest {
         private @Nullable Paginacion ultima;
 
         @Override
+        public Set<Long> prediosConDeclaracionVigente(Ejercicio ejercicio) {
+            return Set.of();
+        }
+
+        @Override
         public Optional<DeclaracionJurada> findById(long id) {
             return Optional.empty();
         }
