@@ -132,8 +132,19 @@ export const NOTAS: Record<Vista, string> = {
     'Los predios y los vehículos afectos, con la deuda de cada uno a la fecha. El uso, el área y el autovalúo no vienen en esta lectura —son de la ficha catastral y de la determinación—, así que no se dibujan en vez de dibujarse en blanco.',
   valores:
     'Los valores emitidos a nombre del contribuyente. El importe está congelado al día en que se emitió el valor, no al de hoy: reimprimirlo dos años después devuelve el mismo desglose. La situación, en cambio, sí se mira a hoy.',
+  /* Decía «si el movimiento lo escribió una persona o una emisión masiva no
+     consta: nada en el libro lo marca todavía», y era cierto hasta `V68`: el
+     abono de una baja y el de una cobranza son, columna a columna, el mismo
+     asiento, así que esta pestaña listaba TODO el libro —los pagos como bajas y
+     los cargos de la emisión como altas (#640)—. Ahora el asiento dice de qué
+     acto nace y la consulta trae sólo los dos que la pestaña promete.
+     Lo que sigue sin poder distinguirse son los asientos ANTERIORES a esa
+     migración, que tienen el acto en blanco y no se pueden reescribir —el libro
+     no admite `UPDATE` (V7) y el migrador corre sin contexto de tenant—, así que
+     una baja de antes no aparece aquí. Se dice, porque su ausencia se lee igual
+     que «no hubo ninguna». */
   movimientos:
-    'Toda alta o baja de deuda con su documento, su fecha y su motivo. Es la bitácora que se mira cuando el contribuyente dice que ya pagó. Si el movimiento lo escribió una persona o una emisión masiva no consta: nada en el libro lo marca todavía.',
+    'Toda alta o baja de deuda con su documento, su fecha y su motivo. Es la bitácora que se mira cuando el contribuyente dice que ya pagó. Los cobros y los cargos de la emisión no salen: son del libro, no de esta pestaña. Las bajas anteriores a la migración que empezó a marcar el acto tampoco, y no se pueden recuperar.',
 };
 
 /* ══════════ Buscar ══════════ */
