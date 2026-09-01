@@ -475,13 +475,14 @@ export const EXPEDIENTE: SeccionDef[] = [
  * Un filtro de la cabecera de una determinación.
  *
  * `k` es **el nombre con el que viaja**, y su ausencia no es un descuido: un
- * filtro sin `k` no lo lee nadie. Los tres del predial —«DJ N°», «Tipo de
- * declaración», «Fecha de declaración»— están declarados en el contrato y
- * `PredialController` sólo lee `codContribuyente` y `ano`, así que se tecleaban
- * y se caían en silencio; los de alcabala y espectáculos ni siquiera están en el
- * contrato. Un control vivo que no acota nada es el defecto que #322, #398 y
- * #432 cerraron tres veces, y aquí se cierra igual: se apaga con su motivo en
- * `bloqueado`, que se lee en su `title`.
+ * filtro sin `k` no lo lee nadie. Y desde #576 los que se apagan por no tener
+ * quien los lea tampoco están ya en el contrato: los tres del predial —«DJ N°»,
+ * «Tipo de declaración», «Fecha de declaración»— y los de espectáculos se
+ * retiraron de él (`SUPRIMIDOS` de `generar-openapi.mjs`), y los de alcabala
+ * nunca estuvieron. «Zona» y «Uso» de arbitrios sí lo están, y se apagan por
+ * otra cosa (#541). Un control vivo que no acota nada es el defecto que #322,
+ * #398 y #432 cerraron tres veces, y aquí se cierra igual: se apaga con su
+ * motivo en `bloqueado`, que se lee en su `title` y bajo la rejilla.
  */
 export type FiltroDef = { l: string; v: string; t?: 'sel'; o?: string[]; ph?: string; k?: string; bloqueado?: string };
 
@@ -577,30 +578,58 @@ const SIN_LECTURA = 'sin lectura';
 /* ── Por qué hay filtros apagados en cuatro de las seis hojas ────────────────
    Un filtro que se teclea y no acota es peor que no tenerlo: quien busca cree
    haber acotado y lee una lista entera como si fuera el resultado de su
-   búsqueda. Aquí hay dos casos distintos y conviene no mezclarlos, porque se
-   arreglan en sitios distintos. */
+   búsqueda. Aquí hay casos distintos y conviene no mezclarlos, porque no todos
+   esperan lo mismo: unos se abren solos el día que el backend crezca y otros no
+   se van a abrir, y decir cuál es cuál es la mitad del aviso. */
 
-/** Está en el contrato y ningún controlador lo lee: el hueco que #544 censó en 62 operaciones. */
-const DECLARADO_Y_SIN_LECTOR =
-  'Este filtro no acota nada. El contrato lo declara y el controlador de la determinación sólo lee el ' +
-  'código de contribuyente y el año, así que tecleado aquí viajaría y se caería en silencio (#544).';
+/**
+ * Los tres de la declaración jurada del predial: no esperan a un lector, porque
+ * acotar por declaración jurada **sería calcular otra cosa**.
+ *
+ * Hasta #576 el contrato los declaraba y `PredialController` no leía ninguno
+ * —el hueco que #544 censó—, así que lo que se escribía aquí era «falta el
+ * lector». Ya no: #576 los retiró del contrato (`SUPRIMIDOS` de
+ * `generar-openapi.mjs`), y lo hizo por lo que saldría de leerlos y no por lo
+ * que falta implementar. La base del predial es POR CONTRIBUYENTE y no por
+ * predio (NEG-05 §1): los tramos progresivos se aplican al conjunto de sus
+ * predios, así que calcularla sobre los de una sola declaración da de menos en
+ * todo el padrón, y la cifra que sale nadie la distingue de la correcta.
+ */
+const OTRO_CALCULO_Y_NO_UN_FILTRO =
+  'Este filtro no acota nada, y no está esperando a que alguien lo implemente: el contrato dejó de declararlo (#576). ' +
+  'Acotar la determinación a una declaración jurada sería calcular otra cosa —la base del predial es la de TODOS los ' +
+  'predios del contribuyente, porque los tramos progresivos se aplican al conjunto—, así que sobre los de una sola ' +
+  'declaración saldría de menos y esa cifra no se distinguiría de la correcta. Son los datos de la DJ que se atiende, ' +
+  'no un criterio de cálculo.';
 
-/** Ni siquiera está en el contrato: la ruta es un `POST` que registra y no declara consulta. */
+/**
+ * Los de alcabala y espectáculos: lo que falta es **la lectura**, no el lector.
+ *
+ * Ninguna operación del contrato lista las transferencias ni los espectáculos
+ * declarados, así que un filtro de búsqueda no tiene a qué petición sumarse: la
+ * ruta de estas dos hojas es el `POST` que registra el acto. Los tres de
+ * alcabala no se declararon nunca y los de espectáculos los retiró #576 por
+ * eso mismo; vuelven el día que exista la lectura que los liste, y ese día
+ * serán suyos y no de este acto.
+ */
 const SIN_LECTURA_QUE_LISTE =
-  'Ninguna lectura del contrato lista estos actos y esta ruta no declara ni un parámetro de consulta: ' +
-  'elegir aquí no cambiaría nada de lo que se manda.';
+  'Ninguna lectura del contrato lista estos actos, y esta ruta —el POST que registra— no declara ni un parámetro de ' +
+  'consulta: elegir aquí no cambiaría nada de lo que se manda. Vuelve el día que exista la lectura que los liste, y ' +
+  'será suyo (#576).';
 
 /** Y el tercero: la hoja entera todavía no habla con el backend. */
 const HOJA_SIN_CONECTAR =
   'Esta hoja todavía no pide nada al backend, así que su filtro no tendría a qué petición sumarse.';
 
-/* ── Y un cuarto, que no dice «todavía» ─────────────────────────────────────
-   Los tres de arriba se abren solos el día que el backend crezca. Estos dos no:
-   lo que falta no es la consulta sino que **los valores del desplegable no
-   existen en el sistema**, así que el filtro no se podría servir ni queriendo
-   sin decidir antes qué significan. #541 los hizo contestar `422` en vez de
-   ignorarlos, que es lo correcto y lo que obliga a bloquearlos aquí: mandarlos
-   rompe la búsqueda entera en vez de devolver de más. */
+/* ── Y un cuarto, que tampoco dice «todavía» ────────────────────────────────
+   De los tres de arriba, dos se abren solos el día que el backend crezca —la
+   lectura que liste, la hoja que se conecte—; el primero no, porque lo que le
+   falta no es un lector. Estos dos tampoco, y por un tercer motivo: lo que
+   falta no es la consulta sino que **los valores del desplegable no existen en
+   el sistema**, así que el filtro no se podría servir ni queriendo sin decidir
+   antes qué significan. #541 los hizo contestar `422` en vez de ignorarlos, que
+   es lo correcto y lo que obliga a bloquearlos aquí: mandarlos rompe la
+   búsqueda entera en vez de devolver de más. */
 
 /** «Zona»: vive en `sector.zona` y cada municipalidad la escribe a su manera. */
 const ZONA_QUE_NO_EXISTE =
@@ -644,15 +673,15 @@ export const DETERMINACIONES: Record<ClaveDeDeterminacion, DeterminacionDef> = {
       /* El único que viaja. El año no se teclea: sale del selector de la
          cabecera, como en las doce pantallas del sistema. */
       { l: 'Cod. Contribuyente', v: '', k: 'codContribuyente', ph: 'C-000001' },
-      { l: 'DJ N°', v: '', bloqueado: DECLARADO_Y_SIN_LECTOR },
+      { l: 'DJ N°', v: '', bloqueado: OTRO_CALCULO_Y_NO_UN_FILTRO },
       {
         l: 'Tipo de declaración',
         t: 'sel',
         v: 'RECTIFICATORIA',
         o: ['INSCRIPCIÓN', 'DESCARGO', 'RECTIFICATORIA', 'ANUAL MECANIZADA'],
-        bloqueado: DECLARADO_Y_SIN_LECTOR,
+        bloqueado: OTRO_CALCULO_Y_NO_UN_FILTRO,
       },
-      { l: 'Fecha de declaración', v: '', bloqueado: DECLARADO_Y_SIN_LECTOR },
+      { l: 'Fecha de declaración', v: '', bloqueado: OTRO_CALCULO_Y_NO_UN_FILTRO },
     ],
     tabla: {
       titulo: 'Predios que integran la base imponible',

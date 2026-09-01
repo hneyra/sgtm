@@ -4507,10 +4507,11 @@ const PIE_DEL_RANGO = (cuantas: number, porCuota: string, total: string): string
  * Los motivos por los que hay filtros apagados, agrupados y con sus rótulos.
  *
  * Agrupar no es cosmética: en el predial los tres apagados lo están por lo mismo
- * —el contrato los declara y el controlador no los lee— y en el masivo las dos
- * cajas de cifra lo están por otro —son valores del conjunto sellado—; repetir
- * el párrafo por campo empuja la rejilla y hace que deje de leerse, y decir un
- * solo motivo para todos sería decir el equivocado para alguno.
+ * —acotar por declaración jurada sería otro cálculo, no un filtro, y por eso
+ * #576 los retiró del contrato— y en el masivo las dos cajas de cifra lo están
+ * por otro —son valores del conjunto sellado—; repetir el párrafo por campo
+ * empuja la rejilla y hace que deje de leerse, y decir un solo motivo para
+ * todos sería decir el equivocado para alguno.
  */
 function motivosDeLosFiltrosApagados(filtros: readonly FiltroDef[]): [motivo: string, cuales: string][] {
   const porMotivo = new Map<string, string[]>();
