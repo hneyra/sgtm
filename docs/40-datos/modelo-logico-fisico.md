@@ -516,6 +516,100 @@ que un `UPDATE cierre_caja SET` en `src/main` rompe el build.
 Todo índice selectivo empieza por `municipalidad_id`: la política RLS añade esa condición a cada
 consulta, y un índice que no la lleve primero no se usa (RNF-064).
 
+### 7.1 La página de omisos, medida (#561, `V69`)
+
+`GET /api/v1/fiscalizacion/omisos` se midió porque #561 lo reportó en **8,5 s por página** sobre el
+padrón real de Catacaos, con el coste **independiente del tamaño de página** (`tamano=1` cuesta lo
+mismo que `tamano=200`). Lo que sigue es la medida, que es lo que el issue pide antes que ningún
+arreglo (precedente de #313).
+
+**Cómo se tomó.** PostgreSQL 16.10, conexión de **`sgtm_app`** con la política RLS activa —no la del
+superusuario, que la omite, ni la de `sgtm_owner`, que con `FORCE ROW LEVEL SECURITY` queda sujeto
+pero es dueño de las tablas—, `SET LOCAL app.municipalidad_id` dentro de una transacción, y el
+padrón de Catacaos —**14 422 predios**— sembrado en **dos** municipalidades (28 844 predios, 28 844
+fichas, 28 844 titularidades, 2 884 declaraciones juradas). Cada sentencia se midió en sus dos
+formas: con los valores a la vista —el *plan personalizado*, el de las primeras ejecuciones— y con
+`plan_cache_mode = force_generic_plan`, que es lo que un pool obtiene a partir de la quinta
+ejecución de la misma sentencia sobre la misma conexión.
+
+**Lo primero que la medida corrige es el diagnóstico del propio issue.** #561 se abrió el 2026-09-01
+a las 06:56 UTC y señalaba `CatastroRepositoryJdbc.padron(...)` (`PADRON_DESDE`, con su `JOIN
+titularidad` interno); **#545 sustituyó esa consulta ese mismo día**. La detección ya no pasa por
+ahí: hoy son tres sentencias por página —el conteo y la página de `DeteccionRepositoryJdbc`, más la
+lectura de titulares de `CatastroRepositoryJdbc.titularesDeVarios`—. Medidas las cuatro formas
+(la de antes de #545 incluida) sobre el mismo padrón y la misma máquina, **ninguna reproduce los
+8,5 s**: la más cara son 125 ms. La cifra que sí sobrevive al cambio de máquina es la de páginas
+tocadas, y por ella se decide.
+
+| Sentencia | Plan personalizado | Plan genérico | Buffers | Filas descartadas |
+|---|---|---|---|---|
+| Conteo de la detección | 83,5 ms | 105,4 ms | 30 871 | — |
+| Página de la detección (`tamano=20`) | 0,58 ms | 0,45 ms | 161 | — |
+| Titulares de la página (**antes de `V69`**) | 23,9 ms | 9,7 ms | 242 | **14 402 para devolver 20** |
+| Titulares de la página (**con `V69`**) | 0,24 ms | — | 45 | 0 |
+| *(contraste)* La consulta anterior a #545 | 62,1 ms | 75,4 ms | ~600 | — |
+
+Sumadas las cuatro sentencias que la petición ejecuta —el conteo, la página, los titulares y la
+resolución de sus nombres en `contribuyente`, que ya entraba por `contribuyente_pk` con las dos
+condiciones en el `Index Cond`—, `?tamano=20` sin filtros cuesta **~85 ms** con `V69` sobre los
+14 422 predios, frente a los ~110 ms de antes. La lectura de titulares baja de 242 páginas tocadas
+a 45 —236 y 39 si se cuenta sólo el nodo que recorre la tabla—.
+
+**El conteo es O(padrón) por naturaleza y no se toca.** Cuenta el padrón: lee sus 14 422 predios y
+sus 14 422 fichas vigentes, y de sus 30 871 buffers **30 295 son el `LEFT JOIN LATERAL`** que busca
+la declaración de cada predio —14 422 descensos al índice `dj_ejercicio_predio_ix`, con su nodo
+`Sort` montado y desmontado una vez por predio—. Es exactamente el coste que no depende del tamaño
+de página. Se midieron dos salidas y **no se toma ninguna**:
+
+- **Reescribir el `LATERAL` como `DISTINCT ON` sin correlación** baja el conteo —medido con el
+  filtro `condicion` puesto, que es el caso caro porque conserva el segundo `JOIN` de fichas— de
+  31 426 buffers a **1 190**, y de 149,8 ms a 45,5 ms. Pero la página, que hoy se corta a los 21 predios leídos, pasa
+  a materializar todas las declaraciones del ejercicio antes de poder devolver veinte: en la medida
+  ya aparece `Rows Removed by Join Filter: 27399`. Cambia una consulta O(padrón) por dos, y la
+  segunda es la que se ejecuta siempre.
+- **Ensanchar `dj_ejercicio_predio_ix` a `(municipalidad_id, ejercicio, predio_id,
+  fecha_presentacion DESC, id DESC)`** quita el `Sort` de los 14 422 ciclos y baja el conteo de
+  ~80 ms a ~60 ms (−20 %), sin cambiar los buffers. Es un 20 % sobre la parte que ya está acotada
+  por debajo de los 600 buffers de las dos lecturas de tabla, y obliga a reemplazar un índice que
+  `V39` creó para otra pregunta.
+
+**Lo que sí se arregla es la tercera sentencia**, y es la que tiene la forma que el hallazgo 3 de §0
+describe: el plan **dice «Index»** y lee la titularidad entera del inquilino, porque su única
+condición de índice es la de la propia política.
+
+```
+-- antes de V69, como sgtm_app y con RLS activa
+Sort  (actual rows=20)
+  ->  Bitmap Heap Scan on titularidad  (actual rows=20)
+        Recheck Cond: (municipalidad_id = current_setting('app.municipalidad_id')::bigint)
+        Filter: (vigencia_desde <= '2026-09-01' AND (vigencia_hasta IS NULL OR ...)
+                 AND predio_id = ANY ('{1,...,20}'))
+        Rows Removed by Filter: 14402          <- 236 buffers para devolver 20 filas
+        ->  Bitmap Index Scan on titularidad_pk  (actual rows=14422)
+              Index Cond: (municipalidad_id = current_setting(...)::bigint)
+
+-- con V69
+Sort  (actual rows=20)
+  ->  Index Scan using titularidad_predio_ix on titularidad  (actual rows=20)
+        Index Cond: ((municipalidad_id = current_setting(...)::bigint)
+                     AND (predio_id = ANY ('{1,...,20}'))
+                     AND (vigencia_desde <= '2026-09-01'))
+        Filter: ((vigencia_hasta IS NULL) OR (vigencia_hasta >= '2026-09-01'))
+```
+
+`titularidad` tenía tres índices y ninguno respondía «de quién es este predio **a una fecha**», que
+es la única forma en que este sistema pregunta por la titularidad (regla 9):
+`titularidad_predio_vigente_ix` es **parcial** —`WHERE vigencia_hasta IS NULL`— y PostgreSQL no
+puede usar un índice parcial cuando el `WHERE` de la consulta no implica su predicado; el de la
+vigencia a una fecha admite a propósito las cuotas cerradas. `V69` añade el equivalente no parcial.
+Las tres condiciones entran en el `Index Cond` porque `int8eq` y `date_le` **son** *leakproof*
+—el reverso de los hallazgos 3 y 5 de §0—, y eso lo comprueba `TitularesEnElIndiceTest` leyendo
+`pg_proc`.
+
+**Y el padrón pequeño no lo paga**: con 25 predios, la misma consulta pasa de 13 a 54 páginas
+tocadas —el motor prefiere veinte descensos al índice antes que recorrer veinticinco filas— y de
+0,283 ms a 0,332 ms. Las dos formas están muy por debajo del milisegundo, y ninguna lee el padrón.
+
 ## 8. Al agregar una tabla
 
 1. ¿Lleva `municipalidad_id NOT NULL`? Entonces `V6` le pone RLS **sola** —descubre las tablas por
