@@ -19,6 +19,7 @@ import {
   deudaDelContribuyente,
   duplicadoDeRecibo,
   listarConvenios,
+  listarRecibos,
   recaudacionPorArea,
   registrarPreconvenio,
   simularFraccionamiento,
@@ -28,8 +29,10 @@ import {
   type Arqueo,
   type Convenio,
   type EstadoDeConvenio,
+  type EstadoDeRecibo,
   type FaseDeCobranza,
   type FilaDeConvenio,
+  type FilaDeRecibo,
   type ObligacionConDeuda,
   type PeticionDeFraccionamiento,
   type Recibo,
@@ -40,6 +43,7 @@ import {
   AUTORIZANTES,
   COBRANZAS_DEL_PROTOTIPO_SIN_BACKEND,
   ESTADOS_DE_CONVENIO,
+  ESTADOS_DE_RECIBO,
   FORMAS_DE_PAGO,
   MOTIVOS_DE_ANULACION,
   OPCIONES,
@@ -319,6 +323,15 @@ export default function Tesoreria({ dest, onDest }: PantallaProps) {
   /* Recibos */
   const [numeroDeRecibo, setNumeroDeRecibo] = useState('');
   const numeroReposado = useRebote(numeroDeRecibo.trim());
+  /* Los filtros del listado (#548). Ninguno es el número: ese abre el recibo por
+     su ruta, y el listado existe para quien NO lo tiene. */
+  const [fRecContribuyente, setFRecContribuyente] = useState('');
+  const [fRecCaja, setFRecCaja] = useState('');
+  const [fRecCajero, setFRecCajero] = useState('');
+  const [fRecDesde, setFRecDesde] = useState('');
+  const [fRecHasta, setFRecHasta] = useState('');
+  const [fRecEstado, setFRecEstado] = useState<'' | EstadoDeRecibo>('');
+  const [paginaRec, setPaginaRec] = useState(0);
   const [actoRecibo, setActoRecibo] = useState<'duplicado' | 'anulacion'>('duplicado');
   /* Reimprimir un recibo es un ACTO: numera un duplicado y queda con quien lo
      generó, así que exige observación (regla 10) igual que la anulación. */
@@ -467,6 +480,39 @@ export default function Tesoreria({ dest, onDest }: PantallaProps) {
     dest === 'recibos' && numeroReposado !== '',
   );
 
+  /**
+   * El listado de recibos (#548): la grilla «Recibos localizados» del manual.
+   *
+   * Se pide sin ningún filtro obligatorio —los recibos del día son la pregunta
+   * corriente en ventanilla— porque el backend contesta una página vacía con
+   * `totalElementos: 0` a quien no tiene ninguno, y eso es una respuesta, no un
+   * error.
+   *
+   * `estado` sólo viaja cuando se eligió uno de los dos: «Todos» **no es un
+   * valor** del enumerado y mandarlo da 422.
+   */
+  const recibos = useRecurso(
+    (s) =>
+      listarRecibos(
+        {
+          codContribuyente: fRecContribuyente.trim() || undefined,
+          caja: fRecCaja.trim() || undefined,
+          cajero: fRecCajero.trim() || undefined,
+          desde: fRecDesde || undefined,
+          hasta: fRecHasta || undefined,
+          estado: fRecEstado || undefined,
+        },
+        /* De más nuevo a más viejo, y no es una preferencia: el backend ordena
+           por `fecha` ASCENDENTE si no se le dice otra cosa, así que en una
+           municipalidad con miles de recibos el de esta mañana —el único que
+           alguien viene a reimprimir— caería en la última página. */
+        { pagina: paginaRec, tamano: 20, direccion: 'DESCENDENTE' },
+        s,
+      ),
+    [fRecContribuyente, fRecCaja, fRecCajero, fRecDesde, fRecHasta, fRecEstado, paginaRec],
+    dest === 'recibos',
+  );
+
   /** Cuántos convenios vigentes hay, para el panel. */
   const vigentes = useRecurso(
     (s) => listarConvenios({ estado: 'VIGENTE' }, { tamano: 1 }, s),
@@ -475,6 +521,17 @@ export default function Tesoreria({ dest, onDest }: PantallaProps) {
   );
 
   useEffect(() => setPaginaConv(0), [fNumero, fContribuyente, fEstado, fDesde, fHasta]);
+  useEffect(() => setPaginaRec(0), [fRecContribuyente, fRecCaja, fRecCajero, fRecDesde, fRecHasta, fRecEstado]);
+  /* Cambiar de recibo deja el acta y las observaciones del anterior: sin esto,
+     el acta de la anulación de A se lee bajo el recibo B —y peor, la observación
+     escrita para A se reimprimiría con B, que es la limpieza tras guardar de
+     #331 aplicada al sujeto—. */
+  useEffect(() => {
+    setActa(null);
+    setObsDuplicado('');
+    setObsAnul('');
+    setMemoAnul('');
+  }, [numeroReposado]);
   /* Cambiar de sujeto deja las marcas de otro: sin esto se cobraría lo marcado
      en la deuda de quien ya no está en pantalla. */
   useEffect(() => {
@@ -667,6 +724,12 @@ export default function Tesoreria({ dest, onDest }: PantallaProps) {
       setActa(a);
       setObsAnul('');
       recibo.reintentar();
+      /* Y el listado también: desde #548 el estado del recibo se ve en DOS
+         sitios de esta misma pantalla, y refrescar sólo la ficha deja la grilla
+         diciendo «EMITIDO» tres centímetros encima del acta que acaba de
+         anularlo. Dos vistas del mismo hecho, y la que se lee primero es la
+         vieja. */
+      recibos.reintentar();
       toast(
         'Recibo ' + a.numero + ' anulado. ' + a.asientosReversados + ' asientos reversados en el libro.',
       );
@@ -1982,17 +2045,246 @@ export default function Tesoreria({ dest, onDest }: PantallaProps) {
     ['Importe', 1],
   ];
 
+  /**
+   * Las ocho columnas de «Recibos localizados» (#548).
+   *
+   * Son las del prototipo menos «Caja», que esta fila no trae —es un filtro de la
+   * búsqueda, no una columna—, y con una más: la **fecha del importe**, porque
+   * toda cifra dice a qué fecha está y la de cada recibo es la que congeló al
+   * emitirse, no la de hoy (regla 9, RNF-075). «Concepto» se queda y va en raya:
+   * ver más abajo por qué.
+   */
+  const COLS_RECIBOS: readonly ColDef[] = [
+    ['Nº recibo', 0],
+    ['Emitido', 0],
+    ['Contribuyente', 0],
+    ['Concepto', 0],
+    ['Importe S/', 1],
+    ['Importe al', 0],
+    ['Duplicados', 1],
+    ['Estado', 0],
+  ];
+
   const recibosPantalla = () => {
     const d = recibo.datos;
     const anulado = d?.estado === 'ANULADO';
+    const filasRec: FilaDeRecibo[] = recibos.datos?.contenido ?? [];
     return (
       <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
         <p style={ENTRADILLA}>
-          Dos actos sobre el mismo objeto: reimprimir un recibo o dejarlo sin efecto. Se busca por el número impreso en
-          el papel que el contribuyente trae a la ventanilla.
+          Dos actos sobre el mismo objeto: reimprimir un recibo o dejarlo sin efecto. Se busca en el listado, o por el
+          número impreso en el papel que el contribuyente trae a la ventanilla.
         </p>
 
         <section style={TARJETA}>
+          <div style={CABECERA}>
+            <h2 style={H2}>Buscar recibos</h2>
+            <span style={META}>GET /tesoreria/recibos</span>
+          </div>
+          <div style={REJILLA(180)}>
+            <label style={CAMPO}>
+              <span style={ETIQUETA}>Cód. contribuyente</span>
+              <input
+                value={fRecContribuyente}
+                onChange={(e) => setFRecContribuyente(e.target.value.toUpperCase())}
+                placeholder="C-000001"
+                style={{ ...IN, fontFamily: 'var(--font-mono)' }}
+              />
+              <span style={AYUDA}>
+                El código exacto del padrón. El prototipo escribe aquí «Nombre o código» y el backend sólo compara el
+                código: buscar por nombre es otra pantalla, y probar el nombre aquí devolvería cero recibos de alguien
+                que sí los tiene.
+              </span>
+            </label>
+            <label style={CAMPO}>
+              <span style={ETIQUETA}>Caja</span>
+              <input
+                value={fRecCaja}
+                onChange={(e) => setFRecCaja(e.target.value.toUpperCase())}
+                placeholder="C-01"
+                style={{ ...IN, fontFamily: 'var(--font-mono)' }}
+              />
+              <span style={AYUDA}>
+                Se teclea, no se elige: no hay ninguna lectura que liste las cajas de la municipalidad —
+                <code style={{ fontFamily: 'var(--font-mono)' }}>GET /tesoreria/cajas</code> contesta 404—, y el
+                desplegable «C-1…C-4» del prototipo son cuatro ventanillas inventadas en el artboard. Publicar ese
+                catálogo es #618.
+              </span>
+            </label>
+            <label style={CAMPO}>
+              <span style={ETIQUETA}>Cajero</span>
+              <input value={fRecCajero} onChange={(e) => setFRecCajero(e.target.value)} placeholder="jperez" style={IN} />
+              <span style={AYUDA}>
+                La cuenta con la que se cobró, exacta y respetando mayúsculas y minúsculas. La pantalla del manual no
+                dibuja este filtro; lo publica el backend, y sin él no se puede reconstruir lo que emitió un turno.
+              </span>
+            </label>
+            <label style={CAMPO}>
+              <span style={ETIQUETA}>Desde</span>
+              <input type="date" value={fRecDesde} onChange={(e) => setFRecDesde(e.target.value)} style={IN} />
+            </label>
+            <label style={CAMPO}>
+              <span style={ETIQUETA}>Hasta</span>
+              <input type="date" value={fRecHasta} onChange={(e) => setFRecHasta(e.target.value)} style={IN} />
+              <span style={AYUDA}>
+                El manual dibuja una «Fecha» sola y aquí hay un rango, que es lo que el backend admite: quien perdió el
+                recibo se acuerda de la semana y no del día.
+              </span>
+            </label>
+            <label style={CAMPO}>
+              <span style={ETIQUETA}>Estado</span>
+              <select
+                value={fRecEstado}
+                onChange={(e) => setFRecEstado(e.target.value as '' | EstadoDeRecibo)}
+                style={IN}
+              >
+                <option value="">Todos</option>
+                {ESTADOS_DE_RECIBO.map((e) => (
+                  <option key={e[0]} value={e[0]}>
+                    {e[1]}
+                  </option>
+                ))}
+              </select>
+              <span style={AYUDA}>
+                Son los dos que el enumerado tiene, y se derivan: un recibo no guarda su estado porque no se actualiza.
+                «Todos» no viaja —no es un valor, es no mandar el filtro—.
+              </span>
+            </label>
+          </div>
+          <p style={NOTA_PIE}>
+            <strong style={{ fontWeight: 600 }}>No hay filtro por número de recibo, y no es un olvido:</strong> el
+            número exacto ya tiene su propia ruta, y se teclea abajo. Este listado existe justamente para quien{' '}
+            <strong style={{ fontWeight: 600 }}>no</strong> lo tiene — que es exactamente quien viene a pedir un
+            duplicado.
+          </p>
+        </section>
+
+        <section style={TARJETA}>
+          <div style={CABECERA}>
+            <h2 style={H2}>Recibos localizados</h2>
+            <span style={META}>
+              {/* «de N recibos» y no «de N» a secas: justo debajo el paginador
+                  escribe «1 de 1», y dos rótulos iguales al lado se leen como el
+                  mismo dato. */}
+              {recibos.datos
+                ? `${filasRec.length} de ${recibos.datos.totalElementos} recibos`
+                : 'GET /tesoreria/recibos'}
+            </span>
+          </div>
+          {recibos.cargando && (
+            <p style={{ margin: 0, padding: '22px 16px', fontSize: 13, color: 'var(--ink-3)' }}>Buscando…</p>
+          )}
+          {!recibos.cargando && recibos.error && (
+            <div style={{ padding: '22px 16px' }}>
+              <p style={{ margin: 0, fontSize: 12.5, color: 'var(--error-texto)', textWrap: 'pretty' }}>
+                {tituloDelFallo(recibos.error, 'los recibos')}. {explicacionDelFallo(recibos.error)}
+              </p>
+              <p style={{ margin: '6px 0 0', fontSize: 12, color: 'var(--ink-3)', textWrap: 'pretty' }}>
+                {queSePuedeHacer(recibos.error)}
+              </p>
+              {recibos.error.reintentable && (
+                <button onClick={() => recibos.reintentar()} className="hov-linea" style={{ ...BOTON_LINEA, marginTop: 10 }}>
+                  Reintentar
+                </button>
+              )}
+            </div>
+          )}
+          {!recibos.cargando && !recibos.error && filasRec.length === 0 && (
+            <p style={{ margin: 0, padding: '24px 16px', fontSize: 13, color: 'var(--ink-3)', textWrap: 'pretty' }}>
+              Ningún recibo con esos criterios. Los tres que el prototipo dibujaba eran del artboard: una lista de
+              muestra al lado de un filtro que sí consulta se lee como los recibos de verdad de esta caja.
+            </p>
+          )}
+          {filasRec.length > 0 && (
+            <div style={{ overflowX: 'auto' }}>
+              <table style={{ width: '100%', borderCollapse: 'collapse', minWidth: 960 }}>
+                <thead>
+                  <tr>{cabeceras(COLS_RECIBOS)}</tr>
+                </thead>
+                <tbody>
+                  {filasRec.map((r) => {
+                    const celdas = [
+                      r.numero,
+                      instante(r.emitidoEn),
+                      r.contribuyente ?? SIN_DATO,
+                      /* «Concepto» del prototipo sale del DESGLOSE, y esta fila no
+                         lo trae a propósito: una página de veinte no puede costar
+                         veinte lecturas del detalle. Raya, y el pie dice por qué —
+                         un blanco aquí se leería como un recibo sin conceptos. */
+                      SIN_DATO,
+                      r.importe.importe,
+                      dia(r.importe.actualizadoA),
+                      String(r.duplicados),
+                      r.estado,
+                    ];
+                    return (
+                      <tr
+                        key={r.numero}
+                        onClick={() => setNumeroDeRecibo(r.numero)}
+                        className="hov-acento"
+                        style={{
+                          borderTop: '1px solid var(--line)',
+                          cursor: 'pointer',
+                          background: numeroReposado === r.numero ? 'var(--accent-soft)' : 'transparent',
+                        }}
+                      >
+                        {celdas.map((v, j) =>
+                          j === 7 ? (
+                            <td key={j} style={{ padding: '11px 14px' }}>
+                              <Insignia tono={tono(v)}>{v}</Insignia>
+                            </td>
+                          ) : (
+                            <td key={j} style={estiloDeCelda(j, COLS_RECIBOS)}>
+                              {v}
+                            </td>
+                          ),
+                        )}
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            </div>
+          )}
+          {recibos.datos !== null && recibos.datos.totalPaginas > 1 && (
+            <div style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '10px 16px', borderTop: '1px solid var(--line)' }}>
+              <button
+                onClick={() => setPaginaRec((n) => Math.max(0, n - 1))}
+                disabled={paginaRec === 0}
+                className="hov-linea"
+                style={{ ...BOTON_LINEA, opacity: paginaRec === 0 ? 0.45 : 1 }}
+              >
+                Anterior
+              </button>
+              <span style={{ fontFamily: 'var(--font-mono)', fontSize: 12, color: 'var(--ink-3)' }}>
+                {recibos.datos.pagina + 1} de {recibos.datos.totalPaginas}
+              </span>
+              <button
+                onClick={() => setPaginaRec((n) => n + 1)}
+                disabled={!recibos.datos.hayMas}
+                className="hov-linea"
+                style={{ ...BOTON_LINEA, opacity: recibos.datos.hayMas ? 1 : 0.45 }}
+              >
+                Siguiente
+              </button>
+            </div>
+          )}
+          <p style={NOTA_PIE}>
+            La columna «Concepto» va en raya en todas las filas: sale del desglose del recibo y esta lectura no lo trae
+            —una página de veinte filas no puede costar veinte lecturas del detalle—. Se ve entero al abrir el recibo,
+            que es lo que hace un clic en la fila. «Caja» y «Cajero» tampoco son columnas: son filtros de arriba, y
+            publicarlos aquí sería inventarle una columna a la pantalla. La hora de «Emitido» es la del instante que
+            manda el backend, en UTC, y no en la del reloj de la caja: cinco horas menos en el papel que el
+            contribuyente trae (#619). El orden va del más nuevo al más viejo: el recibo que alguien viene a reimprimir
+            es casi siempre el de hoy.
+          </p>
+        </section>
+
+        <section style={TARJETA}>
+          <div style={CABECERA}>
+            <h2 style={H2}>Abrir un recibo por su número</h2>
+            <span style={META}>GET …/recibos/{'{nro}'}/duplicado</span>
+          </div>
           <div style={REJILLA(200)}>
             <label style={CAMPO}>
               <span style={ETIQUETA}>Nº de recibo</span>
@@ -2006,9 +2298,8 @@ export default function Tesoreria({ dest, onDest }: PantallaProps) {
             </label>
           </div>
           <p style={NOTA_PIE}>
-            Aquí no hay listado de recibos, y no es un recorte: <strong style={{ fontWeight: 600 }}>no existe</strong>{' '}
-            ninguna operación que liste los recibos de un día, de una caja o de un contribuyente. Los tres que el
-            prototipo dibujaba eran del artboard. Lo que sí se puede es abrir uno por su número.
+            Se rellena solo al elegir una fila de arriba. Lo que se abre es el recibo entero, con su desglose: es otra
+            lectura, y por eso no está en la grilla.
           </p>
         </section>
 
@@ -2134,7 +2425,16 @@ export default function Tesoreria({ dest, onDest }: PantallaProps) {
                       desde #535 los tres formatos contestan 200. Lo que queda es
                       lo del acto: sin observación no se pide. */}
                   <Descargas
-                    traer={(f) => descargarDuplicadoDeRecibo(numeroReposado, f, obsDuplicado.trim())}
+                    /* Reimprimir SUMA un duplicado, y ese contador se dibuja en
+                       la ficha y en la columna «Duplicados» del listado: las dos
+                       se vuelven a pedir, porque un contador que no sube después
+                       de sacar el papel invita a sacarlo otra vez. */
+                    traer={(f) =>
+                      descargarDuplicadoDeRecibo(numeroReposado, f, obsDuplicado.trim()).then(() => {
+                        recibo.reintentar();
+                        recibos.reintentar();
+                      })
+                    }
                     que="el duplicado del recibo"
                     acceso="duplicado_recibo"
                     privilegio="impresion"
@@ -2862,7 +3162,16 @@ function explicacionDelFallo(error: ErrorDeApi | null): string {
     case 'NO_AUTENTICADO':
       return 'Vuelve a entrar: el token caducó o no es de este emisor.';
     case 'SIN_PRIVILEGIO':
+      /* El mensaje del servidor va DELANTE porque es el único sitio donde se
+         nombra el acceso que falta, y desde #548 pueden ser **dos**: con
+         `oTambien` otra opción del catálogo autoriza la misma operación —la
+         deuda que la caja marca la publica `consulta_deuda`, y `caja_tributaria`
+         también vale—, así que una frase escrita aquí nombraría una y callaría
+         la otra, mandando a pedir un permiso que no hacía falta. */
       return (
+        (error.mensaje && error.mensaje !== 'No se pudo completar la operación'
+          ? error.mensaje.replace(/\.?$/, '.') + ' '
+          : '') +
         'La caja separa siete privilegios sobre diez opciones: cobrar es registro, mirar un recibo es lectura, ' +
         'reimprimirlo es impresión, anularlo es eliminación —y si lo cobró otro cajero, además especial—. ' +
         'El permiso lo concede Seguridad.'
