@@ -45,6 +45,17 @@ export function useRecurso<T>(
   const pedirRef = useRef(pedir);
   pedirRef.current = pedir;
 
+  /* Lo que se pidió la última vez, para saber si la petición nueva es OTRA
+     pregunta o la misma. La diferencia decide qué pasa con lo que hay dibujado:
+     con otra pregunta, lo anterior es la respuesta a algo que ya no se está
+     preguntando y tiene que irse; con la misma —un reintento, o un cambio de
+     credencial— se deja mientras se recarga, porque parpadear a vacío y volver
+     es peor que esperar. Sin esta distinción, una pantalla que no gatea por
+     `cargando` dibuja lo de antes bajo el rótulo nuevo: medido en la matriz de
+     accesos, la ficha decía «Seguridad» y la cabecera seguía contando los 21
+     permisos del grupo anterior hasta que llegaba la respuesta. */
+  const llavesPrevias = useRef<readonly unknown[] | null>(null);
+
   useEffect(() => {
     if (!activo) {
       setDatos(null);
@@ -52,8 +63,13 @@ export function useRecurso<T>(
       setError(null);
       return;
     }
+    const previas = llavesPrevias.current;
+    const otraPregunta = previas === null || previas.length !== llaves.length || llaves.some((v, i) => !Object.is(v, previas[i]));
+    llavesPrevias.current = llaves;
+
     const control = new AbortController();
     let vigente = true;
+    if (otraPregunta) setDatos(null);
     setCargando(true);
     setError(null);
 
