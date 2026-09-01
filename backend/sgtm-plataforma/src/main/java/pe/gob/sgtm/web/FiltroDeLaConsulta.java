@@ -45,6 +45,31 @@ public final class FiltroDeLaConsulta {
         return cuerpo != null ? cuerpo : recortado(deLaConsulta);
     }
 
+    /**
+     * El primero de los <b>dos nombres de la consulta</b> que traiga algo: gana el canonico.
+     *
+     * <p>Hermana de {@link #primeroNoVacio}, y para el otro desajuste de la misma familia (#541):
+     * ahi el mismo dato viaja por dos <b>sitios</b> —cuerpo y consulta—, y aqui por la consulta con
+     * <b>dos nombres</b>. El segundo lo produce el rotulo del prototipo, del que el contrato esta
+     * derivado (#312): la pantalla del predial dibuja «Año» —{@code ano}— y la de arbitrios
+     * arrastra el {@code anio} de su {@code endpoint}, mientras el dominio, la columna y el cuerpo
+     * lo llaman {@code ejercicio}. Dos nombres para el mismo dato en la misma operacion obligan al
+     * cliente a saber cual toca en cada mitad, que es lo que #541 cerro.
+     *
+     * <p><b>Gana el canonico</b> y no el alias: si un cliente manda los dos y no coinciden, el que
+     * decide es el nombre que el dato tiene en el dominio. El alias se queda para que la peticion
+     * escrita contra la forma anterior siga funcionando.
+     *
+     * @param canonico el nombre que el dato tiene en el dominio ({@code ejercicio})
+     * @param alias el que produjo el rotulo del prototipo ({@code ano}, {@code anio})
+     * @return el valor ya recortado, o {@code null} si ninguno de los dos dice nada
+     */
+    public static @Nullable String elCanonicoOSuAlias(
+            @Nullable String canonico, @Nullable String alias) {
+        String elCanonico = recortado(canonico);
+        return elCanonico != null ? elCanonico : recortado(alias);
+    }
+
     private static @Nullable String recortado(@Nullable String texto) {
         if (texto == null) {
             return null;

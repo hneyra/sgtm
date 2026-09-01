@@ -56,6 +56,7 @@ class PrediosDeRentasControllerTest {
 
     private static final long JUAN = 501L;
     private static final long MARIA = 502L;
+    private static final long SIN_PREDIOS = 503L;
 
     private final ComprobadorDePrueba comprobador = new ComprobadorDePrueba();
     private final PrediosDePrueba predios = new PrediosDePrueba();
@@ -173,13 +174,16 @@ class PrediosDeRentasControllerTest {
     }
 
     @Test
-    @DisplayName("sin contribuyente devuelve una pagina vacia, no el padron entero")
-    void sinContribuyenteNoDevuelveElPadron() throws Exception {
+    @DisplayName("sin contribuyente es 422 nombrando el parametro, no 200 con cero filas")
+    void sinContribuyenteEs422() throws Exception {
         MvcResult resultado = mvc.perform(get("/api/v1/rentas/predios")).andReturn();
 
-        assertThat(resultado.getResponse().getStatus()).isEqualTo(200);
+        // «no hay filtro» y «esta persona no tiene predios» son dos cosas distintas, y hasta
+        // #541 se decian igual: 200 con la pagina vacia. La hermana de al lado —GET
+        // /rentas/vehiculos— ya contestaba 422 al mismo descuido.
+        assertThat(resultado.getResponse().getStatus()).isEqualTo(422);
         assertThat(resultado.getResponse().getContentAsString())
-                .contains("\"totalElementos\":0")
+                .contains("codContribuyente")
                 .doesNotContain("10001");
     }
 
@@ -194,14 +198,33 @@ class PrediosDeRentasControllerTest {
     }
 
     @Test
-    @DisplayName("un contribuyente que no esta en el padron devuelve una pagina vacia")
+    @DisplayName("un contribuyente que no esta en el padron es 404, y lo dice")
     void contribuyenteInexistente() throws Exception {
         MvcResult resultado =
                 mvc.perform(get("/api/v1/rentas/predios").param("codContribuyente", "NO-EXISTE"))
                         .andReturn();
 
-        assertThat(resultado.getResponse().getStatus()).isEqualTo(200);
-        assertThat(resultado.getResponse().getContentAsString()).contains("\"totalElementos\":0");
+        assertThat(resultado.getResponse().getStatus()).isEqualTo(404);
+        assertThat(resultado.getResponse().getContentAsString()).contains("NO-EXISTE");
+    }
+
+    @Test
+    @DisplayName("«no esta en el padron» y «no tiene predios» son dos respuestas distintas")
+    void elQueNoEstaYElQueNoTienePredios() throws Exception {
+        MvcResult inexistente =
+                mvc.perform(get("/api/v1/rentas/predios").param("codContribuyente", "NO-EXISTE"))
+                        .andReturn();
+        MvcResult sinPredios =
+                mvc.perform(get("/api/v1/rentas/predios").param("codContribuyente", "C-003"))
+                        .andReturn();
+
+        // Hoy eran identicas byte a byte, y son la pregunta que se hace en ventanilla: si el
+        // codigo esta mal tecleado o si la persona de verdad no tiene ningun predio.
+        assertThat(inexistente.getResponse().getStatus()).isEqualTo(404);
+        assertThat(sinPredios.getResponse().getStatus()).isEqualTo(200);
+        assertThat(sinPredios.getResponse().getContentAsString()).contains("\"totalElementos\":0");
+        assertThat(inexistente.getResponse().getContentAsString())
+                .isNotEqualTo(sinPredios.getResponse().getContentAsString());
     }
 
     @Test
@@ -301,6 +324,10 @@ class PrediosDeRentasControllerTest {
         private static final ResumenDeContribuyente DOS =
                 new ResumenDeContribuyente(MARIA, "C-002", "MARIA MEDINA", "03593175");
 
+        /** Esta si esta en el padron, y no tiene ni un predio: la otra mitad de #541 AC 4. */
+        private static final ResumenDeContribuyente TRES =
+                new ResumenDeContribuyente(SIN_PREDIOS, "C-003", "PEDRO SIN PREDIOS", "03593176");
+
         @Override
         public List<ResumenDeContribuyente> buscar(String texto, int maximo) {
             throw new UnsupportedOperationException("El padron predial no busca por texto");
@@ -311,7 +338,10 @@ class PrediosDeRentasControllerTest {
             if ("C-001".equals(codigo)) {
                 return Optional.of(UNO);
             }
-            return "C-002".equals(codigo) ? Optional.of(DOS) : Optional.empty();
+            if ("C-002".equals(codigo)) {
+                return Optional.of(DOS);
+            }
+            return "C-003".equals(codigo) ? Optional.of(TRES) : Optional.empty();
         }
 
         @Override

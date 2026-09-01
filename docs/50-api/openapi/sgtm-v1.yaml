@@ -2032,12 +2032,13 @@ paths:
         - name: contribuyente
           in: query
           required: false
+          description: "Codigo del contribuyente. Uno de los dos —este o «codContribuyente»— es OBLIGATORIO: sin ninguno, 422. Y un codigo que no esta en el padron es 404, no una pagina vacia (#541)."
           schema: { type: string }
           example: "codigo"
         - name: codContribuyente
           in: query
           required: false
-          description: "Filtro «Cod. Contribuyente» de la pantalla"
+          description: "Filtro «Cod. Contribuyente» de la pantalla. Uno de los dos —este o «contribuyente»— es OBLIGATORIO: sin ninguno, 422."
           schema: { type: string }
         - name: codigoPredial
           in: query
@@ -2104,6 +2105,15 @@ paths:
           required: false
           description: "Filtro «Año» de la pantalla"
           schema: { type: string }
+        - name: ejercicio
+          in: query
+          required: false
+          description: >-
+            El ejercicio que se determina, con el nombre que lleva en el cuerpo y en el
+            dominio. «ano» es el mismo dato con el rotulo del prototipo; si vienen los dos,
+            gana el del cuerpo (FiltroDeLaConsulta) y despues este.
+          schema: { type: string }
+          example: "2026"
         - name: djN
           in: query
           required: false
@@ -2379,18 +2389,36 @@ paths:
     get:
       operationId: arbitrios
       summary: "Arbitrios municipales"
-      description: "Limpieza pública, parques y jardines y serenazgo. La tasa depende del uso del predio, la zona, la frecuencia del servicio y los metros de frontis declarados en la ficha."
+      description: >-
+        Las cuotas de arbitrio ya determinadas de un ejercicio: una fila por servicio y mes (#31,
+        RF-022). **Solo lectura.** La determinación existe —`DeterminarArbitrios`— y **no la publica
+        ningún controlador ni ningún proceso**, así que hoy esta consulta lee una tabla que ninguna
+        instalación llena; publicarla está bloqueada por D-02b, porque sus tasas son de ordenanza
+        local.
+
+        El ejercicio se pide con `ejercicio`, que es como se llama el dato en el resto del sistema;
+        `anio` es su alias y hace lo mismo. Sin ninguno de los dos, el ejercicio del reloj del
+        servidor.
+
+        **«Zona» y «Uso» no se sirven, y se rechazan con 422 en vez de ignorarse.** No es falta de
+        consulta: los valores que la pantalla ofrece —«Zona 1»…«Zona 4», y cinco usos en
+        mayúsculas— **no existen en el sistema**. La zona es la del sector del predio y el uso el
+        de su ficha catastral, los dos texto libre por municipalidad («Urbana», «Casa habitación»),
+        así que ninguna de esas nueve opciones casaría con ningún dato y la respuesta sería la tabla
+        vacía, que se lee como «no hay cuotas». Se acota por código predial. La pantalla los dibuja
+        bloqueados con su motivo, como los de #322 y #398.
       tags: ["Rentas · Registro"]
       parameters:
         - name: anio
           in: query
           required: false
+          description: "Alias de «ejercicio», el que trae el endpoint del prototipo. Si vienen los dos, manda «ejercicio» (ArbitriosController)."
           schema: { type: string }
           example: "2026"
         - name: ejercicio
           in: query
           required: false
-          description: "Filtro «Ejercicio» de la pantalla"
+          description: "Filtro «Ejercicio» de la pantalla, y el nombre canonico del dato. Ausente, el ejercicio del reloj del servidor."
           schema: { type: string }
         - name: codigoPredial
           in: query
@@ -2400,12 +2428,12 @@ paths:
         - name: zona
           in: query
           required: false
-          description: "Filtro «Zona» de la pantalla"
+          description: "Filtro «Zona» de la pantalla. NO SE SIRVE: se rechaza con 422 con cualquier valor. La zona de un predio la pone su sector (sector.zona, V1) y es texto libre por municipalidad —la carga real escribe «Urbana»/«Rustica»—, asi que ninguna de las cuatro opciones que el prototipo ofrece casa con ningun dato: filtrar por ellas devolveria la tabla vacia, que se lee como «no hay cuotas». La pantalla lo dibuja bloqueado con su motivo (#322, #398, #541)."
           schema: { type: string }
         - name: uso
           in: query
           required: false
-          description: "Filtro «Uso» de la pantalla"
+          description: "Filtro «Uso» de la pantalla. NO SE SIRVE, y por lo mismo que «zona»: el uso vive en ficha_catastral.uso, tambien texto libre —«Casa habitacion», «Tienda de artesania»—, y ninguno de los cinco usos en mayusculas del desplegable casa con el (#541)."
           schema: { type: string }
         - name: pagina
           in: query

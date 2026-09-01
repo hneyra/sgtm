@@ -95,9 +95,14 @@ class ParametrosDeLaConsultaTest {
             Map.ofEntries(
                     // #395 — la capa web de la determinacion predial. Los dos filtros que la
                     // pantalla dibuja y que deciden la cifra: de quien y de que ano.
+                    //
+                    // #541 anade `ejercicio`, que es **el mismo dato con su nombre canonico**: se
+                    // llamaba `ano` en la consulta y `ejercicio` en el cuerpo, y un cliente tenia
+                    // que saber cual toca en cada mitad. Los tres se prometen aqui, que es lo que
+                    // impide arreglar una mitad y dejar la otra.
                     Map.entry(
                             "POST /rentas/predial/calculo-individual",
-                            Set.of("codContribuyente", "ano")),
+                            Set.of("codContribuyente", "ano", "ejercicio")),
                     // #399 — el calculo vehicular. Los tres filtros de la pantalla: los dos que
                     // resuelven el objetivo (placa o contribuyente) y el ejercicio. `simulacion` no
                     // esta y no es un olvido: no identifica lo que se calcula, decide si la
@@ -185,7 +190,20 @@ class ParametrosDeLaConsultaTest {
      * #elCensoDeFiltrosQueNoFiltranNoCrece}. Una entrada aqui compromete las dos direcciones a la
      * vez y cuesta una linea; se anade cuando su operacion se revisa.
      */
-    private static final Set<String> LOS_DOS_DICEN_LO_MISMO = Set.of("GET /seguridad/auditoria");
+    private static final Set<String> LOS_DOS_DICEN_LO_MISMO =
+            Set.of(
+                    "GET /seguridad/auditoria",
+                    // #541 — las dos lecturas de Rentas que se revisaron con el. La de
+                    // arbitrios declaraba cinco parametros y el controlador leia dos:
+                    // «Ejercicio» se tecleaba y no acotaba —solo entendia `anio`— y «Zona» y
+                    // «Uso» no los leia nadie. Ahora los cinco se leen: el ejercicio acota, y los
+                    // dos desplegables se **rechazan con 422** porque los valores que ofrecen no
+                    // existen en el sistema (ver ArbitriosController). Rechazar tambien es leer,
+                    // y es lo que separa un filtro que dice que no de uno que se traga la
+                    // pregunta. La de predios ya leia los suyos y se compromete aqui por lo mismo:
+                    // es la pareja que #541 revisa.
+                    "GET /rentas/arbitrios",
+                    "GET /rentas/predios");
 
     /**
      * Cuantas operaciones arrastran hoy cada mitad del desajuste. Medido, no estimado (#544).

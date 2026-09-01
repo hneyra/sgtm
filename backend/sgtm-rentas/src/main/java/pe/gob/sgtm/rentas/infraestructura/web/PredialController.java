@@ -60,6 +60,20 @@ import pe.gob.sgtm.web.RespuestaPaginada;
  * vehicular_calculo} arrastra desde #32, donde el controlador lee del cuerpo lo que el contrato
  * declara de consulta y ninguna pantalla puede llamarlo.
  *
+ * <h2>Y el ejercicio se llama igual en las dos mitades (#541)</h2>
+ *
+ * <p>Se llamaba {@code ano} en la consulta y {@code ejercicio} en el cuerpo: dos nombres para el
+ * mismo dato en la misma operacion, con el cliente obligado a saber cual toca en cada mitad. El
+ * <b>canonico es {@code ejercicio}</b> —es como se llama en el dominio ({@link Ejercicio}), en la
+ * columna, en el cuerpo de las dos prediales y en el {@code @RequestParam} del endpoint de las
+ * corridas, tres metodos mas arriba— y ahora tambien se acepta por la consulta, declarado en el
+ * contrato. {@code ano} se conserva porque es lo que produce el rotulo «Año» del prototipo, del que
+ * el contrato esta derivado (#312), y es lo que la pantalla manda hoy: retirarlo dejaria a {@code
+ * parametrosDeBusqueda} descartando el filtro en silencio, que es el defecto de #431.
+ *
+ * <p>La precedencia, de mas a menos: el cuerpo (#425 lo dejo decidido para las nueve operaciones
+ * que aceptan los dos caminos), despues {@code ejercicio} de la consulta, y por ultimo {@code ano}.
+ *
  * <h2>Que devuelve 422</h2>
  *
  * <p>Todo lo que es un dato que falta y no un sistema roto: una cifra del cuadro que el conjunto
@@ -167,6 +181,7 @@ public class PredialController {
     @RequiereAcceso(acceso = "predial_individual", privilegio = Privilegio.REGISTRO)
     public DeterminacionPredialResource calcular(
             @RequestParam(required = false) @Nullable String codContribuyente,
+            @RequestParam(required = false) @Nullable String ejercicio,
             @RequestParam(required = false) @Nullable String ano,
             @RequestBody PeticionDeCalculoPredial peticion) {
 
@@ -183,8 +198,11 @@ public class PredialController {
                                 peticion.codContribuyente(), codContribuyente),
                         "Hay que decir de que contribuyente se determina: falta"
                                 + " «codContribuyente»");
-        Ejercicio ejercicio =
-                ejercicioDe(FiltroDeLaConsulta.primeroNoVacio(peticion.ejercicio(), ano));
+        Ejercicio elEjercicio =
+                ejercicioDe(
+                        FiltroDeLaConsulta.primeroNoVacio(
+                                peticion.ejercicio(),
+                                FiltroDeLaConsulta.elCanonicoOSuAlias(ejercicio, ano)));
 
         List<DeterminarPredial.PredioDeclarado> predios = new ArrayList<>();
         List<PeticionDeCalculoPredial.PredioDelCalculo> declarados =
@@ -210,7 +228,7 @@ public class PredialController {
             return DeterminacionPredialResource.de(
                     individual.determinar(
                             new DeterminarPredial.Peticion(
-                                    ejercicio,
+                                    elEjercicio,
                                     contribuyente,
                                     predios,
                                     peticion.modalidad() == null ? "" : peticion.modalidad(),

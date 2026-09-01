@@ -49,7 +49,7 @@ import pe.gob.sgtm.rentas.infraestructura.TransferenciaRepositoryJdbc;
 /**
  * {@code RegistrarAlcabala} contra PostgreSQL real (#32).
  *
- * <p>Verifica que la elección de base —el mayor entre el valor de transferencia y el autoavalúo
+ * <p>Verifica que la elección de base —el mayor entre el valor de transferencia y el autovalúo
  * ajustado— gobierna el monto determinado, y que una transferencia que no grava alcabala (un
  * vehículo, o un tipo que no la afecta) se rechaza sin determinar nada.
  */
@@ -151,8 +151,8 @@ class RegistrarAlcabalaTest {
     class LaEleccionDeBase {
 
         @Test
-        @DisplayName("cuando el autoavaluo ajustado es mayor, el impuesto se calcula sobre el")
-        void calculaSobreElAutoavaluoCuandoEsMayor() {
+        @DisplayName("cuando el autovaluo ajustado es mayor, el impuesto se calcula sobre el")
+        void calculaSobreElAutovaluoCuandoEsMayor() {
             long transferenciaId =
                     registrarTransferencia(Dinero.de("40000.00"), TipoTransferencia.COMPRA_VENTA);
 
@@ -160,7 +160,7 @@ class RegistrarAlcabalaTest {
                     registrar.determinar(
                             transferenciaId,
                             Dinero.de("100000.00"),
-                            Observacion.de("El autoavaluo ajustado es mayor"));
+                            Observacion.de("El autovaluo ajustado es mayor"));
 
             // Base 100000, tramo inafecto 10 UIT (con UIT ficticia de 4600) = 46000.
             // (100000 - 46000) * 3% = 1620.00
