@@ -441,7 +441,167 @@ class PredialControllerTest {
                 .contains("\"conjunto\":\"2026 v1\"");
     }
 
+    // ------------------------------------------------- falta publicar, y se dice (#540)
+
+    @Test
+    @DisplayName("un ejercicio sin conjunto sellado es 422 y nombra el ejercicio, no 500")
+    void elEjercicioSinSellarSeNombra() throws Exception {
+        predios.con(11L, "10001", "AV. GRAU 100", Porcentaje.total());
+        mvc = montarCon(lectorSinSellar());
+
+        MvcResult resultado = mvc.perform(simularIndividual()).andReturn();
+
+        assertThat(resultado.getResponse().getStatus())
+                .as(
+                        "la peticion esta bien y el servidor no esta roto: lo que falta es sellar el"
+                                + " conjunto del ejercicio")
+                .isEqualTo(422);
+        String cuerpo = resultado.getResponse().getContentAsString();
+        assertThat(cuerpo).contains("VALIDACION").contains("2026");
+        assertThat(cuerpo)
+                .as("un 500 traeria identificador de incidencia; esto no es una incidencia")
+                .doesNotContain("incidencia");
+    }
+
+    @Test
+    @DisplayName("la corrida masiva contesta lo mismo: 422 nombrando el ejercicio")
+    void laCorridaMasivaTambienLoDice() throws Exception {
+        predios.con(11L, "10001", "AV. GRAU 100", Porcentaje.total());
+        sembrarUnPadronQueSeRecalcula();
+        mvc = montarCon(lectorSinSellar());
+
+        MvcResult resultado = mvc.perform(recalcularElPadron()).andReturn();
+
+        assertThat(resultado.getResponse().getStatus())
+                .as(
+                        "la corrida corta y lo dice: la falta es del conjunto, no de un"
+                                + " contribuyente, asi que no se observa treinta mil veces")
+                .isEqualTo(422);
+        assertThat(resultado.getResponse().getContentAsString())
+                .contains("2026")
+                .doesNotContain("incidencia");
+    }
+
+    @Test
+    @DisplayName("un conjunto sellado sin ningun punto de redondeo observado es 422, y dice cual")
+    void elConjuntoSinPuntosDeRedondeoSeNombra() throws Exception {
+        predios.con(11L, "10001", "AV. GRAU 100", Porcentaje.total());
+        mvc = montar(cuadroSinRedondeo());
+
+        MvcResult resultado = mvc.perform(simularIndividual()).andReturn();
+
+        assertThat(resultado.getResponse().getStatus())
+                .as("D-03c abierta no es un fallo del servidor: es una campana de observacion")
+                .isEqualTo(422);
+        assertThat(resultado.getResponse().getContentAsString())
+                .contains("REDONDEO")
+                .doesNotContain("incidencia");
+    }
+
+    @Test
+    @DisplayName("media politica de redondeo —escala sin modo— tambien es 422, y nombra el punto")
+    void laMediaPoliticaSeNombra() throws Exception {
+        predios.con(11L, "10001", "AV. GRAU 100", Porcentaje.total());
+        mvc = montar(cuadroConMediaPolitica());
+
+        MvcResult resultado = mvc.perform(simularIndividual()).andReturn();
+
+        assertThat(resultado.getResponse().getStatus()).isEqualTo(422);
+        assertThat(resultado.getResponse().getContentAsString())
+                .contains("CUOTA")
+                .doesNotContain("incidencia");
+    }
+
+    @Test
+    @DisplayName("y ninguna de las cuatro escribe una incidencia en el registro de errores")
+    void loQueFaltaPublicarNoEnsuciaElRegistro() throws Exception {
+        predios.con(11L, "10001", "AV. GRAU 100", Porcentaje.total());
+        ch.qos.logback.classic.Logger registro =
+                (ch.qos.logback.classic.Logger)
+                        org.slf4j.LoggerFactory.getLogger(ManejadorDeErrores.class);
+        ch.qos.logback.core.read.ListAppender<ch.qos.logback.classic.spi.ILoggingEvent> anotados =
+                new ch.qos.logback.core.read.ListAppender<>();
+        sembrarUnPadronQueSeRecalcula();
+        anotados.start();
+        registro.addAppender(anotados);
+        try {
+            mvc = montarCon(lectorSinSellar());
+            mvc.perform(simularIndividual());
+            mvc.perform(recalcularElPadron());
+            mvc = montar(cuadroSinRedondeo());
+            mvc.perform(simularIndividual());
+            mvc = montar(cuadroConMediaPolitica());
+            mvc.perform(simularIndividual());
+        } finally {
+            registro.detachAppender(anotados);
+        }
+
+        assertThat(
+                        anotados.list.stream()
+                                .filter(e -> e.getLevel() == ch.qos.logback.classic.Level.ERROR)
+                                .toList())
+                .as(
+                        "hoy NINGUN ejercicio esta sellado (D-02a): cada intento dejaba una"
+                                + " incidencia ERROR con su UUID, y con eso el registro deja de"
+                                + " servir para encontrar defectos de verdad")
+                .isEmpty();
+    }
+
+    @Test
+    @DisplayName("lo que SI es un fallo del servidor sigue siendo 500 con su incidencia")
+    void loQueSiEsInternoNoSeDisfraza() throws Exception {
+        predios.con(11L, "10001", "AV. GRAU 100", Porcentaje.total());
+        determinaciones.revienta = true;
+
+        MvcResult resultado =
+                mvc.perform(
+                                post("/api/v1/rentas/predial/calculo-individual")
+                                        .contentType(MediaType.APPLICATION_JSON)
+                                        .content(
+                                                "{\"simulacion\":false,\"codContribuyente\":\"C-001\","
+                                                        + "\"ejercicio\":\"2026\",\"observacion\":"
+                                                        + "\"Emision ordinaria del ejercicio\","
+                                                        + "\"predios\":[{\"predioId\":11,\"autovaluo\":\"100000.00\"}]}"))
+                        .andReturn();
+
+        assertThat(resultado.getResponse().getStatus())
+                .as(
+                        "traducir las dos excepciones no puede convertir TODO en 422: un defecto del"
+                                + " servidor tiene que seguir diciendo que lo es, y dejar su rastro")
+                .isEqualTo(500);
+        assertThat(resultado.getResponse().getContentAsString()).contains("incidencia");
+    }
+
     // ---------------------------------------------------------------- utilidades
+
+    /** Un padron con un contribuyente al que la corrida SI llega a determinar. */
+    private void sembrarUnPadronQueSeRecalcula() {
+        determinaciones.sembrarEmitida(
+                EJERCICIO,
+                7L,
+                DetalleDeterminacionPredio.nuevo(
+                        11L,
+                        Dinero.de("100000.00"),
+                        Dinero.CERO,
+                        Porcentaje.total(),
+                        Dinero.de("100000.00")));
+    }
+
+    private static org.springframework.test.web.servlet.RequestBuilder recalcularElPadron() {
+        return post("/api/v1/rentas/predial/calculo-masivo")
+                .contentType(MediaType.APPLICATION_JSON)
+                .content(
+                        "{\"simulacion\":true,\"ejercicio\":\"2026\","
+                                + "\"recalculaYaEmitidos\":true}");
+    }
+
+    private static org.springframework.test.web.servlet.RequestBuilder simularIndividual() {
+        return post("/api/v1/rentas/predial/calculo-individual")
+                .contentType(MediaType.APPLICATION_JSON)
+                .content(
+                        "{\"simulacion\":true,\"codContribuyente\":\"C-001\",\"ejercicio\":\"2026\","
+                                + "\"predios\":[{\"predioId\":11,\"autovaluo\":\"100000.00\"}]}");
+    }
 
     private static org.springframework.test.web.servlet.RequestBuilder asentarSinObservacion() {
         return post("/api/v1/rentas/predial/calculo-individual")
@@ -452,7 +612,10 @@ class PredialControllerTest {
     }
 
     private MockMvc montar(ParametrosSellados sellados) {
-        LectorDeParametros lector = lector(sellados);
+        return montarCon(lector(sellados));
+    }
+
+    private MockMvc montarCon(LectorDeParametros lector) {
         CuadroPredialParametrizado cuadro = new CuadroPredialParametrizado(lector);
         PadronPredialDelEjercicio padron = new PadronPredialDelEjercicio(determinaciones);
         DeterminarPredial individual =
@@ -530,6 +693,53 @@ class PredialControllerTest {
                 .construir();
     }
 
+    /** El cuadro completo, pero sin una sola fila {@code REDONDEO:‹punto›} (D-03c, #540). */
+    private static ParametrosSellados cuadroSinRedondeo() {
+        return ParametrosSellados.de(EJERCICIO, 1)
+                .numero("UIT", null, ValorNormativo.de("5500.00"))
+                .numero("TRAMO_PREDIAL", "1", ValorNormativo.de("0.2"))
+                .numero("TRAMO_PREDIAL_LIMITE", "1", ValorNormativo.de("15"))
+                .numero("TRAMO_PREDIAL", "2", ValorNormativo.de("1.0"))
+                .numero("PREDIAL_MINIMO", null, ValorNormativo.de("0.6"))
+                .numero("DERECHO_EMISION_PREDIAL", null, ValorNormativo.de("4.50"))
+                .texto("PREDIAL_VENCIMIENTO", "1", "2026-02-27")
+                .construir();
+    }
+
+    /** Un punto con la escala y sin el modo: media politica no es una politica (#203, #540). */
+    private static ParametrosSellados cuadroConMediaPolitica() {
+        return ParametrosSellados.de(EJERCICIO, 1)
+                .numero("UIT", null, ValorNormativo.de("5500.00"))
+                .numero("TRAMO_PREDIAL", "1", ValorNormativo.de("0.2"))
+                .numero("TRAMO_PREDIAL_LIMITE", "1", ValorNormativo.de("15"))
+                .numero("TRAMO_PREDIAL", "2", ValorNormativo.de("1.0"))
+                .numero("PREDIAL_MINIMO", null, ValorNormativo.de("0.6"))
+                .numero("DERECHO_EMISION_PREDIAL", null, ValorNormativo.de("4.50"))
+                .texto("PREDIAL_VENCIMIENTO", "1", "2026-02-27")
+                .numero("REDONDEO", "CUOTA", ValorNormativo.de("2"))
+                .construir();
+    }
+
+    /** Lo que ocurre HOY en todas las municipalidades: ningun conjunto sellado (D-02a). */
+    private static LectorDeParametros lectorSinSellar() {
+        return new LectorDeParametros() {
+            @Override
+            public ParametrosSellados vigenteEn(Ejercicio ejercicio) {
+                throw new LectorDeParametros.EjercicioSinSellar(ejercicio);
+            }
+
+            @Override
+            public ParametrosSellados porConjunto(IdentificadorDeConjunto identificador) {
+                throw new LectorDeParametros.ConjuntoNoSellado(identificador);
+            }
+
+            @Override
+            public IdentificadorDeConjunto conjuntoVigenteEn(Ejercicio ejercicio) {
+                throw new LectorDeParametros.EjercicioSinSellar(ejercicio);
+            }
+        };
+    }
+
     private static LectorDeParametros lector(ParametrosSellados sellados) {
         return new LectorDeParametros() {
             @Override
@@ -605,6 +815,10 @@ class PredialControllerTest {
     private static final class DeterminacionesEnMemoria implements DeterminacionRepository {
 
         private int insertadas;
+
+        /** Un defecto de verdad del servidor, para el contraste de #540. */
+        private boolean revienta;
+
         private final Map<Long, List<DetalleDeterminacionPredio>> detallePorId =
                 new LinkedHashMap<>();
         private final List<Determinacion> cabeceras = new ArrayList<>();
@@ -654,6 +868,9 @@ class PredialControllerTest {
         @Override
         public Determinacion insertar(
                 Determinacion determinacion, List<DetalleDeterminacionPredio> detalle) {
+            if (revienta) {
+                throw new IllegalStateException("un defecto de verdad, con su rastro");
+            }
             insertadas++;
             return new Determinacion(
                     900L + insertadas,

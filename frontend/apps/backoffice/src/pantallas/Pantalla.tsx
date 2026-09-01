@@ -1040,6 +1040,16 @@ function Bloques({
           tuviera nada que ensenar, encima justo de lo que si tenia. */}
       {aviso !== undefined && <Aviso tipo="nota" titulo={aviso.titulo} detalle={aviso.detalle} />}
 
+      {/* Por que no salio la determinacion que quien atiende acaba de pedir
+          (#540). `useSimulacion` lo redactaba desde #393 y **no lo leia nadie**:
+          la peticion fallaba y la pantalla se quedaba con sus importes en «—»,
+          sin una sola linea que dijera por que. Y el motivo mas frecuente hoy no
+          es un fallo del servidor sino que **falta publicar una cifra**: el
+          backend contesta 422 nombrandola, y eso es lo que se lee aqui. */}
+      {simulacion.error !== undefined && (
+        <Aviso tipo="error" titulo="No se calculó la determinación" detalle={simulacion.error} />
+      )}
+
       {estructura.kind === 'dash' && (
         <Suspense fallback={<Esqueleto alto={240} />}>
           <Indicadores kpis={datos?.kpis} paneles={datos?.paneles} cargando={cargando} />
