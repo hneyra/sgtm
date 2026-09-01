@@ -49,6 +49,7 @@ import pe.gob.sgtm.catastro.dominio.BienComun;
 import pe.gob.sgtm.catastro.dominio.CatastroRepository;
 import pe.gob.sgtm.catastro.dominio.CategoriasConstructivas;
 import pe.gob.sgtm.catastro.dominio.Construccion;
+import pe.gob.sgtm.catastro.dominio.CriterioDeVia;
 import pe.gob.sgtm.catastro.dominio.DetalleDeBienesComunes;
 import pe.gob.sgtm.catastro.dominio.DetalleDeLaFicha;
 import pe.gob.sgtm.catastro.dominio.DetalleEconomico;
@@ -2218,7 +2219,7 @@ class EscrituraDeFichasControllerTest {
         }
 
         @Override
-        public Pagina<Via> findAll(Paginacion paginacion) {
+        public Pagina<Via> buscar(CriterioDeVia criterio, Paginacion paginacion) {
             throw new UnsupportedOperationException("La escritura de fichas no lista vias");
         }
 

@@ -38,6 +38,7 @@ import pe.gob.sgtm.catastro.dominio.ActividadEconomica;
 import pe.gob.sgtm.catastro.dominio.BienComun;
 import pe.gob.sgtm.catastro.dominio.Colindante;
 import pe.gob.sgtm.catastro.dominio.CondicionDeTitularidad;
+import pe.gob.sgtm.catastro.dominio.CriterioDeVia;
 import pe.gob.sgtm.catastro.dominio.DetalleDeBienesComunes;
 import pe.gob.sgtm.catastro.dominio.DetalleEconomico;
 import pe.gob.sgtm.catastro.dominio.DetalleRural;
@@ -852,7 +853,7 @@ class FichasDeTodoTipoTest {
         }
 
         @Override
-        public Pagina<Via> findAll(Paginacion paginacion) {
+        public Pagina<Via> buscar(CriterioDeVia criterio, Paginacion paginacion) {
             throw new UnsupportedOperationException("La inscripcion no lista vias");
         }
 
