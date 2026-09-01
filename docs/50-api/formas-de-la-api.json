@@ -591,6 +591,21 @@
     "totalPaginas": "entero",
     "hayMas": "booleano"
   },
+  "GET /catastro/predios/plano": {
+    "lotes": [
+      {
+        "predioId": "entero",
+        "codRefCatastral": "texto",
+        "direccion": "texto",
+        "codigoDeSector": "texto",
+        "codigoDeManzana": "texto",
+        "lote": "texto",
+        "estado": "texto",
+        "geometria": "objeto"
+      }
+    ],
+    "sinGeometria": "entero"
+  },
   "GET /catastro/predios/{predioId}/inquilinos": [
     {
       "inquilinoId": "entero",

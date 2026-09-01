@@ -86,6 +86,11 @@ class ContratoDeApiTest {
                     "PUT /catastro/predios/{predioId}/inquilinos/{inquilinoId}",
                     "POST /catastro/predios/{predioId}/baja",
                     "POST /catastro/predios/{predioId}/reactivacion",
+                    // #536 — el plano catastral. El contrato la declaraba desde #500 (ADR-0022) y
+                    // ningun controlador la servia: era una de las DOS operaciones sin nadie que
+                    // las atendiera, y la otra —`GET /portal/deuda`— no va a tenerlo (ADR-0016
+                    // §3).
+                    "GET /catastro/predios/plano",
                     "GET /catastro/tablas/aranceles",
                     "GET /catastro/tablas/valores-unitarios",
                     "GET /catastro/tablas/depreciacion",

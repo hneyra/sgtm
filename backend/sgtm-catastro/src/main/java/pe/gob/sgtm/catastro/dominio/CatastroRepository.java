@@ -74,6 +74,40 @@ public interface CatastroRepository {
      */
     Pagina<PredioDelCatastro> predios(FiltroDePredios filtro, Paginacion paginacion);
 
+    /**
+     * Los lotes con poligono que caen en el marco, hasta {@code tope} (ADR-0022, #536).
+     *
+     * <p><b>No pagina, y no es un olvido</b>: la paginacion de un plano no significa nada —no hay
+     * un orden que convierta «la pagina 2» en una porcion del territorio— y un plano al que le
+     * faltan lotes se lee como un plano donde no hay lotes. Las dos maneras legitimas de terminar
+     * son «cabe» y «acercate», y de la segunda se encarga quien llama comparando contra {@link
+     * #lotesEnElMarco(FiltroDelPlano)}.
+     *
+     * <p>Por eso {@code tope} es un limite de <b>seguridad</b> y no una pagina: quien llama pide
+     * uno mas de los que admite, y si vuelven todos es que no cabe.
+     *
+     * @param tope cuantas filas como maximo se traen del motor
+     */
+    List<LoteDelPlano> lotesDelPlano(FiltroDelPlano filtro, int tope);
+
+    /**
+     * Cuantos lotes con poligono caen en el marco, sin traerlos.
+     *
+     * <p>Existe para poder decir la cifra al negarse: «hay 4 812 lotes en este marco y el tope es 2
+     * 000» es una respuesta que se puede obedecer; «no caben» no lo es. Solo se pregunta cuando ya
+     * se sabe que no cabe, asi que el camino normal no la paga.
+     */
+    long lotesEnElMarco(FiltroDelPlano filtro);
+
+    /**
+     * Cuantos predios alcanzados por los mismos <b>filtros</b> no tienen poligono (ADR-0022 §3).
+     *
+     * <p>Los filtros, no el marco, y el motivo esta en {@link PlanoDelCatastro}: un predio sin
+     * poligono no tiene sitio en el marco, y el unico que podria situarlo —el perimetro de su
+     * manzana— no existe y no se deriva.
+     */
+    long prediosSinGeometria(FiltroDelPlano filtro);
+
     Predio guardar(Predio predio);
 
     /**
