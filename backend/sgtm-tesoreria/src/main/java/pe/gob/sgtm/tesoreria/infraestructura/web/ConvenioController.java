@@ -28,6 +28,8 @@ import pe.gob.sgtm.cuentacorriente.SeleccionDeObligacion;
 import pe.gob.sgtm.dominio.Alicuota;
 import pe.gob.sgtm.dominio.Ejercicio;
 import pe.gob.sgtm.dominio.Observacion;
+import pe.gob.sgtm.parametros.LectorDeParametros;
+import pe.gob.sgtm.parametros.PoliticasDeRedondeoSelladas;
 import pe.gob.sgtm.tesoreria.aplicacion.CerrarConvenio;
 import pe.gob.sgtm.tesoreria.aplicacion.CondicionesParametrizadas;
 import pe.gob.sgtm.tesoreria.aplicacion.ConsultaDeConvenios;
@@ -71,6 +73,43 @@ import pe.gob.sgtm.web.RespuestaPaginada;
  * <p>{@code {numero}} es el numero <b>impreso</b>, {@code F-2026-000123}: lo que dice el papel que
  * el contribuyente trae a la ventanilla. Ni el identificador interno ni el ejercicio y el
  * correlativo por separado.
+ *
+ * <h2>Que devuelve 422, y por que no 500 (#547)</h2>
+ *
+ * <p>Un convenio no se puede armar sin el interes de fraccionamiento, sin el maximo de cuotas y sin
+ * la politica con que se redondea cada cuota, y las tres salen del <b>conjunto sellado</b> del
+ * ejercicio del convenio ({@link CondicionesParametrizadas}, regla 5). Que ese conjunto no exista
+ * ({@code EjercicioSinSellar}), que exista y no traiga la llave ({@code CondicionSinParametrizar})
+ * o que no parametrice ningun punto de redondeo ({@code SinPuntosObservados}, con sus tres hermanas
+ * de {@link PoliticasDeRedondeoSelladas}) <b>no es un fallo del servidor</b>: es una cifra que
+ * todavia nadie ha publicado, y con D-02a y D-03c abiertas es el estado <i>normal</i> del sistema.
+ *
+ * <p>Hasta #547 solo estaba traducida la segunda. Las otras cinco caian en el
+ * {@code @ExceptionHandler(Exception.class)} de {@code ManejadorDeErrores} y salian como <b>500
+ * {@code ERROR_INTERNO} con identificador de incidencia</b>, con dos consecuencias —las mismas que
+ * #540 midio para las determinaciones de Rentas—: la interfaz no podia distinguir «falta publicar
+ * un parametro» de «el servidor esta roto», y un cliente que reintenta un 500 reintenta para
+ * siempre; y cada intento <b>escribia una incidencia de nivel ERROR en el registro</b>, o sea el
+ * registro de errores del servidor lleno de lo que no es un error. Con eso, el destino entero de
+ * convenios era inalcanzable: no se podia crear ninguno, el listado salia siempre vacio y la
+ * anulacion no tenia sobre que actuar.
+ *
+ * <p>El codigo elegido es <b>422</b> y no 404, siguiendo a {@code LiquidacionController} y no a los
+ * tres lectores de cuadro de catastro —que traducen la misma excepcion a 404 <i>a proposito</i>,
+ * porque ellos <b>leen un cuadro</b> («de ese ejercicio no hay tal tabla») y aqui se <b>pide un
+ * calculo</b>, que es lo que hace {@code LiquidacionController}—. El mensaje es el de la propia
+ * excepcion: ya esta redactado en lenguaje del dominio y nombra el ejercicio o la llave —{@code
+ * INTERES_FRACCIONAMIENTO:ORDINARIO}, {@code REDONDEO:CUOTA}—, sin tabla, sin restriccion y sin SQL
+ * (RNF-033).
+ *
+ * <p>Lo que <b>no</b> cambia: un fallo de verdad del servidor sigue siendo 500 con su incidencia.
+ * Una traduccion demasiado ancha —convertirlo todo en 422— es peor que el defecto que arregla, y
+ * hay una prueba de contraste que lo mide.
+ *
+ * <p>La traduccion vive aqui y no en {@code ManejadorDeErrores} porque {@code pe.gob.sgtm.web} esta
+ * en {@code sgtm-plataforma}, que no depende —ni debe— de {@code sgtm-parametros}, que es un
+ * contexto acotado; y porque la eleccion de codigo no es uniforme en el sistema, asi que decidirla
+ * en un sitio unico decidiria tambien por catastro.
  */
 @RestController
 @RequestMapping(Api.RAIZ + "/tesoreria")
@@ -148,9 +187,15 @@ public class ConvenioController {
             try {
                 return ResponseEntity.ok(
                         ConvenioResource.SimulacionResource.de(registrar.simular(pedido)));
+            } catch (CondicionesParametrizadas.CondicionSinParametrizar
+                    | LectorDeParametros.EjercicioSinSellar
+                    | PoliticasDeRedondeoSelladas.SinPuntosObservados
+                    | PoliticasDeRedondeoSelladas.MediaPolitica
+                    | PoliticasDeRedondeoSelladas.EscalaNoEntera
+                    | PoliticasDeRedondeoSelladas.ModoDesconocido falta) {
+                throw new ProblemaDeNegocio(CodigoDeError.VALIDACION, mensajeDe(falta));
             } catch (RegistrarPreconvenio.SinDeudaQueFraccionar
                     | CondicionesDelConvenio.DemasiadasCuotas
-                    | CondicionesParametrizadas.CondicionSinParametrizar
                     | Cronograma.NadaQueFraccionar
                     | IllegalArgumentException invalido) {
                 throw new ProblemaDeNegocio(CodigoDeError.VALIDACION, mensajeDe(invalido));
@@ -170,9 +215,15 @@ public class ConvenioController {
             // 409: la peticion esta bien formada; lo que no admite la operacion es el
             // estado actual del convenio.
             throw new ProblemaDeNegocio(CodigoDeError.CONFLICTO, mensajeDe(yaTeniaCronograma));
+        } catch (CondicionesParametrizadas.CondicionSinParametrizar
+                | LectorDeParametros.EjercicioSinSellar
+                | PoliticasDeRedondeoSelladas.SinPuntosObservados
+                | PoliticasDeRedondeoSelladas.MediaPolitica
+                | PoliticasDeRedondeoSelladas.EscalaNoEntera
+                | PoliticasDeRedondeoSelladas.ModoDesconocido falta) {
+            throw new ProblemaDeNegocio(CodigoDeError.VALIDACION, mensajeDe(falta));
         } catch (RegistrarPreconvenio.SinDeudaQueFraccionar
                 | CondicionesDelConvenio.DemasiadasCuotas
-                | CondicionesParametrizadas.CondicionSinParametrizar
                 | Cronograma.NadaQueFraccionar
                 | IllegalArgumentException invalido) {
             throw new ProblemaDeNegocio(CodigoDeError.VALIDACION, mensajeDe(invalido));
@@ -293,10 +344,19 @@ public class ConvenioController {
             // 409: la peticion esta bien formada; lo que no admite la operacion es el
             // estado actual del convenio.
             throw new ProblemaDeNegocio(CodigoDeError.CONFLICTO, mensajeDe(enConflicto));
+        } catch (CondicionesParametrizadas.CondicionSinParametrizar
+                | LectorDeParametros.EjercicioSinSellar
+                | PoliticasDeRedondeoSelladas.SinPuntosObservados
+                | PoliticasDeRedondeoSelladas.MediaPolitica
+                | PoliticasDeRedondeoSelladas.EscalaNoEntera
+                | PoliticasDeRedondeoSelladas.ModoDesconocido falta) {
+            // La reformulacion registra un preconvenio nuevo, y ese pide sus condiciones al
+            // conjunto sellado del ejercicio en que se firma: lo mismo que /fraccionamientos,
+            // y por eso se traduce igual.
+            throw new ProblemaDeNegocio(CodigoDeError.VALIDACION, mensajeDe(falta));
         } catch (RegistrarPreconvenio.SinDeudaQueFraccionar
                 | CerrarConvenio.ConvenioSinFormalizar
                 | CondicionesDelConvenio.DemasiadasCuotas
-                | CondicionesParametrizadas.CondicionSinParametrizar
                 | Cronograma.NadaQueFraccionar
                 | IllegalArgumentException invalido) {
             throw new ProblemaDeNegocio(CodigoDeError.VALIDACION, mensajeDe(invalido));
