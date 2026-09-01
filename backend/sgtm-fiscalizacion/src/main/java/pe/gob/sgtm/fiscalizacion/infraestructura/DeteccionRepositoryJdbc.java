@@ -137,8 +137,20 @@ public class DeteccionRepositoryJdbc extends RepositorioJdbc implements Deteccio
      */
     private static final String PREDIO_ACTIVO = "ACTIVO";
 
-    private static final OrdenSeguro ORDEN =
-            OrdenSeguro.sobre("codigo_ref_catastral", "direccion", "predio_id");
+    /**
+     * Por lo que la fila <b>publica</b>, y por nada mas (#546).
+     *
+     * <p>{@code codRefCatastral} es el nombre del campo de {@code OmisoResource}; el {@code
+     * camelCase} automatico de la columna era {@code codigoRefCatastral}, o sea un segundo nombre
+     * para el mismo dato que ademas era el unico que funcionaba. {@code direccion} sale de la lista
+     * porque {@code OmisoResource} no la publica —ordenar por una columna que no esta en la fila no
+     * se puede explicar en pantalla—, y {@code predio_id} pasa a <b>desempate</b>, que es para lo
+     * que servia: da orden total sin ofrecerse como campo (#543).
+     */
+    static final OrdenSeguro ORDEN =
+            OrdenSeguro.sobre("codigo_ref_catastral")
+                    .publicandoComo("codRefCatastral", "codigo_ref_catastral")
+                    .desempatandoPor("predio_id");
 
     public DeteccionRepositoryJdbc(JdbcClient jdbc) {
         super(jdbc);

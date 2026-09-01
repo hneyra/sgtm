@@ -44,7 +44,14 @@ public class OmisosController {
 
     static final String ACCESO_ESTADO_DE_CUENTA = "fisc_estado_cuenta";
 
-    private static final String ORDEN_POR_OMISION = "codigoRefCatastral";
+    /**
+     * El orden por omision, con el nombre que la fila <b>publica</b> (#546).
+     *
+     * <p>Hasta este issue era {@code codigoRefCatastral} —el {@code camelCase} de la columna— y la
+     * fila publica {@code codRefCatastral}: dos nombres para el mismo dato en la misma operacion, y
+     * pedir por el que la fila ensena daba {@code 422 ORDEN_NO_ADMITIDO}.
+     */
+    private static final String ORDEN_POR_OMISION = "codRefCatastral";
 
     private final DeteccionDeOmisos deteccion;
     private final EstadoDeCuentaDeFiscalizacion estadoDeCuenta;

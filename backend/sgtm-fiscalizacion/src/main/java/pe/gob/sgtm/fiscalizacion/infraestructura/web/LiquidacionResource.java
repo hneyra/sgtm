@@ -3,6 +3,7 @@ package pe.gob.sgtm.fiscalizacion.infraestructura.web;
 import java.util.ArrayList;
 import java.util.List;
 import org.jspecify.annotations.Nullable;
+import pe.gob.sgtm.dominio.AreaM2;
 import pe.gob.sgtm.fiscalizacion.aplicacion.ConsultaDeLiquidaciones;
 import pe.gob.sgtm.fiscalizacion.dominio.CambioEntreVersiones;
 import pe.gob.sgtm.fiscalizacion.dominio.DiferenciaEntreLiquidaciones;
@@ -89,8 +90,8 @@ public record LiquidacionResource(
      * @param predioId la unidad, si es predial
      * @param vehiculoId la unidad, si es vehicular
      * @param condicion lo que sale de comparar los dos lados
-     * @param areaDeclarada superficie declarada, como texto
-     * @param areaHallada superficie medida en campo, como texto
+     * @param areaDeclarada superficie declarada
+     * @param areaHallada superficie medida en campo
      * @param diferenciaDeArea la diferencia, nunca negativa; {@code null} si falta un lado
      * @param usoDeclarado uso declarado
      * @param usoHallado uso observado
@@ -102,9 +103,9 @@ public record LiquidacionResource(
             @Nullable Long predioId,
             @Nullable Long vehiculoId,
             String condicion,
-            @Nullable String areaDeclarada,
-            @Nullable String areaHallada,
-            @Nullable String diferenciaDeArea,
+            @Nullable AreaM2 areaDeclarada,
+            @Nullable AreaM2 areaHallada,
+            @Nullable AreaM2 diferenciaDeArea,
             @Nullable String usoDeclarado,
             @Nullable String usoHallado,
             @Nullable String insolutoOmitido,
@@ -116,9 +117,9 @@ public record LiquidacionResource(
                     linea.predioId(),
                     linea.vehiculoId(),
                     linea.condicion().name(),
-                    cifra(linea.areaDeclarada()),
-                    cifra(linea.areaHallada()),
-                    cifra(linea.diferenciaDeArea()),
+                    linea.areaDeclarada(),
+                    linea.areaHallada(),
+                    linea.diferenciaDeArea(),
                     linea.usoDeclarado(),
                     linea.usoHallado(),
                     cifra(linea.insolutoOmitido()),
@@ -126,16 +127,18 @@ public record LiquidacionResource(
         }
 
         /**
-         * La cifra desnuda, sin unidad: {@code "120.00"}, no {@code "120.00 m2"}.
+         * La cifra desnuda, sin moneda: {@code "120.00"}.
          *
-         * <p>Mismo criterio que {@code ActaFiscalizacionResource#areaHallada} (#45): la unidad la
-         * pinta la pantalla, que es quien sabe en que columna va. Metida en el JSON obligaria a
-         * cada consumidor a recortarla antes de poder comparar.
+         * <p>Las superficies ya no pasan por aqui: viajan como {@link AreaM2} y las escribe el
+         * serializador que {@code ConfiguracionDeJson} registra, que es lo que hace que las cuatro
+         * proyecciones del modulo digan lo mismo (#546). Lo que sigue pasando son los importes, que
+         * son {@code Dinero} y no pueden viajar tipados porque la regla de ArchUnit
+         * TODA_CIFRA_DE_LA_WEB_LLEVA_SU_FECHA exigiria su {@code actualizadoA}, y estos no lo
+         * tienen -son cifras congeladas del contraste, no deuda a una fecha-.
          */
         private static @Nullable String cifra(@Nullable Object valor) {
             return switch (valor) {
                 case null -> null;
-                case pe.gob.sgtm.dominio.AreaM2 area -> area.valor().toPlainString();
                 case pe.gob.sgtm.dominio.Dinero dinero -> dinero.valor().toPlainString();
                 default -> valor.toString();
             };

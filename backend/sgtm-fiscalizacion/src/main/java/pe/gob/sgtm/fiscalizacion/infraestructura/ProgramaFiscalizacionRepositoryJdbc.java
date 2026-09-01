@@ -36,7 +36,8 @@ public class ProgramaFiscalizacionRepositoryJdbc extends RepositorioJdbc
 
     private static final String DESDE = " FROM programa_fiscalizacion";
 
-    private static final OrdenSeguro ORDEN =
+    /** Los cinco los publica {@code ProgramaResource} con el mismo nombre (#546). */
+    static final OrdenSeguro ORDEN =
             OrdenSeguro.sobre("codigo", "fecha_inicio", "fecha_fin", "estado", "id");
 
     public ProgramaFiscalizacionRepositoryJdbc(JdbcClient jdbc) {
