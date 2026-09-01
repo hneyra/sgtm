@@ -31,6 +31,7 @@ import pe.gob.sgtm.licencias.dominio.ClaseDeAnuncio;
 import pe.gob.sgtm.licencias.dominio.CriterioDeAnuncios;
 import pe.gob.sgtm.licencias.dominio.MovimientoDeAnuncioRepository;
 import pe.gob.sgtm.licencias.dominio.TipoDeAnuncio;
+import pe.gob.sgtm.parametros.LectorDeParametros;
 import pe.gob.sgtm.web.Api;
 import pe.gob.sgtm.web.CodigoDeError;
 import pe.gob.sgtm.web.ParametrosDePaginacion;
@@ -60,6 +61,18 @@ import pe.gob.sgtm.web.RespuestaPaginada;
  * deuda</b>. Reenviar el mismo registro devuelve {@code 200} con la autorizacion de la primera vez
  * en lugar de {@code 201} con una segunda y su segundo cargo. La garantia no es esta lectura, es
  * {@code anuncio_idempotencia_uq} (V45).
+ *
+ * <h2>El numero, en la ruta</h2>
+ *
+ * <h2>Que devuelve 422, y por que no 500 (#562)</h2>
+ *
+ * <p>La tasa de la clase de anuncio sale del <b>conjunto sellado</b> que rige a la fecha de la
+ * autorizacion ({@link TasaDeAnunciosParametrizada}, regla 5). Que el conjunto exista y no traiga
+ * la llave ({@code TasaSinParametrizar}) ya estaba traducido desde #51; que <b>no exista ningun
+ * conjunto sellado</b> ({@code EjercicioSinSellar}) no lo estaba, y con D-02a abierta ese es el
+ * estado <i>normal</i> de todas las municipalidades: salia como <b>500 {@code ERROR_INTERNO} con
+ * identificador de incidencia</b>, y cada intento ensuciaba el registro de errores del servidor. El
+ * razonamiento completo esta en la cabecera de {@link LicenciaController}.
  *
  * <h2>El numero, en la ruta</h2>
  *
@@ -183,10 +196,12 @@ public class AnuncioController {
             throw new ProblemaDeNegocio(CodigoDeError.NO_ENCONTRADO, mensajeDe(noEsta));
         } catch (RegistrarAnuncio.EstablecimientoDesconocido sinLocal) {
             throw new ProblemaDeNegocio(CodigoDeError.NO_ENCONTRADO, mensajeDe(sinLocal));
-        } catch (TasaDeAnunciosParametrizada.TasaSinParametrizar sinTarifa) {
+        } catch (TasaDeAnunciosParametrizada.TasaSinParametrizar
+                | LectorDeParametros.EjercicioSinSellar sinTarifa) {
             // 422 y no 500: la peticion esta bien y el sistema tampoco esta roto. Lo que falta es
             // un dato de configuracion —la ordenanza de D-02b, #199— y quien opera tiene que
-            // enterarse de cual para poder pedirlo.
+            // enterarse de cual para poder pedirlo. `EjercicioSinSellar` —que no haya NINGUN
+            // conjunto sellado— es el mismo caso y hasta #562 salia como 500 con incidencia.
             throw new ProblemaDeNegocio(CodigoDeError.VALIDACION, mensajeDe(sinTarifa));
         } catch (AnuncioRepository.ClaveRepetida carrera) {
             throw new ProblemaDeNegocio(CodigoDeError.CONFLICTO, mensajeDe(carrera));
@@ -224,7 +239,8 @@ public class AnuncioController {
             throw new ProblemaDeNegocio(CodigoDeError.CONFLICTO, mensajeDe(cesado));
         } catch (MovimientoDeAnuncioRepository.CargoYaAsentado dosVeces) {
             throw new ProblemaDeNegocio(CodigoDeError.CONFLICTO, mensajeDe(dosVeces));
-        } catch (TasaDeAnunciosParametrizada.TasaSinParametrizar sinTarifa) {
+        } catch (TasaDeAnunciosParametrizada.TasaSinParametrizar
+                | LectorDeParametros.EjercicioSinSellar sinTarifa) {
             throw new ProblemaDeNegocio(CodigoDeError.VALIDACION, mensajeDe(sinTarifa));
         } catch (RenovarAnuncio.AnteriorALaAutorizacion | RenovarAnuncio.VigenciaHaciaAtras mal) {
             throw new ProblemaDeNegocio(CodigoDeError.VALIDACION, mensajeDe(mal));

@@ -4,6 +4,9 @@ import java.util.ArrayList;
 import java.util.List;
 import org.springframework.stereotype.Service;
 import pe.gob.sgtm.dominio.Observacion;
+import pe.gob.sgtm.dominio.PoliticasDeRedondeo;
+import pe.gob.sgtm.parametros.LectorDeParametros;
+import pe.gob.sgtm.parametros.PoliticasDeRedondeoSelladas;
 import pe.gob.sgtm.tesoreria.ConvenioCoactivo;
 import pe.gob.sgtm.tesoreria.CuotaDelConvenio;
 import pe.gob.sgtm.tesoreria.FraccionamientoCoactivo;
@@ -23,6 +26,12 @@ import pe.gob.sgtm.tesoreria.dominio.TipoDeConvenio;
  * deuda acogible releida del libro, el interes y el maximo de cuotas del conjunto sellado, el
  * cronograma, el numero, la auditoria y la garantia de que lo que sale es un preconvenio— lo hace
  * {@code RegistrarPreconvenio} sin enterarse de que quien llama es coactiva.
+ *
+ * <p><b>Lo unico que si hace es traducir</b>, y solo lo que no puede cruzar el limite: las
+ * excepciones de negocio de {@code RegistrarPreconvenio} y las de «falta publicar una cifra» viven
+ * en subpaquetes de {@code tesoreria}, asi que {@code coactiva} no las puede nombrar sin que Spring
+ * Modulith lo rechace. Salen como {@link FraccionamientoCoactivo.SinDeudaCoactivaQueFraccionar} y
+ * {@link FraccionamientoCoactivo.CondicionesSinPublicar}, con su mensaje intacto (#42, #562).
  *
  * <p>Si esta clase tuviera una regla propia seria la senal de que el fraccionamiento coactivo no es
  * el mismo mecanismo, y entonces habria dos sitios donde arreglar un defecto del cronograma. El
@@ -54,6 +63,14 @@ public class FraccionamientoCoactivoTesoreria implements FraccionamientoCoactivo
             simulada = preconvenios.simular(peticionDe(solicitud));
         } catch (RegistrarPreconvenio.SinDeudaQueFraccionar sinDeuda) {
             throw new SinDeudaCoactivaQueFraccionar(mensajeDe(sinDeuda), sinDeuda);
+        } catch (CondicionesParametrizadas.CondicionSinParametrizar
+                | LectorDeParametros.EjercicioSinSellar
+                | PoliticasDeRedondeoSelladas.SinPuntosObservados
+                | PoliticasDeRedondeoSelladas.MediaPolitica
+                | PoliticasDeRedondeoSelladas.EscalaNoEntera
+                | PoliticasDeRedondeoSelladas.ModoDesconocido
+                | PoliticasDeRedondeo.PuntoSinPolitica falta) {
+            throw new CondicionesSinPublicar(mensajeDeLoQueFalta(falta), falta);
         }
 
         List<CuotaDelConvenio> cronograma = cronogramaDe(simulada.cronograma());
@@ -81,6 +98,14 @@ public class FraccionamientoCoactivoTesoreria implements FraccionamientoCoactivo
             guardado = preconvenios.registrar(peticionDe(solicitud), observacion);
         } catch (RegistrarPreconvenio.SinDeudaQueFraccionar sinDeuda) {
             throw new SinDeudaCoactivaQueFraccionar(mensajeDe(sinDeuda), sinDeuda);
+        } catch (CondicionesParametrizadas.CondicionSinParametrizar
+                | LectorDeParametros.EjercicioSinSellar
+                | PoliticasDeRedondeoSelladas.SinPuntosObservados
+                | PoliticasDeRedondeoSelladas.MediaPolitica
+                | PoliticasDeRedondeoSelladas.EscalaNoEntera
+                | PoliticasDeRedondeoSelladas.ModoDesconocido
+                | PoliticasDeRedondeo.PuntoSinPolitica falta) {
+            throw new CondicionesSinPublicar(mensajeDeLoQueFalta(falta), falta);
         }
 
         return new ConvenioCoactivo(
@@ -138,5 +163,19 @@ public class FraccionamientoCoactivoTesoreria implements FraccionamientoCoactivo
     private static String mensajeDe(RuntimeException excepcion) {
         String mensaje = excepcion.getMessage();
         return mensaje == null ? "La seleccion no tiene deuda que fraccionar" : mensaje;
+    }
+
+    /**
+     * El mensaje de la cifra que falta, tal cual lo escribio quien la pide.
+     *
+     * <p>Ya nombra la llave —{@code INTERES_FRACCIONAMIENTO:ORDINARIO}, {@code REDONDEO:CUOTA}— o
+     * el ejercicio cuando lo que falta es el conjunto entero, y esa distincion es lo unico que
+     * separa tres arreglos distintos (#547). Reescribirlo aqui la perderia.
+     */
+    private static String mensajeDeLoQueFalta(RuntimeException excepcion) {
+        String mensaje = excepcion.getMessage();
+        return mensaje == null
+                ? "Falta publicar alguna de las cifras con que se arma el cronograma"
+                : mensaje;
     }
 }

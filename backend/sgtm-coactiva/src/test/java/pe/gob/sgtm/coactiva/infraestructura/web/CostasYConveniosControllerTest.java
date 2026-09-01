@@ -367,7 +367,156 @@ class CostasYConveniosControllerTest {
         assertThat(resultado.getResponse().getContentAsString()).contains("D-02b");
     }
 
+    // ---------------------------------------- #562: lo que falta publicar es 422, no 500
+
+    @Test
+    @DisplayName("liquidar costas sin ningun conjunto sellado, 422 y nombra el ejercicio")
+    void liquidarSinConjuntoSellado() throws Exception {
+        expedienteConRec1();
+
+        MvcResult resultado = liquidarCon(new ArancelSinSellar());
+
+        assertThat(resultado.getResponse().getStatus())
+                .as("no es que el servidor este roto: es que nadie ha sellado 2026 (D-02a)")
+                .isEqualTo(422);
+        String cuerpo = resultado.getResponse().getContentAsString();
+        assertThat(cuerpo).contains("VALIDACION").contains("2026");
+        assertThat(cuerpo)
+                .as("un 500 traeria identificador de incidencia; esto no es una incidencia")
+                .doesNotContain("incidencia");
+        assertThat(cargos.asentados).as("y no se asienta ningun cargo").isEmpty();
+    }
+
+    @Test
+    @DisplayName("y un conjunto sellado sin el arancel es otro 422: no llega a la llave")
+    void liquidarSinElArancel() throws Exception {
+        expedienteConRec1();
+
+        MvcResult resultado = liquidarCon(new SinArancelDeLaRec1());
+
+        assertThat(resultado.getResponse().getStatus()).isEqualTo(422);
+        assertThat(resultado.getResponse().getContentAsString())
+                .as(
+                        "medido, no supuesto: `ArancelSinParametrizar` esta en el catch desde #42 y"
+                                + " por esta ruta NO se alcanza —`LiquidarCostas.candidatosDe`"
+                                + " descarta con `arancel.tarifa(tipo)` los actos que la ordenanza"
+                                + " no tarifa, asi que ninguno llega a `paraElActo` y lo que sale"
+                                + " es `SinActosQueLiquidar`—. El 422 es el mismo; lo que cambia es"
+                                + " que el mensaje no nombra la llave sino el expediente")
+                .contains("no tiene ningun acto pendiente de liquidar")
+                .doesNotContain("incidencia");
+    }
+
+    @Test
+    @DisplayName("fraccionar en coactiva sin las condiciones publicadas, 422 con su llave")
+    void fraccionarSinLasCondicionesPublicadas() throws Exception {
+        String expediente = expedienteConRec1();
+        convenios.faltaPublicar =
+                "El conjunto sellado del ejercicio 2026 no tiene el parametro"
+                        + " INTERES_FRACCIONAMIENTO:ORDINARIO";
+
+        MvcResult resultado = fraccionar(expediente, false, "Se registra el convenio coactivo");
+
+        assertThat(resultado.getResponse().getStatus())
+                .as(
+                        "el interes, el maximo de cuotas y el redondeo son cifras que nadie ha"
+                                + " publicado todavia (D-02a, D-03c), no un fallo del servidor")
+                .isEqualTo(422);
+        assertThat(resultado.getResponse().getContentAsString())
+                .contains("INTERES_FRACCIONAMIENTO:ORDINARIO")
+                .doesNotContain("incidencia");
+        assertThat(convenios.registrados).isZero();
+    }
+
+    @Test
+    @DisplayName("y la simulacion contesta lo mismo: es el mismo cronograma")
+    void simularSinLasCondicionesPublicadas() throws Exception {
+        String expediente = expedienteConRec1();
+        convenios.faltaPublicar = "El ejercicio 2026 no tiene un conjunto de parametros sellado";
+
+        MvcResult resultado = fraccionar(expediente, true, "Se simula el convenio coactivo");
+
+        assertThat(resultado.getResponse().getStatus()).isEqualTo(422);
+        assertThat(resultado.getResponse().getContentAsString())
+                .as("sin conjunto no hay llave que nombrar: se nombra el ejercicio")
+                .contains("2026")
+                .doesNotContain("incidencia");
+    }
+
+    @Test
+    @DisplayName("y ninguna de las dos rutas escribe una incidencia en el registro de errores")
+    void loQueFaltaPublicarNoEnsuciaElRegistro() throws Exception {
+        String expediente = expedienteConRec1();
+        convenios.faltaPublicar = "El ejercicio 2026 no tiene un conjunto de parametros sellado";
+
+        ch.qos.logback.classic.Logger registro =
+                (ch.qos.logback.classic.Logger)
+                        org.slf4j.LoggerFactory.getLogger(ManejadorDeErrores.class);
+        ch.qos.logback.core.read.ListAppender<ch.qos.logback.classic.spi.ILoggingEvent> anotados =
+                new ch.qos.logback.core.read.ListAppender<>();
+        anotados.start();
+        registro.addAppender(anotados);
+        try {
+            liquidarCon(new ArancelSinSellar());
+            fraccionar(expediente, false, "Se registra el convenio coactivo");
+        } finally {
+            registro.detachAppender(anotados);
+        }
+
+        assertThat(
+                        anotados.list.stream()
+                                .filter(e -> e.getLevel() == ch.qos.logback.classic.Level.ERROR)
+                                .toList())
+                .as(
+                        "es la mitad del defecto que la respuesta no ensena: con D-02a abierta esto"
+                                + " pasa en TODAS las municipalidades, y el registro de incidencias"
+                                + " es para defectos, no para cifras sin publicar")
+                .isEmpty();
+    }
+
+    @Test
+    @DisplayName("lo que SI es un fallo del servidor sigue siendo 500 con su incidencia")
+    void loQueSiEsInternoNoSeDisfraza() throws Exception {
+        String expediente = expedienteConRec1();
+        convenios.revienta = true;
+
+        MvcResult resultado = fraccionar(expediente, false, "Se registra el convenio coactivo");
+
+        assertThat(resultado.getResponse().getStatus())
+                .as(
+                        "traducir lo que falta publicar no puede convertir TODO en 422: un defecto"
+                                + " del servidor tiene que seguir diciendo que lo es y dejar rastro")
+                .isEqualTo(500);
+        assertThat(resultado.getResponse().getContentAsString()).contains("incidencia");
+    }
+
     // ------------------------------------------------------------------
+
+    /** El mismo borde de costas con otro lector de parametros detras del arancel (#562). */
+    private MvcResult liquidarCon(LectorDeParametros lector) throws Exception {
+        MockMvc borde =
+                construir(
+                        new CostasController(
+                                new LiquidarCostas(
+                                        expedientes,
+                                        movimientos,
+                                        actos,
+                                        costas,
+                                        new ArancelDeCostasParametrizado(lector),
+                                        cargos,
+                                        (RegistroDeAuditoria registro) -> {},
+                                        RELOJ),
+                                new ConsultaDeCostas(costas, expedientes, libro),
+                                contribuyentes,
+                                RELOJ));
+        return borde.perform(
+                        MockMvcRequestBuilders.post("/api/v1/coactiva/liquidaciones-costas")
+                                .contentType(MediaType.APPLICATION_JSON)
+                                .content(
+                                        "{\"nroExpedCoact\":\"EXP-2026-000001\",\"observacion\":\"Se"
+                                                + " liquidan las costas del procedimiento\"}"))
+                .andReturn();
+    }
 
     private MvcResult listarCostas(String consulta) throws Exception {
         return costasMvc
@@ -502,6 +651,44 @@ class CostasYConveniosControllerTest {
         }
     }
 
+    /** Ningun conjunto sellado rige el ejercicio: lo que ocurre hoy en todas (D-02a, #562). */
+    private static final class ArancelSinSellar implements LectorDeParametros {
+
+        @Override
+        public ParametrosSellados vigenteEn(Ejercicio ejercicio) {
+            throw new EjercicioSinSellar(ejercicio);
+        }
+
+        @Override
+        public ParametrosSellados porConjunto(IdentificadorDeConjunto identificador) {
+            throw new ConjuntoNoSellado(identificador);
+        }
+
+        @Override
+        public IdentificadorDeConjunto conjuntoVigenteEn(Ejercicio ejercicio) {
+            throw new EjercicioSinSellar(ejercicio);
+        }
+    }
+
+    /** Hay conjunto sellado y no trae el arancel de la REC-1: el caso que #42 ya traducia. */
+    private static final class SinArancelDeLaRec1 implements LectorDeParametros {
+
+        @Override
+        public ParametrosSellados vigenteEn(Ejercicio ejercicio) {
+            return ParametrosSellados.de(ejercicio, 1).construir();
+        }
+
+        @Override
+        public ParametrosSellados porConjunto(IdentificadorDeConjunto identificador) {
+            return vigenteEn(EJERCICIO);
+        }
+
+        @Override
+        public IdentificadorDeConjunto conjuntoVigenteEn(Ejercicio ejercicio) {
+            return IdentificadorDeConjunto.de(1);
+        }
+    }
+
     /**
      * El puerto de tesoreria, sin tesoreria detras.
      *
@@ -514,16 +701,40 @@ class CostasYConveniosControllerTest {
 
         private int registrados;
 
+        /**
+         * Lo que el adaptador de tesoreria diria cuando falta publicar una cifra (#562).
+         *
+         * <p>Es texto y no un interruptor porque el mensaje <b>es</b> lo que se prueba: nombra la
+         * llave —{@code INTERES_FRACCIONAMIENTO:ORDINARIO}— o el ejercicio cuando lo que falta es
+         * el conjunto entero, y esa distincion separa tres arreglos distintos (#547).
+         */
+        private @org.jspecify.annotations.Nullable String faltaPublicar;
+
+        /** Un defecto de verdad del servidor, para el contraste. */
+        private boolean revienta;
+
         @Override
         public ConvenioCoactivo simular(SolicitudDeConvenioCoactivo solicitud) {
+            fallarSiToca();
             return convenio(solicitud, null);
         }
 
         @Override
         public ConvenioCoactivo registrar(
                 SolicitudDeConvenioCoactivo solicitud, Observacion observacion) {
+            fallarSiToca();
             registrados++;
             return convenio(solicitud, "F-2026-000001");
+        }
+
+        private void fallarSiToca() {
+            if (revienta) {
+                throw new IllegalStateException("un defecto de verdad, con su rastro");
+            }
+            if (faltaPublicar != null) {
+                throw new CondicionesSinPublicar(
+                        faltaPublicar, new IllegalStateException(faltaPublicar));
+            }
         }
 
         private static ConvenioCoactivo convenio(

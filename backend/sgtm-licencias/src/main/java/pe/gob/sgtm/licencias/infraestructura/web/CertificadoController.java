@@ -33,6 +33,7 @@ import pe.gob.sgtm.licencias.dominio.CertificadoRepository;
 import pe.gob.sgtm.licencias.dominio.CriterioDeCertificados;
 import pe.gob.sgtm.licencias.dominio.ParametrosUrbanisticos;
 import pe.gob.sgtm.licencias.dominio.TipoDeCertificado;
+import pe.gob.sgtm.parametros.LectorDeParametros;
 import pe.gob.sgtm.web.Api;
 import pe.gob.sgtm.web.CodigoDeError;
 import pe.gob.sgtm.web.ParametrosDePaginacion;
@@ -61,6 +62,18 @@ import pe.gob.sgtm.web.RespuestaPaginada;
  * correlativo y entrega un papel</b>. Reenviar la misma peticion devuelve {@code 200} con el
  * certificado de la primera vez en lugar de {@code 201} con otro numero por el mismo derecho
  * pagado. La garantia no es esta lectura, es {@code certificado_idempotencia_uq} (V51).
+ *
+ * <h2>Que devuelve 422, y por que no 500 (#562)</h2>
+ *
+ * <p>El concepto del TUPA y los meses de vigencia del certificado salen del <b>conjunto sellado</b>
+ * que rige a la fecha de la emision ({@link DerechosDeTramiteParametrizados}, regla 5). La llave
+ * que falta dentro del conjunto ya estaba traducida desde #54; que <b>no exista ningun conjunto
+ * sellado</b> ({@code EjercicioSinSellar}) salia como <b>500 {@code ERROR_INTERNO} con
+ * identificador de incidencia</b>, y con D-02a abierta ese es el estado <i>normal</i> de todas las
+ * municipalidades. El razonamiento completo esta en la cabecera de {@link LicenciaController}.
+ *
+ * <p><b>La reimpresion no lo necesita</b>: {@code EmitirCertificado.reimprimir} no vuelve a pedir
+ * el derecho, asi que por esa ruta no se alcanza ninguna de las dos.
  */
 @RestController
 @RequestMapping(Api.RAIZ + "/licencias/certificados")
@@ -165,10 +178,12 @@ public class CertificadoController {
             throw new ProblemaDeNegocio(CodigoDeError.VALIDACION, mensajeDe(ajeno));
         } catch (ComprobacionDelDerecho.DerechoNoPagado sinPagar) {
             throw new ProblemaDeNegocio(CodigoDeError.VALIDACION, mensajeDe(sinPagar));
-        } catch (DerechosDeTramiteParametrizados.DerechoSinParametrizar sinParametro) {
+        } catch (DerechosDeTramiteParametrizados.DerechoSinParametrizar
+                | LectorDeParametros.EjercicioSinSellar sinParametro) {
             // 422 y no 500: la peticion esta bien y el sistema tampoco esta roto. Lo que falta es
             // un dato de configuracion —el concepto del TUPA o los meses de vigencia—, y quien
-            // opera tiene que enterarse de cual para poder pedirlo.
+            // opera tiene que enterarse de cual para poder pedirlo. `EjercicioSinSellar` —que no
+            // haya NINGUN conjunto sellado— es el mismo caso y hasta #562 salia como 500.
             throw new ProblemaDeNegocio(CodigoDeError.VALIDACION, mensajeDe(sinParametro));
         } catch (CertificadoRepository.ClaveRepetida carrera) {
             throw new ProblemaDeNegocio(CodigoDeError.CONFLICTO, mensajeDe(carrera));
