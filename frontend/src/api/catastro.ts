@@ -206,12 +206,19 @@ export type LoteDelPlano = {
  *
  * @property sinGeometria cuántos predios **del padrón**, con los mismos filtros
  *   de sector y manzana, no tienen polígono. Sale **siempre**, cero incluido.
- *   Y no es «los de este marco», aunque la descripción del contrato lo diga:
- *   `prediosSinGeometria` consulta con `WHERE p.geometria IS NULL` y **sin** el
- *   marco a propósito —un predio sin polígono no tiene sitio en ningún marco—.
- *   Medido: con `bbox=-180,-90,180,90` y con el marco de Piura, la misma cifra
- *   (14 422 en la municipalidad 9), y con `codigoDeSector=01`, 1. La
- *   descripción del contrato dice lo otro, y eso es #613.
+ *   Y no es «los de este marco»: `prediosSinGeometria` consulta con `WHERE
+ *   p.geometria IS NULL` y **sin** el marco a propósito —un predio sin polígono
+ *   no tiene sitio en ningún marco—. Medido: con `bbox=-180,-90,180,90` y con el
+ *   marco de Piura, la misma cifra (14 422 en la municipalidad 9), y con
+ *   `codigoDeSector=01`, 1.
+ *
+ *   Esta frase se escribió **contra la medición y contra el contrato**, que decía
+ *   lo otro. #613 le dio la razón a la medición y #644 corrigió la descripción,
+ *   así que hoy los dos dicen lo mismo. Lo que ahí se descartó conviene tenerlo a
+ *   mano por si alguien quiere «arreglar» la consulta metiéndole el marco: sería
+ *   peor que el defecto, porque las cuatro columnas `marco_*` de un predio sin
+ *   polígono son nulas y la cifra caería a **cero siempre**, justo cuando más
+ *   hace falta —hoy, sin un solo lote digitalizado en ninguna municipalidad—.
  */
 export type PlanoCatastral = {
   lotes: LoteDelPlano[];
