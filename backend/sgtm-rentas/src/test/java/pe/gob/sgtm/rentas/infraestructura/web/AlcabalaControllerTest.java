@@ -39,6 +39,7 @@ import pe.gob.sgtm.parametros.LectorDeParametros;
 import pe.gob.sgtm.parametros.ParametrosSellados;
 import pe.gob.sgtm.rentas.aplicacion.RegistrarAlcabala;
 import pe.gob.sgtm.rentas.dominio.ObjetoDeTransferencia;
+import pe.gob.sgtm.rentas.dominio.TipoTransferencia;
 import pe.gob.sgtm.rentas.dominio.Transferencia;
 import pe.gob.sgtm.rentas.dominio.TransferenciaRepository;
 import pe.gob.sgtm.rentas.dominio.predial.DetalleDeterminacionPredio;
@@ -278,7 +279,7 @@ class AlcabalaControllerTest {
                         null,
                         501L,
                         502L,
-                        "COMPRAVENTA",
+                        TipoTransferencia.COMPRA_VENTA,
                         LocalDate.of(2026, 3, 16),
                         Dinero.de("180000.00"),
                         Porcentaje.total(),

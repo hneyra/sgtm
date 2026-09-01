@@ -20,6 +20,7 @@ import pe.gob.sgtm.dominio.Placa;
 import pe.gob.sgtm.rentas.aplicacion.ConsultaDeVehiculos;
 import pe.gob.sgtm.rentas.aplicacion.ConsultasDeRentas;
 import pe.gob.sgtm.rentas.aplicacion.RegistrarTransferencia;
+import pe.gob.sgtm.rentas.dominio.TipoTransferencia;
 import pe.gob.sgtm.rentas.dominio.Vehiculo;
 import pe.gob.sgtm.web.Api;
 import pe.gob.sgtm.web.CodigoDeError;
@@ -63,7 +64,7 @@ public class TransferenciaVehiculoController {
                     transferencias.transferirVehiculo(
                             vehiculoId,
                             adquirienteId,
-                            exigir(peticion.tipoTransferencia(), "tipoTransferencia"),
+                            tipoDe(peticion.tipoTransferencia()),
                             fechaDe(peticion.fechaTransferencia()),
                             dineroDe(peticion.valorTransferencia()),
                             peticion.afectaAlcabala() != null && peticion.afectaAlcabala(),
@@ -117,6 +118,21 @@ public class TransferenciaVehiculoController {
             return Observacion.de(texto);
         } catch (IllegalArgumentException invalida) {
             throw new ProblemaDeNegocio(CodigoDeError.VALIDACION, mensajeDe(invalida));
+        }
+    }
+
+    /**
+     * El tipo del acto, contra el vocabulario cerrado de {@link TipoTransferencia} (#542).
+     *
+     * <p>Mismo trato que {@code PredioController.tipoDe} le da a {@code TipoPredio}: <b>422
+     * nombrando el valor</b>. Hasta #542 este campo era texto libre y {@code XXXX} entraba con un
+     * 201, lo que dejaba un acto que ninguna consulta encuentra por su tipo.
+     */
+    private static TipoTransferencia tipoDe(@Nullable String texto) {
+        try {
+            return TipoTransferencia.de(exigir(texto, "tipoTransferencia"));
+        } catch (IllegalArgumentException desconocido) {
+            throw new ProblemaDeNegocio(CodigoDeError.VALIDACION, mensajeDe(desconocido));
         }
     }
 
