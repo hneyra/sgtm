@@ -417,8 +417,9 @@ public class FichaCatastralRepositoryJdbc extends RepositorioJdbc
                 parametros.put(
                         "prediosAcotados", filtro.acotacion().predios().toArray(Long[]::new));
             }
-            case TODOS -> {
-                // No acota.
+            default -> {
+                // TODOS: no acota. Va como `default` y no como caso nombrado porque Checkstyle
+                // exige la rama por omision (MissingSwitchDefault) y el enumerado tiene tres.
             }
         }
 
