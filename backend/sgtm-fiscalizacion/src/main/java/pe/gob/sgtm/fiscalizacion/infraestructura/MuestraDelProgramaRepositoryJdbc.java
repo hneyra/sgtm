@@ -38,8 +38,14 @@ public class MuestraDelProgramaRepositoryJdbc extends RepositorioJdbc
 
     private static final String DESDE = " FROM programa_muestra";
 
-    private static final OrdenSeguro ORDEN =
-            OrdenSeguro.sobre("cod_ref_catastral", "condicion", "sector_codigo", "id");
+    /**
+     * Por lo que la fila <b>publica</b> (#546): {@code sector_codigo} sale por HTTP como {@code
+     * sector}, y {@code id} pasa a desempate porque {@code MuestraResource} no lo publica.
+     */
+    static final OrdenSeguro ORDEN =
+            OrdenSeguro.sobre("cod_ref_catastral", "condicion", "sector_codigo")
+                    .publicandoComo("sector", "sector_codigo")
+                    .desempatandoPor("id");
 
     public MuestraDelProgramaRepositoryJdbc(JdbcClient jdbc) {
         super(jdbc);

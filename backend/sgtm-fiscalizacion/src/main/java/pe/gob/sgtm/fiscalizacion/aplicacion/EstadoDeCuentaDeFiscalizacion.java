@@ -71,7 +71,7 @@ public class EstadoDeCuentaDeFiscalizacion {
 
         List<Liquidacion> suyas = liquidaciones.deContribuyente(contribuyenteId);
         if (suyas.isEmpty()) {
-            return new EstadoDeCuenta(contribuyenteId, aLaFecha, List.of());
+            return new EstadoDeCuenta(contribuyenteId, aLaFecha, false, List.of());
         }
 
         List<ObligacionPublica> enElLibro = deuda.deTodoElContribuyente(contribuyenteId, aLaFecha);
@@ -90,7 +90,7 @@ public class EstadoDeCuentaDeFiscalizacion {
                 lineas.add(componer(liquidacion, linea, enElLibro, aLaFecha));
             }
         }
-        return new EstadoDeCuenta(contribuyenteId, aLaFecha, lineas);
+        return new EstadoDeCuenta(contribuyenteId, aLaFecha, true, lineas);
     }
 
     // ------------------------------------------------------------------
@@ -133,10 +133,14 @@ public class EstadoDeCuentaDeFiscalizacion {
      *
      * @param contribuyenteId el fiscalizado
      * @param aLaFecha el día al que están actualizadas todas las cifras (regla 9)
+     * @param fiscalizado si a este contribuyente se le abrió alguna vez una liquidación
      * @param lineas una por obligación fiscalizada
      */
     public record EstadoDeCuenta(
-            long contribuyenteId, LocalDate aLaFecha, List<LineaDelEstadoDeCuenta> lineas) {
+            long contribuyenteId,
+            LocalDate aLaFecha,
+            boolean fiscalizado,
+            List<LineaDelEstadoDeCuenta> lineas) {
 
         public EstadoDeCuenta {
             Objects.requireNonNull(aLaFecha, "Toda cifra indica a que fecha esta (regla 9)");
@@ -144,12 +148,23 @@ public class EstadoDeCuentaDeFiscalizacion {
         }
 
         /**
-         * El total, si <b>todas</b> las líneas tienen cifra.
+         * El total, si a este contribuyente se le fiscalizó y <b>todas</b> las líneas tienen cifra.
          *
          * <p>{@code null} si alguna no la tiene, y no la suma de las que sí: un total parcial
          * presentado como total es peor que ningún total, porque nadie lo distingue del completo.
+         *
+         * <p><b>Y {@code null} también cuando no hay ninguna línea</b> (#546). Sumar sobre la lista
+         * vacía da {@link Dinero#CERO}, y ese cero salía por HTTP como {@code "importe":"0"} para
+         * quien <b>nunca fue fiscalizado</b> — indistinguible del cero de quien sí lo fue y no debe
+         * nada, que es exactamente lo que el javadoc de {@code EstadoDeCuentaResource} dice de sí
+         * mismo que hay que evitar: «un cero se lee como *no debe nada*». No hay un total de un
+         * procedimiento que no existe; lo que hay es {@link #fiscalizado} en {@code false}, y la
+         * pantalla lo dice con palabras en vez de con una cifra.
          */
         public @Nullable Dinero total() {
+            if (!fiscalizado) {
+                return null;
+            }
             Dinero acumulado = Dinero.CERO;
             for (LineaDelEstadoDeCuenta linea : lineas) {
                 Dinero suya = linea.deuda();

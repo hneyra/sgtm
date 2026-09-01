@@ -57,7 +57,12 @@ public class LiquidacionRepositoryJdbc extends RepositorioJdbc implements Liquid
                     + " JOIN acta_fiscalizacion a"
                     + "   ON a.municipalidad_id = l.municipalidad_id AND a.id = l.acta_id";
 
-    private static final OrdenSeguro ORDEN = OrdenSeguro.sobre("numero", "fecha", "version", "id");
+    /**
+     * Por lo que la fila <b>publica</b> (#546): {@code id} pasa a desempate, porque {@code
+     * LiquidacionResource} no lo publica —lo que identifica una liquidacion es su {@code numero}—.
+     */
+    static final OrdenSeguro ORDEN =
+            OrdenSeguro.sobre("numero", "fecha", "version").desempatandoPor("id");
 
     public LiquidacionRepositoryJdbc(JdbcClient jdbc) {
         super(jdbc);

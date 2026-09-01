@@ -68,6 +68,10 @@ public class MuestraController {
      *
      * <p>{@code predio} viaja <b>por la consulta</b> y no por el cuerpo (#425): es como el acta
      * pide su propia fila, y una búsqueda que no cabe en la URL no se puede compartir ni recargar.
+     *
+     * <p><b>Un {@code id} que no existe es 404 nombrándolo</b> (#546). Cero filas significa «este
+     * programa todavía no ha sorteado su muestra», que es lo contrario de «ese programa no está»; y
+     * hasta este issue las dos respuestas eran idénticas byte a byte.
      */
     @GetMapping("/{id}/muestra")
     @RequiereAcceso(acceso = "fisc_programa", privilegio = Privilegio.LECTURA)
@@ -78,7 +82,14 @@ public class MuestraController {
 
         ConsultaDeMuestra.Resultado resultado =
                 muestra.buscar(
-                        id, predioOpcional(predio), paginacion.aPaginacion(ORDEN_POR_OMISION));
+                                id,
+                                predioOpcional(predio),
+                                paginacion.aPaginacion(ORDEN_POR_OMISION))
+                        .orElseThrow(
+                                () ->
+                                        new ProblemaDeNegocio(
+                                                CodigoDeError.NO_ENCONTRADO,
+                                                "No existe el programa de fiscalizacion " + id));
 
         Map<Long, ResumenDeContribuyente> padron = padronDe(resultado.pagina());
         return RespuestaPaginada.de(

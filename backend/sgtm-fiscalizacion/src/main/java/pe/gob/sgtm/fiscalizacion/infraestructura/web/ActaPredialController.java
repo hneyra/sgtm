@@ -25,6 +25,44 @@ import pe.gob.sgtm.web.ProblemaDeNegocio;
  *
  * <p>Trabaja sobre una copia: no toca ninguna fila de {@code catastro} (AC de #45). El cuerpo es
  * una <b>lista blanca</b>, mismo patrón que {@code TransferenciaPredioController}.
+ *
+ * <h2>No hay ningún {@code GET} de actas, y publicar uno no desbloquearía la pantalla (#546, AC 8)
+ * </h2>
+ *
+ * <p>Un acta se registra y no se puede volver a leer: el único sitio donde asoma es {@code
+ * MuestraResource.visitado}, que dice <b>si</b> un predio de la muestra ya tiene acta y nada más.
+ * Es un hueco real, y el issue de esa lectura es propio.
+ *
+ * <p>Lo que sí queda medido aquí es que <b>ese {@code GET} no es lo que le falta a la pantalla</b>.
+ * El destino {@code actas} del diseño es el acta en cuatro pasos con modo campo: dibuja 23
+ * controles y siete filas de contraste declarado/verificado, y el cuerpo de este {@code POST} tiene
+ * <b>nueve</b> campos —{@code observacion}, {@code programaId}, {@code contribuyenteId}, {@code
+ * predioId}, {@code fechaVisita}, {@code fiscalizador}, {@code hallazgo}, {@code areaHallada},
+ * {@code detalle}—. Un listado publicaría esos nueve, o sea la misma foto que ya no llena el
+ * formulario: lo que falta no es por dónde leer, es <b>dónde guardar</b>.
+ *
+ * <p>Y lo que falta es sobre todo una columna. {@code acta_fiscalizacion} (V4, V24) guarda {@code
+ * area_hallada} y <b>ninguna de uso</b>, así que el «uso observado» —el sexto de los siete
+ * contrastes, y el valor «USO DISTINTO AL DECLARADO» que el desplegable del manual ofrece— no cabe:
+ * hoy lo teclea quien liquida, como argumento de {@code LiquidarFiscalizacion.liquidar}, y quien
+ * visitó no puede dejarlo escrito. Es lo que impide que {@link
+ * pe.gob.sgtm.fiscalizacion.dominio.Hallazgo} gane el quinto valor que {@code CondicionFiscalizada}
+ * sí tiene, y por eso está anotado ahí y no aquí.
+ *
+ * <p>Las otras seis filas de contraste son estructura del predio —frente, fondo, número de pisos,
+ * material, estado de conservación— y ninguna existe todavía en ninguna tabla del acta; declararlas
+ * en el cuerpo sin tabla dejaría la petición aceptando datos que se pierden al guardar, que es peor
+ * que no aceptarlos.
+ *
+ * <p><b>Y es la misma lectura que le falta al embudo del programa</b> (#546, AC 10). Sus cuatro
+ * etapas son «Programados», «Inspeccionados», «Con liquidación» y «Notificadas»; la primera la da
+ * el total de {@code GET /programas/{id}/muestra} y las dos últimas los dos totales de {@code GET
+ * /fiscalizacion/resultados}, cada uno de su propia consulta. La única que no tiene de dónde salir
+ * es <b>«Inspeccionados»</b>, que es cuántas actas tiene el programa: {@code visitado} viaja fila a
+ * fila en la muestra y ninguna operación publica el recuento. No se compone en la interfaz —y no
+ * podría: sin las dos cifras no hay proporción que pintar—, así que el embudo dice «—» en esa
+ * etapa. El día que exista el {@code GET} de actas, esa etapa se llena con su {@code
+ * totalElementos} y no con una suma.
  */
 @RestController
 @RequestMapping(Api.RAIZ + "/fiscalizacion/predial/actas")
