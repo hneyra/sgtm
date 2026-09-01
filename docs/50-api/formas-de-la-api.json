@@ -2678,6 +2678,12 @@
     "totalPaginas": "entero",
     "hayMas": "booleano"
   },
+  "GET /seguridad/sesion/municipalidad": {
+    "id": "entero",
+    "ubigeo": "texto",
+    "nombre": "texto",
+    "tipo": "texto"
+  },
   "GET /seguridad/sesion/permisos": "objeto",
   "GET /seguridad/usuarios": {
     "contenido": [

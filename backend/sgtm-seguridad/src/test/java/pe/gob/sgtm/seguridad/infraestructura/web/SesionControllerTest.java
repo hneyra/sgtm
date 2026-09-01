@@ -56,6 +56,7 @@ class SesionControllerTest {
                             new SesionController(
                                     new AdministrarSesion(
                                             repositorioDeMentira(), null, null, RELOJ),
+                                    null,
                                     null))
                     .setControllerAdvice(new ManejadorDeErrores())
                     .setMessageConverters(

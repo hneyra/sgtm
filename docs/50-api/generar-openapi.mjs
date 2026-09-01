@@ -960,6 +960,35 @@ const OPERACIONES_ADICIONALES = {
         (REQ-03 §5). Un usuario sin ningún permiso recibe \`{}\`, no un 403.
       `),
     },
+    // Y a QUIEN pertenece la sesion (#555). Vive aqui por lo mismo que
+    // `permisos_de_la_sesion` —no es una opcion del catalogo, sino la sesion
+    // hablando de si misma— y no por afinidad con los permisos.
+    {
+      operationId: 'municipalidad_de_la_sesion',
+      metodo: 'get',
+      ruta: '/api/v1/seguridad/sesion/municipalidad',
+      titulo: 'Municipalidad de la sesión',
+      descripcion: literal(`
+        A quién pertenecen las cifras de la pantalla: la municipalidad a la que
+        pertenece la sesión, con su nombre tal como sale impreso.
+
+        **Sin ningún parámetro, y eso es la decisión.** El identificador sale del claim
+        \`municipalidad_id\` del token, se fija una vez con \`SET LOCAL\` y lo compara el
+        \`WHERE\` de la consulta (ARQ-03 §3.1). Admitir un identificador convertiría esta
+        lectura en un **directorio de municipalidades**: con el token de A no hay forma de
+        obtener el nombre de B, y un parámetro de más se rechaza con 422 nombrándolo.
+
+        Autenticada, pero **no es una opción del catálogo**: el rótulo de la entidad no es
+        de un módulo, es del sistema entero, y sin él las doce pantallas quedan sin decir
+        de quién son sus cifras. Cualquier sesión válida la lee, tenga los permisos que
+        tenga — el mismo trato que \`permisos_de_la_sesion\` (ADR-0013).
+
+        \`nombre\` es el nombre **completo**, con su tipo delante —«Municipalidad Distrital
+        de Catacaos»—, porque de ahí sale el membrete de las hojas que se imprimen; \`tipo\`
+        va aparte para quien necesite distinguir una distrital de una provincial y **no se
+        antepone**. \`ubigeo\` son los seis dígitos del distrito.
+      `),
+    },
     // Y la matriz de OTRO usuario, que es la que se administra (#543). No sale
     // de `permisos_de_la_sesion` —aquella no tiene sujeto, sale del token— ni de
     // `permisos_de_grupo` —aquella devuelve lo configurado de un grupo, no lo
@@ -2552,6 +2581,33 @@ const RESPUESTAS = {
       tipoDeContenido: 'application/octet-stream',
       esquema: '{ type: string, format: binary }',
     },
+  },
+  // Sin 422 por lo mismo que `permisos_de_la_sesion`: no recibe cuerpo ni
+  // filtros, asi que no hay regla de negocio que pueda incumplir. Y la forma se
+  // describe entera porque la interfaz la consume entera: de estos tres campos
+  // salen el rotulo de la cabecera, el membrete de las hojas imprimibles y el
+  // ubigeo que el alta de predio prefijaba compilado (#555).
+  municipalidad_de_la_sesion: {
+    principal: {
+      codigo: '200',
+      descripcion: 'La municipalidad a la que pertenece la sesión',
+      esquema: sangrado(`
+        type: object
+        required: [id, ubigeo, nombre, tipo]
+        properties:
+          id: { type: integer, format: int64 }
+          ubigeo: { type: string, minLength: 6, maxLength: 6 }
+          nombre: { type: string }
+          tipo: { type: string, enum: [DISTRITAL, PROVINCIAL] }
+      `),
+      ejemplo: sangrado(`
+        id: 1
+        ubigeo: "200105"
+        nombre: "Municipalidad Distrital de Catacaos"
+        tipo: "DISTRITAL"
+      `),
+    },
+    sinValidacion: true,
   },
   permisos_de_la_sesion: {
     principal: {
