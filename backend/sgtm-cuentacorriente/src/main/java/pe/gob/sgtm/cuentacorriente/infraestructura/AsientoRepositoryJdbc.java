@@ -13,6 +13,7 @@ import org.springframework.stereotype.Repository;
 import pe.gob.sgtm.auditoria.OrigenContext;
 import pe.gob.sgtm.compartido.Pagina;
 import pe.gob.sgtm.compartido.Paginacion;
+import pe.gob.sgtm.cuentacorriente.dominio.ActoDelLibro;
 import pe.gob.sgtm.cuentacorriente.dominio.Asiento;
 import pe.gob.sgtm.cuentacorriente.dominio.AsientoRepository;
 import pe.gob.sgtm.cuentacorriente.dominio.CargoAgregado;
@@ -53,7 +54,7 @@ public class AsientoRepositoryJdbc extends RepositorioJdbc implements AsientoRep
             "a.id, a.ejercicio, a.contribuyente_id, a.tributo, a.concepto, a.tipo, a.fase,"
                     + " a.periodo, a.predio_id, a.vehiculo_id, a.referencia_externa, a.monto,"
                     + " a.fecha_valor, a.documento_origen, a.asiento_reversado_id, a.usuario_id,"
-                    + " a.motivo";
+                    + " a.motivo, a.acto";
 
     private static final String DESDE = " FROM cuenta_corriente_asiento a";
 
@@ -332,6 +333,23 @@ public class AsientoRepositoryJdbc extends RepositorioJdbc implements AsientoRep
             "('INSOLUTO', 'REAJUSTE', 'INTERES', 'GASTO')";
 
     /**
+     * El filtro que separa una baja de deuda de un cobro, <b>por el acto y no por el signo</b>
+     * (#601, V67).
+     *
+     * <p>Los cuatro {@link #CONCEPTOS_DE_COBRANZA} no bastan: el abono de una baja de deuda es un
+     * {@code ABONO} de concepto {@code INSOLUTO}, columna a columna el mismo asiento que el de una
+     * cobranza. Sin este filtro, extinguir deuda se publica como dinero que <b>entro</b> por
+     * ventanilla —hacia arriba y sin que nadie lo note—, que es lo mismo que #56 ya dijo de la
+     * condonacion.
+     *
+     * <p>{@code IS DISTINCT FROM} y no {@code <>}: la columna es nula en todo lo que no nacio de un
+     * alta ni de una baja —una emision, una cobranza, una reversion— y {@code <>} descartaria esas
+     * filas enteras, que son casi todas.
+     */
+    private static final String NO_ES_UNA_BAJA_DE_DEUDA =
+            "   AND a.acto IS DISTINCT FROM 'BAJA_DEUDA'";
+
+    /**
      * Lo cobrado de esos tributos entre dos fechas, agregado en el motor (#53, RF-073, RF-074).
      *
      * <p>Los tres filtros dicen lo mismo que su contrato: {@code tipo = 'ABONO'} —el cargo con que
@@ -387,6 +405,7 @@ public class AsientoRepositoryJdbc extends RepositorioJdbc implements AsientoRep
                 + filtroDeTributo
                 + "   AND a.concepto IN "
                 + CONCEPTOS_DE_COBRANZA
+                + NO_ES_UNA_BAJA_DE_DEUDA
                 + "   AND a.fecha_valor >= :desde"
                 + "   AND a.fecha_valor <= :hasta"
                 + "   AND NOT EXISTS ("
@@ -415,17 +434,39 @@ public class AsientoRepositoryJdbc extends RepositorioJdbc implements AsientoRep
      * ese defecto porque netea cargos contra abonos; este agregado solo mira un lado, y por eso
      * necesita decirlo.
      *
+     * <p><b>Y una cuarta, que es la de #601</b>: una deuda dada de baja deja de estar puesta a
+     * cobrar. La baja no es una reversion —es un asiento nuevo—, asi que no la cazaba ninguna de
+     * las tres anteriores: dar de alta 100 y darlo de baja despues devolvia la cartera al centimo y
+     * dejaba lo cargado con los 100. Medido en la instalacion de demostracion: seis altas de 100 y
+     * cinco bajas dejaban la cartera exacta y lo cargado en +600,07, o sea el denominador de todas
+     * las barras del panel inflado <b>por corregir bien</b>.
+     *
+     * <p>Se resta {@code acto = 'BAJA_DEUDA'}, <b>por el acto y no por el signo</b>. Netear todos
+     * los abonos de insoluto contra los cargos —{@code CARGO} menos {@code ABONO} a secas— se
+     * llevaria por delante los <b>cobros</b>, y «lo cargado» acabaria valiendo la cartera
+     * pendiente: el avance de cobranza saltaria al 100 % en cuanto alguien pagara. El abono de una
+     * cobranza es columna a columna el mismo asiento que el de una baja, y lo unico que los separa
+     * es {@link ActoDelLibro} (V67).
+     *
+     * <p>{@code cargos} cuenta solo las filas de {@code CARGO}: son los asientos que pusieron deuda
+     * a cobrar, y un acto que la quita no es «un cargo mas». Una baja anterior a V67 no lleva acto
+     * y no se puede reconocer —el libro no admite {@code UPDATE} (V7) y no se reescribe (regla 4)—:
+     * lo que este filtro arregla es de aqui en adelante.
+     *
      * <p>El filtro por {@code ejercicio} es ademas la <b>clave de particion</b> del libro (V2), asi
      * que esta consulta toca una sola particion aunque haya diez anos de asientos.
      */
     @Override
     public List<CargoAgregado> cargadoPorTributo(Ejercicio ejercicio) {
         return jdbc().sql(
-                        "SELECT a.tributo, sum(a.monto) AS cargado, count(*) AS cargos"
+                        "SELECT a.tributo,"
+                                + "       sum(CASE WHEN a.tipo = 'CARGO' THEN a.monto"
+                                + "                ELSE -a.monto END) AS cargado,"
+                                + "       count(*) FILTER (WHERE a.tipo = 'CARGO') AS cargos"
                                 + DESDE
                                 + " WHERE a.ejercicio = :ejercicio"
-                                + "   AND a.tipo = 'CARGO'"
                                 + "   AND a.concepto = 'INSOLUTO'"
+                                + "   AND (a.tipo = 'CARGO' OR a.acto = 'BAJA_DEUDA')"
                                 + "   AND a.asiento_reversado_id IS NULL"
                                 + "   AND NOT EXISTS ("
                                 + "         SELECT 1 FROM cuenta_corriente_asiento r"
@@ -551,14 +592,14 @@ public class AsientoRepositoryJdbc extends RepositorioJdbc implements AsientoRep
                                         + "  tributo, concepto, tipo, fase, periodo, predio_id,"
                                         + "  vehiculo_id, referencia_externa, monto, fecha_valor,"
                                         + "  documento_origen, asiento_reversado_id, usuario_id,"
-                                        + "  motivo)"
+                                        + "  motivo, acto)"
                                         + " VALUES ("
                                         + MUNICIPALIDAD_ACTUAL
                                         + ", :ejercicio, :contribuyenteId, :tributo, :concepto,"
                                         + "  :tipo, :fase, :periodo, :predioId, :vehiculoId,"
                                         + "  :referenciaExterna, :monto, :fechaValor,"
                                         + "  :documentoOrigen, :asientoReversadoId, :usuario,"
-                                        + "  :motivo)"
+                                        + "  :motivo, :acto)"
                                         + " RETURNING id")
                         .param("ejercicio", asiento.ejercicio().valor())
                         .param("contribuyenteId", asiento.contribuyenteId())
@@ -576,6 +617,7 @@ public class AsientoRepositoryJdbc extends RepositorioJdbc implements AsientoRep
                         .param("asientoReversadoId", asiento.asientoReversadoId())
                         .param("usuario", usuario)
                         .param("motivo", asiento.motivo())
+                        .param("acto", asiento.acto() == null ? null : asiento.acto().name())
                         .query(Long.class)
                         .single();
 
@@ -596,7 +638,8 @@ public class AsientoRepositoryJdbc extends RepositorioJdbc implements AsientoRep
                 asiento.documentoOrigen(),
                 asiento.asientoReversadoId(),
                 usuario,
-                asiento.motivo());
+                asiento.motivo(),
+                asiento.acto());
     }
 
     private static Asiento mapear(ResultSet fila, int numeroDeFila) throws SQLException {
@@ -626,6 +669,15 @@ public class AsientoRepositoryJdbc extends RepositorioJdbc implements AsientoRep
                 fila.getString("documento_origen"),
                 asientoReversadoId,
                 fila.getString("usuario_id"),
-                fila.getString("motivo"));
+                fila.getString("motivo"),
+                actoDe(fila.getString("acto")));
+    }
+
+    /**
+     * El acto del asiento, si el libro lo sabe. Nulo es «no nacio de un alta ni de una baja de
+     * deuda» —una emision, una cobranza, una reversion—, no «se desconoce» (#601, V67).
+     */
+    private static @Nullable ActoDelLibro actoDe(@Nullable String columna) {
+        return columna == null ? null : ActoDelLibro.valueOf(columna);
     }
 }

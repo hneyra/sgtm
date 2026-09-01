@@ -138,25 +138,41 @@ public record MovimientoDeDeuda(
      * Los conceptos son los del desglose, no {@code ANULACION} ni {@code CONDONACION}: el concepto
      * dice <b>contra que</b> se imputa, y el motivo por que. Quien lea el estado de cuenta tiene
      * que poder ver que una baja de S/ 100 quito S/ 80 de insoluto y S/ 20 de interes.
+     *
+     * <p><b>Y por eso cada asiento nace con su {@link ActoDelLibro}</b> (#601). Ese «por que» no
+     * cabia en ninguna columna: un abono de baja y un abono de cobranza son los dos {@code ABONO}
+     * de concepto {@code INSOLUTO}, de modo que «lo cargado» del panel se quedaba con el cargo de
+     * un alta que ya no debe nada y lo recaudado contaba la baja como dinero que entro. Cambiar el
+     * concepto no era una salida: {@code CalculoDeDeuda#netear} y {@code ProyeccionDelSaldo} netean
+     * <b>por concepto</b>, asi que una baja escrita como {@code ANULACION} dejaria de restar del
+     * insoluto y la deuda no bajaria.
      */
     public List<Asiento> enAsientos() {
         TipoAsiento tipo =
                 sentido == SentidoDelMovimiento.ALTA ? TipoAsiento.CARGO : TipoAsiento.ABONO;
+        ActoDelLibro acto =
+                sentido == SentidoDelMovimiento.ALTA
+                        ? ActoDelLibro.ALTA_DEUDA
+                        : ActoDelLibro.BAJA_DEUDA;
         List<Asiento> asientos = new ArrayList<>();
-        agregarSiTraeImporte(asientos, Concepto.INSOLUTO, insoluto, tipo);
-        agregarSiTraeImporte(asientos, Concepto.REAJUSTE, reajuste, tipo);
-        agregarSiTraeImporte(asientos, Concepto.INTERES, interes, tipo);
-        agregarSiTraeImporte(asientos, Concepto.GASTO, gasto, tipo);
+        agregarSiTraeImporte(asientos, Concepto.INSOLUTO, insoluto, tipo, acto);
+        agregarSiTraeImporte(asientos, Concepto.REAJUSTE, reajuste, tipo, acto);
+        agregarSiTraeImporte(asientos, Concepto.INTERES, interes, tipo, acto);
+        agregarSiTraeImporte(asientos, Concepto.GASTO, gasto, tipo, acto);
         return List.copyOf(asientos);
     }
 
     private void agregarSiTraeImporte(
-            List<Asiento> asientos, Concepto concepto, Dinero monto, TipoAsiento tipo) {
+            List<Asiento> asientos,
+            Concepto concepto,
+            Dinero monto,
+            TipoAsiento tipo,
+            ActoDelLibro acto) {
         if (monto.esCero()) {
             return;
         }
         asientos.add(
-                Asiento.nuevo(
+                Asiento.nuevoDelActo(
                         clave.ejercicio(),
                         clave.contribuyenteId(),
                         clave.tributo(),
@@ -169,6 +185,7 @@ public record MovimientoDeDeuda(
                         referenciaExterna,
                         monto,
                         fechaValor,
-                        documentoOrigen));
+                        documentoOrigen,
+                        acto));
     }
 }
