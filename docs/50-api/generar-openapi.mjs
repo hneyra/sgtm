@@ -493,11 +493,25 @@ const DEL_BACKEND = {
   // «Año» y «Tributo» los dibuja la pantalla, pero en la seccion «Filtros del
   // detalle» y no en la barra de filtros, que es lo unico que el prototipo
   // publica como `filters`. Por eso van aqui, y entre los dos que los rodean.
+  // El codigo del contribuyente se unifica en `codContribuyente` (#622). En la
+  // misma pantalla el mismo dato viajaba con tres grafias —`contribuyente` en
+  // predios y vehiculos, `codContribuyente` en deuda, pagos y valores, y
+  // `codigoCont` en altas y bajas—, de modo que el dia que una dejara de admitir
+  // su nombre el 422 nombraria un parametro que quien lee la pantalla no ha
+  // escrito. Las tres que no lo tenian lo ganan aqui; el nombre anterior sigue
+  // declarado y sigue admitido, porque es el que el frontend manda hoy.
   consulta_altas_bajas: [
+    {
+      nombre: 'codContribuyente',
+      ejemplo: '',
+      tras: 'codigoCont',
+      descripcion:
+        'Codigo del contribuyente, con el nombre unificado. «codigoCont» es el mismo dato',
+    },
     {
       nombre: 'ano',
       ejemplo: '',
-      tras: 'codigoCont',
+      tras: 'codContribuyente',
       descripcion: 'Filtro «Año» de la pantalla, dentro de «Filtros del detalle»',
     },
     {
@@ -529,7 +543,23 @@ const DEL_BACKEND = {
     },
   ],
   // La deuda de cada fila se actualiza a una fecha, y la fila la dice (regla 9).
+  consulta_predios: [
+    {
+      nombre: 'codContribuyente',
+      ejemplo: '',
+      tras: 'contribuyente',
+      descripcion:
+        'Codigo del contribuyente, con el nombre unificado. «contribuyente» es el mismo dato',
+    },
+  ],
   consulta_vehiculos: [
+    {
+      nombre: 'codContribuyente',
+      ejemplo: '',
+      tras: 'contribuyente',
+      descripcion:
+        'Codigo del contribuyente, con el nombre unificado. «contribuyente» es el mismo dato',
+    },
     {
       nombre: 'fecha',
       ejemplo: '',

@@ -93,6 +93,18 @@ public class ConsultarDeuda {
      * saldo proyectado es una cache de <i>hoy</i> (#23) y una fecha de corte pasada puede pedir
      * otra cosa.
      */
+    /**
+     * El identificador del contribuyente por su codigo, o vacio si no esta en el padron (#622).
+     *
+     * <p>Vacio no es una peticion mal formada: es un padron sin ese contribuyente, y quien pregunta
+     * por su deuda necesita distinguirlo de «no debe nada». Las dos frases se decian igual —200 con
+     * cero filas— y una de las dos es falsa.
+     */
+    @Transactional(readOnly = true)
+    public java.util.Optional<Long> contribuyentePorCodigo(String codigo) {
+        return repositorio.contribuyentePorCodigo(codigo);
+    }
+
     @Transactional(readOnly = true)
     public Pagina<ObligacionConDeuda> porContribuyente(
             CriterioDeDeudaPorContribuyente criterio, Paginacion paginacion) {
