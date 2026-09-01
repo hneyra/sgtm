@@ -60,6 +60,7 @@ import pe.gob.sgtm.parametros.infraestructura.ParametrosRepositoryJdbc;
 import pe.gob.sgtm.plataforma.tenant.TenantTransactionManager;
 import pe.gob.sgtm.rentas.aplicacion.ConsultaDeConciliacion.FichaConciliada;
 import pe.gob.sgtm.rentas.dominio.PlantillaDeNumeroDeDeclaracion;
+import pe.gob.sgtm.rentas.infraestructura.ConciliacionRepositoryJdbc;
 import pe.gob.sgtm.rentas.infraestructura.DeclaracionJuradaRepositoryJdbc;
 import pe.gob.sgtm.rentas.infraestructura.web.DeclaracionJuradaController;
 import pe.gob.sgtm.web.ConfiguracionDeJson;
@@ -142,6 +143,7 @@ class EscrituraDeDeclaracionJuradaJdbcTest {
                                                         new FichaCatastralRepositoryJdbc(jdbc),
                                                         padron))),
                                 declaraciones,
+                                new ConciliacionRepositoryJdbc(jdbc),
                                 new AuditoriaJdbc(jdbc, RELOJ),
                                 RELOJ));
 

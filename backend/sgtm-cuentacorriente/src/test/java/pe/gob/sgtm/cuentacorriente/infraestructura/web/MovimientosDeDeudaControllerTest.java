@@ -323,6 +323,14 @@ class MovimientosDeDeudaControllerTest {
         }
 
         @Override
+        public List<Ejercicio> ejerciciosAsentables() {
+            // El libro de mentira acepta el ejercicio de las pruebas de este archivo. Lo que
+            // el ejercicio sin particion produce se mide contra PostgreSQL, en
+            // AltaDeDeudaPorRangoFronteraTest: aqui no hay particiones que consultar.
+            return List.of(new Ejercicio(2026), new Ejercicio(2027));
+        }
+
+        @Override
         public Optional<Asiento> findById(long id) {
             throw noLoUsa();
         }

@@ -350,6 +350,7 @@ class ContratoDeApiTest {
                     // dependerlo cerraria el ciclo de modulos. La sirve rentas, en esta ruta, y
                     // la de catastro redirige alli la peticion que trae el filtro.
                     "GET /catastro/fichas/conciliacion",
+                    "GET /catastro/fichas/conciliacion/resumen",
                     // #366 — ADR-0015 §2.4: el titular del predio, resuelto al clic. La grilla
                     // sigue publicando el nombre y no el identificador; quien quiera el codigo
                     // del contribuyente lo pide aqui, de un predio cada vez, con el permiso del

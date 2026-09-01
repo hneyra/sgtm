@@ -299,6 +299,23 @@ const SUPRIMIDOS = {
  * la consulta de vehiculos, despues del estado.
  */
 const DEL_BACKEND = {
+  // El catalogo vial gana un filtro que el prototipo no dibuja: una via dada de
+  // baja no deberia poder elegirse para un predio nuevo (RNF-051: no se borra,
+  // se desactiva) y hasta #565 salia en la lista sin distinguirse.
+  calles: [
+    {
+      nombre: 'activa',
+      ejemplo: 'true',
+      tras: 'sector',
+      esquema: '{ type: string, enum: [true, false] }',
+      descripcion: bloque(`
+        Solo las vigentes («true»), solo las dadas de baja («false») o las dos (ausente).
+        Cualquier otra palabra es 422: un «si» tecleado que se leyera como «no filtres»
+        devolveria a la lista las vias que se dieron de baja, que es lo que este filtro existe
+        para impedir.
+      `),
+    },
+  ],
   auditoria: [
     {
       nombre: 'ejercicio',
@@ -758,6 +775,23 @@ const DESCRIPCIONES_DE_FILTRO = {
       'Filtro «Uso» de la pantalla. NO SE SIRVE, y por lo mismo que «zona»: el uso vive en' +
       ' ficha_catastral.uso, tambien texto libre —«Casa habitacion», «Tienda de artesania»—, y' +
       ' ninguno de los cinco usos en mayusculas del desplegable casa con el (#541).',
+  },
+  // Los cuatro filtros que el prototipo dibuja para el catalogo vial. Tres se
+  // sirven desde #565 y uno se rechaza: `via` (V1) no tiene columna de sector.
+  calles: {
+    codigoDeVia: 'Filtro «Código de vía» de la pantalla. Por PREFIJO del codigo (#565).',
+    nombreDeCalle:
+      'Filtro «Nombre de calle» de la pantalla. Por PREFIJO del nombre, sin distinguir' +
+      ' mayusculas ni tildes: el catalogo real guarda «Cayetano Heredia» y en ventanilla se' +
+      ' teclea «cayetano» (#565).',
+    tipoDeVia:
+      'Filtro «Tipo de vía» de la pantalla. Por igualdad contra el enumerado TipoVia; un tipo' +
+      ' que no existe es 422 nombrandolo, no una pagina vacia (#565).',
+    sector:
+      'Filtro «Sector» de la pantalla. NO SE SIRVE: se rechaza con 422 con cualquier valor. La' +
+      ' tabla `via` (V1) no guarda el sector y `ViaResource` no lo publica —Track 2 de #290—,' +
+      ' asi que no hay contra que comparar; ignorarlo devolveria el catalogo entero bajo un' +
+      ' filtro tecleado (#565).',
   },
   consulta_fichas: {
     conciliadaConRentas:
@@ -1221,6 +1255,47 @@ const OPERACIONES_ADICIONALES = {
         },
       ],
       paginacion: true,
+    },
+    // El recuento de la conciliacion (#564). No es la grilla con `tamano=1`: la
+    // grilla NO SE PUEDE USAR PARA CONTAR —el filtro se aplica sobre la pagina y
+    // `totalElementos` sigue siendo el del padron sin filtrar—, y medido sobre
+    // Catacaos los tres valores del filtro devolvian 14 422, o sea el padron
+    // entero. El panel de Catastro pintaba con esa cifra «Predios sin conciliar:
+    // 14 422» encima de «14 422 predios en el padron».
+    //
+    // No pagina y no acepta los filtros de la grilla, a proposito: la pregunta es
+    // sobre el padron, y aceptarlos obligaria a repetir aqui aquel WHERE.
+    {
+      operationId: 'conciliacion_resumen',
+      metodo: 'get',
+      ruta: '/api/v1/catastro/fichas/conciliacion/resumen',
+      titulo: 'Recuento de la conciliación con rentas',
+      descripcion:
+        'Cuántos predios del padrón hay a esa fecha, cuántos declararon ese ejercicio y cuántos' +
+        ' no, resuelto en **una** consulta agregada y sin recorrer el padrón (#564). Existe' +
+        ' porque la grilla no sirve para contar: su filtro se aplica sobre la página ya devuelta' +
+        ' y su `totalElementos` es el del padrón sin filtrar. La población es la misma que lista' +
+        ' la grilla —las fichas vigentes a la fecha—, y que lo siga siendo lo comprueba una' +
+        ' prueba que compara las dos cifras. A diferencia de `conciliadaConRentas=No`, **no** ' +
+        'exige privilegio sobre `fisc_omisos` y **no** deja fila en la bitácora: aquella nombra' +
+        ' —es la lista de a quién no le va a llegar recibo— y ésta cuenta.',
+      parametros: [
+        {
+          nombre: 'ejercicio',
+          ejemplo: '2026',
+          descripcion:
+            'A qué ejercicio responde el recuento; si falta, el de la fecha de corte. La' +
+            ' respuesta lo dice siempre: no existe «sin conciliar», existe «sin conciliar a' +
+            ' 2026» (regla 9, RNF-075)',
+        },
+        {
+          nombre: 'fecha',
+          ejemplo: '2026-08-28',
+          descripcion:
+            'Fecha de corte a la que se resuelve qué versión de ficha rige, igual que en la' +
+            ' grilla; si falta, hoy',
+        },
+      ],
     },
     // El plano catastral (#500, ADR-0022). Cuelga de `/catastro/predios` porque
     // el recurso es el predio, y sale de `consulta_fichas` porque **es esa misma

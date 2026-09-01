@@ -7,6 +7,7 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
+import org.jspecify.annotations.Nullable;
 import org.springframework.jdbc.core.simple.JdbcClient;
 import org.springframework.stereotype.Repository;
 import pe.gob.sgtm.auditoria.OrigenContext;
@@ -42,6 +43,11 @@ import pe.gob.sgtm.persistencia.RepositorioJdbc;
  */
 @Repository
 public class AsientoRepositoryJdbc extends RepositorioJdbc implements AsientoRepository {
+
+    /**
+     * Memoria de {@link #ejerciciosAsentables()}; ver su javadoc para por que se puede memorizar.
+     */
+    private volatile @Nullable List<Ejercicio> particiones;
 
     private static final String COLUMNAS =
             "a.id, a.ejercicio, a.contribuyente_id, a.tributo, a.concepto, a.tipo, a.fase,"
@@ -485,6 +491,53 @@ public class AsientoRepositoryJdbc extends RepositorioJdbc implements AsientoRep
                 // atajo devuelve List<@Nullable Long>, que NullAway rechaza con razon.
                 .query((fila, numeroDeFila) -> fila.getLong("contribuyente_id"))
                 .list();
+    }
+
+    /**
+     * Los ejercicios con particion declarada en {@code cuenta_corriente_asiento} (#597).
+     *
+     * <p>Se lee del catalogo y no de una lista escrita en Java: una constante quedaria vieja en
+     * silencio el dia que una migracion anada 2028, que es el mismo modo de fallo que este issue
+     * describe con otro nombre.
+     *
+     * <p>La expresion del limite de cada particion se parte por comas para admitir tambien una
+     * particion que agrupe varios ejercicios, y de cada trozo se toma el primer numero. <b>Los dos
+     * detalles salieron de ejecutarlo</b>: {@code ejercicio} es un <b>dominio</b> sobre {@code
+     * int}, y {@code pg_get_expr} imprime el limite de una columna de dominio <b>entrecomillado</b>
+     * —{@code FOR VALUES IN ('2026')}, no {@code (2026)}—, de modo que la version obvia se caia con
+     * «invalid input syntax for type integer: "'2026'"» <b>en la primera alta de cualquier
+     * ejercicio</b>. Una particion {@code DEFAULT} no lleva ningun numero y se descarta: no la hay,
+     * y si algun dia la hubiera esta comprobacion seria mas estricta de lo necesario, nunca mas
+     * laxa.
+     *
+     * <p><b>Se memoriza.</b> La lista cambia solo con una migracion, y las migraciones corren antes
+     * de que el proceso web atienda (ADR-0003); preguntarlo por asiento costaria una consulta al
+     * catalogo por cada fila de una emision masiva, que son decenas de miles.
+     */
+    @Override
+    public List<Ejercicio> ejerciciosAsentables() {
+        List<Ejercicio> memorizados = particiones;
+        if (memorizados != null) {
+            return memorizados;
+        }
+        List<Ejercicio> leidos =
+                jdbc().sql(
+                                """
+                                SELECT DISTINCT substring(valor from '[0-9]+')::int AS ejercicio
+                                  FROM pg_catalog.pg_inherits i
+                                  JOIN pg_catalog.pg_class c ON c.oid = i.inhrelid,
+                                       LATERAL regexp_split_to_table(
+                                           substring(pg_get_expr(c.relpartbound, c.oid)
+                                                     from 'FOR VALUES IN \\((.*)\\)'),
+                                           ',') AS valor
+                                 WHERE i.inhparent = 'cuenta_corriente_asiento'::regclass
+                                   AND substring(valor from '[0-9]+') IS NOT NULL
+                                 ORDER BY ejercicio
+                                """)
+                        .query((fila, numeroDeFila) -> new Ejercicio(fila.getInt("ejercicio")))
+                        .list();
+        particiones = List.copyOf(leidos);
+        return particiones;
     }
 
     @Override

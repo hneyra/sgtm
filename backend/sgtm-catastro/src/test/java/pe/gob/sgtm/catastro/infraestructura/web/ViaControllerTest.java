@@ -31,6 +31,7 @@ import pe.gob.sgtm.autorizacion.ComprobadorDeAcceso;
 import pe.gob.sgtm.autorizacion.Privilegio;
 import pe.gob.sgtm.catastro.aplicacion.ConsultaDeVias;
 import pe.gob.sgtm.catastro.aplicacion.RegistrarVia;
+import pe.gob.sgtm.catastro.dominio.CriterioDeVia;
 import pe.gob.sgtm.catastro.dominio.TipoVia;
 import pe.gob.sgtm.catastro.dominio.Via;
 import pe.gob.sgtm.catastro.dominio.ViaRepository;
@@ -476,6 +477,97 @@ class ViaControllerTest {
         return asentado.get(asentado.size() - 1);
     }
 
+    // ---------------------------------------------------- los filtros (#565)
+
+    @Test
+    @DisplayName("los tres filtros que se sirven viajan al criterio")
+    void losTresFiltrosViajan() throws Exception {
+        mvc.perform(
+                        get("/api/v1/catastro/vias")
+                                .param("codigoDeVia", "V-1")
+                                .param("nombreDeCalle", "grau")
+                                .param("tipoDeVia", "avenida")
+                                .param("activa", "true"))
+                .andReturn();
+
+        assertThat(repositorio.ultimoCriterio).isNotNull();
+        assertThat(repositorio.ultimoCriterio.codigo()).isEqualTo("V-1");
+        assertThat(repositorio.ultimoCriterio.nombre()).isEqualTo("grau");
+        assertThat(repositorio.ultimoCriterio.tipo()).isEqualTo(TipoVia.AVENIDA);
+        assertThat(repositorio.ultimoCriterio.activa()).isTrue();
+    }
+
+    @Test
+    @DisplayName("sin filtros el criterio no acota: sigue siendo el catalogo entero")
+    void sinFiltrosNoAcota() throws Exception {
+        mvc.perform(get("/api/v1/catastro/vias")).andReturn();
+
+        assertThat(repositorio.ultimoCriterio).isEqualTo(CriterioDeVia.todas());
+    }
+
+    @Test
+    @DisplayName("un tipo de via que el enumerado no tiene es 422 nombrandolo, no cero filas")
+    void tipoDeViaDesconocidoEs422() throws Exception {
+        MvcResult resultado =
+                mvc.perform(get("/api/v1/catastro/vias").param("tipoDeVia", "AUTOPISTA"))
+                        .andReturn();
+
+        assertThat(resultado.getResponse().getStatus())
+                .as(
+                        "una pagina vacia y «ese tipo no existe» se leen igual en pantalla, y solo"
+                                + " una de las dos significa «no hay ninguna via asi»")
+                .isEqualTo(422);
+        assertThat(resultado.getResponse().getContentAsString()).contains("AUTOPISTA");
+        assertThat(repositorio.ultimoCriterio).as("y no se llega a consultar").isNull();
+    }
+
+    @Test
+    @DisplayName("el filtro «Sector» se rechaza con su motivo, no se ignora")
+    void elSectorSeRechaza() throws Exception {
+        MvcResult resultado =
+                mvc.perform(get("/api/v1/catastro/vias").param("sector", "S-01")).andReturn();
+
+        assertThat(resultado.getResponse().getStatus())
+                .as(
+                        "la tabla `via` no guarda el sector: ignorarlo devolveria el catalogo"
+                                + " entero bajo un filtro tecleado, y eso se lee como filtrado")
+                .isEqualTo(422);
+        assertThat(resultado.getResponse().getContentAsString()).contains("sector");
+        assertThat(repositorio.ultimoCriterio).isNull();
+    }
+
+    @Test
+    @DisplayName("«activa» solo admite true o false; un «si» es 422 y no un false silencioso")
+    void activaSoloAdmiteTrueOFalse() throws Exception {
+        MvcResult resultado =
+                mvc.perform(get("/api/v1/catastro/vias").param("activa", "si")).andReturn();
+
+        assertThat(resultado.getResponse().getStatus()).isEqualTo(422);
+        assertThat(resultado.getResponse().getContentAsString()).contains("activa");
+        assertThat(repositorio.ultimoCriterio)
+                .as(
+                        "convertido a `false` en silencio, el filtro que existe para esconder las"
+                                + " vias dadas de baja ensenaria justo esas")
+                .isNull();
+    }
+
+    @Test
+    @DisplayName("un filtro en blanco no acota, que no es lo mismo que rechazarlo")
+    void unFiltroEnBlancoNoAcota() throws Exception {
+        MvcResult resultado =
+                mvc.perform(
+                                get("/api/v1/catastro/vias")
+                                        .param("sector", "  ")
+                                        .param("nombreDeCalle", "")
+                                        .param("activa", ""))
+                        .andReturn();
+
+        assertThat(resultado.getResponse().getStatus())
+                .as("una caja de filtro vacia es la pantalla recien abierta, no un valor malo")
+                .isEqualTo(200);
+        assertThat(repositorio.ultimoCriterio).isEqualTo(CriterioDeVia.todas());
+    }
+
     /**
      * Repositorio en memoria: aqui se prueba el transporte, no la persistencia.
      *
@@ -494,6 +586,7 @@ class ViaControllerTest {
                                 new Via(2L, "V-2", TipoVia.CALLE, "Calle Lima", "200101", true)));
 
         private Paginacion ultima;
+        private CriterioDeVia ultimoCriterio;
         private boolean fallarConOrdenNoAdmitido;
         private long siguienteId = 3L;
 
@@ -508,7 +601,8 @@ class ViaControllerTest {
         }
 
         @Override
-        public Pagina<Via> findAll(Paginacion paginacion) {
+        public Pagina<Via> buscar(CriterioDeVia criterio, Paginacion paginacion) {
+            this.ultimoCriterio = criterio;
             this.ultima = paginacion;
             if (fallarConOrdenNoAdmitido) {
                 // El repositorio real valida contra su lista blanca; aqui se reproduce

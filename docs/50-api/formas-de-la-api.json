@@ -231,6 +231,13 @@
     "totalPaginas": "entero",
     "hayMas": "booleano"
   },
+  "GET /catastro/fichas/conciliacion/resumen": {
+    "ejercicio": "entero",
+    "aLaFecha": "fecha",
+    "total": "entero",
+    "conciliados": "entero",
+    "noConciliados": "entero"
+  },
   "GET /catastro/fichas/economica/{codRefCatastral}": {
     "id": "entero",
     "predioId": "entero",
@@ -1500,6 +1507,7 @@
   "GET /consultas/vehiculos": {
     "contenido": [
       {
+        "vehiculoId": "entero",
         "placa": "texto",
         "clase": "texto",
         "marca": "texto",
@@ -2532,6 +2540,7 @@
   "GET /rentas/vehiculos": {
     "contenido": [
       {
+        "vehiculoId": "entero",
         "placa": "texto",
         "clase": "texto",
         "marca": "texto",
