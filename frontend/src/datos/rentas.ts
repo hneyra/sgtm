@@ -1308,12 +1308,22 @@ export const CAMPOS_DE_LA_BAJA: CampoDef[] = [
     k: 'causal',
     l: 'Causal',
     t: 'sel',
-    v: 'PRESCRIPCIÓN DECLARADA',
-    o: ['PRESCRIPCIÓN DECLARADA', 'RESOLUCIÓN QUE DEJA SIN EFECTO', 'ERROR MATERIAL', 'COMPENSACIÓN', 'DEUDA DE COBRANZA DUDOSA', 'CONDONACIÓN POR ORDENANZA'],
+    /* Nace VACIA, y esa opcion primera es el arreglo de #636. Tenia
+       `PRESCRIPCIÓN DECLARADA` por omision, asi que la causal se escribia en la
+       bitacora la hubiera elegido alguien o no — medido: una baja que fue un
+       error material quedo auditada como «PRESCRIPCIÓN DECLARADA. Deshace el
+       alta…», y las dos cosas no se parecen: la prescripcion es una declaracion
+       sobre el plazo del art. 43 y no se revierte; el error material es una
+       correccion. Y lo escrito se queda, porque el libro no admite `UPDATE`
+       (regla 4, V29/V30). Es #331 —«un desplegable que ensena 2026 y manda
+       2024»— con la agravante de que aqui lo que viaja acaba en el texto que
+       defiende el acto ante una auditoria. */
+    v: '',
+    o: ['', 'PRESCRIPCIÓN DECLARADA', 'RESOLUCIÓN QUE DEJA SIN EFECTO', 'ERROR MATERIAL', 'COMPENSACIÓN', 'DEUDA DE COBRANZA DUDOSA', 'CONDONACIÓN POR ORDENANZA'],
     /* `PeticionDeMovimiento` no tiene campo para la causal, asi que se copia a la
        observacion, que es donde queda auditada (RNF-052). Dejarla suelta seria un
        desplegable que se elige y no llega: el defecto de #331. */
-    ayuda: 'El cuerpo del backend no tiene campo propio para la causal: se antepone a la observación, que es donde queda auditada',
+    ayuda: 'El cuerpo del backend no tiene campo propio para la causal: se antepone a la observación, que es donde queda auditada. Sin elegirla no se puede dar de baja',
   },
   { k: 'numRes', l: 'Nº de resolución', t: 'text', ayuda: 'Es el sustento documental de la baja: sin él no se registra' },
   {

@@ -2412,6 +2412,12 @@ export default function Rentas({ dest, onDest }: PantallaProps) {
     if (cruceDeLaBaja.datos !== null && cruceDeLaBaja.datos.estado === 'ajena' && !declaraTitularAnteriorEnLaBaja)
       return `La unidad de esa obligación ${cruceDeLaBaja.datos.de}, no de ${sujetoDeDeuda.nombreRazonSocial}. Si la deuda es de cuando sí era suya, márcalo en la casilla de debajo de la tabla; si no, revisa la fila marcada`;
     if (observacionDelActo.trim() === '') return 'Falta la observación: sin motivo no se guarda';
+    /* La causal no tiene valor por omision desde #636, y por eso hace falta
+       exigirla aqui: se antepone a la observacion, que es LO UNICO que se audita
+       del acto, asi que una por omision quedaria escrita sin que nadie la
+       eligiera. Y no se puede corregir despues: el libro no admite `UPDATE`. */
+    if (texto('causal').trim() === '')
+      return 'Elige la causal: es lo primero que se lee en la observación del acto, que es lo único que queda auditado de una baja, y no se puede corregir después';
     if (texto('numRes').trim() === '')
       return 'Falta el Nº de resolución: sin la resolución que la aprueba, una baja no se puede defender ante nadie';
     return undefined;
