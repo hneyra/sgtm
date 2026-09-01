@@ -5,6 +5,7 @@ import java.time.Instant;
 import java.time.LocalDate;
 import java.util.List;
 import java.util.Objects;
+import org.jspecify.annotations.Nullable;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import pe.gob.sgtm.auditoria.Auditoria;
@@ -60,6 +61,54 @@ public class AdministrarParametros {
     @Transactional(readOnly = true)
     public Pagina<ParametroTributario> parametros(Paginacion paginacion) {
         return repositorio.parametros(paginacion);
+    }
+
+    /**
+     * Si un ejercicio tiene conjunto <b>sellado</b>, y cual (#605).
+     *
+     * <p><b>Que problema resuelve.</b> Hasta aqui la unica forma de saberlo era mandar la peticion
+     * de calculo y recibir el 422 de {@code LectorDeParametros.EjercicioSinSellar}: quien fracciona
+     * teclea el contribuyente, marca las deudas, rellena cuotas, garantia y vencimiento —y en el
+     * preconvenio, la observacion que la regla 10 obliga a redactar antes de habilitar el boton—
+     * para enterarse al final de que el ejercicio no esta parametrizado, que con D-02a abierta es
+     * el estado de <b>todas</b> las municipalidades. Y no es solo convenios: el predial, la
+     * valorizacion del FUE, la liquidacion de fiscalizacion y el resumen anual de licencias tienen
+     * la misma forma de enterarse tarde.
+     *
+     * <p><b>Ninguna cifra sale de aqui.</b> Se publica si hay conjunto sellado y su identidad
+     * —{@code conjuntoId} y {@code version}—, que es exactamente lo que {@code
+     * ConvenioResource.conjuntoDeParametros} ya publica cuando el convenio existe y lo que {@code
+     * Determinacion} guarda para poder repetirse. Los valores son otra cosa y siguen detras del
+     * permiso de {@code parametros} (REQ-03: quien opera el sistema no publica las cifras con las
+     * que se calcula).
+     *
+     * <p><b>«No hay conjunto sellado» es una respuesta, no un error.</b> La pregunta es «¿hay
+     * conjunto sellado para este ejercicio?» —no «¿se puede calcular?», que depende ademas de que
+     * cada llave que la regla pida este dentro— y su respuesta puede ser que no; devolver vacio
+     * obligaria a quien pregunta a distinguir dos ausencias que aqui no son distintas —un ejercicio
+     * sin ninguna version y uno con la version abierta— porque para calcular las dos valen igual.
+     * Lo que si tiene que salir distinto es un ejercicio <b>fuera de rango</b>, y sale: {@link
+     * Ejercicio} lo rechaza en su constructor y el borde lo traduce a 422.
+     *
+     * <p><b>No deja fila en la bitacora, y es deliberado.</b> Es el unico endpoint del sistema
+     * fuera del catalogo de opciones —{@code SESION_PROPIA}, para que un cajero con {@code
+     * fraccionamiento} pueda preguntarlo sin necesitar el permiso de {@code parametros}—, y los
+     * cinco escritores de {@code Operacion.ACCESO} que ya existen estan todos detras de un acceso
+     * del catalogo o de la cadena firmada del ciudadano. Auditar aqui pondria una escritura <b>sin
+     * cota</b> al alcance de cualquier token valido, sobre una tabla que es append-only por diseno:
+     * no hay {@code DELETE} (regla 4, RNF-051), no hay poda y no hay limite de peticiones.
+     *
+     * <p>Y no hace falta: lo que se publica no es dato del padron sino si la propia instalacion
+     * tiene sellado un ejercicio suyo, igual que {@code permisos_de_la_sesion} (ADR-0013) y {@code
+     * sesion/municipalidad} (#555), que tampoco auditan. Lo que sigue detras del permiso de {@code
+     * parametros} son las cifras (REQ-03).
+     */
+    @Transactional(readOnly = true)
+    public EstadoDelEjercicio estadoDelEjercicio(Ejercicio ejercicio) {
+        Objects.requireNonNull(ejercicio, "La pregunta es por un ejercicio concreto");
+
+        return new EstadoDelEjercicio(
+                ejercicio, repositorio.selladoVigenteDe(ejercicio).orElse(null));
     }
 
     /**
@@ -195,6 +244,24 @@ public class AdministrarParametros {
                                         CodigoDeError.NO_ENCONTRADO,
                                         "No hay ningun conjunto de parametros con identificador "
                                                 + id));
+    }
+
+    /**
+     * Si el ejercicio esta parametrizado, y con que conjunto.
+     *
+     * @param ejercicio el que se pregunto, devuelto tal cual: quien lee la respuesta tiene que
+     *     poder decir de que ano habla sin volver a mirar lo que envio
+     * @param sellado el conjunto sellado vigente, o nulo si el ejercicio no tiene ninguno
+     */
+    public record EstadoDelEjercicio(Ejercicio ejercicio, @Nullable ConjuntoDeParametros sellado) {
+
+        public EstadoDelEjercicio {
+            Objects.requireNonNull(ejercicio, "La respuesta dice de que ejercicio habla");
+        }
+
+        public boolean estaSellado() {
+            return sellado != null;
+        }
     }
 
     private void auditar(

@@ -35,6 +35,8 @@ import org.springframework.transaction.interceptor.TransactionInterceptor;
 import pe.gob.sgtm.auditoria.AuditoriaJdbc;
 import pe.gob.sgtm.auditoria.Origen;
 import pe.gob.sgtm.auditoria.OrigenContext;
+import pe.gob.sgtm.autorizacion.Privilegio;
+import pe.gob.sgtm.autorizacion.RequiereAcceso;
 import pe.gob.sgtm.compartido.TenantContext;
 import pe.gob.sgtm.dominio.MunicipalidadId;
 import pe.gob.sgtm.esquema.BaseDeDatosDePrueba;
@@ -225,6 +227,116 @@ class PermisosDeUnUsuarioFronteraTest {
                 .as(
                         "la fila de miembro no se borra (RNF-051), pero activo = false no es pertenecer")
                 .doesNotContain("Coactiva");
+    }
+
+    // ------------------- #582: la pregunta inversa, quien esta EN un grupo
+
+    @Test
+    @DisplayName("#582 AC 1 — el grupo devuelve a sus miembros activos, y solo a esos")
+    void losMiembrosDelGrupo() throws Exception {
+        String cuerpo = cuerpoDe(get(camino("/seguridad/grupos/%d/miembros", grupoUno)));
+
+        assertThat(cuerpo)
+                .as("sin transaccion RLS no devuelve vacio: revienta con 500 (#486)")
+                .contains("admin.local")
+                .contains("con.excepcion")
+                .contains("de.dos.grupos");
+        assertThat(cuerpo).contains("\"totalElementos\":3");
+    }
+
+    @Test
+    @DisplayName("#582 AC 1 — quien salio del grupo no sale, aunque su fila siga ahi")
+    void elQueSalioNoEsMiembro() throws Exception {
+        String cuerpo = cuerpoDe(get(camino("/seguridad/grupos/%d/miembros", grupoAjeno)));
+
+        assertThat(cuerpo)
+                .as(
+                        "la fila de miembro no se borra (RNF-051), pero activo = false no es estar"
+                                + " dentro: sin «AND m.activo» el dado de baja reaparece y el grupo"
+                                + " le atribuiria permisos que ya no tiene")
+                .doesNotContain("con.excepcion");
+        assertThat(cuerpo)
+                .as("un grupo del que todos salieron es una pagina vacia, no un 404")
+                .contains("\"totalElementos\":0");
+    }
+
+    @Test
+    @DisplayName("#582 AC 2 — cada fila trae cuenta, nombre y habilitado")
+    void cadaFilaTraeLoQueLaGrillaDibuja() throws Exception {
+        ejecutar("UPDATE usuario SET habilitado = false WHERE id = " + usuarioDeDosGrupos);
+        try {
+            String cuerpo = cuerpoDe(get(camino("/seguridad/grupos/%d/miembros", grupoUno)));
+
+            assertThat(cuerpo)
+                    .as(
+                            "una cuenta deshabilitada que sigue afiliada es justo lo que hay que"
+                                    + " poder ver: estar en el grupo y poder entrar son cosas"
+                                    + " distintas, y sin «habilitado» en la fila haria falta una"
+                                    + " segunda lectura por usuario para saberlo")
+                    .contains("\"cuenta\":\"admin.local\"")
+                    .contains("\"habilitado\":false");
+            assertThat(cuerpo)
+                    .as("y los otros dos siguen habilitados, o sea que la columna dice algo")
+                    .contains("\"habilitado\":true");
+        } finally {
+            ejecutar("UPDATE usuario SET habilitado = true WHERE id = " + usuarioDeDosGrupos);
+        }
+    }
+
+    @Test
+    @DisplayName("#582 AC 3 — un grupo que no existe es 404 nombrandolo, no una pagina vacia")
+    void grupoInexistenteEs404() throws Exception {
+        MvcResult resultado =
+                mvc.perform(get(camino("/seguridad/grupos/%d/miembros", 999_999L))).andReturn();
+
+        assertThat(resultado.getResponse().getStatus())
+                .as(
+                        "no tener miembros y no existir son dos respuestas distintas, y la segunda"
+                                + " no se puede decir callando")
+                .isEqualTo(404);
+        assertThat(resultado.getResponse().getContentAsString()).contains("999999");
+    }
+
+    @Test
+    @DisplayName("#582 AC 3 — desde B, el grupo de A no existe: 404, no sus miembros")
+    void elAislamientoDeLosMiembros() throws Exception {
+        TenantContext.fijar(new MunicipalidadId(municipalidadB));
+
+        MvcResult resultado =
+                mvc.perform(get(camino("/seguridad/grupos/%d/miembros", grupoUno))).andReturn();
+
+        assertThat(resultado.getResponse().getStatus())
+                .as(
+                        "conectando el pool como SUPERUSUARIO del cluster —que omite RLS incluso"
+                                + " con FORCE ROW LEVEL SECURITY— esto seria 200 con los miembros"
+                                + " de A. Con sgtm_owner NO: al dueno la politica tambien lo"
+                                + " somete, y la rotura pasaria en verde sin medir nada (#537,"
+                                + " #545)")
+                .isEqualTo(404);
+    }
+
+    @Test
+    @DisplayName("#582 AC 4 — el acceso es «grupos» con LECTURA, declarado en el metodo")
+    void elAccesoDeLosMiembrosEsElDelGrupo() throws Exception {
+        RequiereAcceso anotacion =
+                SeguridadController.class
+                        .getMethod(
+                                "usuariosDeGrupo",
+                                long.class,
+                                pe.gob.sgtm.web.ParametrosDePaginacion.class)
+                        .getAnnotation(RequiereAcceso.class);
+
+        assertThat(anotacion)
+                .as("la clase no declara ninguna: sin la del metodo esta lectura no tiene guardia")
+                .isNotNull();
+        assertThat(anotacion.acceso())
+                .as(
+                        "es una lectura SOBRE UN GRUPO, simetrica a la de los grupos de un usuario,"
+                                + " que pide «usuarios». Pedir «miembros» exigiria el privilegio de"
+                                + " afiliar para poder mirar. ArchUnit no ve CUAL acceso es:"
+                                + " cambiarlo por «usuarios» deja el build en VERDE")
+                .isEqualTo("grupos");
+        assertThat(anotacion.privilegio()).isEqualTo(Privilegio.LECTURA);
     }
 
     // ------------------------------------------------------------------ AC 2 y AC 3

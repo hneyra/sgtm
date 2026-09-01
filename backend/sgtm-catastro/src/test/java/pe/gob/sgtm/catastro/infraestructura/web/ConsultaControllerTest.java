@@ -76,7 +76,7 @@ class ConsultaControllerTest {
     }
 
     @Test
-    @DisplayName("el area construida viaja SUMADA, con su unidad: la interfaz no suma (RNF-083)")
+    @DisplayName("el area construida viaja SUMADA, y sin unidad dentro: la pone la cabecera (#607)")
     void elAreaConstruidaViajaSumada() throws Exception {
         MvcResult resultado = mvc.perform(get("/api/v1/catastro/fichas")).andReturn();
 
@@ -85,7 +85,20 @@ class ConsultaControllerTest {
                         "si la fila no la publicara, la pantalla tendria que pedir cada ficha con sus"
                                 + " construcciones y sumarlas: veinte peticiones por pagina y una suma"
                                 + " distinta en cada pantalla que la necesite")
-                .contains("\"areaConstruida\":\"210.50 m2\"");
+                .contains("\"areaConstruida\":\"210.50\"");
+    }
+
+    @Test
+    @DisplayName("y ninguna area de la grilla lleva los «m2» dentro (#607)")
+    void ningunAreaLlevaLaUnidadDentro() throws Exception {
+        MvcResult resultado = mvc.perform(get("/api/v1/catastro/fichas")).andReturn();
+
+        assertThat(resultado.getResponse().getContentAsString())
+                .as(
+                        "hasta #607 esta misma respuesta decia «360.00 m2» del predio del que"
+                                + " GET /fiscalizacion/omisos decia «360.00»: la misma superficie"
+                                + " con dos formas segun a que modulo se le preguntara")
+                .doesNotContain("m2");
     }
 
     @Test

@@ -3,6 +3,7 @@ package pe.gob.sgtm.licencias.infraestructura.web;
 import java.time.LocalDate;
 import java.util.List;
 import org.jspecify.annotations.Nullable;
+import pe.gob.sgtm.dominio.AreaM2;
 import pe.gob.sgtm.dominio.Dinero;
 import pe.gob.sgtm.dominio.Ejercicio;
 import pe.gob.sgtm.licencias.aplicacion.ConsultaDeAnuncios;
@@ -25,6 +26,12 @@ import pe.gob.sgtm.web.ImporteActualizado;
  * debe» —eso lo dice el libro, que descuenta lo pagado y es de otro contexto—: es lo que esta
  * autorizacion ha devengado hasta la fecha de corte, sumando las tasas que cada acto copio cuando
  * se asento.
+ *
+ * <p><b>El area viaja tipada</b> (#607). Se escribia a mano con {@code valor().toPlainString()}:
+ * daba la cifra buena, pero era una segunda convencion para lo mismo, y de tener dos salio que
+ * catastro compusiera con {@code toString()} y publicara «360.00 m2» del mismo predio que aqui sale
+ * «360.00». Ahora la escribe el serializador que {@code ConfiguracionDeJson} registra para {@code
+ * AreaM2}, que es un solo sitio; la unidad la sigue poniendo el nombre del campo, no el dato.
  */
 public record AnuncioResource(
         String nroAutorizacion,
@@ -41,7 +48,7 @@ public record AnuncioResource(
         @Nullable String forma,
         @Nullable String denominacion,
         String direccion,
-        String area,
+        AreaM2 area,
         int nroLados,
         int cantidad,
         LocalDate fecInicio,
@@ -69,7 +76,7 @@ public record AnuncioResource(
                 anuncio.forma(),
                 anuncio.denominacion(),
                 anuncio.ubicacion(),
-                anuncio.area().valor().toPlainString(),
+                anuncio.area(),
                 anuncio.lados(),
                 anuncio.cantidad(),
                 anuncio.fechaAutorizacion(),

@@ -106,7 +106,7 @@ public class ConvenioRepositoryJdbc extends RepositorioJdbc implements ConvenioR
     }
 
     @Override
-    public Convenio registrar(Convenio convenio) {
+    public Convenio registrar(Convenio convenio, @Nullable String claveDeIdempotencia) {
         if (!convenio.esNuevo()) {
             throw new IllegalArgumentException(
                     "Un convenio ya registrado no se vuelve a insertar ni se corrige: se cierra y"
@@ -123,14 +123,14 @@ public class ConvenioRepositoryJdbc extends RepositorioJdbc implements ConvenioR
                                             + " maximo_cuotas, monto_total, cuota_inicial,"
                                             + " numero_cuotas, tipo_garantia, detalle_garantia,"
                                             + " resolucion, convenio_origen_id, usuario_registro,"
-                                            + " observacion, fecha_registro)"
+                                            + " observacion, fecha_registro, clave_idempotencia)"
                                             + " VALUES ("
                                             + MUNICIPALIDAD_ACTUAL
                                             + ", :numero, :contribuyente, :tipo, :fecha, :corte,"
                                             + " :conjunto, :interes, :inicialPct, :maximo, :total,"
                                             + " :inicial, :cuotas, :garantia, :detalle,"
                                             + " :resolucion, :origen, :usuario, :observacion,"
-                                            + " :registrado)"
+                                            + " :registrado, :clave)"
                                             + " RETURNING id")
                             .param("numero", convenio.numero().impreso())
                             .param("contribuyente", convenio.contribuyenteId())
@@ -155,12 +155,23 @@ public class ConvenioRepositoryJdbc extends RepositorioJdbc implements ConvenioR
                             .param("usuario", UsuarioDeLaSesion.actual())
                             .param("observacion", convenio.observacion().texto())
                             .param("registrado", java.sql.Timestamp.from(convenio.registradoEn()))
+                            .param("clave", claveDeIdempotencia)
                             .query(Long.class)
                             .single();
 
             insertarDeuda(Objects.requireNonNull(id), convenio);
             insertarCuotas(id, convenio);
         } catch (DuplicateKeyException yaEstaba) {
+            // Los indices unicos de estas tres tablas significan cosas distintas y por eso se
+            // traducen por separado, igual que en `AnuncioRepositoryJdbc`: el de la clave de
+            // idempotencia NO es un defecto —es la carrera de dos envios del mismo intento— y el
+            // del cronograma si lo seria. Un mensaje unico mandaria a mirar donde no es.
+            if (choqueDe(yaEstaba, "convenio_idempotencia_uq")) {
+                throw new ClaveRepetida(
+                        "Ya se registro un convenio con esa clave de idempotencia: el reenvio del"
+                                + " mismo intento no abre un segundo convenio sobre la misma deuda",
+                        yaEstaba);
+            }
             throw new CronogramaDuplicado(
                     "Ese convenio ya tiene su cronograma o su deuda acogida: reejecutar la"
                             + " generacion no duplica, y quien lo impide es la base"
@@ -190,6 +201,17 @@ public class ConvenioRepositoryJdbc extends RepositorioJdbc implements ConvenioR
     @Override
     public Optional<Convenio> porId(long id) {
         return leerPorId(id);
+    }
+
+    @Override
+    public Optional<Convenio> porClaveDeIdempotencia(String clave) {
+        Long id =
+                jdbc().sql("SELECT id FROM convenio WHERE clave_idempotencia = :clave")
+                        .param("clave", clave)
+                        .query(Long.class)
+                        .optional()
+                        .orElse(null);
+        return id == null ? Optional.empty() : leerPorId(id);
     }
 
     @Override
@@ -265,6 +287,23 @@ public class ConvenioRepositoryJdbc extends RepositorioJdbc implements ConvenioR
     }
 
     // ------------------------------------------------------------------
+
+    /**
+     * De cual de los indices unicos vino el choque.
+     *
+     * <p>Se busca por el <b>nombre del indice</b> en la cadena de causas, que es donde PostgreSQL
+     * lo deja. Mismo mecanismo que {@code AnuncioRepositoryJdbc}, y el nombre nunca sale al
+     * cliente: los mensajes que se lanzan no lo llevan (RNF-033).
+     */
+    private static boolean choqueDe(RuntimeException fallo, String indice) {
+        for (Throwable causa = fallo; causa != null; causa = causa.getCause()) {
+            String mensaje = causa.getMessage();
+            if (mensaje != null && mensaje.contains(indice)) {
+                return true;
+            }
+        }
+        return false;
+    }
 
     /**
      * {@code REFORMULACION} en la base es {@code REFORMULADO} en el estado: el movimiento nombra el

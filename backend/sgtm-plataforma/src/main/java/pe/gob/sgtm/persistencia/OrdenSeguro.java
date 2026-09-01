@@ -3,6 +3,7 @@ package pe.gob.sgtm.persistencia;
 import java.util.Map;
 import java.util.Set;
 import java.util.TreeMap;
+import java.util.TreeSet;
 import org.jspecify.annotations.Nullable;
 import pe.gob.sgtm.compartido.Paginacion;
 
@@ -26,9 +27,16 @@ public final class OrdenSeguro {
     /** Columna que rompe los empates de la pedida, o nulo si no se declaro ninguna. */
     private final @Nullable String desempate;
 
-    private OrdenSeguro(Map<String, String> columnasPorCampo, @Nullable String desempate) {
+    /** Columnas cuyos nulos van siempre al final, en las dos direcciones. */
+    private final Set<String> nulosAlFinal;
+
+    private OrdenSeguro(
+            Map<String, String> columnasPorCampo,
+            @Nullable String desempate,
+            Set<String> nulosAlFinal) {
         this.columnasPorCampo = columnasPorCampo;
         this.desempate = desempate;
+        this.nulosAlFinal = nulosAlFinal;
     }
 
     /**
@@ -50,7 +58,7 @@ public final class OrdenSeguro {
             mapa.put(columna, columna);
             mapa.put(aCamelCase(columna), columna);
         }
-        return new OrdenSeguro(Map.copyOf(mapa), null);
+        return new OrdenSeguro(Map.copyOf(mapa), null, Set.of());
     }
 
     /**
@@ -87,7 +95,7 @@ public final class OrdenSeguro {
         mapa.putAll(columnasPorCampo);
         mapa.remove(aCamelCase(columna));
         mapa.put(campo, columna);
-        return new OrdenSeguro(Map.copyOf(mapa), desempate);
+        return new OrdenSeguro(Map.copyOf(mapa), desempate, nulosAlFinal);
     }
 
     /**
@@ -113,7 +121,41 @@ public final class OrdenSeguro {
             throw new IllegalArgumentException(
                     "El desempate solo admite un nombre de columna simple: '" + columna + "'");
         }
-        return new OrdenSeguro(columnasPorCampo, columna);
+        return new OrdenSeguro(columnasPorCampo, columna, nulosAlFinal);
+    }
+
+    /**
+     * La misma lista blanca, con una columna cuyos <b>nulos van siempre al final</b> (#608).
+     *
+     * <p>En PostgreSQL el sitio del nulo depende del sentido: {@code ASC} lo pone al final y {@code
+     * DESC} lo pone <b>delante</b>. Sobre una columna que admite nulos eso significa que pedir el
+     * listado «de mayor a menor» abre por las filas cuyo valor no se puede calcular, que son
+     * justamente las que menos dicen: {@code GET /fiscalizacion/omisos?ordenarPor=diferenciaDeArea}
+     * ordenado de mayor a menor tiene que abrir por el predio con mas metros sin declarar, no por
+     * uno cuya diferencia no se conoce porque nunca declaro.
+     *
+     * <p>Se declara <b>por columna</b> y no se pone a todas: emitir {@code NULLS LAST} donde no
+     * hace falta cambiaria el orden de los otros listados que ya usan esta clase, y el orden de un
+     * listado es lo que decide que fila cae en que pagina. Una columna que no admite nulos produce
+     * exactamente la clausula de siempre.
+     *
+     * <p>Va en las <b>dos</b> direcciones a proposito: en {@code ASC} coincide con lo que
+     * PostgreSQL ya hacia, y declararlo igual deja una sola regla que explicar —«el nulo nunca
+     * encabeza»— en vez de una que depende del sentido.
+     *
+     * @param columna una de las columnas ya declaradas en {@link #sobre}
+     */
+    public OrdenSeguro conNulosAlFinal(String columna) {
+        if (!columnasPorCampo.containsValue(columna)) {
+            throw new IllegalArgumentException(
+                    "'"
+                            + columna
+                            + "' no esta en la lista blanca: conNulosAlFinal declara como anulable"
+                            + " una columna ya declarada en sobre(...), no anade ninguna");
+        }
+        Set<String> ampliado = new TreeSet<>(nulosAlFinal);
+        ampliado.add(columna);
+        return new OrdenSeguro(columnasPorCampo, desempate, Set.copyOf(ampliado));
     }
 
     public Set<String> camposAdmitidos() {
@@ -131,6 +173,9 @@ public final class OrdenSeguro {
             throw new OrdenNoAdmitido(paginacion.ordenarPor(), columnasPorCampo.keySet());
         }
         String clausula = "ORDER BY " + columna + " " + paginacion.direccion().sql();
+        if (nulosAlFinal.contains(columna)) {
+            clausula = clausula + " NULLS LAST";
+        }
         if (desempate == null || desempate.equals(columna)) {
             return clausula;
         }

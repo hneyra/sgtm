@@ -5,6 +5,7 @@ import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
+import org.jspecify.annotations.Nullable;
 import pe.gob.sgtm.compartido.Pagina;
 import pe.gob.sgtm.compartido.Paginacion;
 import pe.gob.sgtm.dominio.Ejercicio;
@@ -21,11 +22,16 @@ import pe.gob.sgtm.tesoreria.dominio.NumeroDeConvenio;
  * <p>El correlativo se comporta como el de la base: incrementa por ejercicio y no se reinicia. Que
  * dos registros consecutivos no repitan numero se prueba aqui; que no lo repitan <b>bajo
  * concurrencia real</b> es otra cosa, y esa la hace {@code ConvenioJdbcTest} contra PostgreSQL.
+ *
+ * <p>Reproduce tambien {@code convenio_idempotencia_uq} (V70): sin ella el doble dejaria pasar lo
+ * que la base rechaza, y las pruebas de {@code RegistrarPreconvenio} probarian menos de lo que
+ * parece.
  */
 public final class ConveniosEnMemoria implements ConvenioRepository {
 
     private final Map<Long, Convenio> guardados = new LinkedHashMap<>();
     private final Map<Integer, Long> correlativos = new LinkedHashMap<>();
+    private final Map<String, Long> claves = new LinkedHashMap<>();
     private long siguienteId = 1;
 
     public List<Convenio> registrados() {
@@ -39,9 +45,14 @@ public final class ConveniosEnMemoria implements ConvenioRepository {
     }
 
     @Override
-    public Convenio registrar(Convenio convenio) {
+    public Convenio registrar(Convenio convenio, @Nullable String claveDeIdempotencia) {
         if (!convenio.esNuevo()) {
             throw new IllegalArgumentException("Un convenio ya registrado no se vuelve a insertar");
+        }
+        if (claveDeIdempotencia != null && claves.containsKey(claveDeIdempotencia)) {
+            throw new ClaveRepetida(
+                    "Ya se registro un convenio con esa clave de idempotencia",
+                    new IllegalStateException("convenio_idempotencia_uq"));
         }
         long id = siguienteId++;
         Convenio guardado =
@@ -63,7 +74,16 @@ public final class ConveniosEnMemoria implements ConvenioRepository {
                         "cajero.prueba",
                         convenio.observacion());
         guardados.put(id, guardado);
+        if (claveDeIdempotencia != null) {
+            claves.put(claveDeIdempotencia, id);
+        }
         return guardado;
+    }
+
+    @Override
+    public Optional<Convenio> porClaveDeIdempotencia(String clave) {
+        Long id = claves.get(clave);
+        return id == null ? Optional.empty() : Optional.ofNullable(guardados.get(id));
     }
 
     @Override

@@ -25,8 +25,10 @@ import pe.gob.sgtm.cuentacorriente.ObligacionPublica;
 import pe.gob.sgtm.dominio.Dinero;
 import pe.gob.sgtm.rentas.aplicacion.ConsultasDeRentas;
 import pe.gob.sgtm.web.Api;
+import pe.gob.sgtm.web.CodigoDeError;
 import pe.gob.sgtm.web.ImporteActualizado;
 import pe.gob.sgtm.web.ParametrosDePaginacion;
+import pe.gob.sgtm.web.ProblemaDeNegocio;
 import pe.gob.sgtm.web.RespuestaPaginada;
 
 /**
@@ -75,7 +77,8 @@ public class ConsultaPrediosController {
     @GetMapping
     @Transactional(readOnly = true)
     public RespuestaPaginada<PredioEncontradoResource> buscar(
-            @RequestParam String contribuyente,
+            @RequestParam(required = false) @Nullable String contribuyente,
+            @RequestParam(required = false) @Nullable String codContribuyente,
             @RequestParam(required = false) @Nullable String codigoPredial,
             @RequestParam(required = false) @Nullable String calle,
             @RequestParam(required = false) @Nullable String manzana,
@@ -84,10 +87,17 @@ public class ConsultaPrediosController {
             ParametrosDePaginacion parametros) {
 
         Paginacion paginacion = parametros.aPaginacion(ORDEN_POR_OMISION);
+        String codigo = primeroNoVacio(codContribuyente, contribuyente);
+        if (codigo == null) {
+            throw new ProblemaDeNegocio(
+                    CodigoDeError.VALIDACION,
+                    "Hay que decir de quien son los predios: falta «codContribuyente» (o su otro"
+                            + " nombre, «contribuyente»)");
+        }
         Optional<Long> contribuyenteId =
-                consulta.contribuyentePorCodigo(contribuyente.strip().toUpperCase(Locale.ROOT));
+                consulta.contribuyentePorCodigo(codigo.toUpperCase(Locale.ROOT));
         if (contribuyenteId.isEmpty()) {
-            return RespuestaPaginada.de(Pagina.vacia(paginacion));
+            throw noEstaEnElPadron(codigo);
         }
 
         LocalDate fechaDeCorte = fechaDe(fecha);
@@ -139,5 +149,34 @@ public class ConsultaPrediosController {
             throw new IllegalArgumentException(
                     "La fecha debe tener formato AAAA-MM-DD: '" + texto + "'", excepcion);
         }
+    }
+
+    /**
+     * Un codigo que no esta en el padron es {@code 404} nombrandolo, no una pagina vacia (#622).
+     *
+     * <p>Es el defecto que #541 y #595 cerraron en las dos lecturas de Rentas, en la pantalla de al
+     * lado: el expediente de Consultas pedia siete lecturas con el mismo codigo, una contestaba 404
+     * y las otras seis «existe y no tiene nada». Las dos que listan padron —esta y su gemela—
+     * contradecian ademas a la pantalla de Rentas sobre la misma persona.
+     */
+    private static RuntimeException noEstaEnElPadron(String codigo) {
+        return new ProblemaDeNegocio(
+                CodigoDeError.NO_ENCONTRADO,
+                "En el padron de esta municipalidad no hay ningun contribuyente con codigo '"
+                        + codigo
+                        + "'");
+    }
+
+    private static @Nullable String primeroNoVacio(@Nullable String uno, @Nullable String otro) {
+        String primero = limpio(uno);
+        return primero != null ? primero : limpio(otro);
+    }
+
+    private static @Nullable String limpio(@Nullable String texto) {
+        if (texto == null) {
+            return null;
+        }
+        String sinBlancos = texto.strip();
+        return sinBlancos.isEmpty() ? null : sinBlancos;
     }
 }

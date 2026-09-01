@@ -493,11 +493,25 @@ const DEL_BACKEND = {
   // «Año» y «Tributo» los dibuja la pantalla, pero en la seccion «Filtros del
   // detalle» y no en la barra de filtros, que es lo unico que el prototipo
   // publica como `filters`. Por eso van aqui, y entre los dos que los rodean.
+  // El codigo del contribuyente se unifica en `codContribuyente` (#622). En la
+  // misma pantalla el mismo dato viajaba con tres grafias —`contribuyente` en
+  // predios y vehiculos, `codContribuyente` en deuda, pagos y valores, y
+  // `codigoCont` en altas y bajas—, de modo que el dia que una dejara de admitir
+  // su nombre el 422 nombraria un parametro que quien lee la pantalla no ha
+  // escrito. Las tres que no lo tenian lo ganan aqui; el nombre anterior sigue
+  // declarado y sigue admitido, porque es el que el frontend manda hoy.
   consulta_altas_bajas: [
+    {
+      nombre: 'codContribuyente',
+      ejemplo: '',
+      tras: 'codigoCont',
+      descripcion:
+        'Codigo del contribuyente, con el nombre unificado. «codigoCont» es el mismo dato',
+    },
     {
       nombre: 'ano',
       ejemplo: '',
-      tras: 'codigoCont',
+      tras: 'codContribuyente',
       descripcion: 'Filtro «Año» de la pantalla, dentro de «Filtros del detalle»',
     },
     {
@@ -529,7 +543,23 @@ const DEL_BACKEND = {
     },
   ],
   // La deuda de cada fila se actualiza a una fecha, y la fila la dice (regla 9).
+  consulta_predios: [
+    {
+      nombre: 'codContribuyente',
+      ejemplo: '',
+      tras: 'contribuyente',
+      descripcion:
+        'Codigo del contribuyente, con el nombre unificado. «contribuyente» es el mismo dato',
+    },
+  ],
   consulta_vehiculos: [
+    {
+      nombre: 'codContribuyente',
+      ejemplo: '',
+      tras: 'contribuyente',
+      descripcion:
+        'Codigo del contribuyente, con el nombre unificado. «contribuyente» es el mismo dato',
+    },
     {
       nombre: 'fecha',
       ejemplo: '',
@@ -614,6 +644,26 @@ const DEL_BACKEND = {
  * pantalla que todavia no la tiene.
  */
 const DESCRIPCIONES = {
+  // Cuenta corriente · Consultas (#640)
+  consulta_altas_bajas: bloque(`
+    Los **actos** de alta y de baja de deuda de un contribuyente (RF-043, RF-044), con el documento
+    que los aprueba y el motivo con que se registraron.
+
+    **No es todo el movimiento del libro.** Un cobro de ventanilla no sale aquí —es un pago, y lo
+    lista \`GET /consultas/pagos\`— ni el cargo de la emisión, aunque los tres se escriban con los
+    mismos conceptos del desglose: el abono de una baja y el de una cobranza son, columna a
+    columna, el mismo asiento. Lo que los separa es de qué acto nace la fila.
+
+    **Los movimientos anteriores a la migración que estampa ese dato no aparecen**, y no se pueden
+    recuperar: el libro no admite corrección —se anula, se da de baja o se reversa— y las filas ya
+    escritas nacieron sin él. Para una instalación con historia previa, esta relación empieza el día
+    en que se aplicó esa migración; lo anterior se consulta como movimientos de la cuenta corriente.
+
+    **«Auto / Manual» no se sirve** y se rechaza con 422 en vez de ignorarse: hoy todo lo que este
+    sistema registra como alta o baja viene de las dos pantallas que lo hacen a mano, así que
+    «AUTOMÁTICA» devolvería la tabla vacía, que se lee como «no hay ninguna» y no como «este sistema
+    todavía no las produce».
+  `),
   // Rentas · Determinaciones (#577)
   vehicular_calculo: bloque(`
     Determina —o simula— el impuesto al patrimonio vehicular de **un ejercicio**, sobre los
@@ -808,6 +858,37 @@ const DESCRIPCIONES = {
   adm_resumen_recaudacion: bloque(`
     Lo recaudado por multas administrativas, según el libro (#53, RF-074). Mismo criterio que
     el de tránsito: la suma exacta de los abonos vivos.
+  `),
+  // Tesoreria · Convenios (#606)
+  fraccionamiento: bloque(`
+    Acoge la deuda marcada a pago fraccionado, o solo **simula** su cronograma: lo decide
+    \`simular\` en el cuerpo. Lo que sale de aquí es siempre un **preconvenio**; no acoge deuda ni
+    toca el libro hasta que su cuota inicial se cobre en caja (\`POST /tesoreria/caja/cobranza\`
+    con \`tipoDePago = PRECONVENIO\`).
+
+    **La cabecera \`Idempotency-Key\` se lee** (#606). Reenviar el mismo intento —el doble clic, el
+    reintento tras un tiempo de espera agotado— devuelve **201 con el convenio de la primera vez**,
+    con su mismo número, en vez de abrir un segundo preconvenio sobre la misma deuda. Con una clave
+    ya usada para **otro contribuyente** responde 409: devolver el convenio de la primera vez
+    imprimiría en ventanilla el acuerdo de otra persona. Simular no consume la clave, porque no
+    escribe nada. Sin la cabecera, dos envíos siguen siendo dos convenios.
+
+    El interés, el máximo de cuotas y la política con que se redondea cada cuota salen del conjunto
+    sellado del ejercicio: ninguno viaja en el cuerpo, y si falta alguno la respuesta es 422
+    nombrando la llave o el ejercicio (#547).
+  `),
+  // Tesoreria · Convenios (#606)
+  anulacion_convenio: bloque(`
+    Anula, quiebra o reformula un convenio: las tres por la misma ruta, porque en el libro son el
+    mismo acto —lo pendiente vuelve a la fase de la que salió, con asientos y no con un \`UPDATE\`
+    de fase—. El motivo es obligatorio y queda en el acta. Anular exige además que el recibo de la
+    cuota inicial ya esté anulado; quebrar no, porque ese dinero sí entró.
+
+    **La cabecera \`Idempotency-Key\` se lee** (#606). Sin ella, reenviar el mismo intento chocaba
+    con \`convenio_movimiento_cierre_uq\` y respondía **409**, que se lee como un fallo nuevo y no
+    como «ya estaba hecho»; con ella devuelve **201 con el convenio ya cerrado** y su acta. En una
+    reformulación la clave la reclama el acta de cierre, así que el reenvío no abre un segundo
+    preconvenio. Con una clave que cerró **otro** convenio responde 409.
   `),
 };
 
@@ -1175,6 +1256,34 @@ const OPERACIONES_ADICIONALES = {
         usuario deshabilitado o fuera de vigencia recibe la lista **vacía**. Un \`id\`
         que no existe en esta municipalidad es **404**, no una lista vacía: no tener
         permisos y no existir son dos respuestas distintas.
+      `),
+    },
+  ],
+  // Y la pregunta inversa: quien esta EN un grupo. De `miembro` solo habia el
+  // POST que afilia, asi que derivarla costaba una peticion por usuario del
+  // padron de cuentas (#582).
+  miembros: [
+    {
+      operationId: 'miembros_del_grupo',
+      metodo: 'get',
+      titulo: 'Usuarios que pertenecen a un grupo',
+      paginacion: true,
+      descripcion: literal(`
+        Quiénes están en un grupo (#582, RF-120): la pregunta inversa de
+        \`/seguridad/usuarios/{id}/grupos\`. Hasta ahora no se podía hacer —de esta
+        ruta sólo existía el \`POST\` que afilia—, así que responder «quién está
+        dentro» obligaba a recorrer el padrón de cuentas preguntando por cada una.
+
+        **Sólo las pertenencias activas.** Una baja no se borra —la fila sigue ahí con
+        \`activo\` en falso (RNF-051)—, pero quien salió del grupo ya no está en él.
+        Lo que **sí** devuelve son los usuarios **deshabilitados** que siguen
+        afiliados: estar en el grupo y poder entrar son cosas distintas, y cada fila
+        publica \`habilitado\` para separarlas — es lo que permite contestar qué cuenta
+        deshabilitada conserva permisos sin una segunda lectura.
+
+        Un \`grupo\` que no existe en esta municipalidad es **404**; un grupo sin
+        miembros es una página vacía con **200**. No tener a nadie y no existir son dos
+        respuestas distintas.
       `),
     },
   ],
@@ -1662,6 +1771,61 @@ const OPERACIONES_ADICIONALES = {
           descripcion: 'Ejercicio de la declaración que se anula, como en el GET de la ruta',
         },
       ],
+    },
+  ],
+  // `parametros` declara «GET /seguridad/parametros» —el listado paginado de los
+  // conjuntos—; preguntar por UN ejercicio necesita ruta propia (#605). Cuelga de
+  // esta pantalla porque los datos son suyos, pero **no exige su permiso**: el
+  // acceso `parametros` es una opción del módulo Seguridad y quien la necesita es
+  // quien calcula, que tiene `fraccionamiento` o `predial_individual`.
+  parametros: [
+    {
+      operationId: 'ejercicio_parametrizado',
+      metodo: 'get',
+      ruta: '/api/v1/seguridad/parametros/ejercicios/{ejercicio}',
+      titulo: 'Si el ejercicio tiene parámetros sellados',
+      descripcionesDeRuta: {
+        ejercicio: 'El año que se pregunta, de 1990 a 2100',
+      },
+      descripcion: literal(`
+        Si un ejercicio tiene conjunto de parámetros **sellado**, y cuál — para poder
+        decirlo **antes** de calcular (#605, ADR-0007).
+
+        Hasta aquí ninguna ruta lo publicaba, así que toda pantalla que calcula tenía que
+        fallar para enterarse: se rellenaba el formulario entero —y en «Registrar
+        preconvenio» también la observación que exige la regla 10— para recibir al final
+        el 422 «El ejercicio 2026 no tiene un conjunto de parámetros sellado», que con
+        D-02a abierta es lo que contestan hoy **todas** las municipalidades. El mismo
+        agujero tienen la determinación predial, la valorización del FUE, la liquidación de
+        fiscalización y el resumen anual de licencias.
+
+        **Ninguna cifra.** Sale \`sellado\` y la identidad del conjunto —\`conjuntoId\` y
+        \`version\`—, que es lo que \`ConvenioResource.conjuntoDeParametros\` ya publica
+        cuando el convenio existe. Los valores siguen detrás del permiso de \`parametros\`
+        (REQ-03: quien opera el sistema no publica ni consulta las cifras con las que se
+        calcula).
+
+        **«No hay conjunto sellado» es 200 diciendo que no**, no un 404: la pregunta es si
+        **hay conjunto sellado** y la respuesta puede ser que no. Conviene no leerla como
+        «se puede calcular»: sin conjunto sellado seguro que **no** se puede, pero con él
+        el cálculo puede fallar igual si falta dentro alguna llave que la regla pida —el
+        422 que nombra la llave (#547, #562)—. Esta lectura adelanta la primera mitad, que
+        es la que hoy falla en todas las municipalidades. Un ejercicio **fuera del rango
+        1990 a 2100** sí es distinto, y sale 422 nombrando el rango.
+
+        **No deja fila en la bitácora**, a diferencia de las demás lecturas que registran
+        \`ACCESO\`: es la única fuera del catálogo, y auditarla pondría una escritura sin
+        cota, sobre una tabla que no se poda, al alcance de cualquier token válido.
+
+        Autenticada, pero **no es una opción del catálogo**: exigir \`parametros\` —del
+        módulo Seguridad— dejaría esta lectura fuera del alcance de quien la necesita, y
+        otorgárselo en cada implantación invertiría la separación de funciones de REQ-03
+        para poder leer un booleano. El criterio es el de \`permisos_de_la_sesion\`
+        (ADR-0013, REQ-03 §5) y aquí es literal: el 422 de cualquier operación que calcule
+        ya dice lo mismo. Lo que sí deja, y las otras lecturas de sesión no, es su fila de
+        \`ACCESO\`: ésta admite un parámetro, así que quien recorra 1990 a 2100 deja su
+        nombre en cada intento.
+      `),
     },
   ],
   // `contribuyentes` declara «GET /rentas/contribuyentes» como su endpoint —el

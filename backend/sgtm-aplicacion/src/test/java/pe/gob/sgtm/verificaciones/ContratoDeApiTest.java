@@ -174,6 +174,10 @@ class ContratoDeApiTest {
                     "GET /seguridad/usuarios/{id}/grupos",
                     "GET /seguridad/usuarios/{id}/permisos",
                     "POST /seguridad/grupos/{grupo}/miembros",
+                    // #582 — la pregunta inversa: quien esta EN un grupo. De esta misma
+                    // ruta solo habia el POST que afilia, asi que derivarla costaba una
+                    // peticion por usuario del padron de cuentas.
+                    "GET /seguridad/grupos/{grupo}/miembros",
                     "PUT /seguridad/grupos/{id}/permisos",
                     "GET /seguridad/grupos/{id}/permisos",
                     "GET /seguridad/sesion/permisos",
@@ -192,6 +196,10 @@ class ContratoDeApiTest {
                     "GET /seguridad/auditoria",
                     "POST /seguridad/respaldos",
                     "GET /seguridad/parametros",
+                    // #605 — si un ejercicio tiene conjunto sellado, para poder decirlo ANTES
+                    // de calcular. Es una ruta que la pantalla `parametros` no declara —declara
+                    // su listado— y entra por OPERACIONES_ADICIONALES del generador.
+                    "GET /seguridad/parametros/ejercicios/{ejercicio}",
                     "GET /transito/codigos",
                     "GET /infracciones/cuis",
                     "GET /infracciones/administrativas/codigos/reporte",

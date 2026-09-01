@@ -22,16 +22,26 @@ import pe.gob.sgtm.web.RespuestaPaginada;
 /**
  * Consulta de altas y bajas: {@code GET /api/v1/consultas/altas-bajas} (RF-045).
  *
- * <p>Devuelve los asientos que son movimientos de deuda, con el documento que los sustenta y el
- * motivo con que se registraron. Es lo que responde «por que debe esto» sobre una deuda restante:
- * la lista de lo que entro y lo que salio, cada linea con su resolucion.
+ * <p>Devuelve los <b>actos</b> de alta y de baja de deuda —los de RF-043 y RF-044—, con el
+ * documento que los sustenta y el motivo con que se registraron. Es lo que responde «quien movio
+ * esta deuda a mano y con que resolucion»: el control sobre un acto que extingue deuda del
+ * municipio.
  *
- * <p><b>{@code autoManual} es un filtro que el contrato declara y esta pantalla no resuelve</b>, y
- * conviene decir por que en vez de fingirlo: hoy nada distingue en el libro un movimiento
- * registrado a mano de uno que produjo una emision, porque no hay ninguna columna que lo marque y
- * la emision masiva todavia no existe —es #30, mas adelante en la secuencia—. Cuando exista habra
- * que decidir como se marca; mientras tanto el filtro se ignora en vez de fallar la peticion, igual
- * que {@code situacion} en {@code CuentaCorrienteController}.
+ * <p><b>No es el libro entero</b> (#640). Un cobro de ventanilla no aparece aqui —es un pago, y
+ * tiene su propia consulta (RF-048)— ni el cargo de la emision masiva, aunque los tres se escriban
+ * con los mismos conceptos del desglose. Que se pudieran separar depende de {@code
+ * cuenta_corriente_asiento.acto} (V68), y las consecuencias de que esa columna nazca vacia en las
+ * filas viejas estan en {@code AsientoRepositoryJdbc#altasYBajas}.
+ *
+ * <p><b>{@code autoManual} es un filtro que el contrato declara y esta pantalla no resuelve.</b> Lo
+ * que el manual llama «automatica» es un alta o una baja que produjo un proceso —su columna «Doc.
+ * Aprob.» dice «BAJA AUTOMÁTICA: POR NO CORRESPONDER DEUDA…»—, no un cobro; y hoy <b>todo</b> lo
+ * que este sistema estampa con acto viene de las dos pantallas que lo registran a mano, asi que el
+ * filtro tendria una sola respuesta posible y «AUTOMÁTICA» devolveria la tabla vacia, que se lee
+ * como «no hay ninguna» en vez de «este sistema todavia no las produce» (#427, #431). Cuando {@code
+ * ExtincionDeDeuda} estampe su acto —el defecto gemelo que #601 dejo censado— habra un segundo
+ * origen y entonces la distincion tendra contra que medirse. Desde #539 el parametro no se ignora:
+ * {@code GuardiaDeParametros} lo rechaza con 422 nombrandolo.
  */
 @RestController
 @RequestMapping(Api.RAIZ + "/consultas/altas-bajas")
@@ -56,15 +66,20 @@ public class AltasBajasController {
     @GetMapping
     @Transactional(readOnly = true)
     public RespuestaPaginada<AsientoResource> altasYBajas(
-            @RequestParam String codigoCont,
+            @RequestParam(required = false) @Nullable String codigoCont,
+            @RequestParam(required = false) @Nullable String codContribuyente,
             @RequestParam(required = false) @Nullable String ano,
             @RequestParam(required = false) @Nullable String tributo,
             @RequestParam(required = false) @Nullable String altaBaja,
             ParametrosDePaginacion paginacion) {
 
+        String codigo = exigirContribuyente(codContribuyente, codigoCont, "codigoCont");
+        if (consulta.contribuyentePorCodigo(codigo).isEmpty()) {
+            throw noEstaEnElPadron(codigo);
+        }
+
         CriterioDeAltasBajas criterio =
-                new CriterioDeAltasBajas(
-                        codigoCont, ejercicioDe(ano), tributo, sentidoDe(altaBaja));
+                new CriterioDeAltasBajas(codigo, ejercicioDe(ano), tributo, sentidoDe(altaBaja));
 
         return RespuestaPaginada.de(
                 consulta.altasYBajas(criterio, paginacion.aPaginacion(ORDEN_POR_OMISION)),
@@ -93,5 +108,56 @@ public class AltasBajasController {
                     CodigoDeError.VALIDACION,
                     "El filtro «Alta / Baja» admite ALTA o BAJA: '" + texto + "'");
         }
+    }
+
+    /**
+     * Lo que la peticion diga de quien es la consulta, con los dos nombres (#622).
+     *
+     * <p>Uno de los dos es <b>obligatorio</b>: sin ninguno, 422. Sin esa exigencia esto seria una
+     * puerta al padron entero.
+     */
+    private static String exigirContribuyente(
+            @Nullable String canonico, @Nullable String alias, String nombreDelAlias) {
+        String codigo = primeroNoVacio(canonico, alias);
+        if (codigo == null) {
+            throw new ProblemaDeNegocio(
+                    CodigoDeError.VALIDACION,
+                    "Hay que decir de quien es la consulta: falta «codContribuyente» (o su otro"
+                            + " nombre, «"
+                            + nombreDelAlias
+                            + "»)");
+        }
+        return codigo;
+    }
+
+    private static @Nullable String primeroNoVacio(@Nullable String uno, @Nullable String otro) {
+        String primero = limpio(uno);
+        return primero != null ? primero : limpio(otro);
+    }
+
+    private static @Nullable String limpio(@Nullable String texto) {
+        if (texto == null) {
+            return null;
+        }
+        String sinBlancos = texto.strip();
+        return sinBlancos.isEmpty() ? null : sinBlancos;
+    }
+
+    /**
+     * Un codigo que no esta en el padron es {@code 404} nombrandolo, no una pagina vacia (#622).
+     *
+     * <p>Es el mismo defecto que #541 y #595 cerraron en las dos lecturas de Rentas: el expediente
+     * pide siete lecturas con el mismo codigo, una contestaba 404 y las otras seis «existe y no
+     * tiene nada». Quien atiende leia seis afirmaciones de que la persona existe debajo de una que
+     * decia que no — y la que mas cuesta es la de deuda, porque «no tiene deuda pendiente» sobre
+     * alguien que el padron no reconoce es lo que se dice antes de emitir una constancia de no
+     * adeudo.
+     */
+    private static RuntimeException noEstaEnElPadron(String codigo) {
+        return new ProblemaDeNegocio(
+                CodigoDeError.NO_ENCONTRADO,
+                "En el padron de esta municipalidad no hay ningun contribuyente con codigo '"
+                        + codigo
+                        + "'");
     }
 }
