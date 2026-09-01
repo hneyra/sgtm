@@ -43,6 +43,19 @@ const pagina = await contexto.newPage();
 
 const fallos = [];
 let vistas = 0;
+/* Cuantas peticiones al API salieron y cuantas volvieron 401. Con un token
+   caducado, TODAS lo hacen: las pantallas dibujan su aviso de sesion —asi que
+   ni el `<main>` queda vacio ni hay error de consola— y este recorrido informa
+   en verde sin haber mirado una sola pantalla conectada. Es el mismo agujero
+   que `flujos.mjs` ya cerro, y aqui es mas facil de pasar por alto porque este
+   arnes tambien sirve SIN token a proposito. */
+let alApi = 0;
+let sinAutenticar = 0;
+pagina.on('response', (r) => {
+  if (!r.url().includes('/api/v1')) return;
+  alApi++;
+  if (r.status() === 401) sinAutenticar++;
+});
 
 for (const m of MODULOS) {
   if (soloModulo && m.k !== soloModulo) continue;
@@ -76,6 +89,17 @@ for (const m of MODULOS) {
 }
 
 await navegador.close();
+
+/* Solo cuando se pidio token: sin el, un 401 en todo es lo esperado y correcto. */
+if (TOKEN && alApi > 0 && sinAutenticar === alApi) {
+  console.error(
+    `\nEl token no vale: las ${alApi} peticiones volvieron 401.\n` +
+      'Las pantallas dibujaron su aviso de sesion, asi que este recorrido no ha mirado\n' +
+      'ninguna pantalla conectada. Consigue un token fresco y vuelve a correrlo.',
+  );
+  process.exit(2);
+}
+
 console.log(`${vistas} pantallas recorridas · capturas en ${SALIDA}/`);
 if (fallos.length) {
   console.error(`\n${fallos.length} con problema:\n\n${fallos.join('\n\n')}`);
