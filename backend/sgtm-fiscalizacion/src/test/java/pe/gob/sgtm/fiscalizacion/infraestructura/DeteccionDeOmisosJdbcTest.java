@@ -66,7 +66,7 @@ class DeteccionDeOmisosJdbcTest {
 
     private static final Ejercicio E2024 = new Ejercicio(2024);
     private static final LocalDate HOY = LocalDate.of(2026, 3, 16);
-    private static final Paginacion PRIMERA = Paginacion.de(0, 20, "codigoRefCatastral");
+    private static final Paginacion PRIMERA = Paginacion.de(0, 20, "codRefCatastral");
 
     private static BaseDeDatosDePrueba base;
     private static long municipalidadA;
@@ -583,7 +583,7 @@ class DeteccionDeOmisosJdbcTest {
         }
 
         private Paginacion deTamano(int tamano, int pagina) {
-            return Paginacion.de(pagina, tamano, "codigoRefCatastral");
+            return Paginacion.de(pagina, tamano, "codRefCatastral");
         }
 
         /**

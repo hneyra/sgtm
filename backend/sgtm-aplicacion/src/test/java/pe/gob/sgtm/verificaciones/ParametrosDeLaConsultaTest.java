@@ -31,6 +31,9 @@ import org.springframework.web.bind.annotation.RequestMethod;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 import pe.gob.sgtm.auditoria.Operacion;
+import pe.gob.sgtm.fiscalizacion.dominio.CondicionFiscalizada;
+import pe.gob.sgtm.fiscalizacion.dominio.EstadoDeLiquidacion;
+import pe.gob.sgtm.fiscalizacion.dominio.Hallazgo;
 
 /**
  * El contrato y el controlador tienen que decir lo mismo sobre <b>por donde viajan los datos</b>
@@ -217,10 +220,18 @@ class ParametrosDeLaConsultaTest {
      * filtra, o uno que se lee sin publicar, ponen la prueba en rojo con la operacion dentro. Y
      * bajan solas segun cada modulo se revisa; la que baja se ajusta en el mismo PR, que es donde
      * se sabe por que.
+     *
+     * <p>#546 baja las dos. {@code POST /fiscalizacion/vehicular} declaraba los tres filtros del
+     * cruce registral —{@code placa}, {@code ejercicio}, {@code origenDelCruce}— y ese cruce no
+     * existe: se retiran con {@code SUPRIMIDOS}. {@code GET /fiscalizacion/estado-cuenta} declaraba
+     * los filtros de una pantalla de PAPELETAS y la paginacion de una grilla que no tiene, y no
+     * declaraba {@code fechaDeConsulta} —el parametro de la regla 9 y el unico, con el
+     * contribuyente, que la operacion lee—: la brecha en las <b>dos</b> direcciones a la vez, que
+     * es lo que hace que baje tambien la segunda cifra.
      */
-    private static final int OPERACIONES_CON_FILTRO_QUE_NADIE_LEE = 64;
+    private static final int OPERACIONES_CON_FILTRO_QUE_NADIE_LEE = 62;
 
-    private static final int OPERACIONES_QUE_LEEN_UN_FILTRO_SIN_PUBLICAR = 19;
+    private static final int OPERACIONES_QUE_LEEN_UN_FILTRO_SIN_PUBLICAR = 18;
 
     /** Una ruta del contrato: {@code "/ruta":} con dos espacios de sangria. */
     private static final Pattern RUTA_DEL_CONTRATO = Pattern.compile("  \"(/[^\"]*)\":");
@@ -482,6 +493,48 @@ class ParametrosDeLaConsultaTest {
     }
 
     @Test
+    @DisplayName("y el de los tres desplegables de fiscalizacion es el de SUS enumerados (#546)")
+    void elVocabularioDeFiscalizacionEsElDeSusEnumerados() throws IOException {
+        // El mismo eslabon que el de arriba, en el modulo donde #546 midio cinco
+        // desplegables que no cuadraban -y hasta CERO coincidencias de seis-. Lo que
+        // hace falta comprobar no es que la lista sea «razonable» sino que sea la del
+        // enumerado LETRA POR LETRA: parecerse no es serlo, y aqui el que se parece
+        // entra con 422 -o, en el acta, con 201 y sin hallazgo-.
+        assertThat(vocabularioDelContrato("/fiscalizacion/omisos", "condicion"))
+                .as("«Condicion» de fisc_omisos es CondicionFiscalizada")
+                .containsExactly(nombresDe(CondicionFiscalizada.values()));
+        assertThat(vocabularioDelContrato("/fiscalizacion/resultados", "hallazgo"))
+                .as("«Hallazgo» de fisc_resultados tambien: lo que filtra es lo DERIVADO")
+                .containsExactly(nombresDe(CondicionFiscalizada.values()));
+        assertThat(vocabularioDelContrato("/fiscalizacion/resultados", "estado"))
+                .as("«Estado» de fisc_resultados es EstadoDeLiquidacion, y no existe «Reclamado»")
+                .containsExactly(nombresDe(EstadoDeLiquidacion.values()));
+        assertThat(vocabularioDelContrato("/fiscalizacion/vehicular", "hallazgo"))
+                .as(
+                        "y el del acta es Hallazgo -CUATRO-, que no es CondicionFiscalizada: el"
+                                + " acta no consigna el uso observado, asi que USO_DISTINTO no se"
+                                + " puede anotar")
+                .containsExactly(nombresDe(Hallazgo.values()));
+    }
+
+    @Test
+    @DisplayName("y los dos vocabularios de fiscalizacion NO son el mismo: son cuatro y cinco")
+    void hallazgoNoEsCondicionFiscalizada() {
+        // Sin esto, las cuatro comprobaciones de arriba seguirian pasando el dia que
+        // alguien «unificara» los dos enumerados, que es exactamente el arreglo comodo
+        // ante una discrepancia futura -el que #436 tuvo que impedir por escrito con
+        // las partidas del cuadro y las de la ficha-.
+        assertThat(nombresDe(Hallazgo.values()))
+                .as(
+                        "USO_DISTINTO lo DERIVA el sistema comparando usos; el acta no tiene"
+                                + " columna donde anotarlo (V4, V24), asi que no puede ser un"
+                                + " hallazgo de campo mientras eso no cambie")
+                .hasSize(4)
+                .doesNotContain("USO_DISTINTO");
+        assertThat(nombresDe(CondicionFiscalizada.values())).hasSize(5).contains("USO_DISTINTO");
+    }
+
+    @Test
     @DisplayName("todo cuerpo publicado es un record, o la regla de arriba deja de verlo")
     void todoCuerpoPublicadoEsUnRecord() {
         List<String> sinForma = new ArrayList<>();
@@ -542,6 +595,37 @@ class ParametrosDeLaConsultaTest {
                 Pattern.compile("enum: \\[([^\\]]+)\\]").matcher(yaml.substring(parametro));
         assertThat(vocabulario.find()).as("con su vocabulario dentro").isTrue();
         return Arrays.stream(vocabulario.group(1).split(",")).map(String::strip).toList();
+    }
+
+    /**
+     * El {@code enum} que el contrato declara para un parametro de una ruta (#546).
+     *
+     * <p>Se lee del YAML y no de la tabla del generador a proposito: lo que un cliente ve es el
+     * contrato comprometido, y comprobar el generador contra si mismo no diria nada.
+     */
+    private static List<String> vocabularioDelContrato(String ruta, String parametro)
+            throws IOException {
+        String yaml =
+                Files.readString(
+                        raizDelRepositorio().resolve("docs/50-api/openapi/sgtm-v1.yaml"),
+                        StandardCharsets.UTF_8);
+        int desde = yaml.indexOf("  \"" + ruta + "\":");
+        assertThat(desde).as("la ruta %s esta en el contrato", ruta).isPositive();
+        int donde = yaml.indexOf("- name: " + parametro, desde);
+        assertThat(donde).as("%s declara el parametro %s", ruta, parametro).isPositive();
+        Matcher vocabulario =
+                Pattern.compile("enum: \\[([^\\]]+)\\]").matcher(yaml.substring(donde));
+        assertThat(vocabulario.find())
+                .as(
+                        "el parametro %s de %s tiene que publicar su vocabulario: se declara en"
+                                + " docs/50-api/generar-openapi.mjs (VOCABULARIOS), nunca a mano",
+                        parametro, ruta)
+                .isTrue();
+        return Arrays.stream(vocabulario.group(1).split(",")).map(String::strip).toList();
+    }
+
+    private static String[] nombresDe(Enum<?>[] valores) {
+        return Arrays.stream(valores).map(Enum::name).toArray(String[]::new);
     }
 
     private static Map<String, Set<String>> parametrosDeConsultaDelContrato() throws IOException {

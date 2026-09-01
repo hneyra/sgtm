@@ -4,6 +4,7 @@ import java.util.ArrayList;
 import java.util.List;
 import org.jspecify.annotations.Nullable;
 import pe.gob.sgtm.contribuyentes.ResumenDeContribuyente;
+import pe.gob.sgtm.dominio.AreaM2;
 import pe.gob.sgtm.dominio.Dinero;
 import pe.gob.sgtm.fiscalizacion.aplicacion.ConsultaDeResoluciones;
 import pe.gob.sgtm.fiscalizacion.aplicacion.TransferirARentas;
@@ -132,8 +133,8 @@ public record ResolucionResource(
             @Nullable String multa,
             @Nullable String total,
             String condicion,
-            @Nullable String areaDeclarada,
-            @Nullable String areaHallada) {
+            @Nullable AreaM2 areaDeclarada,
+            @Nullable AreaM2 areaHallada) {
 
         static LineaDeterminadaResource de(LineaDeLiquidacion linea) {
             return new LineaDeterminadaResource(
@@ -144,8 +145,8 @@ public record ResolucionResource(
                     cifra(linea.multaTributaria()),
                     cifra(total(linea)),
                     linea.condicion().name(),
-                    cifra(linea.areaDeclarada()),
-                    cifra(linea.areaHallada()));
+                    linea.areaDeclarada(),
+                    linea.areaHallada());
         }
 
         /**
@@ -162,12 +163,14 @@ public record ResolucionResource(
         }
 
         /**
-         * La cifra desnuda, sin unidad ni moneda: la pinta la pantalla, que sabe en que columna.
+         * La cifra desnuda, sin moneda: la moneda la pinta la pantalla, que sabe en que columna.
+         *
+         * <p>Las dos superficies ya no pasan por aqui: viajan como {@link AreaM2} y las escribe el
+         * serializador de {@code ConfiguracionDeJson} (#546).
          */
         private static @Nullable String cifra(@Nullable Object valor) {
             return switch (valor) {
                 case null -> null;
-                case pe.gob.sgtm.dominio.AreaM2 area -> area.valor().toPlainString();
                 case Dinero dinero -> dinero.valor().toPlainString();
                 default -> valor.toString();
             };

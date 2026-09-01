@@ -54,6 +54,43 @@ public final class OrdenSeguro {
     }
 
     /**
+     * Declara con qué nombre <b>publica el recurso</b> una columna cuyo {@code camelCase} no es el
+     * nombre del campo que sale por HTTP (#546).
+     *
+     * <p>{@link #sobre} admite la columna y su {@code camelCase} automático, y eso alcanza mientras
+     * los dos coincidan con el campo publicado. Cuando no coinciden, el listado ordena por un
+     * nombre que <b>no está en ninguna de sus filas</b>: {@code GET /fiscalizacion/omisos} publica
+     * {@code codRefCatastral} en cada fila y sólo aceptaba {@code ?ordenarPor=codigoRefCatastral};
+     * pedir por el nombre que la fila enseña daba {@code 422 ORDEN_NO_ADMITIDO}. Dos nombres para
+     * la misma columna en la misma operación, y el que el cliente ve es el que no funciona.
+     *
+     * <p>El {@code camelCase} automático de esa columna <b>se retira</b>: dejarlo dejaría los dos
+     * nombres vivos, que es el defecto de partida. La columna cruda sigue admitida, como en {@link
+     * #sobre}, para un cliente que ya conozca la tabla.
+     *
+     * @param campo el nombre que el {@code record} del recurso publica
+     * @param columna una de las columnas ya declaradas en {@link #sobre}
+     */
+    public OrdenSeguro publicandoComo(String campo, String columna) {
+        if (!esIdentificadorSimple(campo)) {
+            throw new IllegalArgumentException(
+                    "El campo publicado solo admite un identificador simple: '" + campo + "'");
+        }
+        if (!columnasPorCampo.containsValue(columna)) {
+            throw new IllegalArgumentException(
+                    "'"
+                            + columna
+                            + "' no esta en la lista blanca: publicandoComo renombra una columna ya"
+                            + " declarada en sobre(...), no anade ninguna");
+        }
+        Map<String, String> mapa = new TreeMap<>(String.CASE_INSENSITIVE_ORDER);
+        mapa.putAll(columnasPorCampo);
+        mapa.remove(aCamelCase(columna));
+        mapa.put(campo, columna);
+        return new OrdenSeguro(Map.copyOf(mapa), desempate);
+    }
+
+    /**
      * La misma lista blanca, con una columna que <b>rompe los empates</b> de la pedida (#543).
      *
      * <p>{@code ORDER BY orden} sobre doce modulos que tienen todos {@code orden = 0} no es un

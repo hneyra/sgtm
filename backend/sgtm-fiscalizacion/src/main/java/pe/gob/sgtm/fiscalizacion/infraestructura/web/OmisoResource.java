@@ -5,6 +5,7 @@ import java.util.List;
 import java.util.Map;
 import org.jspecify.annotations.Nullable;
 import pe.gob.sgtm.contribuyentes.ResumenDeContribuyente;
+import pe.gob.sgtm.dominio.AreaM2;
 import pe.gob.sgtm.fiscalizacion.dominio.FilaDeOmisos;
 
 /**
@@ -34,7 +35,14 @@ import pe.gob.sgtm.fiscalizacion.dominio.FilaDeOmisos;
  * (#198). Viajan en {@code null} y la interfaz escribe «sin cifra». Ponerles un número supuesto
  * produciría una esquela de cobranza sobre un valor inventado.
  *
- * <p>Lo que sí viaja con valor es la comparación de superficies, que es estructura.
+ * <p>Lo que sí viaja con valor es la comparación de superficies, que es estructura, y viaja como
+ * {@link AreaM2}: el serializador que {@code ConfiguracionDeJson} registra la escribe {@code
+ * "180.50"}, sin unidad. Hasta #546 estos tres campos eran {@code String} compuestos con {@code
+ * toString()}, así que salían {@code "180.50 m2"} aquí y en la muestra, y {@code "180.50"} en la
+ * liquidación y en la resolución — cuatro proyecciones del mismo módulo con dos formas del mismo
+ * dato, y el serializador registrado sin intervenir en ninguna porque los cuatro campos ya eran
+ * texto. <b>La unidad la pone la cabecera de la columna, no el dato</b>: metida dentro obliga a
+ * cada consumidor a recortarla antes de poder comparar.
  *
  * <p>{@code declaroFueraDePlazo} viaja aparte de {@code condicion} <b>a propósito</b> (AC 3): quien
  * declaró tarde no es omiso, y la pantalla tiene que poder decir las dos cosas sin mezclarlas.
@@ -48,8 +56,8 @@ import pe.gob.sgtm.fiscalizacion.dominio.FilaDeOmisos;
  * @param sector el sector del predio
  * @param condicion CONFORME, OMISO, SUBVALUADOR, USO_DISTINTO o NO_UBICADO
  * @param declaroFueraDePlazo si presentó su declaración vencido el plazo
- * @param areaCatastral el área de la ficha vigente, como texto
- * @param areaDeclarada el área de la ficha que la declaración referencia, como texto
+ * @param areaCatastral el área de la ficha vigente
+ * @param areaDeclarada el área de la ficha que la declaración referencia
  * @param diferenciaDeArea la diferencia, nunca negativa
  * @param valorCatastralS siempre {@code null} hasta D-02a
  * @param valorDeclaradoS siempre {@code null} hasta D-02a
@@ -64,9 +72,9 @@ public record OmisoResource(
         @Nullable String sector,
         String condicion,
         boolean declaroFueraDePlazo,
-        @Nullable String areaCatastral,
-        @Nullable String areaDeclarada,
-        @Nullable String diferenciaDeArea,
+        @Nullable AreaM2 areaCatastral,
+        @Nullable AreaM2 areaDeclarada,
+        @Nullable AreaM2 diferenciaDeArea,
         @Nullable String valorCatastralS,
         @Nullable String valorDeclaradoS,
         @Nullable String diferenciaS,
@@ -111,9 +119,9 @@ public record OmisoResource(
                 fila.sectorCodigo(),
                 fila.condicion().name(),
                 fila.declaroFueraDePlazo(),
-                texto(fila.areaCatastral()),
-                texto(fila.areaDeclarada()),
-                texto(fila.diferenciaDeArea()),
+                fila.areaCatastral(),
+                fila.areaDeclarada(),
+                fila.diferenciaDeArea(),
                 texto(fila.valorCatastral()),
                 texto(fila.valorDeclarado()),
                 null,

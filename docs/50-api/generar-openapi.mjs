@@ -199,7 +199,41 @@ const SUPRIMIDOS = {
   // Asi que el que se va es el nombre, no el filtro: `operacion` sube a
   // DEL_BACKEND con el vocabulario del enumerado, y la pantalla manda ese.
   auditoria: ['accion'],
-
+  // `POST /fiscalizacion/vehicular` declara tres filtros del **cruce registral**
+  // —SUNARP, SUNAT, MTC— y ese cruce NO EXISTE: no hay integracion con ningun
+  // registro, ni tabla donde apoyarla, ni operacion que la haga (#546, AC 9).
+  // `ActaVehicularController` registra el acta de una inspeccion, lee `hallazgo`
+  // —de la consulta y del cuerpo, como #425 lo dejo— y no mira ninguno de los
+  // tres.
+  //
+  // Y no se cierra dejandolos declarados: un parametro publicado es una promesa
+  // —el frontend lo manda creyendo que acota, y aqui acotaria QUE VEHICULO se
+  // fiscaliza—. Fingir la integracion seria peor todavia: la placa que el cruce
+  // «no encontro» es indistinguible de la del cruce que nadie hizo.
+  //
+  // Vuelven el dia que exista la operacion del cruce, y entonces seran suyos y
+  // no de esta acta.
+  fisc_vehicular: ['placa', 'ejercicio', 'origenDelCruce'],
+  // `GET /fiscalizacion/estado-cuenta` declaraba los filtros de una pantalla de
+  // PAPELETAS —«Tipo de papeleta», «Papeleta», «Placa»— y la paginacion de una
+  // grilla, y no leia ninguno de los siete (#546, AC 4). Lo que la operacion
+  // contesta es el estado de cuenta de UN contribuyente: una sola respuesta, sin
+  // sobre paginado, con sus lineas dentro.
+  //
+  // Los tres primeros no son de esta pantalla —`OmisosController.estadoDeCuenta`
+  // lee `contribuyente` y `fechaDeConsulta`, y nada mas—; los cuatro de
+  // paginacion los pone el generador a toda lectura con tabla, y aqui no hay
+  // ninguna que paginar. `fechaDeConsulta`, que si se lee y es el parametro de la
+  // regla 9, se declara en DEL_BACKEND.
+  fisc_estado_cuenta: [
+    'tipoDePapeleta',
+    'papeleta',
+    'placa',
+    'pagina',
+    'tamano',
+    'ordenarPor',
+    'direccion',
+  ],
 };
 
 /**
@@ -254,6 +288,21 @@ const DEL_BACKEND = {
         Sobre que tabla se actuo, tal como la bitacora la nombra —«recibo», «predio»,
         «sesion»—. Es lo que la grilla dibuja en la columna «Opción».
       `),
+    },
+  ],
+  // El estado de cuenta de fiscalizacion responde **a una fecha**: es la unica
+  // cifra que publica y no existe «la deuda», existe la deuda actualizada a un
+  // dia (regla 9, RNF-075). `OmisosController.estadoDeCuenta` lo lee desde #49 y
+  // el contrato no lo declaraba, asi que el unico parametro que la operacion
+  // sirve de verdad era el que ninguna pantalla podia mandar (#546).
+  fisc_estado_cuenta: [
+    {
+      nombre: 'fechaDeConsulta',
+      ejemplo: '2026-09-01',
+      tras: 'contribuyente',
+      descripcion:
+        'A que dia se actualizan las cifras (regla 9, RNF-075). Sin el, hoy. En formato ISO' +
+        ' (2026-09-01)',
     },
   ],
   // Las cuatro fichas responden **a una fecha**: sin ella, la que rige hoy; con
@@ -686,6 +735,86 @@ const DESCRIPCIONES_DE_FILTRO = {
   },
   costas_procesales_listado: {
     estado: 'Filtro «Estado» de la pantalla. Se derivan del libro: ACTIVA o CANCELADA',
+  },
+};
+
+/**
+ * El vocabulario que un desplegable de la pantalla puede ofrecer, letra por letra.
+ *
+ * Un filtro de la pantalla sale del contrato como `{ type: string }`, o sea sin
+ * decir que palabras admite. Mientras el backend acepte texto libre eso es
+ * exacto; en cuanto detras hay un `enum` de Java —y el controlador rechaza con
+ * 422 lo que no este en el—, el contrato tiene que decirlo, porque si no cada
+ * pantalla inventa su lista y **parecerse no es serlo**: es el cruce que dejo
+ * `infracciones_adm` sin conectar hasta #397, el que #427 se nego a traducir
+ * («ACTIVA» no es VIGENTE) y el que #546 midio en fiscalizacion —cinco
+ * desplegables y hasta cero coincidencias de seis—.
+ *
+ * Cada entrada nombra el enumerado del que sale, y una prueba del backend
+ * (`ParametrosDeLaConsultaTest`) compara este texto contra los `values()` de esa
+ * clase: anadirle un valor al enumerado sin publicarlo aqui, o publicar aqui uno
+ * que el enumerado no tiene, pone el build en rojo.
+ *
+ * **No hay traduccion en ninguna direccion.** Lo que se publica es lo que el
+ * enumerado declara; si a la pantalla le falta una palabra, la decision es
+ * anadirla al enumerado —con su norma o su pantalla del manual— o quitarla del
+ * desplegable, nunca mapearla a la que se le parece.
+ */
+const VOCABULARIOS = {
+  // `CondicionFiscalizada` (5). Se DERIVA comparando lo hallado con lo
+  // declarado, asi que la lista no puede salir de una columna: sale del
+  // enumerado. Omitir el parametro son todas.
+  fisc_omisos: {
+    condicion: {
+      valores: ['CONFORME', 'OMISO', 'SUBVALUADOR', 'USO_DISTINTO', 'NO_UBICADO'],
+      enumerado: 'CondicionFiscalizada',
+      descripcion:
+        'Filtro «Condición» de la pantalla. El vocabulario es el del enumerado' +
+        ' «CondicionFiscalizada», letra por letra; cualquier otra palabra se rechaza con 422 en' +
+        ' vez de devolver una pagina vacia. Sin el parametro, todas.',
+    },
+  },
+  // La misma `CondicionFiscalizada` bajo el rotulo «Hallazgo» de la pantalla, y
+  // `EstadoDeLiquidacion` (5), que se deriva del historial de movimientos. El
+  // artboard dibujaba «Determinado», «Notificado», «Reclamado» y «Conforme»: de
+  // los cuatro ninguno es un valor del enumerado, y «Reclamado» no existe.
+  fisc_resultados: {
+    hallazgo: {
+      valores: ['CONFORME', 'OMISO', 'SUBVALUADOR', 'USO_DISTINTO', 'NO_UBICADO'],
+      enumerado: 'CondicionFiscalizada',
+      descripcion:
+        'Filtro «Hallazgo» de la pantalla: la condicion del contraste. El vocabulario es el del' +
+        ' enumerado «CondicionFiscalizada», letra por letra. Sin el parametro, todas.',
+    },
+    estado: {
+      valores: ['ABIERTA', 'EN_PROCESO', 'LIQUIDADA', 'NOTIFICADA', 'ANULADA'],
+      enumerado: 'EstadoDeLiquidacion',
+      descripcion:
+        'Filtro «Estado» de la pantalla. El vocabulario es el del enumerado' +
+        ' «EstadoDeLiquidacion», que se DERIVA del historial de movimientos y no es una columna.' +
+        ' No existe «Reclamado». Se admite tambien la etiqueta con espacio, «EN PROCESO».',
+    },
+  },
+  // `Hallazgo` (4) es lo que el fiscalizador ANOTA en campo, y no es lo mismo
+  // que `CondicionFiscalizada` (5), que es lo que el sistema DERIVA: el acta no
+  // tiene donde consignar el uso observado —`acta_fiscalizacion` guarda area y
+  // no uso—, asi que USO_DISTINTO no puede anotarse y el enumerado no lo tiene.
+  //
+  // Y aqui publicar el vocabulario importa mas que en las lecturas: `hallazgo`
+  // es OPCIONAL, asi que una palabra que el enumerado no reconoce no da una
+  // lista vacia — daba 422, y una que se omite deja el acta entrando con 201 y
+  // SIN hallazgo, que `LiquidarFiscalizacion` ya no liquida (lanza
+  // `ActaSinHallazgo`) pero que nadie ve al registrarla.
+  fisc_vehicular: {
+    hallazgo: {
+      valores: ['CONFORME', 'OMISO', 'SUBVALUADOR', 'NO_UBICADO'],
+      enumerado: 'Hallazgo',
+      descripcion:
+        'Lo que el fiscalizador encontro en campo. El vocabulario es el del enumerado' +
+        ' «Hallazgo», letra por letra —cuatro valores, y no los cinco de' +
+        ' «CondicionFiscalizada»: un acta no consigna el uso observado—. Tambien se admite en el' +
+        ' cuerpo, y ahi gana (#425).',
+    },
   },
 };
 
@@ -2228,7 +2357,13 @@ function clavesRepetidas(fuente, tabla) {
 
 {
   const fuente = readFileSync(fileURLToPath(import.meta.url), 'utf8');
-  const tablas = ['SUPRIMIDOS', 'DEL_BACKEND', 'DESCRIPCIONES', 'OPERACIONES_ADICIONALES'];
+  const tablas = [
+    'SUPRIMIDOS',
+    'DEL_BACKEND',
+    'DESCRIPCIONES',
+    'VOCABULARIOS',
+    'OPERACIONES_ADICIONALES',
+  ];
   const repetidas = tablas.flatMap((tabla) =>
     clavesRepetidas(fuente, tabla).map((clave) => `${tabla}.${clave}`),
   );
@@ -2509,9 +2644,20 @@ function intercalar(parametros, intercalados) {
 /** El texto por omision de un filtro, salvo donde el servicio hace otra cosa. */
 function conSuDescripcion(operationId, parametros) {
   const propias = DESCRIPCIONES_DE_FILTRO[operationId] ?? {};
-  return parametros.map((parametro) =>
-    propias[parametro.nombre] ? { ...parametro, descripcion: propias[parametro.nombre] } : parametro,
-  );
+  const vocabularios = VOCABULARIOS[operationId] ?? {};
+  return parametros.map((parametro) => {
+    const vocabulario = vocabularios[parametro.nombre];
+    if (vocabulario) {
+      return {
+        ...parametro,
+        descripcion: vocabulario.descripcion,
+        esquema: `{ type: string, enum: [${vocabulario.valores.join(', ')}] }`,
+      };
+    }
+    return propias[parametro.nombre]
+      ? { ...parametro, descripcion: propias[parametro.nombre] }
+      : parametro;
+  });
 }
 
 /* ── Serializar a YAML, sin dependencias ──────────────────────────────── */

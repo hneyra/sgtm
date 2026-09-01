@@ -2980,26 +2980,11 @@ paths:
       description: "Cruce del padrón vehicular con la información registral y de SUNAT para detectar vehículos afectos no declarados o con valor subvaluado."
       tags: ["Fiscalización"]
       parameters:
-        - name: placa
-          in: query
-          required: false
-          description: "Filtro «Placa» de la pantalla"
-          schema: { type: string }
-        - name: ejercicio
-          in: query
-          required: false
-          description: "Filtro «Ejercicio» de la pantalla"
-          schema: { type: string }
-        - name: origenDelCruce
-          in: query
-          required: false
-          description: "Filtro «Origen del cruce» de la pantalla"
-          schema: { type: string }
         - name: hallazgo
           in: query
           required: false
-          description: "Filtro «Hallazgo» de la pantalla"
-          schema: { type: string }
+          description: "Lo que el fiscalizador encontro en campo. El vocabulario es el del enumerado «Hallazgo», letra por letra —cuatro valores, y no los cinco de «CondicionFiscalizada»: un acta no consigna el uso observado—. Tambien se admite en el cuerpo, y ahi gana (#425)."
+          schema: { type: string, enum: [CONFORME, OMISO, SUBVALUADOR, NO_UBICADO] }
       requestBody:
         required: true
         content:
@@ -3030,13 +3015,13 @@ paths:
         - name: hallazgo
           in: query
           required: false
-          description: "Filtro «Hallazgo» de la pantalla"
-          schema: { type: string }
+          description: "Filtro «Hallazgo» de la pantalla: la condicion del contraste. El vocabulario es el del enumerado «CondicionFiscalizada», letra por letra. Sin el parametro, todas."
+          schema: { type: string, enum: [CONFORME, OMISO, SUBVALUADOR, USO_DISTINTO, NO_UBICADO] }
         - name: estado
           in: query
           required: false
-          description: "Filtro «Estado» de la pantalla"
-          schema: { type: string }
+          description: "Filtro «Estado» de la pantalla. El vocabulario es el del enumerado «EstadoDeLiquidacion», que se DERIVA del historial de movimientos y no es una columna. No existe «Reclamado». Se admite tambien la etiqueta con espacio, «EN PROCESO»."
+          schema: { type: string, enum: [ABIERTA, EN_PROCESO, LIQUIDADA, NOTIFICADA, ANULADA] }
         - name: pagina
           in: query
           required: false
@@ -3090,8 +3075,8 @@ paths:
         - name: condicion
           in: query
           required: false
-          description: "Filtro «Condición» de la pantalla"
-          schema: { type: string }
+          description: "Filtro «Condición» de la pantalla. El vocabulario es el del enumerado «CondicionFiscalizada», letra por letra; cualquier otra palabra se rechaza con 422 en vez de devolver una pagina vacia. Sin el parametro, todas."
+          schema: { type: string, enum: [CONFORME, OMISO, SUBVALUADOR, USO_DISTINTO, NO_UBICADO] }
         - name: pagina
           in: query
           required: false
@@ -3137,44 +3122,12 @@ paths:
           required: false
           schema: { type: string }
           example: "codigo"
-        - name: tipoDePapeleta
+        - name: fechaDeConsulta
           in: query
           required: false
-          description: "Filtro «Tipo de papeleta» de la pantalla"
+          description: "A que dia se actualizan las cifras (regla 9, RNF-075). Sin el, hoy. En formato ISO (2026-09-01)"
           schema: { type: string }
-        - name: papeleta
-          in: query
-          required: false
-          description: "Filtro «Papeleta» de la pantalla"
-          schema: { type: string }
-        - name: placa
-          in: query
-          required: false
-          description: "Filtro «Placa» de la pantalla"
-          schema: { type: string }
-        - name: pagina
-          in: query
-          required: false
-          description: "Pagina que se pide, contada desde 0"
-          schema: { type: string }
-          example: "0"
-        - name: tamano
-          in: query
-          required: false
-          description: "Filas por pagina"
-          schema: { type: string }
-          example: "20"
-        - name: ordenarPor
-          in: query
-          required: false
-          description: "Campo por el que se ordena, en camelCase"
-          schema: { type: string }
-        - name: direccion
-          in: query
-          required: false
-          description: "ASCENDENTE | DESCENDENTE"
-          schema: { type: string }
-          example: "ASCENDENTE"
+          example: "2026-09-01"
       responses:
         200:
           description: Operacion realizada

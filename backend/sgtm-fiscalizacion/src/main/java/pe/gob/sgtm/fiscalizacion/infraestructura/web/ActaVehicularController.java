@@ -27,7 +27,21 @@ import pe.gob.sgtm.web.ProblemaDeNegocio;
  * <p>Trabaja sobre una copia: no toca ninguna fila de {@code rentas} (AC de #45). Nunca lleva ficha
  * ni área —esas dos son del acta predial—. El cuerpo es una <b>lista blanca</b>.
  *
- * <p><b>{@code hallazgo} también viaja por la consulta</b> (#425). Es el filtro «Hallazgo» que la
+ * <h2>Los tres filtros del cruce registral se retiran del contrato (#546, AC 9)</h2>
+ *
+ * <p>El contrato declaraba {@code placa}, {@code ejercicio} y {@code origenDelCruce} {@code in:
+ * query} para esta operación, y <b>ningún método los lee</b>: son los filtros del cruce del padrón
+ * vehicular contra SUNARP, SUNAT y MTC, y ese cruce <b>no existe</b> —no hay integración con ningún
+ * registro, ni tabla donde apoyarla, ni operación que la haga—. Esta operación registra el acta de
+ * una inspección, que es otra cosa.
+ *
+ * <p>Se retiran con {@code SUPRIMIDOS} del generador y no se dejan declarados: un parámetro
+ * publicado es una promesa —el frontend lo manda creyendo que acota, y aquí acotaría <b>qué
+ * vehículo se fiscaliza</b>—. Fingir la integración habría sido peor: la placa que el cruce «no
+ * encontró» es indistinguible de la del cruce que nadie hizo. Vuelven el día que exista la
+ * operación del cruce, y entonces serán suyos y no de esta acta.
+ *
+ * <p><b>{@code hallazgo} sí se lee, y no es del cruce</b> (#425). Es el filtro «Hallazgo» que la
  * pantalla dibuja y el contrato lo declara {@code in: query}. Aquí el desajuste no producía un 422
  * sino algo peor: {@code hallazgo} es opcional, así que la petición que la interfaz sabe construir
  * entraba con <b>201</b> y el acta quedaba guardada <b>sin hallazgo</b> —una inspección sin
