@@ -37,6 +37,12 @@ import pe.gob.sgtm.parametros.ParametrosSellados;
  * sin arancel declarado <b>no se liquida</b> —no se liquida a cero—, porque cero y «esta ordenanza
  * no lo tarifa» son cosas distintas y la segunda no es un cobro.
  *
+ * <p><b>Y eso vale mientras haya ordenanza</b> (#634). Un conjunto sellado que no publica
+ * <b>ninguna</b> llave {@code ARANCEL_COSTA} no esta diciendo que la ordenanza no tarife nada: esta
+ * diciendo que no hay ordenanza cargada, que es D-02c (#193) y el estado de hoy en todas las
+ * municipalidades. Las dos se distinguen con {@link Vigente#tarifaAlgunActo()}, y la segunda falla
+ * nombrando la llave en vez de dejar el expediente sin nada que liquidar.
+ *
  * <h2>«Vigente a la fecha de la liquidacion», no vigente hoy</h2>
  *
  * <p>El conjunto se resuelve por el ejercicio de la fecha de la liquidacion, y su identificador
@@ -134,6 +140,23 @@ public class ArancelDeCostasParametrizado {
          */
         public boolean tarifa(TipoDeActoCoactivo tipo) {
             return sellados.numero(TIPO_ARANCEL, clave(tipo)).isPresent();
+        }
+
+        /**
+         * Si la ordenanza cargada tarifa <b>algun</b> acto (#634).
+         *
+         * <p>Es lo que separa dos situaciones que hasta #634 se contestaban igual: que la ordenanza
+         * tarife unos actos y otros no —una <b>decision</b> de la ordenanza, que se respeta— y que
+         * nadie haya publicado el arancel —que no es ninguna decision: falta el dato—. El conjunto
+         * sellado sabe distinguirlas porque {@link ParametrosSellados#clavesDe} enumera las claves
+         * que publica de un tipo, asi que cero claves {@code ARANCEL_COSTA} es «nadie lo publico».
+         *
+         * <p>La pregunta se hace <b>aqui</b> y no en el caso de uso porque el nombre del tipo de
+         * parametro es de esta clase: quien liquida no tiene por que saber como se llama la familia
+         * de llaves, solo si hay arancel con el que liquidar.
+         */
+        public boolean tarifaAlgunActo() {
+            return !sellados.clavesDe(TIPO_ARANCEL).isEmpty();
         }
 
         private static String clave(TipoDeActoCoactivo tipo) {

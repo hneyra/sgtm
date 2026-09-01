@@ -388,23 +388,43 @@ class CostasYConveniosControllerTest {
     }
 
     @Test
-    @DisplayName("y un conjunto sellado sin el arancel es otro 422: no llega a la llave")
+    @DisplayName("y un conjunto sellado sin NINGUN arancel es otro 422, y nombra la llave (#634)")
     void liquidarSinElArancel() throws Exception {
         expedienteConRec1();
 
-        MvcResult resultado = liquidarCon(new SinArancelDeLaRec1());
+        MvcResult resultado = liquidarCon(new SinNingunArancel());
 
         assertThat(resultado.getResponse().getStatus()).isEqualTo(422);
         assertThat(resultado.getResponse().getContentAsString())
                 .as(
-                        "medido, no supuesto: `ArancelSinParametrizar` esta en el catch desde #42 y"
-                                + " por esta ruta NO se alcanza —`LiquidarCostas.candidatosDe`"
-                                + " descarta con `arancel.tarifa(tipo)` los actos que la ordenanza"
-                                + " no tarifa, asi que ninguno llega a `paraElActo` y lo que sale"
-                                + " es `SinActosQueLiquidar`—. El 422 es el mismo; lo que cambia es"
-                                + " que el mensaje no nombra la llave sino el expediente")
-                .contains("no tiene ningun acto pendiente de liquidar")
+                        "hasta #634 esta ruta contestaba «este expediente no tiene ningun acto"
+                                + " pendiente de liquidar» —el mismo 422, con el mensaje que se"
+                                + " lee como «no hay nada que cobrar» en vez de «falta publicar"
+                                + " una cifra»—")
+                .contains("ARANCEL_COSTA:REC1")
+                .contains("#193")
                 .doesNotContain("incidencia");
+        assertThat(cargos.asentados).as("y no se asienta ningun cargo").isEmpty();
+    }
+
+    @Test
+    @DisplayName("pero si la ordenanza tarifa OTROS actos, sigue siendo 422 sin llave (#634)")
+    void liquidarConUnaOrdenanzaQueNoTarifaEsteActo() throws Exception {
+        expedienteConRec1();
+
+        MvcResult resultado = liquidarCon(new ConOtroArancelQueNoEsElDeLaRec1());
+
+        assertThat(resultado.getResponse().getStatus()).isEqualTo(422);
+        assertThat(resultado.getResponse().getContentAsString())
+                .as(
+                        "es el contraste que impide convertirlo todo en `ArancelSinParametrizar`:"
+                                + " que la ordenanza no tarife un acto es una decision suya, y"
+                                + " pedir que se publique una llave seria pedir que se cambie la"
+                                + " ordenanza")
+                .contains("no tiene ningun acto pendiente de liquidar")
+                .doesNotContain("ARANCEL_COSTA")
+                .doesNotContain("incidencia");
+        assertThat(cargos.asentados).isEmpty();
     }
 
     @Test
@@ -458,6 +478,8 @@ class CostasYConveniosControllerTest {
         registro.addAppender(anotados);
         try {
             liquidarCon(new ArancelSinSellar());
+            liquidarCon(new SinNingunArancel());
+            liquidarCon(new ConOtroArancelQueNoEsElDeLaRec1());
             fraccionar(expediente, false, "Se registra el convenio coactivo");
         } finally {
             registro.detachAppender(anotados);
@@ -717,12 +739,46 @@ class CostasYConveniosControllerTest {
         }
     }
 
-    /** Hay conjunto sellado y no trae el arancel de la REC-1: el caso que #42 ya traducia. */
-    private static final class SinArancelDeLaRec1 implements LectorDeParametros {
+    /**
+     * Hay conjunto sellado y no trae <b>ningun</b> {@code ARANCEL_COSTA}: el estado de hoy (D-02c).
+     *
+     * <p>No es que la ordenanza no tarife estos actos: es que no hay ordenanza cargada, y por eso
+     * desde #634 la respuesta nombra la llave que falta en vez de decir que no hay actos.
+     */
+    private static final class SinNingunArancel implements LectorDeParametros {
 
         @Override
         public ParametrosSellados vigenteEn(Ejercicio ejercicio) {
             return ParametrosSellados.de(ejercicio, 1).construir();
+        }
+
+        @Override
+        public ParametrosSellados porConjunto(IdentificadorDeConjunto identificador) {
+            return vigenteEn(EJERCICIO);
+        }
+
+        @Override
+        public IdentificadorDeConjunto conjuntoVigenteEn(Ejercicio ejercicio) {
+            return IdentificadorDeConjunto.de(1);
+        }
+    }
+
+    /**
+     * La ordenanza esta publicada y tarifa el embargo, no la REC-1: una decision suya (#634).
+     *
+     * <p>Es el contraste de {@link SinNingunArancel}: aqui no falta ninguna cifra que publicar, asi
+     * que la respuesta no puede nombrar ninguna llave.
+     */
+    private static final class ConOtroArancelQueNoEsElDeLaRec1 implements LectorDeParametros {
+
+        @Override
+        public ParametrosSellados vigenteEn(Ejercicio ejercicio) {
+            return ParametrosSellados.de(ejercicio, 1)
+                    .numero(
+                            "ARANCEL_COSTA",
+                            TipoDeActoCoactivo.EMBARGO.name(),
+                            ValorNormativo.de("20.00"))
+                    .construir();
         }
 
         @Override

@@ -4129,5 +4129,8 @@ const COLUMNAS_DE_LA_FICHA: readonly ColumnaDeTabla[] = [
   ['Direccion', 0],
   ['Uso', 0],
   ['Condicion', 0],
-  ['Area de terreno', 1],
+  // La unidad va en el rotulo desde #607: el dato viaja como cifra sola —«360.00»,
+  // igual en catastro, rentas, fiscalizacion y licencias— y quien la lee tiene que
+  // poder decir en que se mide sin abrir el contrato.
+  ['Area de terreno (m2)', 1],
 ];
