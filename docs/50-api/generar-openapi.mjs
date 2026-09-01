@@ -1256,6 +1256,47 @@ const OPERACIONES_ADICIONALES = {
       ],
       paginacion: true,
     },
+    // El recuento de la conciliacion (#564). No es la grilla con `tamano=1`: la
+    // grilla NO SE PUEDE USAR PARA CONTAR —el filtro se aplica sobre la pagina y
+    // `totalElementos` sigue siendo el del padron sin filtrar—, y medido sobre
+    // Catacaos los tres valores del filtro devolvian 14 422, o sea el padron
+    // entero. El panel de Catastro pintaba con esa cifra «Predios sin conciliar:
+    // 14 422» encima de «14 422 predios en el padron».
+    //
+    // No pagina y no acepta los filtros de la grilla, a proposito: la pregunta es
+    // sobre el padron, y aceptarlos obligaria a repetir aqui aquel WHERE.
+    {
+      operationId: 'conciliacion_resumen',
+      metodo: 'get',
+      ruta: '/api/v1/catastro/fichas/conciliacion/resumen',
+      titulo: 'Recuento de la conciliación con rentas',
+      descripcion:
+        'Cuántos predios del padrón hay a esa fecha, cuántos declararon ese ejercicio y cuántos' +
+        ' no, resuelto en **una** consulta agregada y sin recorrer el padrón (#564). Existe' +
+        ' porque la grilla no sirve para contar: su filtro se aplica sobre la página ya devuelta' +
+        ' y su `totalElementos` es el del padrón sin filtrar. La población es la misma que lista' +
+        ' la grilla —las fichas vigentes a la fecha—, y que lo siga siendo lo comprueba una' +
+        ' prueba que compara las dos cifras. A diferencia de `conciliadaConRentas=No`, **no** ' +
+        'exige privilegio sobre `fisc_omisos` y **no** deja fila en la bitácora: aquella nombra' +
+        ' —es la lista de a quién no le va a llegar recibo— y ésta cuenta.',
+      parametros: [
+        {
+          nombre: 'ejercicio',
+          ejemplo: '2026',
+          descripcion:
+            'A qué ejercicio responde el recuento; si falta, el de la fecha de corte. La' +
+            ' respuesta lo dice siempre: no existe «sin conciliar», existe «sin conciliar a' +
+            ' 2026» (regla 9, RNF-075)',
+        },
+        {
+          nombre: 'fecha',
+          ejemplo: '2026-08-28',
+          descripcion:
+            'Fecha de corte a la que se resuelve qué versión de ficha rige, igual que en la' +
+            ' grilla; si falta, hoy',
+        },
+      ],
+    },
     // El plano catastral (#500, ADR-0022). Cuelga de `/catastro/predios` porque
     // el recurso es el predio, y sale de `consulta_fichas` porque **es esa misma
     // busqueda por otro camino**: el mapa es la forma principal de encontrar un
