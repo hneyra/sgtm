@@ -31,14 +31,25 @@ import pe.gob.sgtm.dominio.Ejercicio;
  * <h2>Y lo que costo se midio antes de cambiarlo</h2>
  *
  * <p>El motivo escrito en #56 para no leer el libro era el coste: «recorrer el libro entero de un
- * ejercicio en cada carga de la pantalla de inicio». Medido contra PostgreSQL 16 con un padron del
- * tamano de Catacaos —105 161 asientos y 100 154 filas proyectadas, como {@code sgtm_app}, con RLS
- * activa y tres repeticiones de cada consulta en la misma sesion (mediana)—: la cartera sobre
- * {@code saldo_proyectado} tardaba <b>74,6 ms</b> y sobre el libro tarda <b>234,0 ms</b>. Pero
- * {@link #cargadoPorTributo} <b>ya</b> recorre esa misma particion en cada carga del panel y tarda
- * <b>178,8 ms</b>: la consulta nueva cuesta 1,3 veces la que el panel ya paga sobre la misma
- * particion, asi que leer el libro no es una clase de coste nueva. Lo que se gana a cambio es que
- * no hay dos definiciones de «lo pendiente» que puedan divergir.
+ * ejercicio en cada carga de la pantalla de inicio». Se midio antes de derogarlo, y la medida
+ * completa —con su plan, sus paginas y sus mutaciones— vive en {@code CarteraEnElPlanJdbcTest}:
+ * sobre <b>dos</b> padrones del tamano de Catacaos en la misma instalacion (210 210 asientos en la
+ * particion de 2026), como {@code sgtm_app} y con RLS activa, la cartera sobre {@code
+ * saldo_proyectado} tardaba <b>76,4 ms</b> y tocaba <b>3 944</b> paginas; sobre el libro tarda
+ * <b>178,1 ms</b> y toca <b>4 166</b>. Y {@link #cargadoPorTributo}, que el panel <b>ya</b> paga en
+ * cada carga sobre esa misma particion, tarda 127,9 ms y toca <b>4 210</b>: la consulta nueva toca
+ * <b>menos</b> paginas que la que ya se pagaba, asi que no estrena una clase de coste.
+ *
+ * <p><b>Y el aislamiento efectivo de la lectura mejora, que no se esperaba.</b> {@code
+ * saldo_proyectado} no esta particionada y no tiene indice por {@code municipalidad_id}, asi que la
+ * consulta vieja recorria la tabla entera y descartaba <b>63 310</b> filas de la municipalidad
+ * vecina y de otros ejercicios; la nueva lee <b>cero</b> filas ajenas, porque el mapa de bits sobre
+ * {@code municipalidad_id} las excluye antes de tocar el heap y la particion poda el ejercicio.
+ *
+ * <p>Lo unico que sale mas caro es CPU y no E/S —el agregado por obligacion desborda a disco con el
+ * {@code work_mem} por omision, y con 32 MB baja a 157,8 ms—, y <b>ningun indice lo arregla</b>: se
+ * midio uno de cobertura, ocupa 18 MB sobre una tabla de 51 y el planificador no lo usa ni una vez.
+ * Lo que se gana a cambio es que no hay dos definiciones de «lo pendiente» que puedan divergir.
  *
  * <p>{@code readOnly = true} y ni un bloqueo, por lo mismo que en {@link
  * RecaudacionDelLibroCuentaCorriente}: un panel se mira mientras la ventanilla cobra. Sin
