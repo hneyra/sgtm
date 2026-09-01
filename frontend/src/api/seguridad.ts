@@ -36,19 +36,28 @@ export const ROTULO_DEL_PRIVILEGIO: Record<Privilegio, string> = {
 
 /**
  * Las siete clases de acto que la bitacora reconoce. Es `Operacion` del
- * backend, **letra por letra**.
+ * backend, **letra por letra**, y desde #544 tambien el `enum` que el contrato
+ * publica para el parametro `operacion` de esta ruta.
  *
  * <h2>El que no esta, y el que no es de aqui</h2>
  *
  * No hay `ELIMINACION`: la aplicacion no borra (RNF-051), y lo que parece un
  * borrado es una `BAJA`, una `ANULACION` o una `REVERSION`. `ELIMINACION` si
- * existe, pero como **privilegio** —esta arriba, en `PRIVILEGIOS`—, y ofrecerlo
- * como operacion devuelve siempre una tabla vacia: medido contra la
- * municipalidad 1, `?operacion=ELIMINACION` da 0 filas de 1 481.
+ * existe, pero como **privilegio** —esta arriba, en `PRIVILEGIOS`—.
  *
- * Y el que mas pesa es el que faltaba: `PERMISO` son 1 160 de esas 1 481 filas
- * —cada cambio de la matriz de accesos deja la suya (ADR-0008 §5)—, que es
- * justo lo que esta pantalla existe para poder mirar.
+ * <h2>Y ofrecerlo ya no sale gratis (#544)</h2>
+ *
+ * Antes daba una tabla vacia —indistinguible de «no hubo ninguno»— y ahora el
+ * controlador lo **rechaza**: medido el 2026-09-01 contra la municipalidad 1,
+ * `?operacion=ELIMINACION` contesta `422 VALIDACION` con «La operacion va entre
+ * ALTA, MODIFICACION, BAJA, ANULACION, REVERSION, PERMISO, ACCESO:
+ * 'ELIMINACION'». Por eso esta lista es la unica fuente del desplegable: una
+ * palabra de mas no devuelve nada raro, deja la pantalla en rojo.
+ *
+ * Y el que mas pesa es el que faltaba: `PERMISO` son **1 453 de las 1 783** filas
+ * del ejercicio 2026 —cada cambio de la matriz de accesos deja la suya
+ * (ADR-0008 §5)—, que es justo lo que esta pantalla existe para poder mirar. La
+ * bitacora crece, asi que la proporcion es de ese dia; el comportamiento no.
  */
 export const OPERACIONES = [
   'ALTA',

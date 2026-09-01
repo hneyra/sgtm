@@ -23,6 +23,14 @@ export type CampoDef = {
   ayuda?: string;
   /** El valor por omisión del propio campo: gana al del contribuyente. */
   v?: string | boolean;
+  /**
+   * Por qué el control se dibuja y no se puede tocar.
+   *
+   * Es para el control que el manual dibuja y el backend **rechaza**: quitarlo
+   * de la pantalla escondería que el manual lo pide, y dejarlo vivo promete algo
+   * que la petición no puede llevar. Se dibuja apagado y con su motivo al lado.
+   */
+  bloqueado?: string;
 };
 
 /** Una columna de tabla: rótulo y si es numérica (alineada a la derecha). */
@@ -335,11 +343,37 @@ export const EXPEDIENTE: SeccionDef[] = [
    las nueve cajas de solo lectura del sistema actual no dejan ver: que es una
    cuenta encadenada. */
 
-export type FiltroDef = { l: string; v: string; t?: 'sel'; o?: string[]; ph?: string };
+/**
+ * Un filtro de la cabecera de una determinación.
+ *
+ * `k` es **el nombre con el que viaja**, y su ausencia no es un descuido: un
+ * filtro sin `k` no lo lee nadie. Los tres del predial —«DJ N°», «Tipo de
+ * declaración», «Fecha de declaración»— están declarados en el contrato y
+ * `PredialController` sólo lee `codContribuyente` y `ano`, así que se tecleaban
+ * y se caían en silencio; los de alcabala y espectáculos ni siquiera están en el
+ * contrato. Un control vivo que no acota nada es el defecto que #322, #398 y
+ * #432 cerraron tres veces, y aquí se cierra igual: se apaga con su motivo en
+ * `bloqueado`, que se lee en su `title`.
+ */
+export type FiltroDef = { l: string; v: string; t?: 'sel'; o?: string[]; ph?: string; k?: string; bloqueado?: string };
 
-/** Una línea de la memoria del cálculo: operador, rótulo, detalle, importe y
- *  —cuando la hay— la clase que la destaca como subtotal o como total. */
-export type LineaDeMemoria = [op: string, label: string, detalle: string, valor: string, clase?: 'sub' | 'total'];
+/**
+ * Una línea de la memoria del cálculo: operador, rótulo, detalle, importe y
+ * —cuando la hay— la clase que la destaca como subtotal o como total.
+ *
+ * El sexto es el PREFIJO de la cifra, y existe porque no todas son dinero: la
+ * alícuota de un tramo es un porcentaje, y dibujarla con «S/» delante la
+ * convierte en un importe. Con `''` no se antepone nada; sin él se antepone
+ * «S/», que es lo que casi todas las líneas necesitan.
+ */
+export type LineaDeMemoria = [
+  op: string,
+  label: string,
+  detalle: string,
+  valor: string,
+  clase?: 'sub' | 'total',
+  prefijo?: string,
+];
 
 export type MemoriaDef = { titulo: string; lineas: LineaDeMemoria[]; nota: string };
 
@@ -356,6 +390,17 @@ export type DeterminacionDef = {
   titulo: string;
   endpoint: string;
   desc: string;
+  /**
+   * La acción del pie que PIDE la determinación sin asentarla, si la hay.
+   *
+   * Son las tres cuyo cuerpo admite `simulacion: true`, que es la marca con la
+   * que el backend calcula y no escribe (#395, #399). Las otras tres no la
+   * tienen: `alcabala` y `espectaculos` registran el acto —su `POST` no acepta
+   * ninguna marca— y `arbitrios` es un `GET`. Declarar aquí la etiqueta y no un
+   * booleano es lo que impide que la acción viva quede rotulada con lo que no
+   * hace, que es el defecto de `LA_QUE_ESCRIBE` (#421).
+   */
+  simula?: string;
   filtros: FiltroDef[];
   tabla?: TablaDef;
   memoria?: MemoriaDef;
@@ -401,6 +446,38 @@ const SIN_CIFRA = '—';
 /** Lo que va en el recuento de una tabla cuya lectura no existe todavía. */
 const SIN_LECTURA = 'sin lectura';
 
+/* ── Por qué hay filtros apagados en cuatro de las seis hojas ────────────────
+   Un filtro que se teclea y no acota es peor que no tenerlo: quien busca cree
+   haber acotado y lee una lista entera como si fuera el resultado de su
+   búsqueda. Aquí hay dos casos distintos y conviene no mezclarlos, porque se
+   arreglan en sitios distintos. */
+
+/** Está en el contrato y ningún controlador lo lee: el hueco que #544 censó en 62 operaciones. */
+const DECLARADO_Y_SIN_LECTOR =
+  'Este filtro no acota nada. El contrato lo declara y el controlador de la determinación sólo lee el ' +
+  'código de contribuyente y el año, así que tecleado aquí viajaría y se caería en silencio (#544).';
+
+/** Ni siquiera está en el contrato: la ruta es un `POST` que registra y no declara consulta. */
+const SIN_LECTURA_QUE_LISTE =
+  'Ninguna lectura del contrato lista estos actos y esta ruta no declara ni un parámetro de consulta: ' +
+  'elegir aquí no cambiaría nada de lo que se manda.';
+
+/** Y el tercero: la hoja entera todavía no habla con el backend. */
+const HOJA_SIN_CONECTAR =
+  'Esta hoja todavía no pide nada al backend, así que su filtro no tendría a qué petición sumarse.';
+
+/** Las dos cajas del masivo que enseñan una cifra normativa: se leen, no se escriben. */
+const DEL_CONJUNTO_SELLADO =
+  'Es una cifra del conjunto sellado del ejercicio, no un dato que se teclee: escribirla aquí dejaría que ' +
+  'quien corre la emisión eligiera con qué UIT se calcula (regla 5).';
+
+/* Los dos únicos alcances que `DeterminarPredialMasivo.Peticion` admite, letra
+   por letra. El desplegable del manual ofrecía cuatro —«TODO EL PADRÓN», «POR
+   SECTOR», «POR RANGO DE CÓDIGO», «SOLO OBSERVADOS»— y NINGUNO coincide: los
+   dos primeros se parecen, y parecerse no es serlo (#427). Los otros dos no
+   existen en el backend, y se dicen en la ayuda en vez de ofrecerse. */
+export const ALCANCES_DE_LA_CORRIDA = ['TODOS', 'SECTOR'] as const;
+
 /** La coletilla de las cuatro memorias: por qué no hay números. */
 const MEMORIA_SIN_CIFRAS =
   'Los pasos y su orden son los del cálculo; las cifras no se dibujan. Cada operando que multiplica un importe —la UIT, los tramos, las ' +
@@ -413,11 +490,20 @@ export const DETERMINACIONES: Record<ClaveDeDeterminacion, DeterminacionDef> = {
     titulo: 'Cálculo individual del impuesto predial',
     endpoint: 'POST /api/v1/rentas/predial/calculo-individual',
     desc: 'Determina el impuesto de un contribuyente sobre el autovalúo acumulado de todos sus predios en el distrito, con la escala progresiva acumulativa y el mínimo imponible del ejercicio.',
+    simula: 'Simular',
     filtros: [
-      { l: 'Cod. Contribuyente', v: '' },
-      { l: 'DJ N°', v: '' },
-      { l: 'Tipo de declaración', t: 'sel', v: 'RECTIFICATORIA', o: ['INSCRIPCIÓN', 'DESCARGO', 'RECTIFICATORIA', 'ANUAL MECANIZADA'] },
-      { l: 'Fecha de declaración', v: '' },
+      /* El único que viaja. El año no se teclea: sale del selector de la
+         cabecera, como en las doce pantallas del sistema. */
+      { l: 'Cod. Contribuyente', v: '', k: 'codContribuyente', ph: 'C-000001' },
+      { l: 'DJ N°', v: '', bloqueado: DECLARADO_Y_SIN_LECTOR },
+      {
+        l: 'Tipo de declaración',
+        t: 'sel',
+        v: 'RECTIFICATORIA',
+        o: ['INSCRIPCIÓN', 'DESCARGO', 'RECTIFICATORIA', 'ANUAL MECANIZADA'],
+        bloqueado: DECLARADO_Y_SIN_LECTOR,
+      },
+      { l: 'Fecha de declaración', v: '', bloqueado: DECLARADO_Y_SIN_LECTOR },
     ],
     tabla: {
       titulo: 'Predios que integran la base imponible',
@@ -511,15 +597,19 @@ export const DETERMINACIONES: Record<ClaveDeDeterminacion, DeterminacionDef> = {
     titulo: 'Cálculo masivo del impuesto predial',
     endpoint: 'POST /api/v1/rentas/predial/calculo-masivo',
     desc: 'Proceso de emisión anual. Recalcula todo el padrón para el ejercicio y deja constancia de los contribuyentes observados que quedan fuera de la emisión.',
+    simula: 'Simular',
     filtros: [
-      { l: 'Alcance', t: 'sel', v: 'TODO EL PADRÓN', o: ['TODO EL PADRÓN', 'POR SECTOR', 'POR RANGO DE CÓDIGO', 'SOLO OBSERVADOS'] },
-      { l: 'Sector', t: 'sel', v: 'Todos', o: ['Todos', '01', '02', '03', '04', '05'] },
+      { l: 'Alcance', t: 'sel', v: ALCANCES_DE_LA_CORRIDA[0], o: [...ALCANCES_DE_LA_CORRIDA], k: 'alcance' },
+      /* Los códigos los pone `GET /catastro/sectores` al abrir la hoja: los seis
+         de aquí —«Todos», «01»…«05»— eran los de la maqueta, y con `SECTOR` el
+         backend exige uno que exista. La lista vacía es a propósito. */
+      { l: 'Sector', t: 'sel', v: '', o: [], k: 'sector' },
       /* La UIT y el derecho de emisión los pone el conjunto sellado del
          ejercicio, y no se teclean: escribirlos aquí sería la regla 5 —una cifra
          normativa compilada— y ademas dejaria que quien corre la emision de
          62 000 cuentas eligiera con qué UIT se calcula. */
-      { l: 'UIT del ejercicio (S/)', v: SIN_CIFRA },
-      { l: 'Derecho de emisión (S/)', v: SIN_CIFRA },
+      { l: 'UIT del ejercicio (S/)', v: SIN_CIFRA, bloqueado: DEL_CONJUNTO_SELLADO },
+      { l: 'Derecho de emisión (S/)', v: SIN_CIFRA, bloqueado: DEL_CONJUNTO_SELLADO },
     ],
     tabla: {
       titulo: 'Resultado de la última corrida',
@@ -540,9 +630,26 @@ export const DETERMINACIONES: Record<ClaveDeDeterminacion, DeterminacionDef> = {
         label: 'Qué hace esta corrida',
         hint: 'Se confirma antes de ejecutar',
         campos: [
-          { k: 'incArbitrios', l: 'Incluye arbitrios', t: 'chk', ph: 'Emitir arbitrios junto al predial' },
-          { k: 'recalcula', l: 'Recalcula ya emitidos', t: 'chk', ph: 'Sobrescribe cuponeras existentes' },
-          { k: 'cuponera', l: 'Genera cuponera PDF', t: 'chk', ph: 'Produce archivo para imprenta' },
+          /* Las dos que el backend RECHAZA con 422, y nacían marcadas: una
+             corrida con «Incluye arbitrios» en verde se lee como que los emitió.
+             `rechazarLoQueNoHace` de `PredialController` las contesta una a una. */
+          {
+            k: 'incArbitrios',
+            l: 'Incluye arbitrios',
+            t: 'chk',
+            v: false,
+            ph: 'Emitir arbitrios junto al predial',
+            bloqueado: 'Esta corrida determina el impuesto predial. Los arbitrios son otro tributo, con su propia determinación por periodo, y el backend rechaza la petición que los pida.',
+          },
+          { k: 'recalcula', l: 'Recalcula ya emitidos', t: 'chk', v: false, ph: 'Sobrescribe cuponeras existentes' },
+          {
+            k: 'cuponera',
+            l: 'Genera cuponera PDF',
+            t: 'chk',
+            v: false,
+            ph: 'Produce archivo para imprenta',
+            bloqueado: 'Esta corrida determina; no genera documentos. La cuponera se imprime desde la emisión de valores, con su numeración y su rastro.',
+          },
         ],
       },
     ],
@@ -560,9 +667,15 @@ export const DETERMINACIONES: Record<ClaveDeDeterminacion, DeterminacionDef> = {
     endpoint: 'GET /api/v1/rentas/arbitrios',
     desc: 'Limpieza pública, parques y jardines y serenazgo. La tasa depende del uso del predio, la zona, la frecuencia del servicio y los metros de frontis declarados en la ficha catastral.',
     filtros: [
-      { l: 'Código predial', v: '' },
-      { l: 'Zona', t: 'sel', v: 'Zona 2', o: ['Zona 1', 'Zona 2', 'Zona 3', 'Zona 4'] },
-      { l: 'Uso', t: 'sel', v: 'CASA HABITACIÓN', o: ['CASA HABITACIÓN', 'COMERCIO', 'INDUSTRIA', 'SERVICIOS', 'TERRENO SIN CONSTRUIR'] },
+      { l: 'Código predial', v: '', bloqueado: HOJA_SIN_CONECTAR },
+      { l: 'Zona', t: 'sel', v: 'Zona 2', o: ['Zona 1', 'Zona 2', 'Zona 3', 'Zona 4'], bloqueado: HOJA_SIN_CONECTAR },
+      {
+        l: 'Uso',
+        t: 'sel',
+        v: 'CASA HABITACIÓN',
+        o: ['CASA HABITACIÓN', 'COMERCIO', 'INDUSTRIA', 'SERVICIOS', 'TERRENO SIN CONSTRUIR'],
+        bloqueado: HOJA_SIN_CONECTAR,
+      },
     ],
     tabla: {
       titulo: 'Determinación por servicio',
@@ -596,9 +709,15 @@ export const DETERMINACIONES: Record<ClaveDeDeterminacion, DeterminacionDef> = {
     titulo: 'Cálculo del impuesto vehicular',
     endpoint: 'POST /api/v1/rentas/vehicular/calculo',
     desc: 'Aplica la alícuota del ejercicio sobre la base imponible, con el mínimo imponible del conjunto sellado, por los tres ejercicios en que el vehículo permanece afecto.',
+    simula: 'Simular',
+    /* Los dos viajan por la consulta, que es donde el contrato los declara y lo
+       que permite compartir la búsqueda por la URL (#399). Con la placa el
+       cálculo es de UN vehículo y un vehículo fuera de plazo se rechaza
+       nombrándolo; con el contribuyente son todos los suyos y los no afectos se
+       excluyen sin ruido. Son dos preguntas distintas, y por eso hay dos cajas. */
     filtros: [
-      { l: 'Placa', v: '' },
-      { l: 'Cod. Contribuyente', v: '' },
+      { l: 'Placa', v: '', k: 'placa', ph: 'ZLG-701' },
+      { l: 'Cod. Contribuyente', v: '', k: 'codContribuyente', ph: 'C-000007' },
     ],
     tabla: {
       titulo: 'Determinación por ejercicio',
@@ -648,9 +767,9 @@ export const DETERMINACIONES: Record<ClaveDeDeterminacion, DeterminacionDef> = {
     endpoint: 'POST /api/v1/rentas/alcabala',
     desc: 'Grava la transferencia de propiedad sobre el exceso de un tramo inafecto, tomando como base el mayor valor entre el de transferencia y el autovalúo ajustado.',
     filtros: [
-      { l: 'Nº de liquidación', v: '' },
-      { l: 'Nº de expediente', v: '' },
-      { l: 'Fecha de la transferencia', v: '' },
+      { l: 'Nº de liquidación', v: '', bloqueado: SIN_LECTURA_QUE_LISTE },
+      { l: 'Nº de expediente', v: '', bloqueado: SIN_LECTURA_QUE_LISTE },
+      { l: 'Fecha de la transferencia', v: '', bloqueado: SIN_LECTURA_QUE_LISTE },
     ],
     memoria: {
       titulo: 'Liquidación',
@@ -693,13 +812,14 @@ export const DETERMINACIONES: Record<ClaveDeDeterminacion, DeterminacionDef> = {
     endpoint: 'POST /api/v1/rentas/espectaculos',
     desc: 'Grava el monto que se abona por presenciar el espectáculo. La alícuota depende del tipo de evento y el organizador actúa como agente perceptor.',
     filtros: [
-      { l: 'Nº de expediente', v: '' },
-      { l: 'Organizador', v: '' },
+      { l: 'Nº de expediente', v: '', bloqueado: SIN_LECTURA_QUE_LISTE },
+      { l: 'Organizador', v: '', bloqueado: SIN_LECTURA_QUE_LISTE },
       {
         l: 'Tipo de espectáculo',
         t: 'sel',
         v: 'CONCIERTO DE MÚSICA POPULAR',
         o: ['CONCIERTO DE MÚSICA POPULAR', 'ESPECTÁCULO TAURINO', 'CARRERA DE CABALLOS', 'DISCOTECA', 'CINE', 'TEATRO', 'FOLCLORE NACIONAL'],
+        bloqueado: SIN_LECTURA_QUE_LISTE,
       },
     ],
     tabla: {
@@ -751,7 +871,7 @@ export const DETERMINACIONES: Record<ClaveDeDeterminacion, DeterminacionDef> = {
       ['Registrar', 0],
       ['Imprimir liquidación', 1],
     ],
-    aviso: 'Los cuatro filtros de búsqueda están bloqueados: ninguna lectura del contrato lista los espectáculos declarados, así que elegirlos cambiaría la URL y nada más.',
+    aviso: 'Los tres filtros de búsqueda están apagados: ninguna lectura del contrato lista los espectáculos declarados. Decían «cuatro» y son tres, y hasta ahora se dibujaban habilitados.',
   },
 };
 
@@ -1202,9 +1322,6 @@ export const DEFECTOS: Record<string, string | boolean> = {
   c2: '—',
   c3: '—',
   c4: '—',
-  incArbitrios: true,
-  recalcula: false,
-  cuponera: true,
   espDenom: 'GRAN NOCHE DE CUMBIA',
   espLocal: 'COLISEO MUNICIPAL',
   espFecha: '18/07/2026',

@@ -429,9 +429,13 @@ export default function Seguridad({ dest, onDest }: PantallaProps) {
   const audFiltros: { k: string; label: string; tipo: 'sel' | 'fecha' | 'texto'; valor: string; opts?: string[]; ph?: string }[] = [
     { k: 'audUsuario', label: 'Usuario', tipo: 'texto', valor: '', ph: 'jperez' },
     { k: 'audTabla', label: 'Tabla', tipo: 'texto', valor: '', ph: 'recibo, permiso, predio…' },
-    /* Los siete del enumerado `Operacion`, y sólo esos. El desplegable ofrecía
-       antes `ELIMINACION` —que es un PRIVILEGIO y devuelve siempre 0 filas— y se
-       dejaba fuera `PERMISO`, que son 1 160 de las 1 481 del ejercicio. */
+    /* Los siete del enumerado `Operacion`, y sólo esos: son los mismos que el
+       contrato publica como `enum` de `operacion` desde #544, letra por letra.
+       El desplegable del manual ofrecía `ELIMINACIÓN` —que es un PRIVILEGIO, no
+       una operación— y dejaba fuera `PERMISO`, que son 1 453 de las 1 783 filas
+       del ejercicio 2026. Y `ELIMINACION` ya no devuelve una tabla vacía sino un
+       422: ofrecerlo dejaría la pantalla en rojo por una palabra que ella misma
+       puso. */
     { k: 'audOperacion', label: 'Operación', tipo: 'sel', valor: 'Todas', opts: ['Todas', ...OPERACIONES] },
     { k: 'audDesde', label: 'Desde', tipo: 'fecha', valor: '' },
     { k: 'audHasta', label: 'Hasta', tipo: 'fecha', valor: '' },

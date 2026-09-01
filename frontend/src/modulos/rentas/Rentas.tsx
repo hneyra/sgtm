@@ -5,14 +5,20 @@ import {
   altaDeDeuda,
   bajaDeDeuda,
   buscarContribuyentes,
+  calcularVehicular,
+  correrPredialMasivo,
+  determinarPredial,
   indicadores,
   ultimaCorridaPredial,
   transferirPredio,
   transferirVehiculo,
+  type CalculoVehicular,
   type Contribuyente,
+  type CorridaDePredial,
+  type DeterminacionPredial,
   type PeticionDeMovimientoDeDeuda,
 } from '../../api/rentas';
-import { listarPredios } from '../../api/catastro';
+import { listarPredios, listarSectores } from '../../api/catastro';
 /* Dos lecturas de `consultas` que este módulo necesita y no duplica: la deuda de
    un contribuyente —la que se da de baja, y la que arrastra el transferente— y el
    vehículo por placa, que es de donde sale su titular vigente. */
@@ -23,7 +29,7 @@ import {
   type ObligacionConDeuda,
 } from '../../api/consultas';
 import { ErrorDeApi, type RespuestaPaginada } from '../../api/cliente';
-import { FalloDeLectura } from '../../api/Fallo';
+import { FalloDeLectura, explicacionDelFallo } from '../../api/Fallo';
 import { useRebote, useRecurso } from '../../api/useRecurso';
 import { Icono } from '../../ds/Icono';
 import { ICO } from '../../ds/iconos';
@@ -47,7 +53,10 @@ import {
   type ClaveDeDeterminacion,
   type ClaveDeTransferencia,
   type ColDef,
+  type FiltroDef,
+  type LineaDeMemoria,
   type TablaDef,
+  type TotalDef,
 } from '../../datos/rentas';
 
 /* ══════════ Los estilos que el artboard declara una vez y repite ══════════
@@ -65,6 +74,9 @@ const IN: CSSProperties = {
   background: 'var(--bg-elev)',
   fontSize: 13.5,
 };
+
+/** El mismo control, apagado: se ve que está y se ve que no se puede tocar. */
+const APAGADO: CSSProperties = { opacity: 0.5, cursor: 'not-allowed', background: 'var(--bg-card)' };
 
 const TH: CSSProperties = {
   padding: '10px 14px',
@@ -271,16 +283,20 @@ function CampoDeFormulario({
   onCambio: (v: string | boolean) => void;
 }) {
   const texto = typeof valor === 'boolean' ? '' : valor;
+  const apagado = f.bloqueado !== undefined;
+  const estilo = apagado ? { ...IN, ...APAGADO } : IN;
   return (
     <label data-ancho={f.ancho ? '1' : '0'} style={{ display: 'flex', flexDirection: 'column', gap: 5, minWidth: 0 }}>
-      <span style={{ fontSize: 11.5, fontWeight: 500, color: 'var(--ink-3)' }}>{f.l}</span>
+      <span style={{ fontSize: 11.5, fontWeight: 500, color: apagado ? 'var(--ink-4)' : 'var(--ink-3)' }}>{f.l}</span>
 
       {(f.t === undefined || f.t === 'text') && (
-        <input value={texto} onChange={(e) => onCambio(e.target.value)} placeholder={f.ph} style={IN} />
+        <input value={texto} disabled={apagado} onChange={(e) => onCambio(e.target.value)} placeholder={f.ph} style={estilo} />
       )}
-      {f.t === 'date' && <input type="date" value={texto} onChange={(e) => onCambio(e.target.value)} style={IN} />}
+      {f.t === 'date' && (
+        <input type="date" value={texto} disabled={apagado} onChange={(e) => onCambio(e.target.value)} style={estilo} />
+      )}
       {f.t === 'sel' && (
-        <select value={texto} onChange={(e) => onCambio(e.target.value)} style={IN}>
+        <select value={texto} disabled={apagado} onChange={(e) => onCambio(e.target.value)} style={estilo}>
           {(f.o ?? []).map((o) => (
             <option key={o} value={o}>
               {o}
@@ -321,10 +337,11 @@ function CampoDeFormulario({
           <input
             type="checkbox"
             checked={valor === true}
+            disabled={apagado}
             onChange={(e) => onCambio(e.target.checked)}
-            style={{ accentColor: 'var(--accent)', width: 15, height: 15, flex: '0 0 auto' }}
+            style={{ accentColor: 'var(--accent)', width: 15, height: 15, flex: '0 0 auto', ...(apagado ? APAGADO : null) }}
           />
-          <span style={{ fontSize: 13, color: 'var(--ink-2)' }}>{f.ph}</span>
+          <span style={{ fontSize: 13, color: apagado ? 'var(--ink-4)' : 'var(--ink-2)' }}>{f.ph}</span>
         </span>
       )}
       {f.t === 'ro' && (
@@ -345,7 +362,9 @@ function CampoDeFormulario({
         </span>
       )}
 
-      {f.ayuda && <span style={{ fontSize: 11.5, lineHeight: 1.4, color: 'var(--ink-4)', textWrap: 'pretty' }}>{f.ayuda}</span>}
+      {(f.bloqueado ?? f.ayuda) !== undefined && (
+        <span style={{ fontSize: 11.5, lineHeight: 1.4, color: 'var(--ink-4)', textWrap: 'pretty' }}>{f.bloqueado ?? f.ayuda}</span>
+      )}
     </label>
   );
 }
@@ -644,6 +663,127 @@ export default function Rentas({ dest, onDest }: PantallaProps) {
   };
 
   const det = DETERMINACIONES[tipo];
+
+  /* ── La determinación pedida al servidor (#540) ────────────────────────────
+     La hoja no pide nada al abrirse —abrir una pantalla no puede lanzar una
+     determinación—: la pide quien atiende con la acción secundaria, y sólo la
+     que lleva la marca `simulacion: true`. Lo que vuelve —cifras o el motivo por
+     el que no hay— es de ESTA hoja y de este sujeto, así que se suelta al
+     cambiar de pastilla o de filtro: dejarlo dibujado bajo otro contribuyente es
+     enseñarle a alguien la cuenta de otro. */
+  const [determinacion, setDeterminacion] = useState<ResultadoDeDeterminacion | null>(null);
+  const [falloDeLaDeterminacion, setFalloDeLaDeterminacion] = useState<ErrorDeApi | null>(null);
+  const [simulando, setSimulando] = useState(false);
+
+  const enDeterminar = dest === 'determinar';
+
+  /** El valor de un filtro por el nombre con el que viaja; `''` si esta hoja no lo dibuja. */
+  const filtroQueViaja = (clave: string): string => {
+    const i = det.filtros.findIndex((f) => f.k === clave);
+    if (i < 0) return '';
+    return (filtros[`${tipo}|${i}`] ?? det.filtros[i].v).trim();
+  };
+
+  /* Los sectores del catastro, que son los que la corrida por sector admite.
+     El desplegable del manual traía seis códigos inventados y `alcance: SECTOR`
+     exige uno que exista: con uno inventado la corrida sale vacía y se lee como
+     «en ese sector no hay nadie». Exige otro acceso que esta pantalla
+     —`sectores`—, así que puede fallar sola sin tumbar la hoja. */
+  const alcanceDeLaCorrida = filtroQueViaja('alcance');
+  const sectores = useRecurso(
+    (s2) => listarSectores(s2),
+    [],
+    enDeterminar && tipo === 'masivo',
+  );
+  const codigosDeSector = (sectores.datos?.contenido ?? []).map((x) => x.codigo);
+
+  /* Al cambiar de hoja, de sujeto o de ejercicio, lo dibujado deja de ser la
+     respuesta a lo que está en pantalla. */
+  const sujetoDeLaDeterminacion = `${tipo}|${pref.ejercicio}|${filtroQueViaja('codContribuyente')}|${filtroQueViaja('placa')}|${alcanceDeLaCorrida}|${filtroQueViaja('sector')}`;
+  useEffect(() => {
+    setDeterminacion(null);
+    setFalloDeLaDeterminacion(null);
+  }, [sujetoDeLaDeterminacion]);
+
+  /**
+   * Lo que impide pedir la determinación, o `undefined` si nada lo impide.
+   *
+   * Se calcula ANTES de habilitar la acción y no dentro del envío: un botón que
+   * promete lo que no puede es peor que uno apagado que dice por qué.
+   */
+  const impedimentoDeSimular = (): string | undefined => {
+    if (det.simula === undefined) return IMPEDIMENTO_DE_LA_DETERMINACION[tipo];
+    if (tipo === 'predial' && filtroQueViaja('codContribuyente') === '') {
+      return 'Escribe el código del contribuyente: la base del predial es de una persona —el conjunto de sus predios—, no de un predio.';
+    }
+    if (tipo === 'vehicular' && filtroQueViaja('placa') === '' && filtroQueViaja('codContribuyente') === '') {
+      return 'Escribe la placa o el código del contribuyente: sin uno de los dos no hay sobre qué calcular.';
+    }
+    if (tipo === 'masivo' && alcanceDeLaCorrida === 'SECTOR') {
+      if (sectores.error !== null) return 'No se pudieron leer los sectores del catastro, y con alcance SECTOR el backend exige uno que exista.';
+      if (filtroQueViaja('sector') === '') return 'Con alcance SECTOR hay que decir cuál: sin él, «solo el sector» y «todo el padrón» serían la misma corrida.';
+    }
+    return undefined;
+  };
+
+  /**
+   * Pide la determinación **sin asentarla**.
+   *
+   * `simulacion: true` es la marca con la que el servidor calcula y no escribe
+   * ninguna fila; el propio backend compone entonces la observación, porque no
+   * hay ninguna modificación que justificar (regla 10 gobierna lo que se
+   * guarda). El resto del cuerpo va vacío a propósito: es la misma negación por
+   * omisión de las escrituras, y aquí la aprieta un motivo más —`predios` lleva
+   * el autovalúo declarado de cada predio y esta pantalla no tiene dónde
+   * escribirlo—.
+   */
+  const simular = async () => {
+    setSimulando(true);
+    setFalloDeLaDeterminacion(null);
+    try {
+      if (tipo === 'predial') {
+        setDeterminacion({
+          clase: 'predial',
+          datos: await determinarPredial(
+            { codContribuyente: filtroQueViaja('codContribuyente'), ano: pref.ejercicio },
+            { simulacion: true },
+          ),
+        });
+      } else if (tipo === 'masivo') {
+        setDeterminacion({
+          clase: 'masivo',
+          datos: await correrPredialMasivo({
+            simulacion: true,
+            ejercicio: pref.ejercicio,
+            alcance: alcanceDeLaCorrida,
+            ...(alcanceDeLaCorrida === 'SECTOR' ? { sector: filtroQueViaja('sector') } : null),
+          }),
+        });
+      } else if (tipo === 'vehicular') {
+        setDeterminacion({
+          clase: 'vehicular',
+          datos: await calcularVehicular(
+            {
+              ejercicio: pref.ejercicio,
+              ...(filtroQueViaja('placa') !== '' ? { placa: filtroQueViaja('placa') } : null),
+              ...(filtroQueViaja('codContribuyente') !== '' ? { codContribuyente: filtroQueViaja('codContribuyente') } : null),
+            },
+            { simulacion: true },
+          ),
+        });
+      }
+    } catch (fallo) {
+      /* Lo anterior era la respuesta a la misma pregunta, así que se va: dejarlo
+         debajo del aviso de error se lee como que la cuenta sigue valiendo. */
+      setDeterminacion(null);
+      setFalloDeLaDeterminacion(
+        fallo instanceof ErrorDeApi ? fallo : new ErrorDeApi('ERROR_INTERNO', 'No se pudo calcular la determinación', 0),
+      );
+    } finally {
+      setSimulando(false);
+    }
+  };
+
   const trDef = TRANSFERENCIAS[trTipo];
   const paso = Math.min(trPaso, trDef.pasos.length - 1);
   const pasoActual = trDef.pasos[paso];
@@ -1776,38 +1916,100 @@ export default function Rentas({ dest, onDest }: PantallaProps) {
                   const clave = `${tipo}|${i}`;
                   const valor = filtros[clave] ?? f.v;
                   const cambiar = (v: string) => setFiltros((s) => ({ ...s, [clave]: v }));
+                  /* El desplegable de sector no tiene opciones escritas: son las
+                     del catastro, y mientras se leen no hay ninguna que elegir. */
+                  const opciones = f.k === 'sector' ? ['', ...codigosDeSector] : (f.o ?? []);
+                  const apagado = f.bloqueado !== undefined;
+                  const ayuda =
+                    f.bloqueado ??
+                    (f.k === 'sector' && sectores.error !== null
+                      ? 'No se pudieron leer los sectores del catastro: hace falta el acceso «sectores».'
+                      : undefined);
                   return (
-                    <label key={f.l} style={{ display: 'flex', flexDirection: 'column', gap: 5, minWidth: 0 }}>
-                      <span style={{ fontSize: 11.5, fontWeight: 500, color: 'var(--ink-3)' }}>{f.l}</span>
+                    <label key={f.l} style={{ display: 'flex', flexDirection: 'column', gap: 5, minWidth: 0 }} title={ayuda}>
+                      <span style={{ fontSize: 11.5, fontWeight: 500, color: apagado ? 'var(--ink-4)' : 'var(--ink-3)' }}>
+                        {f.l}
+                        {apagado && ' · no acota'}
+                      </span>
                       {f.t === 'sel' ? (
-                        <select value={valor} onChange={(e) => cambiar(e.target.value)} style={IN}>
-                          {(f.o ?? []).map((o) => (
+                        <select
+                          value={valor}
+                          disabled={apagado}
+                          onChange={(e) => cambiar(e.target.value)}
+                          style={{ ...IN, ...(apagado ? APAGADO : null) }}
+                        >
+                          {f.k === 'sector' && sectores.cargando && <option value="">leyendo los sectores…</option>}
+                          {opciones.map((o) => (
                             <option key={o} value={o}>
-                              {o}
+                              {o === '' ? '(elige un sector)' : o}
                             </option>
                           ))}
                         </select>
                       ) : (
-                        <input value={valor} onChange={(e) => cambiar(e.target.value)} placeholder={f.ph} style={IN} />
+                        <input
+                          value={valor}
+                          disabled={apagado}
+                          onChange={(e) => cambiar(e.target.value)}
+                          placeholder={f.ph}
+                          style={{ ...IN, ...(apagado ? APAGADO : null) }}
+                        />
                       )}
                     </label>
                   );
                 })}
               </div>
+              {/* El motivo se dice una vez y en pantalla, no cuatro veces dentro
+                  de la rejilla ni sólo en un `title` que nadie llega a leer
+                  (RNF-082). Se agrupa por motivo porque no todos los apagados lo
+                  están por lo mismo. */}
+              {motivosDeLosFiltrosApagados(det.filtros).map(([motivo, cuales]) => (
+                <p key={motivo} style={{ ...PIE, borderTop: '1px solid var(--line)' }}>
+                  <strong style={{ fontWeight: 500 }}>{cuales}</strong> {motivo}
+                </p>
+              ))}
+              {tipo === 'masivo' && sectores.error !== null && (
+                <p style={{ ...PIE, color: 'var(--bad-ink, var(--ink-2))' }}>
+                  No se pudieron leer los sectores del catastro —hace falta el acceso «sectores»—, así que la corrida por sector no se
+                  puede pedir: el backend exige un código que exista y aquí no hay ninguno que ofrecer.
+                </p>
+              )}
+              {tipo === 'masivo' && (
+                <p style={PIE}>
+                  «Alcance» ofrece los dos únicos valores que <code>DeterminarPredialMasivo</code> admite. El desplegable del manual traía
+                  cuatro —«TODO EL PADRÓN», «POR SECTOR», «POR RANGO DE CÓDIGO», «SOLO OBSERVADOS»— y ninguno coincidía letra por letra:
+                  los dos primeros se parecen, y parecerse no es serlo; los otros dos el backend no los implementa. Los sectores son los
+                  del catastro, no los seis códigos que dibujaba la maqueta.
+                </p>
+              )}
             </section>
 
             {det.tabla && (
               <section style={TARJETA}>
                 <div style={CABECERA}>
-                  <h2 style={H2}>{det.tabla.titulo}</h2>
-                  <span style={META}>{det.tabla.conteo}</span>
+                  <h2 style={H2}>{tipo === 'vehicular' && filasDeLaDeterminacion(tipo, determinacion).length > 0 ? 'Determinación del ejercicio, por vehículo' : det.tabla.titulo}</h2>
+                  <span style={META}>
+                    {determinacion === null
+                      ? det.tabla.conteo
+                      : `${filasDeLaDeterminacion(tipo, determinacion).length} de la determinación`}
+                  </span>
                 </div>
                 <TablaDeDatos
-                  cols={det.tabla.cols}
-                  filas={det.tabla.filas}
+                  cols={tipo === 'vehicular' ? COLS_DE_LA_DETERMINACION_VEHICULAR : det.tabla.cols}
+                  filas={filasDeLaDeterminacion(tipo, determinacion)}
                   min={det.tabla.min}
-                  vacia={VACIA_EN_LA_DETERMINACION[tipo]}
+                  vacia={
+                    determinacion === null
+                      ? VACIA_EN_LA_DETERMINACION[tipo]
+                      : 'La determinación no trajo ninguna fila para esta tabla.'
+                  }
                 />
+                {tipo === 'vehicular' && (
+                  <p style={PIE}>
+                    El artboard dibujaba «Determinación por ejercicio» con los tres años en que el vehículo permanece afecto, y esta
+                    operación determina <strong>un</strong> ejercicio y devuelve una fila por vehículo. Las columnas son las que el recurso
+                    publica: con las del artboard, dos vehículos darían dos filas del mismo año sin decir de cuál es cada importe.
+                  </p>
+                )}
                 {det.tabla.nota && <p style={PIE}>{det.tabla.nota}</p>}
               </section>
             )}
@@ -1819,7 +2021,7 @@ export default function Rentas({ dest, onDest }: PantallaProps) {
                   <span style={{ fontSize: 11, color: 'var(--ink-3)' }}>De dónde sale la cifra</span>
                 </div>
                 <div style={{ padding: '6px 16px 14px' }}>
-                  {det.memoria.lineas.map((l, i) => {
+                  {lineasDeLaMemoria(tipo, det.memoria.lineas, determinacion).map((l, i) => {
                     const fuerte = l[4] === 'total';
                     const sub = l[4] === 'sub';
                     return (
@@ -1853,12 +2055,17 @@ export default function Rentas({ dest, onDest }: PantallaProps) {
                             color: fuerte ? 'var(--accent-ink)' : 'var(--ink)',
                           }}
                         >
-                          S/ {l[3]}
+                          {/* El prefijo lo dice la línea: una alícuota no lleva «S/». */}
+                          {l[5] === '' ? l[3] : `${l[5] ?? 'S/'} ${l[3]}`}
                         </span>
                       </div>
                     );
                   })}
-                  <p style={{ margin: '12px 0 0', fontSize: 12, lineHeight: 1.5, color: 'var(--ink-3)', textWrap: 'pretty' }}>{det.memoria.nota}</p>
+                  <p style={{ margin: '12px 0 0', fontSize: 12, lineHeight: 1.5, color: 'var(--ink-3)', textWrap: 'pretty' }}>
+                    {determinacion === null
+                      ? det.memoria.nota
+                      : 'Todas las cifras de arriba son las que devolvió el servidor: ni una se compone aquí (RNF-083), y los tramos —cuántos son, dónde está su tope y qué alícuota lleva cada uno— salen del conjunto sellado del ejercicio.'}
+                  </p>
                 </div>
               </section>
             )}
@@ -1885,7 +2092,7 @@ export default function Rentas({ dest, onDest }: PantallaProps) {
                   overflow: 'hidden',
                 }}
               >
-                {det.totales.map((t) => (
+                {totalesDeLaDeterminacion(tipo, det.totales, determinacion).map((t) => (
                   <div key={t[0]} style={celdaDeTotal(t[2] === 1)}>
                     <p style={{ margin: '0 0 4px', fontSize: 10.5, textTransform: 'uppercase', letterSpacing: '.1em', color: 'var(--ink-3)' }}>{t[0]}</p>
                     <p style={{ margin: 0, fontFamily: 'var(--font-mono)', fontSize: 20, color: 'var(--ink)' }}>{t[1]}</p>
@@ -1894,27 +2101,96 @@ export default function Rentas({ dest, onDest }: PantallaProps) {
               </div>
             )}
 
-            {/* Ninguna de las seis determinaciones manda nada todavía, y la
-                primaria decía «Determinación asentada en la cuenta corriente»:
-                un acto que afirma haber escrito deuda y no salió de la pantalla.
-                Se apagan las seis con lo que le falta a cada una, que es lo que
-                CONECTAR.md pide cuando algo no se puede conectar honestamente. */}
-            <Aviso tono="warn" titulo="Aquí todavía no se determina nada">
+            {/* La fecha y el conjunto con que se calculó. Sin las dos, la cifra
+                de arriba no se puede recalcular ni fechar: toda cifra dice a qué
+                fecha está (regla 9, RNF-075) y una determinación dice además con
+                qué juego de valores sellado, porque dos conjuntos del mismo
+                ejercicio dan dos importes distintos y los dos correctos. */}
+            {determinacion !== null && (
+              <div
+                aria-label="Fecha y parámetros de la determinación"
+                style={{
+                  display: 'flex',
+                  gap: 14,
+                  flexWrap: 'wrap',
+                  alignItems: 'baseline',
+                  padding: '10px 14px',
+                  background: 'var(--bg-elev)',
+                  border: '1px solid var(--line)',
+                  borderRadius: 8,
+                  fontSize: 12,
+                  color: 'var(--ink-3)',
+                }}
+              >
+                <span>
+                  Simulado al <strong style={{ color: 'var(--ink-2)' }}>{bandaDeLaDeterminacion(determinacion).fecha}</strong>
+                </span>
+                <span>
+                  Conjunto de parámetros <strong style={{ color: 'var(--ink-2)' }}>{bandaDeLaDeterminacion(determinacion).conjunto}</strong>
+                </span>
+                <span style={{ marginLeft: 'auto' }}>No se asentó nada: la petición llevó la marca de simulación.</span>
+              </div>
+            )}
+
+            {/* Lo que el servidor contestó cuando no pudo calcular.
+                El mensaje se enseña TAL CUAL porque es el único que nombra lo
+                que falta —«El ejercicio 2026 no tiene un conjunto de parametros
+                sellado», `TRAMO_PREDIAL_LIMITE:2`, `DERECHO_EMISION_PREDIAL`— y
+                reescribirlo aquí perdería justo eso (#540, RNF-080). Y
+                «Reintentar» sólo sale cuando reintentar puede cambiar algo:
+                `ErrorDeApi.reintentable` es falso en un 422, y ofrecerlo encima
+                de una ordenanza sin publicar manda a pulsar el botón para
+                siempre. */}
+            {falloDeLaDeterminacion !== null && (
+              <Aviso tono="bad" titulo="No se calculó la determinación">
+                {explicacionDelFallo(
+                  falloDeLaDeterminacion,
+                  tipo === 'masivo' ? 'predial_masivo' : tipo === 'vehicular' ? 'vehicular_calculo' : 'predial_individual',
+                )}
+                {/* «Reintentar» sólo donde reintentar puede cambiar algo. */}
+                {falloDeLaDeterminacion.reintentable && (
+                  <div style={{ marginTop: 9 }}>
+                    <button onClick={() => void simular()} style={BOTON_SECUNDARIO}>
+                      Reintentar
+                    </button>
+                  </div>
+                )}
+              </Aviso>
+            )}
+
+            {/* Simular no es asentar. Las seis siguen sin poder ESCRIBIR la
+                determinación, y la primaria decía «Determinación asentada en la
+                cuenta corriente»: un acto que afirma haber escrito deuda y no
+                salió de la pantalla. Se apagan las seis con lo que le falta a
+                cada una. */}
+            <Aviso tono="warn" titulo={det.simula === undefined ? 'Aquí todavía no se determina nada' : 'Aquí se simula; asentar todavía no'}>
               {IMPEDIMENTO_DE_LA_DETERMINACION[tipo]}
             </Aviso>
             <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap', paddingTop: 4 }}>
               <p style={{ margin: 0, flex: 1, minWidth: 180, fontSize: 12, color: 'var(--ink-3)', textWrap: 'pretty' }}>{det.aviso}</p>
-              {det.acciones.map((a) => (
-                <button
-                  key={a[0]}
-                  disabled
-                  aria-disabled="true"
-                  title={a[2] ?? IMPEDIMENTO_DE_LA_DETERMINACION[tipo]}
-                  style={{ ...(a[1] ? BOTON_PRIMARIO : BOTON_SECUNDARIO), opacity: 0.55, cursor: 'not-allowed' }}
-                >
-                  {a[0]}
-                </button>
-              ))}
+              {det.acciones.map((a) => {
+                /* La acción viva es UNA y la nombra el catálogo (`simula`): con
+                   un booleano acabaría rotulada con lo que no hace, que es el
+                   defecto que #421 cerró. */
+                const laQueSimula = det.simula !== undefined && a[0] === det.simula;
+                const impedimento = laQueSimula ? impedimentoDeSimular() : (a[2] ?? IMPEDIMENTO_DE_LA_DETERMINACION[tipo]);
+                const viva = laQueSimula && impedimento === undefined && !simulando;
+                return (
+                  <button
+                    key={a[0]}
+                    disabled={!viva}
+                    aria-disabled={viva ? undefined : 'true'}
+                    title={impedimento}
+                    onClick={viva ? () => void simular() : undefined}
+                    style={{
+                      ...(a[1] ? BOTON_PRIMARIO : BOTON_SECUNDARIO),
+                      ...(viva ? null : { opacity: 0.55, cursor: 'not-allowed' }),
+                    }}
+                  >
+                    {laQueSimula && simulando ? 'Simulando…' : a[0]}
+                  </button>
+                );
+              })}
             </div>
           </div>
         )}
@@ -2794,13 +3070,14 @@ async function padronPorCriterio(
  * traía dentro el nombre, el DNI, el domicilio, los dos predios con su valúo y
  * los cuatro totales de la maqueta. Ninguno tiene origen: la lectura de la DJ
  * publica su número, su ejercicio, su tipo, sus fechas y su estado, y la cuenta
- * del predial es la determinación, que hoy contesta 500 (#540).
+ * del predial es la determinación, que hoy contesta 422 nombrando el conjunto
+ * de parámetros que falta sellar (#540) — no una cuenta que se pueda imprimir.
  */
 const NO_SE_PUEDE_EMITIR_LA_DJ =
   'La hoja resumen lleva el contribuyente, sus predios con el valúo afecto de cada uno y el impuesto que resulta, y ninguna lectura ' +
-  'publica eso: «GET /rentas/declaraciones/{n}» da el número, el ejercicio, el tipo, las fechas y el estado de la declaración, y la ' +
-  'cuenta la haría la determinación del predial, que hoy no se puede pedir (#540). Se imprimía con las cifras de la maqueta, bajo un ' +
-  '«Declaro bajo juramento» (#563).';
+  'publica eso: «GET /rentas/declaraciones/{n}» da el número, el ejercicio, el tipo, las fechas y el estado de la declaración. La ' +
+  'cuenta la hace la determinación del predial, que ya se puede pedir desde «Determinaciones» y hoy contesta 422 porque el ejercicio ' +
+  'no tiene conjunto de parámetros sellado (#540). Se imprimía con las cifras de la maqueta, bajo un «Declaro bajo juramento» (#563).';
 
 /**
  * Por qué el expediente no se puede guardar.
@@ -2822,6 +3099,231 @@ const NO_SE_PUEDE_GUARDAR_EL_EXPEDIENTE =
  * contribuyente y se queda en la pantalla. Las seis se apagan con su motivo, que
  * no es el mismo para todas.
  */
+/* ══════════ La determinación, pedida al servidor ══════════
+   #540 arregló el borde: lo que falta publicar ya no sale como 500 opaco con un
+   UUID de incidencia sino como **422 nombrando la llave**. Eso es lo que hace
+   conectable esta pantalla, y de una forma muy concreta: la acción secundaria
+   —«Simular»— pide la determinación con `simulacion: true`, y lo que se dibuja
+   es o bien las cifras que el servidor calculó, o bien la frase con la que el
+   servidor dice qué falta. Ninguna de las dos se escribe aquí.
+
+   Lo que NO cambia: la primaria sigue apagada. Simular no es asentar, y asentar
+   necesita la observación (regla 10) y —en el predial— el autovalúo declarado de
+   cada predio, que ninguna sección del manual dibuja. */
+
+/**
+ * Los motivos por los que hay filtros apagados, agrupados y con sus rótulos.
+ *
+ * Agrupar no es cosmética: en el predial los tres apagados lo están por lo mismo
+ * —el contrato los declara y el controlador no los lee— y en el masivo las dos
+ * cajas de cifra lo están por otro —son valores del conjunto sellado—; repetir
+ * el párrafo por campo empuja la rejilla y hace que deje de leerse, y decir un
+ * solo motivo para todos sería decir el equivocado para alguno.
+ */
+function motivosDeLosFiltrosApagados(filtros: readonly FiltroDef[]): [motivo: string, cuales: string][] {
+  const porMotivo = new Map<string, string[]>();
+  for (const f of filtros) {
+    if (f.bloqueado === undefined) continue;
+    porMotivo.set(f.bloqueado, [...(porMotivo.get(f.bloqueado) ?? []), `«${f.l}»`]);
+  }
+  return [...porMotivo].map(([motivo, cuales]) => [motivo, cuales.join(', ') + ':']);
+}
+
+/** Lo que devolvió la simulación, con la hoja que la pidió. */
+type ResultadoDeDeterminacion =
+  | { clase: 'predial'; datos: DeterminacionPredial }
+  | { clase: 'masivo'; datos: CorridaDePredial }
+  | { clase: 'vehicular'; datos: CalculoVehicular };
+
+/** Lo que se dibuja donde el servidor no publicó una cifra. */
+const SIN_CIFRA_DEL_SERVIDOR = '—';
+
+/**
+ * La memoria del predial, rehecha con lo que contestó el servidor.
+ *
+ * Los tramos son **uno por renglón y salen de la respuesta**: cuántos son,
+ * dónde está el tope de cada uno y qué alícuota lleva son cifras del conjunto
+ * sellado del ejercicio (regla 5), así que la escala se dibuja porque el
+ * servidor la mandó y no porque esté escrita aquí. Sin determinación pedida, la
+ * memoria es la de siempre: los pasos, y ni un número.
+ */
+function memoriaDelPredial(d: DeterminacionPredial): LineaDeMemoria[] {
+  const tramos = d.tramos.map(
+    (t): LineaDeMemoria => [
+      '×',
+      `Tramo ${t.orden} — ${t.limiteSuperior === null ? 'sin tope' : `hasta S/ ${t.limiteSuperior}`} · ${t.alicuota} %`,
+      `Porción gravada S/ ${t.porcionGravada}`,
+      t.aporte,
+    ],
+  );
+  return [
+    ['', 'Valuo total del conjunto', 'La suma de sus predios, cada uno ponderado por su % de propiedad', d.valuoTotal],
+    ['−', 'Valuo exonerado', 'Lo que el beneficio deja fuera de la base', d.valuoExonerado],
+    ['=', 'Valuo afecto', '', d.valuoAfecto, 'sub'],
+    ...tramos,
+    ['=', 'Impuesto insoluto anual', `Con la UIT del conjunto sellado: S/ ${d.uit}`, d.impuestoInsoluto, 'total'],
+    ['', 'Mínimo imponible', 'Se compara con el insoluto y gana el mayor', d.minimoImponible],
+  ];
+}
+
+/**
+ * La memoria del vehicular, con los dos operandos que el recurso NO publica.
+ *
+ * `CalculoVehicularResource` da la base imponible ya resuelta —el mayor entre el
+ * valor de adquisición y el referencial del MEF—, la alícuota y el mínimo, y no
+ * los dos valores que se compararon. Se dice: un «—» con su motivo es lo único
+ * honesto donde el artboard dibujaba las dos cifras del ejemplo.
+ */
+function memoriaDelVehicular(c: CalculoVehicular): LineaDeMemoria[] {
+  const unico = c.determinaciones.length === 1 ? c.determinaciones[0] : undefined;
+  return [
+    ['', 'Valor de adquisición', 'Declarado por el titular. La respuesta del cálculo no lo publica: sólo la base ya resuelta', SIN_CIFRA_DEL_SERVIDOR],
+    ['', 'Valor referencial del MEF', 'El de la tabla del año de fabricación. Tampoco viaja por separado', SIN_CIFRA_DEL_SERVIDOR],
+    [
+      '=',
+      'Base imponible — el mayor de los dos',
+      unico === undefined ? 'Son varios vehículos: la base de cada uno está en la tabla' : `Vehículo ${unico.placa}`,
+      unico?.valorReferencial ?? SIN_CIFRA_DEL_SERVIDOR,
+      'sub',
+    ],
+    ['×', 'Alícuota del ejercicio', 'Del conjunto sellado, como todo lo que multiplica un importe', `${c.alicuota} %`, undefined, ''],
+    [
+      '=',
+      'Impuesto anual',
+      unico === undefined ? 'Uno por vehículo: sumarlos aquí sería componer dinero en la pantalla (RNF-083)' : '',
+      unico?.montoDeterminado ?? SIN_CIFRA_DEL_SERVIDOR,
+      'total',
+    ],
+    ['', 'Mínimo imponible', 'Se compara con el impuesto y gana el mayor', c.minimoImponible],
+  ];
+}
+
+/** Las líneas que se dibujan: las del servidor si hubo determinación, y si no las del cálculo a secas. */
+function lineasDeLaMemoria(
+  tipo: ClaveDeDeterminacion,
+  base: LineaDeMemoria[],
+  resultado: ResultadoDeDeterminacion | null,
+): LineaDeMemoria[] {
+  if (resultado === null) return base;
+  if (tipo === 'predial' && resultado.clase === 'predial') return memoriaDelPredial(resultado.datos);
+  if (tipo === 'vehicular' && resultado.clase === 'vehicular') return memoriaDelVehicular(resultado.datos);
+  return base;
+}
+
+/**
+ * Las filas de la tabla de cada hoja, en la forma que su recurso publica.
+ *
+ * Las tres cuadran columna a columna con su `record`, y la del vehicular sólo
+ * porque sus columnas cambiaron: ver `COLS_DE_LA_DETERMINACION_VEHICULAR`.
+ */
+function filasDeLaDeterminacion(
+  tipo: ClaveDeDeterminacion,
+  resultado: ResultadoDeDeterminacion | null,
+): string[][] {
+  if (resultado === null) return [];
+  if (tipo === 'predial' && resultado.clase === 'predial') {
+    return resultado.datos.predios.map((x) => [
+      x.codigoPredial,
+      x.ubicacion,
+      x.uso ?? SIN_CIFRA_DEL_SERVIDOR,
+      x.porcentajePropiedad,
+      x.autovaluo,
+      x.valuoExonerado,
+      x.valuoAfecto,
+    ]);
+  }
+  if (tipo === 'masivo' && resultado.clase === 'masivo') {
+    return resultado.datos.etapas.map((e) => [
+      e.etapa,
+      e.registros.toLocaleString('es-PE'),
+      /* Las etapas que no mueven dinero mandan la cadena vacía, no un cero: un
+         cero en «Monto S/» se leería como «esta etapa emitió nada». */
+      e.monto === '' ? SIN_CIFRA_DEL_SERVIDOR : e.monto,
+      e.observados.toLocaleString('es-PE'),
+      e.estado,
+    ]);
+  }
+  if (tipo === 'vehicular' && resultado.clase === 'vehicular') {
+    const alicuota = resultado.datos.alicuota;
+    return resultado.datos.determinaciones.map((d) => [
+      d.placa,
+      d.ejercicio,
+      d.valorReferencial,
+      `${alicuota} %`,
+      d.montoDeterminado,
+      d.simulacion ? 'SIMULADA' : 'ASENTADA',
+    ]);
+  }
+  return [];
+}
+
+/**
+ * Las columnas del vehicular, cambiadas por las que el recurso publica.
+ *
+ * El artboard dibujaba «Determinación por ejercicio» con los tres años en que el
+ * vehículo permanece afecto, y `POST /rentas/vehicular/calculo` determina **un**
+ * ejercicio y devuelve **una fila por vehículo**. Con las columnas del artboard,
+ * un contribuyente con dos vehículos daría dos filas con el mismo año y dos
+ * importes distintos, sin ninguna columna que dijera de cuál es cada uno.
+ */
+const COLS_DE_LA_DETERMINACION_VEHICULAR: ColDef[] = [
+  ['Placa', 0],
+  ['Ejercicio', 0],
+  ['Base imponible S/', 1],
+  ['Alícuota', 0],
+  ['Impuesto S/', 1],
+  ['Estado', 0],
+];
+
+/** Los cuatro totales del pie, con lo que el servidor publicó y no más. */
+function totalesDeLaDeterminacion(
+  tipo: ClaveDeDeterminacion,
+  base: TotalDef[],
+  resultado: ResultadoDeDeterminacion | null,
+): TotalDef[] {
+  if (resultado === null) return base;
+  if (tipo === 'predial' && resultado.clase === 'predial') {
+    const d = resultado.datos;
+    return [
+      ['Valuo afecto', d.valuoAfecto, 0],
+      ['Impuesto insoluto', d.impuestoInsoluto, 0],
+      ['Derecho de emisión', d.derechoDeEmision, 0],
+      ['Total a pagar', d.totalAPagar, 1],
+    ];
+  }
+  if (tipo === 'vehicular' && resultado.clase === 'vehicular') {
+    /* Dos de los cuatro no se pueden llenar y no es por descuido: el recurso no
+       publica cronograma vehicular, y «total tres ejercicios» exigiría sumar
+       tres determinaciones que esta operación no hace —determina UNO— (RNF-083). */
+    const unico = resultado.datos.determinaciones.length === 1 ? resultado.datos.determinaciones[0] : undefined;
+    return [
+      ['Base imponible', unico?.valorReferencial ?? SIN_CIFRA_DEL_SERVIDOR, 0],
+      ['Impuesto anual', unico?.montoDeterminado ?? SIN_CIFRA_DEL_SERVIDOR, 0],
+      ['Cuota trimestral', SIN_CIFRA_DEL_SERVIDOR, 0],
+      ['Total tres ejercicios', SIN_CIFRA_DEL_SERVIDOR, 1],
+    ];
+  }
+  return base;
+}
+
+/**
+ * La fecha y el conjunto con que se calculó, que es lo que hace la cifra
+ * reproducible.
+ *
+ * Toda cifra dice a qué fecha está (regla 9, RNF-075), y una determinación dice
+ * además con qué conjunto sellado: dos conjuntos del mismo ejercicio dan dos
+ * importes distintos y los dos correctos.
+ */
+function bandaDeLaDeterminacion(resultado: ResultadoDeDeterminacion): { fecha: string; conjunto: string } {
+  const conjunto =
+    resultado.clase === 'predial'
+      ? resultado.datos.conjunto
+      : resultado.clase === 'masivo'
+        ? resultado.datos.conjunto
+        : resultado.datos.conjunto;
+  return { fecha: resultado.datos.fechaCalculo, conjunto: conjunto === '' ? SIN_CIFRA_DEL_SERVIDOR : conjunto };
+}
+
 /**
  * Qué dice cada tabla de la determinación mientras no tenga filas.
  *
@@ -2831,36 +3333,42 @@ const NO_SE_PUEDE_GUARDAR_EL_EXPEDIENTE =
  * Una cabecera sola no basta: se lee como «este contribuyente no tiene ninguno».
  */
 const VACIA_EN_LA_DETERMINACION: Record<ClaveDeDeterminacion, string> = {
-  predial:
-    'Los predios que integran la base salen del cálculo, y el cálculo no se puede pedir todavía. Los del contribuyente se ven mientras tanto en Catastro.',
-  masivo: 'Se llena con el resultado de la última corrida. No hay ninguna del ejercicio, y por eso no hay etapas que enseñar.',
+  predial: 'Los predios que integran la base salen del cálculo: pulsa «Simular» y los trae el servidor. Los del contribuyente se ven mientras tanto en Catastro.',
+  masivo: 'Las etapas salen de la corrida: pulsa «Simular» y se recorre el padrón sin asentar nada.',
   arbitrios:
     'La determinación por servicio depende de las tasas de la ordenanza local con su ratificación provincial, que todavía no están cargadas (D-02b).',
-  vehicular: 'Los tres ejercicios afectos salen del cálculo vehicular, que hoy no se puede pedir.',
+  vehicular: 'La determinación del ejercicio sale del cálculo: escribe la placa o el contribuyente y pulsa «Simular».',
   espectaculos: 'Ninguna lectura del contrato lista los espectáculos declarados: no hay de dónde traer estas filas.',
   alcabala: 'Sin filas.',
 };
 
 const IMPEDIMENTO_DE_LA_DETERMINACION: Record<ClaveDeDeterminacion, string> = {
   predial:
-    'La operación existe (POST /rentas/predial/calculo-individual) y contesta 500 en esta instalación: ningún ejercicio tiene conjunto ' +
-    'de parámetros sellado y el borde no traduce esa falta (#540). Además le falta el dato que pide: el autovalúo declarado de cada ' +
-    'predio —el sistema todavía no sabe valorizar uno— y esta pantalla no dibuja ningún campo para escribirlo.',
+    'Simular sí: la petición sale con la marca que impide asentar, y lo que el servidor conteste se lee aquí —hoy, un 422 que dice que ' +
+    'ningún ejercicio tiene conjunto de parámetros sellado (#540)—. Asentar no, y por dos cosas: el cuerpo que escribe exige la ' +
+    'observación de quien determina (regla 10, RNF-052) y el autovalúo declarado de CADA predio. Ese autovalúo sólo se puede omitir ' +
+    'cuando el ejercicio ya tiene una determinación de la que releerlo, y no la hay: el sistema todavía no sabe valorizar un predio y ' +
+    'esta pantalla no dibuja ningún campo para escribirlo.',
   masivo:
-    'La corrida existe y responde, pero sobre un padrón declarado vacío: hoy devuelve «Padrón leído: 0 registros» porque ningún predio ' +
-    'tiene autovalúo declarado. Ejecutarla desde aquí emitiría una corrida de ceros que quedaría como la última del ejercicio.',
+    'Simular recorre el padrón y no asienta nada. Ejecutar no: hoy la corrida lee «Padrón leído: 0 registros» —ningún predio tiene ' +
+    'autovalúo declarado—, así que ejecutarla dejaría una emisión de ceros como la última del ejercicio, y además exige la observación ' +
+    'de quien la lanza. Las dos casillas que el manual dibuja aquí, «Incluye arbitrios» y «Genera cuponera PDF», el backend las ' +
+    'rechaza con 422: los arbitrios son otro tributo con su propia determinación y la cuponera es un documento.',
   arbitrios:
-    'GET /rentas/arbitrios es una lectura, y la acción de esta hoja es emitir la cuponera: un documento, que es la capa que todavía no ' +
-    'está. Las cifras de los arbitrios son de ordenanza local con su ratificación provincial (D-02b, #189).',
+    'GET /rentas/arbitrios es una lectura —no hay nada que simular: sus cifras llegarían al abrir— y la acción de esta hoja es emitir ' +
+    'la cuponera, que es un documento y esa capa no está. Las cifras de los arbitrios son de ordenanza local con su ratificación ' +
+    'provincial (D-02b, #189).',
   vehicular:
-    'POST /rentas/vehicular/calculo existe y contesta 500 por lo mismo que el predial (#540). Y la acción de esta hoja es emitir la ' +
-    'cuponera, que es un documento y no un cálculo.',
+    'Simular sí, con la placa o con el contribuyente. Asentar no: exige la observación de quien determina (regla 10). Y «Emitir ' +
+    'cuponera» no es un cálculo sino un documento, que es la capa que todavía no está.',
   alcabala:
-    'El backend registra el acto y no acepta una marca de «calcula y no asientes nada», así que «Liquidar» no tiene a dónde ir. El ' +
-    'autovalúo ajustado que la cuenta necesita depende del % de actualización, que no tiene fuente identificada (D-11).',
+    'El backend registra el acto y no acepta ninguna marca de «calcula y no asientes nada», así que «Liquidar» no tiene a dónde ir sin ' +
+    'escribir. Y le falta el dato con el que se identifica lo que se liquida: `transferenciaId`, un identificador interno que ninguna ' +
+    'lectura del contrato publica (#432). El autovalúo ajustado depende además del % de actualización, sin fuente identificada (D-11).',
   espectaculos:
-    'PeticionDeEspectaculo no tiene campo para las entradas vendidas, que es uno de los dos operandos de la base imponible del art. 56; ' +
-    'y la alícuota se pide por una llave que no coincide con ninguno de los rótulos del desplegable.',
+    'El POST registra el acto —no hay marca de simulación— y le falta campo para las entradas vendidas, que es uno de los dos ' +
+    'operandos de la base imponible del art. 56; la alícuota se pide además por una llave que no coincide con ninguno de los rótulos ' +
+    'del desplegable.',
 };
 
 /** El filtro con que se pregunta por un documento: DNI si son ocho, RUC si once. */
