@@ -269,11 +269,40 @@ export function transferirVehiculo(peticion: PeticionDeTransferenciaDeVehiculo):
 /**
  * El cuerpo de un movimiento de deuda, alta o baja.
  *
- * **`cuota` es singular.** La pantalla del manual da de alta un rango —«cuotas
- * 1 a 4»— y este `record` no lo admite: `cuotaDesde`/`cuotaHasta` no estan en
- * la lista blanca, asi que Jackson los descartaria sin decir nada y el asiento
- * quedaria con `periodo: 0`. Se manda una cuota por peticion hasta que el
- * backend admita el rango.
+ * <h2>Tres formas de decir que cuota, y ninguna se adivina (#538)</h2>
+ *
+ * Hasta #538 el `record` declaraba solo `cuota`, singular. La pantalla del
+ * manual da de alta un **rango** —«cuotas 1 a 4»— y mandaba
+ * `cuotaDesde`/`cuotaHasta`, que **no estaban en la lista blanca**: Jackson los
+ * descartaba sin decir nada y la clave se componia con `cuota ?? 0`. Respuesta
+ * `201`, importe correcto, documento emitido, y los asientos en `periodo = 0`.
+ *
+ * Y eso no se ve. **`0` es un valor legitimo** —la obligacion anual, la que no
+ * se divide en cuotas—, asi que la fila mala era indistinguible de una buena:
+ * se descubria cuando alguien pagaba y el abono no cancelaba lo que creia.
+ *
+ * Ahora son tres, medidas contra el backend:
+ *
+ * <ul>
+ *   <li>ni `cuota` ni rango → la obligacion **anual**, `periodo = 0`;
+ *   <li>`cuota` → esa sola;
+ *   <li>`cuotaDesde` + `cuotaHasta`, las dos incluidas → **un asiento por cuota**.
+ * </ul>
+ *
+ * Los dos campos del rango son `?`, y por eso el tipo no puede impedir por si
+ * solo que salga media pregunta: lo impide `impedimentoDelAlta`, antes de
+ * mandar. Media pregunta el backend la contesta con 422 —solo `cuotaDesde`,
+ * solo `cuotaHasta`, el rango invertido, `cuotaDesde: 0`, uno fuera de 1..12, o
+ * `cuota` **y** el rango a la vez—, y ese 422 es la red, no el camino.
+ *
+ * <h2>El desglose SE REPITE en cada cuota, no se reparte</h2>
+ *
+ * Medido: `cuotaDesde: 1`, `cuotaHasta: 4`, `insoluto: "100.00"` devuelve
+ * **cuatro asientos y `total: 400.00`**, uno de 100,00 por cuota. Las dos
+ * lecturas del rotulo del manual —«Insoluto (S/)» a secas junto a «Cuota
+ * desde» y «Cuota hasta»— son plausibles y se diferencian en un factor `n`,
+ * asi que la pantalla tiene que decir cual es: lo hace `PIE_DEL_RANGO` y el
+ * total que se ensena antes de mandar.
  */
 export type PeticionDeMovimientoDeDeuda = {
   observacion: string;
@@ -281,7 +310,12 @@ export type PeticionDeMovimientoDeDeuda = {
   tributo: string;
   /** El ejercicio. Se llama `ano` en este cuerpo. */
   ano: string;
-  cuota: number;
+  /** Una sola cuota; `0` es la obligacion anual. Excluyente con el rango. */
+  cuota?: number;
+  /** La primera del rango, incluida. **Nunca `0`**: 0 es la anual, y se pide sin cuota. */
+  cuotaDesde?: number;
+  /** La ultima del rango, incluida. Va siempre con `cuotaDesde`. */
+  cuotaHasta?: number;
   predioId?: number;
   vehiculoId?: number;
   insoluto?: string;
@@ -294,7 +328,39 @@ export type PeticionDeMovimientoDeDeuda = {
   referenciaExterna?: string;
 };
 
-export function altaDeDeuda(peticion: PeticionDeMovimientoDeDeuda): Promise<unknown> {
+/**
+ * Un asiento del libro, tal como `AsientoResource` lo publica.
+ *
+ * Se lee la RESPUESTA y no lo tecleado: es la unica forma de decir en pantalla
+ * cuantas obligaciones se movieron de verdad y por cuanto. Con un rango de
+ * cuatro cuotas son cuatro asientos, y el `total` del sobre es la suma —no el
+ * importe que se escribio en la caja—.
+ */
+export type AsientoDelMovimiento = {
+  id: number;
+  ejercicio: number;
+  tributo: string;
+  concepto: string;
+  /** `CARGO` | `ABONO`. */
+  tipo: string;
+  fase: string;
+  /** La cuota. `0` es la obligacion anual. */
+  periodo: number;
+  predioId: number | null;
+  vehiculoId: number | null;
+  referenciaExterna: string | null;
+};
+
+/** Es `MovimientoDeDeudaResource`. `total` lleva su fecha (regla 9). */
+export type MovimientoRegistrado = {
+  /** `ALTA` | `BAJA`. */
+  sentido: string;
+  numeroDeDocumento: string;
+  total: { importe: string; actualizadoA: string };
+  asientos: AsientoDelMovimiento[];
+};
+
+export function altaDeDeuda(peticion: PeticionDeMovimientoDeDeuda): Promise<MovimientoRegistrado> {
   return solicitar('/rentas/deuda/altas', { metodo: 'POST', cuerpo: peticion });
 }
 

@@ -1281,7 +1281,20 @@ export default function Rentas({ dest, onDest }: PantallaProps) {
     if (observacionDelActo.trim() === '') return 'Falta la observación: sin motivo no se guarda';
     if (texto('altaConcepto').trim() === '') return 'Falta el concepto: es el tributo de la obligación';
     if (texto('altaAnio').trim() === '') return 'Falta el año de la obligación';
-    if (!/^\d{1,2}$/.test(texto('altaCuotaD').trim())) return 'La cuota va de 0 (anual) a 12: escribe una sola';
+    /* Media pregunta no sale. El backend la contesta con 422 —y bien, nombrando
+       el campo—, pero ese 422 es la red y no el camino: gastarlo obliga a quien
+       atiende a rellenar el formulario entero para que le digan lo que se sabia
+       antes de mandar. Cada rama dice **cual** de las cinco es. */
+    const d = texto('altaCuotaD').trim();
+    const h = texto('altaCuotaH').trim();
+    const esCuota = (x: string) => /^\d{1,2}$/.test(x) && Number(x) >= 0 && Number(x) <= 12;
+    if (d !== '' && !esCuota(d)) return 'La cuota va de 0 (anual) a 12: revisa «Cuota desde»';
+    if (h !== '' && !esCuota(h)) return 'La cuota va de 0 (anual) a 12: revisa «Cuota hasta»';
+    if (d === '' && h !== '') return 'Falta «Cuota desde»: con «hasta» sola no se sabe dónde empieza el rango';
+    if (d !== '' && h !== '' && Number(d) === 0 && Number(h) !== 0)
+      return '0 es la obligación anual, no la cuota cero: no puede ser el principio de un rango. Deja las dos cajas en blanco para dar de alta la anual';
+    if (d !== '' && h !== '' && Number(d) > Number(h))
+      return `El rango va de la primera cuota a la última: «${d}» es mayor que «${h}»`;
     if (texto('altaNumDoc').trim() === '')
       return 'Falta el Nº del documento que sustenta: sin la resolución que lo aprueba, un alta no se registra';
     const partes = ['altaInsoluto', 'altaReajuste', 'altaInteres', 'altaGastos'].map((k) => importeQueViaja(texto(k)));
@@ -1311,13 +1324,19 @@ export default function Rentas({ dest, onDest }: PantallaProps) {
   };
 
   /**
-   * Da de alta una cuota, contra `POST /rentas/deuda/altas`.
+   * Da de alta la obligacion —una, o las del rango—, contra `POST /rentas/deuda/altas`.
    *
-   * **Una cuota por acto.** El formulario del manual pide un rango y el `record`
-   * del backend declara `cuota` en singular; `cuotaDesde`/`cuotaHasta` no están
-   * en su lista blanca, así que Jackson los descartaría sin decir nada y el
-   * asiento quedaría con `periodo: 0`. Se manda «Cuota desde» y se dice en
-   * pantalla que el rango no viaja.
+   * **El rango viaja desde #538.** Hasta entonces el `record` del backend
+   * declaraba `cuota` en singular y `cuotaDesde`/`cuotaHasta` no estaban en su
+   * lista blanca: Jackson los descartaba sin decir nada y el asiento quedaba en
+   * `periodo: 0`. Esta pantalla se defendia mandando solo «Cuota desde» y
+   * diciendo que el rango no viajaba; ahora viaja, y lo que resuelve cual de las
+   * tres formas se manda es `cuotasDelAlta`, nunca este metodo.
+   *
+   * **Y el aviso se lee de la RESPUESTA, no de lo tecleado.** Con un rango son
+   * `n` asientos y el total es `n` veces el desglose; decirlo desde el
+   * formulario seria repetir la cuenta que la pantalla ya hizo, en vez de
+   * contar lo que de verdad se escribio.
    */
   const darDeAltaLaDeuda = async () => {
     setRegistrando(true);
@@ -1327,12 +1346,19 @@ export default function Rentas({ dest, onDest }: PantallaProps) {
         toast(`«${texto('altaUnidad').trim()}» no es ningún predio del padrón, y una placa todavía no se puede mandar.`);
         return;
       }
+      /* `impedimentoDelAlta` ya apago el boton si lo escrito no era una
+         pregunta entera; esto es la guarda de programa, no la de pantalla. */
+      const cuotas = cuotasDelAlta();
+      if (cuotas === null) {
+        toast('Las cuotas no se entienden: revisa «Cuota desde» y «Cuota hasta».');
+        return;
+      }
       const cuerpo: PeticionDeMovimientoDeDeuda = {
         observacion: observacionDelActo.trim(),
         codContribuyente: sujetoDeDeuda!.codigo,
         tributo: texto('altaConcepto'),
         ano: texto('altaAnio'),
-        cuota: Number(texto('altaCuotaD').trim()),
+        ...cuotas,
         ...unidad,
         insoluto: importeQueViaja(texto('altaInsoluto')) || undefined,
         reajuste: importeQueViaja(texto('altaReajuste')) || undefined,
@@ -1340,10 +1366,17 @@ export default function Rentas({ dest, onDest }: PantallaProps) {
         gasto: importeQueViaja(texto('altaGastos')) || undefined,
         documentoOrigen: texto('altaNumDoc').trim(),
       };
-      await altaDeDeuda(cuerpo);
+      const registrado = await altaDeDeuda(cuerpo);
       setSucio(false);
       setObservacionDelActo('');
-      toast('Alta registrada en la cuenta corriente.');
+      /* Cuantas obligaciones se movieron y por cuanto, contado sobre lo que
+         volvio. Con «cuotas 1 a 4» y 100,00 escritos, el servidor asienta
+         cuatro de 100,00 y devuelve 400,00: el aviso dice esa cifra, que es la
+         que va a aparecer en la cuenta. */
+      const n = registrado.asientos.length;
+      toast(
+        `Alta registrada: ${n} ${n === 1 ? 'asiento' : 'asientos'} por S/ ${registrado.total.importe} al ${registrado.total.actualizadoA} · ${registrado.numeroDeDocumento}.`,
+      );
     } catch (error) {
       toast(error instanceof ErrorDeApi ? error.mensaje : 'No se pudo registrar el alta.');
     } finally {
@@ -1496,6 +1529,49 @@ export default function Rentas({ dest, onDest }: PantallaProps) {
      ven en pantalla, y es una previsualización de lo que se manda —no una cifra
      traída—. La suma de la baja ya NO se calcula aquí: la trae el servidor con
      la obligación, cada parte con su fecha. */
+  /**
+   * Que cuotas abarca el alta, resuelto de las DOS cajas del manual (#538).
+   *
+   * El formulario dibuja «Cuota desde» y «Cuota hasta», y el backend admite
+   * desde #538 tres formas que **no se adivinan**:
+   *
+   * <ul>
+   *   <li>las dos en blanco → ni `cuota` ni rango: la obligacion **anual**,
+   *       `periodo = 0`, que es lo que significaba y sigue significando;
+   *   <li>una sola cuota —«desde» sola, o las dos iguales— → `cuota`;
+   *   <li>«desde» y «hasta» distintas → `cuotaDesde`/`cuotaHasta`, y el backend
+   *       asienta **una por cuota**.
+   * </ul>
+   *
+   * Las dos iguales van como `cuota` y no como un rango de uno, y no es
+   * indiferente: con `0` en las dos, `cuotaDesde: 0` es un 422 —«0 es la
+   * obligacion anual, no la cuota cero»— mientras que `cuota: 0` es
+   * exactamente la anual. Una sola regla, y nunca pisa esa guarda.
+   *
+   * Devuelve `null` cuando lo escrito no es una pregunta entera; el motivo lo
+   * dice `impedimentoDelAlta`, que es quien apaga el boton. Aqui no se elige por
+   * nadie: adivinar cual de las dos mitades vale seria el defecto que #538
+   * cierra, con otro nombre.
+   */
+  const cuotasDelAlta = (): { cuota?: number; cuotaDesde?: number; cuotaHasta?: number } | null => {
+    const d = texto('altaCuotaD').trim();
+    const h = texto('altaCuotaH').trim();
+    const esCuota = (x: string) => /^\d{1,2}$/.test(x) && Number(x) >= 0 && Number(x) <= 12;
+    if (d === '' && h === '') return {};
+    if (!esCuota(d) || (h !== '' && !esCuota(h))) return null;
+    if (d === '') return null;
+    if (h === '' || Number(h) === Number(d)) return { cuota: Number(d) };
+    if (Number(d) === 0 || Number(d) > Number(h)) return null;
+    return { cuotaDesde: Number(d), cuotaHasta: Number(h) };
+  };
+
+  /** Cuantas obligaciones mueve el alta tal como esta escrita. `1` si no es un rango. */
+  const cuantasCuotasDelAlta = (): number => {
+    const c = cuotasDelAlta();
+    if (c === null) return 1;
+    return c.cuotaDesde === undefined || c.cuotaHasta === undefined ? 1 : c.cuotaHasta - c.cuotaDesde + 1;
+  };
+
   const altaInsoluto = numero(texto('altaInsoluto'));
   const altaReajuste = numero(texto('altaReajuste'));
   const altaInteres = numero(texto('altaInteres'));
@@ -2931,7 +3007,10 @@ export default function Rentas({ dest, onDest }: PantallaProps) {
                     ['Insoluto', importeDelAlta('altaInsoluto', altaInsoluto), false],
                     ['Reajuste', importeDelAlta('altaReajuste', altaReajuste), false],
                     ['Interés', importeDelAlta('altaInteres', altaInteres), false],
-                    ['Total del alta', hayAlgoQueSumarEnElAlta ? soles(altaTotal) : '—', true],
+                    /* El total del ACTO, no el de una cuota: con un rango, el
+                       desglose se repite en cada una y son `n` veces esta suma.
+                       Ver `PIE_DEL_RANGO`. */
+                    ['Total del alta', hayAlgoQueSumarEnElAlta ? soles(altaTotal * cuantasCuotasDelAlta()) : '—', true],
                   ] as [string, string, boolean][]
                 ).map((t) => (
                   <div key={t[0]} style={celdaDeTotal(t[2])}>
@@ -2940,6 +3019,20 @@ export default function Rentas({ dest, onDest }: PantallaProps) {
                   </div>
                 ))}
               </div>
+            )}
+
+            {/* Lo que el backend pidio que la pantalla dijera, y no podia decir
+                por si sola: con un rango, las cuatro cajas de arriba son **de
+                cada cuota**, no del año. Las dos lecturas del formulario del
+                manual —«Insoluto (S/)» a secas junto a «Cuota desde» y «Cuota
+                hasta»— son plausibles y se diferencian en un factor `n`. */}
+            {hoja === 'alta' && hayAlgoQueSumarEnElAlta && cuantasCuotasDelAlta() > 1 && (
+              <p
+                role="status"
+                style={{ margin: 0, fontSize: 12.5, lineHeight: 1.5, color: 'var(--ink-2)', background: 'var(--bg-elev)', border: '1px solid var(--line)', borderRadius: 6, padding: '9px 12px', textWrap: 'pretty' }}
+              >
+                {PIE_DEL_RANGO(cuantasCuotasDelAlta(), soles(altaTotal), soles(altaTotal * cuantasCuotasDelAlta()))}
+              </p>
             )}
 
             {/* Cada hoja tiene su propio acto, su propio cuerpo y su propio
@@ -2958,7 +3051,7 @@ export default function Rentas({ dest, onDest }: PantallaProps) {
             <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>
               <p style={{ margin: 0, flex: 1, minWidth: 180, fontSize: 12, color: 'var(--ink-3)', textWrap: 'pretty' }}>
                 {hoja === 'alta'
-                  ? 'Un alta manual entra en la cuenta corriente y se cobra como cualquier otra deuda. Queda en la bitácora con tu usuario. Se registra UNA cuota por acto: el backend no admite rango todavía, así que «Cuota hasta» no viaja.'
+                  ? 'Un alta manual entra en la cuenta corriente y se cobra como cualquier otra deuda. Queda en la bitácora con tu usuario. Con «Cuota desde» y «Cuota hasta» se registra una obligación por cuota, y el desglose se repite en cada una.'
                   : 'Elige arriba la obligación que se extingue: una por acto. El importe que se da de baja es el que el servidor publicó para ella a la fecha de la resolución; la causal se antepone a la observación, porque el cuerpo no tiene campo propio para ella.'}
               </p>
               <label style={{ flex: 1, minWidth: 220 }}>
@@ -3308,6 +3401,24 @@ const NO_SE_PUEDE_EMITIR_LA_DJ =
  * publica ocho— y `PUT /rentas/contribuyentes/{id}` sólo admite tres. Mandarlos
  * escribiría el nombre de la maqueta sobre el de quien esté abierto.
  */
+/**
+ * Lo que la franja dice cuando el alta abarca mas de una cuota (#538).
+ *
+ * **El desglose se repite en cada cuota, no se reparte entre ellas.** Medido
+ * contra el backend: `cuotaDesde: 1`, `cuotaHasta: 4` e `insoluto: "100.00"`
+ * devuelven **cuatro asientos y `total: 400.00`**, uno de 100,00 por cuota.
+ *
+ * Decirlo es cosa de la pantalla y el propio backend lo dejo escrito: el rotulo
+ * del manual es «Insoluto (S/)» a secas junto a «Cuota desde» y «Cuota
+ * hasta», y no dice si esa cifra es la del año o la de cada cuota. Las dos
+ * lecturas son plausibles y se diferencian en un factor `n`; quien teclee
+ * «cuotas 1 a 4 · S/ 100» puede estar esperando cualquiera de las dos, y el
+ * recibo dira una.
+ */
+const PIE_DEL_RANGO = (cuantas: number, porCuota: string, total: string): string =>
+  `Son ${cuantas} obligaciones, una por cuota: el desglose de arriba se repite en cada una y no se reparte entre ellas. ` +
+  `${porCuota} × ${cuantas} = ${total}, que es lo que quedará en la cuenta corriente.`;
+
 const NO_SE_PUEDE_GUARDAR_EL_EXPEDIENTE =
   'Aquí todavía no se guarda nada: los campos de este expediente no se leen del padrón —son los de la maqueta— y la operación que ' +
   'corrige un contribuyente sólo admite el nombre o razón social, la condición especial y la baja. Guardar escribiría datos de otra ' +

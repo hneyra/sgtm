@@ -1081,10 +1081,44 @@ export const CAMPOS_DEL_ALTA: CampoDef[] = [
       'Código predial o placa. Se resuelve contra el padrón antes de mandar: el identificador interno no se teclea. En blanco, el alta cae sobre la obligación SIN unidad, que es otra distinta de la del predio.',
   },
   /* El valor por omision es el primero de la lista a proposito: un desplegable que
-     ensena «2026» y manda «2024» es el defecto de #331. */
-  { k: 'altaAnio', l: 'Año', t: 'sel', v: '2026', o: ['2026', '2025', '2024', '2023', '2022'] },
-  { k: 'altaCuotaD', l: 'Cuota desde', t: 'text', ayuda: '0 es anual; 1 a 12, la cuota o el mes' },
-  { k: 'altaCuotaH', l: 'Cuota hasta', t: 'text', ayuda: 'No viaja: el backend registra una cuota por acto' },
+     ensena «2026» y manda «2024» es el defecto de #331.
+
+     Los cinco anios se quedan como el manual los dibuja, y la ayuda dice lo
+     medido: `cuenta_corriente_asiento` esta particionada por ejercicio y `V2`
+     declara solo 2026 y 2027, asi que los otros cuatro revientan con un 500
+     opaco. **No se recortan a «2026»**: seria escribir a mano el conjunto de
+     particiones de hoy, que quedaria viejo en silencio el dia que alguien anada
+     2028 —el mismo modo de fallo que el issue describe, con otro nombre—. */
+  {
+    k: 'altaAnio',
+    l: 'Año',
+    t: 'sel',
+    v: '2026',
+    o: ['2026', '2025', '2024', '2023', '2022'],
+    ayuda:
+      'Medido el 2026-09-01: de estos cinco ejercicios sólo 2026 registra; los otros cuatro contestan un error interno del servidor, porque la cuenta corriente sólo tiene abiertos 2026 y 2027 (#597).',
+  },
+  /* Las dos cajas del manual, y las tres formas que el backend admite desde
+     #538. Hasta entonces «Cuota hasta» se dibujaba y NO viajaba: Jackson la
+     descartaba sin decir nada y el asiento quedaba en `periodo: 0` —que es un
+     valor legitimo, la obligacion anual, asi que la fila mala era
+     indistinguible de una buena—. */
+  {
+    k: 'altaCuotaD',
+    l: 'Cuota desde',
+    t: 'text',
+    ayuda: 'En blanco las dos, la obligación anual. De 1 a 12, la cuota o el mes. 0 es la anual y no puede empezar un rango.',
+  },
+  {
+    k: 'altaCuotaH',
+    l: 'Cuota hasta',
+    t: 'text',
+    ayuda: 'Con las dos, un asiento por cuota — y el desglose se repite en cada una, no se reparte. En blanco, sólo la de la izquierda.',
+  },
+  /* Las cuatro son **de cada cuota** cuando hay rango, no del acto entero:
+     medido, `1 a 4` con 100,00 deja cuatro asientos y un total de 400,00. La
+     etiqueta no se cambia —es la del manual (RNF-080)— y lo dice la franja de
+     totales, que ensena el total del ACTO y explica la multiplicacion. */
   { k: 'altaInsoluto', l: 'Insoluto (S/)', t: 'text', ph: '0.00' },
   { k: 'altaReajuste', l: 'Reajuste (S/)', t: 'text', ph: '0.00' },
   { k: 'altaInteres', l: 'Interés (S/)', t: 'text', ph: '0.00' },
