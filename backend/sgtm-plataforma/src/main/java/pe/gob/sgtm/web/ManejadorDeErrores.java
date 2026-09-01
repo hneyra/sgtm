@@ -1,15 +1,24 @@
 package pe.gob.sgtm.web;
 
 import java.net.URI;
+import java.util.Comparator;
+import java.util.LinkedHashSet;
 import java.util.List;
+import java.util.Set;
 import java.util.UUID;
+import java.util.stream.Collectors;
+import org.jspecify.annotations.Nullable;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.dao.DataAccessException;
+import org.springframework.http.HttpHeaders;
+import org.springframework.http.HttpMethod;
 import org.springframework.http.ProblemDetail;
 import org.springframework.http.ResponseEntity;
+import org.springframework.web.HttpRequestMethodNotSupportedException;
 import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.RestControllerAdvice;
+import org.springframework.web.servlet.NoHandlerFoundException;
 import org.springframework.web.servlet.resource.NoResourceFoundException;
 import pe.gob.sgtm.persistencia.OrdenSeguro;
 
@@ -162,11 +171,96 @@ public class ManejadorDeErrores {
      * incidencia. El contrato declara 134 operaciones y hoy hay una implementada: cada pantalla del
      * prototipo cuyo endpoint todavia no existe generaria una «incidencia» por carga. El {@code
      * 404} dice la verdad —la operacion aun no esta publicada— y no ensucia el registro.
+     *
+     * <p><b>Son dos excepciones para el mismo hecho, y se midio cual sale cuando</b> (#556). Con la
+     * aplicacion en marcha sale {@link NoResourceFoundException}, porque el mapeo de recursos
+     * estaticos que Spring Boot registra sobre {@code /**} atiende lo que ningun controlador
+     * reclamo; en un {@code DispatcherServlet} <i>sin</i> ese mapeo —el de {@code
+     * MockMvcBuilders.standaloneSetup}, y el de una instalacion con {@code
+     * spring.web.resources.add-mappings=false}— el mismo {@code GET /no/existe} sale como {@link
+     * NoHandlerFoundException} y caia en {@link #cualquierOtra}: {@code 500} con su UUID y su linea
+     * de ERROR. El hecho es uno —ahi no hay ninguna operacion— asi que la respuesta tiene que ser
+     * una, y no la que dependa de si alguien apago el mapeo de recursos.
      */
-    @ExceptionHandler(NoResourceFoundException.class)
-    public ResponseEntity<ProblemDetail> rutaNoEncontrada(NoResourceFoundException error) {
+    @ExceptionHandler({NoResourceFoundException.class, NoHandlerFoundException.class})
+    public ResponseEntity<ProblemDetail> rutaNoEncontrada(Exception error) {
         return respuesta(
                 CodigoDeError.NO_ENCONTRADO, CodigoDeError.NO_ENCONTRADO.mensaje(), List.of());
+    }
+
+    /**
+     * La ruta existe y el verbo no: {@code 405}, con la cabecera {@code Allow} (#556).
+     *
+     * <p><b>Hasta aqui esto era un 500 con identificador de incidencia</b>, y son las tres mismas
+     * consecuencias que {@link #peticionQueNoSePuedeLeer} describe para el caso vecino que cerro
+     * #486. Spring lanza {@link HttpRequestMethodNotSupportedException} <i>antes</i> de entrar al
+     * controlador —al buscar el handler—, nadie la cazaba, y caia en el
+     * {@code @ExceptionHandler(Exception.class)} de mas abajo:
+     *
+     * <ul>
+     *   <li>el estado miente: un {@code 500} dice «el servidor se rompio» cuando lo que pasa es que
+     *       el cliente pidio con el verbo equivocado;
+     *   <li>el mensaje no dice que arreglar —«No se pudo completar la operacion»— y no nombra ni el
+     *       verbo pedido ni los que la ruta admite;
+     *   <li>y <b>cada peticion con el verbo equivocado escribia una incidencia de nivel ERROR</b>.
+     *       Afecta a las ~84 operaciones de escritura del contrato: cualquiera pedida con {@code
+     *       GET} dejaba su UUID, asi que un cliente mal escrito —o un rastreador— ensuciaba el
+     *       registro de errores del servicio sin que hubiera ningun error del servicio.
+     * </ul>
+     *
+     * <p>La cabecera {@code Allow} no es un adorno: es lo que un {@code 405} tiene que decir por
+     * contrato HTTP, y es la mitad de la respuesta que un cliente puede leer sin leer prosa.
+     *
+     * <p>El codigo es {@link CodigoDeError#METODO_NO_ADMITIDO} y no {@code ERROR_INTERNO}, y de ahi
+     * sale gratis que la interfaz deje de ofrecer «Reintentar»: {@code ErrorDeApi.reintentable}
+     * solo es cierto para {@code ERROR_INTERNO} y {@code SIN_RESPUESTA}.
+     *
+     * <p>El mensaje nombra el verbo pedido y los admitidos, y nada mas: los dos son del contrato
+     * publico de la ruta, asi que devolverlos no revela nada del esquema (RNF-033).
+     */
+    @ExceptionHandler(HttpRequestMethodNotSupportedException.class)
+    public ResponseEntity<ProblemDetail> verboNoAdmitido(
+            HttpRequestMethodNotSupportedException error) {
+        Set<HttpMethod> admitidos = ordenados(error.getSupportedHttpMethods());
+
+        ProblemDetail cuerpo =
+                cuerpoDe(CodigoDeError.METODO_NO_ADMITIDO, motivoDelVerbo(error, admitidos));
+
+        HttpHeaders cabeceras = new HttpHeaders();
+        if (!admitidos.isEmpty()) {
+            cabeceras.setAllow(admitidos);
+        }
+        return ResponseEntity.status(CodigoDeError.METODO_NO_ADMITIDO.estado())
+                .headers(cabeceras)
+                .body(cuerpo);
+    }
+
+    /**
+     * Los verbos admitidos, en orden alfabetico.
+     *
+     * <p>El conjunto que trae la excepcion viene en el orden en que se resolvieron los mapeos, que
+     * no es estable entre arranques. Un mensaje que cambia de orden solo no se puede afirmar en
+     * ninguna prueba ni comparar en ningun registro.
+     */
+    private static Set<HttpMethod> ordenados(@Nullable Set<HttpMethod> admitidos) {
+        if (admitidos == null) {
+            return Set.of();
+        }
+        return admitidos.stream()
+                .sorted(Comparator.comparing(HttpMethod::name))
+                .collect(Collectors.toCollection(LinkedHashSet::new));
+    }
+
+    /** El motivo, con el verbo pedido y los admitidos y sin una sola palabra del esquema. */
+    private static String motivoDelVerbo(
+            HttpRequestMethodNotSupportedException error, Set<HttpMethod> admitidos) {
+        String pedido = "El verbo '" + error.getMethod() + "' no se admite en esta ruta";
+        if (admitidos.isEmpty()) {
+            return pedido;
+        }
+        return pedido
+                + ". Admitidos: "
+                + admitidos.stream().map(HttpMethod::name).collect(Collectors.joining(", "));
     }
 
     @ExceptionHandler(Exception.class)
