@@ -20,6 +20,8 @@ import pe.gob.sgtm.compartido.Pagina;
 import pe.gob.sgtm.compartido.Paginacion;
 import pe.gob.sgtm.dominio.Ejercicio;
 import pe.gob.sgtm.dominio.Observacion;
+import pe.gob.sgtm.rentas.dominio.ConciliacionRepository;
+import pe.gob.sgtm.rentas.dominio.ConciliacionRepository.ResumenDeConciliacion;
 import pe.gob.sgtm.rentas.dominio.DeclaracionJuradaRepository;
 
 /**
@@ -72,18 +74,54 @@ public class ConsultaDeConciliacion {
 
     private final FichasDelPadron fichas;
     private final DeclaracionJuradaRepository declaraciones;
+    private final ConciliacionRepository recuento;
     private final Auditoria auditoria;
     private final Clock reloj;
 
     public ConsultaDeConciliacion(
             FichasDelPadron fichas,
             DeclaracionJuradaRepository declaraciones,
+            ConciliacionRepository recuento,
             Auditoria auditoria,
             Clock reloj) {
         this.fichas = fichas;
         this.declaraciones = declaraciones;
+        this.recuento = recuento;
         this.auditoria = auditoria;
         this.reloj = reloj;
+    }
+
+    /**
+     * Cuantos predios hay, cuantos declararon y cuantos no, <b>sin recorrerlos</b> (#564).
+     *
+     * <p>La grilla no sirve para contar y lo decia su propio javadoc: el filtro se aplica sobre la
+     * pagina y {@code totalElementos} sigue siendo el del padron sin filtrar. Medido sobre
+     * Catacaos, los tres filtros contestaban 14 422 —el padron entero—, y el panel de Catastro
+     * dibujaba con esa cifra «Predios sin conciliar: 14 422» encima de «14 422 predios en el
+     * padron»: una acusacion de omision a todo el distrito que ninguna de las dos cifras pretendia
+     * hacer.
+     *
+     * <h2>Este recuento NO deja rastro en la bitacora, y ese es el motivo</h2>
+     *
+     * <p>{@link #noConciliadas} si lo deja, porque <b>nombra</b>: es la lista de los predios que no
+     * generan deuda predial, y en manos equivocadas el mapa de a quien no le va a llegar recibo
+     * (ADR-0015 §2.3). Un recuento no nombra a nadie —dice cuantos, no cuales—, asi que auditar
+     * cada pintada del panel llenaria la bitacora de filas que no responden a la pregunta que la
+     * bitacora existe para responder, y de paso haria que una pantalla de solo lectura escribiera.
+     *
+     * <p>Por lo mismo no exige el permiso de fiscalizacion: quien puede abrir la consulta de fichas
+     * puede saber cuantas hay.
+     *
+     * <p><b>Sin criterio</b>, y a proposito: la pregunta del panel es sobre el padron, no sobre una
+     * busqueda. Aceptar los filtros de la grilla obligaria a que esta consulta repitiera el {@code
+     * WHERE} de aquella, y dos copias de la misma poblacion divergen — que es exactamente el
+     * defecto que este metodo viene a cerrar, un escalon mas abajo.
+     */
+    @Transactional(readOnly = true)
+    public ResumenDeConciliacion resumen(Ejercicio ejercicio, LocalDate aLaFecha) {
+        Objects.requireNonNull(ejercicio, "El recuento necesita el ejercicio (regla 9)");
+        Objects.requireNonNull(aLaFecha, "Toda lectura del padron indica a que fecha (regla 9)");
+        return recuento.contar(ejercicio, aLaFecha);
     }
 
     /** El filtro «Todas»: la grilla entera, cada fila con su estado de conciliacion. */
@@ -191,6 +229,11 @@ public class ConsultaDeConciliacion {
      * ejercicio y pasarselos a catastro como lista— convierte el criterio en un {@code IN} de
      * decenas de miles de identificadores, que es peor consulta y ademas cruzaria la frontera con
      * el padron entero.
+     *
+     * <p><b>Y por eso este total no se puede usar para contar</b> (#564): la pregunta «cuantos
+     * predios no estan conciliados» la contesta {@link #resumen}, que la resuelve en una sola
+     * consulta agregada y no recorre nada. Hasta #564 no habia ninguna, y quien la necesitaba solo
+     * podia leer este total —que es otro numero— o recorrer las 722 paginas del padron.
      *
      * <p>Una sola lectura de rentas por pagina, no una por fila.
      */

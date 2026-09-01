@@ -36,6 +36,8 @@ import pe.gob.sgtm.compartido.Paginacion;
 import pe.gob.sgtm.dominio.AreaM2;
 import pe.gob.sgtm.dominio.Ejercicio;
 import pe.gob.sgtm.rentas.aplicacion.ConsultaDeConciliacion;
+import pe.gob.sgtm.rentas.dominio.ConciliacionRepository;
+import pe.gob.sgtm.rentas.dominio.ConciliacionRepository.ResumenDeConciliacion;
 import pe.gob.sgtm.rentas.dominio.DeclaracionJurada;
 import pe.gob.sgtm.rentas.dominio.DeclaracionJuradaRepository;
 import pe.gob.sgtm.web.ConfiguracionDeJson;
@@ -65,13 +67,21 @@ class ConciliacionControllerTest {
 
     private final DeclaracionesDePrueba declaraciones = new DeclaracionesDePrueba();
     private final AuditoriaDePrueba auditoria = new AuditoriaDePrueba();
+
+    /** El recuento de #564: aqui se prueba el transporte, no la consulta agregada. */
+    private final RecuentoDePrueba recuento = new RecuentoDePrueba();
+
     private final ComprobadorDePrueba comprobador = new ComprobadorDePrueba();
 
     private final MockMvc mvc =
             MockMvcBuilders.standaloneSetup(
                             new ConciliacionController(
                                     new ConsultaDeConciliacion(
-                                            new PadronDePrueba(), declaraciones, auditoria, RELOJ),
+                                            new PadronDePrueba(),
+                                            declaraciones,
+                                            recuento,
+                                            auditoria,
+                                            RELOJ),
                                     comprobador,
                                     RELOJ))
                     .setControllerAdvice(new ManejadorDeErrores())
@@ -161,6 +171,78 @@ class ConciliacionControllerTest {
                                 .getResponse()
                                 .getContentAsString())
                 .doesNotContain("municipalidad");
+    }
+
+    // ------------------------------------------ el recuento (#564)
+
+    @Test
+    @DisplayName("el recuento publica los tres numeros, con su ejercicio y su fecha")
+    void elRecuentoPublicaLosTresNumeros() throws Exception {
+        MvcResult resultado =
+                mvc.perform(
+                                get("/api/v1/catastro/fichas/conciliacion/resumen")
+                                        .param("ejercicio", "2026")
+                                        .param("fecha", "2026-08-28"))
+                        .andReturn();
+
+        assertThat(resultado.getResponse().getStatus()).isEqualTo(200);
+        String cuerpo = resultado.getResponse().getContentAsString();
+        assertThat(cuerpo)
+                .contains("\"total\":14422")
+                .contains("\"conciliados\":11000")
+                .as("la resta la hace el servidor: componerla en la pantalla es RNF-083")
+                .contains("\"noConciliados\":3422");
+        assertThat(cuerpo)
+                .as("no existe «sin conciliar»: existe «sin conciliar a 2026» (regla 9)")
+                .contains("\"ejercicio\":2026")
+                .contains("\"aLaFecha\":\"2026-08-28\"");
+        assertThat(recuento.ejercicio).isEqualTo(new Ejercicio(2026));
+        assertThat(recuento.fecha).isEqualTo(LocalDate.of(2026, 8, 28));
+    }
+
+    @Test
+    @DisplayName("sin ejercicio, el de la fecha de corte; y lo dice")
+    void elRecuentoSinEjercicioTomaElDeLaFecha() throws Exception {
+        MvcResult resultado =
+                mvc.perform(
+                                get("/api/v1/catastro/fichas/conciliacion/resumen")
+                                        .param("fecha", "2024-06-30"))
+                        .andReturn();
+
+        assertThat(resultado.getResponse().getContentAsString()).contains("\"ejercicio\":2024");
+        assertThat(recuento.ejercicio).isEqualTo(new Ejercicio(2024));
+    }
+
+    @Test
+    @DisplayName("contar NO exige el privilegio de fiscalizacion, al reves que la lista de «No»")
+    void contarNoExigeElPrivilegioDeFiscalizacion() throws Exception {
+        // El comprobador niega todo. Es el mismo con el que `conciliadaConRentas=No`
+        // contesta 403: si el recuento preguntara por `fisc_omisos`, esto seria 403.
+        comprobador.autoriza = false;
+
+        MvcResult resultado =
+                mvc.perform(get("/api/v1/catastro/fichas/conciliacion/resumen")).andReturn();
+
+        assertThat(resultado.getResponse().getStatus()).isEqualTo(200);
+        assertThat(comprobador.acceso)
+                .as(
+                        "«No» NOMBRA —es el mapa de a quien no le va a llegar recibo— y por eso"
+                                + " pregunta por fisc_omisos; contar dice cuantos, no cuales, y le"
+                                + " basta el permiso de la pantalla, que ya comprueba el guardia"
+                                + " por la anotacion de la clase")
+                .isEmpty();
+    }
+
+    @Test
+    @DisplayName("contar no deja fila en la bitacora")
+    void contarNoDejaFilaEnLaBitacora() throws Exception {
+        int antes = auditoria.registros.size();
+
+        mvc.perform(get("/api/v1/catastro/fichas/conciliacion/resumen")).andReturn();
+
+        assertThat(auditoria.registros.size())
+                .as("auditar cada pintada del panel llenaria la bitacora de filas que no nombran")
+                .isEqualTo(antes);
     }
 
     @Test
@@ -378,6 +460,20 @@ class ConciliacionControllerTest {
             this.acceso = acceso;
             this.privilegio = privilegio;
             return autoriza;
+        }
+    }
+
+    /** El recuento en memoria, que ademas recuerda con que se le pregunto. */
+    private final class RecuentoDePrueba implements ConciliacionRepository {
+
+        private Ejercicio ejercicio;
+        private LocalDate fecha;
+
+        @Override
+        public ResumenDeConciliacion contar(Ejercicio ejercicio, LocalDate aLaFecha) {
+            this.ejercicio = ejercicio;
+            this.fecha = aLaFecha;
+            return ResumenDeConciliacion.de(ejercicio, aLaFecha, 14422L, 11000L);
         }
     }
 }

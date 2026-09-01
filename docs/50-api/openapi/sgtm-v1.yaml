@@ -614,6 +614,35 @@ paths:
           $ref: "#/components/responses/SinMunicipalidad"
         "422":
           $ref: "#/components/responses/ErrorDeValidacion"
+  "/catastro/fichas/conciliacion/resumen":
+    get:
+      operationId: conciliacion_resumen
+      summary: "Recuento de la conciliación con rentas"
+      description: "Cuántos predios del padrón hay a esa fecha, cuántos declararon ese ejercicio y cuántos no, resuelto en **una** consulta agregada y sin recorrer el padrón (#564). Existe porque la grilla no sirve para contar: su filtro se aplica sobre la página ya devuelta y su `totalElementos` es el del padrón sin filtrar. La población es la misma que lista la grilla —las fichas vigentes a la fecha—, y que lo siga siendo lo comprueba una prueba que compara las dos cifras. A diferencia de `conciliadaConRentas=No`, **no** exige privilegio sobre `fisc_omisos` y **no** deja fila en la bitácora: aquella nombra —es la lista de a quién no le va a llegar recibo— y ésta cuenta."
+      tags: ["Catastro"]
+      parameters:
+        - name: ejercicio
+          in: query
+          required: false
+          description: "A qué ejercicio responde el recuento; si falta, el de la fecha de corte. La respuesta lo dice siempre: no existe «sin conciliar», existe «sin conciliar a 2026» (regla 9, RNF-075)"
+          schema: { type: string }
+          example: "2026"
+        - name: fecha
+          in: query
+          required: false
+          description: "Fecha de corte a la que se resuelve qué versión de ficha rige, igual que en la grilla; si falta, hoy"
+          schema: { type: string }
+          example: "2026-08-28"
+      responses:
+        200:
+          description: Operacion realizada
+          content:
+            application/json:
+              schema: { type: object }
+        "403":
+          $ref: "#/components/responses/SinMunicipalidad"
+        "422":
+          $ref: "#/components/responses/ErrorDeValidacion"
   "/catastro/predios/plano":
     get:
       operationId: plano_catastral
