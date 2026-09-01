@@ -493,11 +493,25 @@ const DEL_BACKEND = {
   // «Año» y «Tributo» los dibuja la pantalla, pero en la seccion «Filtros del
   // detalle» y no en la barra de filtros, que es lo unico que el prototipo
   // publica como `filters`. Por eso van aqui, y entre los dos que los rodean.
+  // El codigo del contribuyente se unifica en `codContribuyente` (#622). En la
+  // misma pantalla el mismo dato viajaba con tres grafias —`contribuyente` en
+  // predios y vehiculos, `codContribuyente` en deuda, pagos y valores, y
+  // `codigoCont` en altas y bajas—, de modo que el dia que una dejara de admitir
+  // su nombre el 422 nombraria un parametro que quien lee la pantalla no ha
+  // escrito. Las tres que no lo tenian lo ganan aqui; el nombre anterior sigue
+  // declarado y sigue admitido, porque es el que el frontend manda hoy.
   consulta_altas_bajas: [
+    {
+      nombre: 'codContribuyente',
+      ejemplo: '',
+      tras: 'codigoCont',
+      descripcion:
+        'Codigo del contribuyente, con el nombre unificado. «codigoCont» es el mismo dato',
+    },
     {
       nombre: 'ano',
       ejemplo: '',
-      tras: 'codigoCont',
+      tras: 'codContribuyente',
       descripcion: 'Filtro «Año» de la pantalla, dentro de «Filtros del detalle»',
     },
     {
@@ -529,7 +543,23 @@ const DEL_BACKEND = {
     },
   ],
   // La deuda de cada fila se actualiza a una fecha, y la fila la dice (regla 9).
+  consulta_predios: [
+    {
+      nombre: 'codContribuyente',
+      ejemplo: '',
+      tras: 'contribuyente',
+      descripcion:
+        'Codigo del contribuyente, con el nombre unificado. «contribuyente» es el mismo dato',
+    },
+  ],
   consulta_vehiculos: [
+    {
+      nombre: 'codContribuyente',
+      ejemplo: '',
+      tras: 'contribuyente',
+      descripcion:
+        'Codigo del contribuyente, con el nombre unificado. «contribuyente» es el mismo dato',
+    },
     {
       nombre: 'fecha',
       ejemplo: '',
@@ -1472,11 +1502,17 @@ const OPERACIONES_ADICIONALES = {
         una página con los primeros dibujaría un plano al que le faltan lotes, y eso no se
         lee como «faltan», se lee como «ahí no hay nada». Por lo mismo no pagina.
 
-        **\`sinGeometria\` cuenta los predios del mismo marco y los mismos filtros que no
-        tienen polígono**, y la interfaz lo dice siempre, incluso cuando es cero. Sin esa
-        cifra el visor afirma algo que no sabe: hoy no hay una sola municipalidad con
-        geometría cargada, así que lo honesto es que el plano vacío diga por qué lo está
-        —la carga cartográfica de ADR-0021— y no que parezca un distrito sin predios.
+        **\`sinGeometria\` cuenta los predios del padrón que pasan los mismos filtros de
+        sector y de manzana y no tienen polígono, sin acotar por el marco**, y la interfaz lo
+        dice siempre, incluso cuando es cero. Que no lo acote el marco no es una omisión: un predio
+        sin polígono **no tiene sitio en el marco**, así que acotarlo por \`bbox\` daría cero
+        siempre, y daría cero justo cuando la cifra más hace falta —hoy, sin un solo lote
+        digitalizado—. El único dato que podría situarlo, el perímetro de su manzana, no existe
+        en el esquema, y derivarlo de la unión de los lotes ya levantados es lo que ADR-0022 §5
+        prohíbe. Sin esta cifra el visor afirma algo que no sabe: hoy no hay una sola
+        municipalidad con geometría cargada, así que lo honesto es que el plano vacío diga por
+        qué lo está —la carga cartográfica de ADR-0021— y no que parezca un distrito sin
+        predios.
 
         Ni un importe y ni un titular, por lo mismo que \`GET /catastro/predios\`: quién es
         el propietario se resuelve al clic, de un predio cada vez, en

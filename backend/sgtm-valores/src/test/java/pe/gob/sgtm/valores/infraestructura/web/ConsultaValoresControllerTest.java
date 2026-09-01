@@ -65,6 +65,10 @@ class ConsultaValoresControllerTest {
     ConsultaValoresControllerTest() {
         contribuyentes.con(
                 new ResumenDeContribuyente(7L, "C-000007", "PEÑA GARCIA, LUIS", "40700007"));
+        // Esta persona SI esta en el padron y no tiene ni un valor emitido: es el unico
+        // caso en que «cero filas» significa de verdad «no tiene» (#622).
+        contribuyentes.con(
+                new ResumenDeContribuyente(8L, "C-000008", "SIN VALORES, ANA", "40800008"));
         repositorio.con(
                 valor("OP-2026-000001", TipoValor.ORDEN_DE_PAGO, EstadoDeValor.EMITIDO),
                 detalle(2026));
@@ -195,18 +199,19 @@ class ConsultaValoresControllerTest {
     }
 
     @Test
-    @DisplayName("un codigo de contribuyente que no existe devuelve la pagina vacia, no todo")
-    void unCodigoInexistenteDevuelveVacio() throws Exception {
+    @DisplayName("un codigo de contribuyente que no existe NO devuelve el listado entero")
+    void unCodigoInexistenteNoDevuelveTodo() throws Exception {
         MvcResult resultado =
                 mvc.perform(get("/api/v1/consultas/valores").param("codContribuyente", "C-999999"))
                         .andReturn();
 
-        assertThat(resultado.getResponse().getStatus()).isEqualTo(200);
-        assertThat(resultado.getResponse().getContentAsString())
-                .as(
-                        "ignorar el filtro devolveria los valores de toda la municipalidad: un"
-                                + " padron sin ese contribuyente no es una peticion mal formada")
-                .contains("\"totalElementos\":0");
+        // Lo que esta prueba defiende desde #25 sigue en pie: ignorar el filtro devolveria
+        // los valores de toda la municipalidad y quien mira creeria estar viendo los de esa
+        // persona. Lo que #622 cambia es la OTRA mitad: la respuesta ya no es 200 con cero
+        // filas —que afirma que la persona existe y no tiene valores— sino el 404 que las
+        // otras seis lecturas del mismo expediente contestan.
+        assertThat(resultado.getResponse().getContentAsString()).doesNotContain("OP-2026-000001");
+        assertThat(resultado.getResponse().getStatus()).isEqualTo(404);
     }
 
     @Test
@@ -217,6 +222,37 @@ class ConsultaValoresControllerTest {
         assertThat(resultado.getResponse().getContentAsString())
                 .as("el identificador de municipalidad no sale ni entra por HTTP (ADR-0005)")
                 .doesNotContain("municipalidad");
+    }
+
+    @Test
+    @DisplayName("#622 — un codigo que no esta en el padron es 404, no cero filas")
+    void codigoInventadoEs404() throws Exception {
+        MvcResult resultado =
+                mvc.perform(
+                                get("/api/v1/consultas/valores")
+                                        .param("codContribuyente", "C-NO-EXISTE"))
+                        .andReturn();
+
+        assertThat(resultado.getResponse().getStatus())
+                .as(
+                        "el expediente de Consultas pide siete lecturas con el mismo codigo; con"
+                                + " `Pagina.vacia` esta afirmaba que la persona existe y no tiene"
+                                + " valores, debajo de otra que decia que no existe")
+                .isEqualTo(404);
+        assertThat(resultado.getResponse().getContentAsString()).contains("C-NO-EXISTE");
+    }
+
+    @Test
+    @DisplayName("#622 — quien SI esta en el padron y no tiene valores sigue siendo 200 con cero")
+    void elQueExisteYNoTieneValoresSigueSiendoCeroFilas() throws Exception {
+        MvcResult resultado =
+                mvc.perform(get("/api/v1/consultas/valores").param("codContribuyente", "C-000008"))
+                        .andReturn();
+
+        assertThat(resultado.getResponse().getStatus())
+                .as("sin este caso, un 404 lanzado tambien con la lista vacia pasaria en verde")
+                .isEqualTo(200);
+        assertThat(resultado.getResponse().getContentAsString()).contains("\"totalElementos\":0");
     }
 
     // ------------------------------------------------------------------

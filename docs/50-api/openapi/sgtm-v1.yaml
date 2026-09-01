@@ -658,11 +658,17 @@ paths:
         una página con los primeros dibujaría un plano al que le faltan lotes, y eso no se
         lee como «faltan», se lee como «ahí no hay nada». Por lo mismo no pagina.
 
-        **`sinGeometria` cuenta los predios del mismo marco y los mismos filtros que no
-        tienen polígono**, y la interfaz lo dice siempre, incluso cuando es cero. Sin esa
-        cifra el visor afirma algo que no sabe: hoy no hay una sola municipalidad con
-        geometría cargada, así que lo honesto es que el plano vacío diga por qué lo está
-        —la carga cartográfica de ADR-0021— y no que parezca un distrito sin predios.
+        **`sinGeometria` cuenta los predios del padrón que pasan los mismos filtros de
+        sector y de manzana y no tienen polígono, sin acotar por el marco**, y la interfaz lo
+        dice siempre, incluso cuando es cero. Que no lo acote el marco no es una omisión: un predio
+        sin polígono **no tiene sitio en el marco**, así que acotarlo por `bbox` daría cero
+        siempre, y daría cero justo cuando la cifra más hace falta —hoy, sin un solo lote
+        digitalizado—. El único dato que podría situarlo, el perímetro de su manzana, no existe
+        en el esquema, y derivarlo de la unión de los lotes ya levantados es lo que ADR-0022 §5
+        prohíbe. Sin esta cifra el visor afirma algo que no sabe: hoy no hay una sola
+        municipalidad con geometría cargada, así que lo honesto es que el plano vacío diga por
+        qué lo está —la carga cartográfica de ADR-0021— y no que parezca un distrito sin
+        predios.
 
         Ni un importe y ni un titular, por lo mismo que `GET /catastro/predios`: quién es
         el propietario se resuelve al clic, de un predio cada vez, en
@@ -6048,6 +6054,11 @@ paths:
           required: false
           description: "Filtro «Código Cont.» de la pantalla"
           schema: { type: string }
+        - name: codContribuyente
+          in: query
+          required: false
+          description: "Codigo del contribuyente, con el nombre unificado. «codigoCont» es el mismo dato"
+          schema: { type: string }
         - name: ano
           in: query
           required: false
@@ -6238,6 +6249,11 @@ paths:
           required: false
           description: "Filtro «Contribuyente» de la pantalla"
           schema: { type: string }
+        - name: codContribuyente
+          in: query
+          required: false
+          description: "Codigo del contribuyente, con el nombre unificado. «contribuyente» es el mismo dato"
+          schema: { type: string }
         - name: calle
           in: query
           required: false
@@ -6307,6 +6323,11 @@ paths:
           in: query
           required: false
           description: "Filtro «Contribuyente» de la pantalla"
+          schema: { type: string }
+        - name: codContribuyente
+          in: query
+          required: false
+          description: "Codigo del contribuyente, con el nombre unificado. «contribuyente» es el mismo dato"
           schema: { type: string }
         - name: estado
           in: query
