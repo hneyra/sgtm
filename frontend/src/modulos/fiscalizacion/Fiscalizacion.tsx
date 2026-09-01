@@ -2,6 +2,8 @@ import { useEffect, useMemo, useState, type CSSProperties } from 'react';
 import { Shell } from '../../shell/Shell';
 import type { PantallaProps } from '../../App';
 import { Icono } from '../../ds/Icono';
+import { listarOmisos } from '../../api/fiscalizacion';
+import { useRecurso } from '../../api/useRecurso';
 import { ICO } from '../../ds/iconos';
 import { Insignia, type Tono } from '../../ds/componentes';
 import { moduloDe } from '../../shell/modulos';
@@ -250,6 +252,49 @@ export default function Fiscalizacion({ dest, onDest }: PantallaProps) {
   }, [dest, toast]);
 
   /* ── Detección ─────────────────────────────────────────────── */
+  /* ── Deteccion predial, contra `GET /fiscalizacion/omisos` ──── */
+  const [sectorDet, setSectorDet] = useState('');
+  const [condicionDet, setCondicionDet] = useState('');
+  const [paginaDet, setPaginaDet] = useState(0);
+  useEffect(() => setPaginaDet(0), [sectorDet, condicionDet, pref.ejercicio]);
+
+  const omisos = useRecurso(
+    (senal) =>
+      listarOmisos(
+        {
+          ejercicio: pref.ejercicio,
+          sector: sectorDet || undefined,
+          condicion: condicionDet || undefined,
+        },
+        { pagina: paginaDet, tamano: 20 },
+        senal,
+      ),
+    [pref.ejercicio, sectorDet, condicionDet, paginaDet],
+    dest === 'deteccion' && detTab === 0,
+  );
+
+  /**
+   * Las filas de la deteccion predial, en la forma que el recurso publica.
+   *
+   * Las cuatro columnas de dinero llegan `null` y **seguiran llegando `null`**:
+   * valorar un predio exige el cuadro de valores unitarios, la depreciacion y
+   * el arancel, y ninguno esta firmado (D-02a). Salen «—», no cero: un cero se
+   * lee como «no debe nada».
+   *
+   * Y se añaden las tres que el backend SI publica con cifra y el artboard no
+   * dibuja: el area catastral, la declarada y su diferencia. Son lo unico
+   * cuantificado que hoy distingue a un subvaluador.
+   */
+  const filasDeOmisos: string[][] = (omisos.datos?.contenido ?? []).map((o) => [
+    o.codRefCatastral,
+    o.titular,
+    o.condicion === 'OMISO' ? 'Omiso' : 'Subvaluador',
+    o.areaCatastral ?? '—',
+    o.areaDeclarada ?? '—',
+    o.diferenciaDeArea ?? '—',
+    o.impuestoOmitidoS ?? '—',
+  ]);
+
   const detAct = detTab === 0 ? DET_PREDIAL : DET_VEHICULAR;
   const marcadasN = detAct.filas.filter((_f, i) => marcadas[i]).length;
 
@@ -602,33 +647,65 @@ export default function Fiscalizacion({ dest, onDest }: PantallaProps) {
                   borderBottom: '1px solid var(--line)',
                 }}
               >
-                {detAct.filtros.map((f) => (
-                  <label key={f.label} style={{ display: 'flex', flexDirection: 'column', gap: 5, minWidth: 0 }}>
-                    <span style={{ fontSize: 11.5, fontWeight: 500, color: 'var(--ink-3)' }}>{f.label}</span>
-                    <select
-                      value={filtroDe(f.label, f.valor)}
-                      onChange={(e) => setFiltros((s) => ({ ...s, [detTab + ':' + f.label]: e.target.value }))}
-                      style={{ width: '100%', border: '1px solid var(--line-2)', borderRadius: 6, padding: '9px 10px', background: 'var(--bg-elev)', fontSize: 13.5 }}
-                    >
-                      {f.opts.map((o) => (
-                        <option key={o} value={o}>
-                          {o}
-                        </option>
-                      ))}
-                    </select>
-                  </label>
-                ))}
+                {detTab === 0 ? (
+                  <>
+                    <label style={{ display: 'flex', flexDirection: 'column', gap: 5, minWidth: 0 }}>
+                      <span style={{ fontSize: 11.5, fontWeight: 500, color: 'var(--ink-3)' }}>Sector</span>
+                      <input
+                        value={sectorDet}
+                        onChange={(e) => setSectorDet(e.target.value)}
+                        placeholder="01"
+                        style={{ width: '100%', border: '1px solid var(--line-2)', borderRadius: 6, padding: '9px 10px', background: 'var(--bg-elev)', fontSize: 13.5 }}
+                      />
+                    </label>
+                    <label style={{ display: 'flex', flexDirection: 'column', gap: 5, minWidth: 0 }}>
+                      <span style={{ fontSize: 11.5, fontWeight: 500, color: 'var(--ink-3)' }}>Condición</span>
+                      <select
+                        value={condicionDet}
+                        onChange={(e) => setCondicionDet(e.target.value)}
+                        style={{ width: '100%', border: '1px solid var(--line-2)', borderRadius: 6, padding: '9px 10px', background: 'var(--bg-elev)', fontSize: 13.5 }}
+                      >
+                        <option value="">Todas</option>
+                        <option value="OMISO">OMISO</option>
+                        <option value="SUBVALUADOR">SUBVALUADOR</option>
+                      </select>
+                    </label>
+                    {/* «Ordenar por» del artboard ofrece tres campos y los tres
+                        dan 422 ORDEN_NO_ADMITIDO. No se dibuja. */}
+                    <p style={{ margin: 0, gridColumn: '1 / -1', fontSize: 11.5, lineHeight: 1.5, color: 'var(--ink-4)', textWrap: 'pretty' }}>
+                      «Ordenar por» no se ofrece: los tres campos que el manual propone —impuesto omitido, diferencia de valor, sector— los
+                      rechaza el backend con «orden no admitido».
+                    </p>
+                  </>
+                ) : (
+                  detAct.filtros.map((f) => (
+                    <label key={f.label} style={{ display: 'flex', flexDirection: 'column', gap: 5, minWidth: 0 }}>
+                      <span style={{ fontSize: 11.5, fontWeight: 500, color: 'var(--ink-3)' }}>{f.label}</span>
+                      <select
+                        value={filtroDe(f.label, f.valor)}
+                        onChange={(e) => setFiltros((s) => ({ ...s, [detTab + ':' + f.label]: e.target.value }))}
+                        style={{ width: '100%', border: '1px solid var(--line-2)', borderRadius: 6, padding: '9px 10px', background: 'var(--bg-elev)', fontSize: 13.5 }}
+                      >
+                        {f.opts.map((o) => (
+                          <option key={o} value={o}>
+                            {o}
+                          </option>
+                        ))}
+                      </select>
+                    </label>
+                  ))
+                )}
               </div>
               <div style={{ overflowX: 'auto' }}>
                 <table style={{ width: '100%', borderCollapse: 'collapse', minWidth: detAct.min }}>
                   <thead>
                     <tr>
                       <th style={{ padding: '10px 14px', width: 38, background: 'var(--bg-elev)' }} />
-                      <Cabeceras cols={detAct.cols} />
+                      <Cabeceras cols={detTab === 0 ? COLUMNAS_DE_OMISOS : detAct.cols} />
                     </tr>
                   </thead>
                   <tbody>
-                    {detAct.filas.map((f, i) => {
+                    {(detTab === 0 ? filasDeOmisos : detAct.filas).map((f, i) => {
                       const on = marcadas[i] === true;
                       return (
                         <tr key={f[0]} className="hov-elev" style={{ borderTop: '1px solid var(--line)', background: on ? 'var(--accent-soft)' : 'transparent' }}>
@@ -641,7 +718,7 @@ export default function Fiscalizacion({ dest, onDest }: PantallaProps) {
                               style={{ accentColor: 'var(--accent)', width: 16, height: 16 }}
                             />
                           </td>
-                          <Celdas fila={f} cols={detAct.cols} insignia={detTab === 0 ? 2 : 5} />
+                          <Celdas fila={f} cols={detTab === 0 ? COLUMNAS_DE_OMISOS : detAct.cols} insignia={detTab === 0 ? 2 : 5} />
                         </tr>
                       );
                     })}
@@ -1353,3 +1430,21 @@ export default function Fiscalizacion({ dest, onDest }: PantallaProps) {
     </Shell>
   );
 }
+
+/**
+ * Las columnas de la deteccion predial, en la forma del recurso.
+ *
+ * «Valor catastral», «Valor declarado» y «Diferencia S/» del artboard se
+ * sustituyen por las areas, que es lo unico que el backend cuantifica hoy. El
+ * impuesto omitido se queda —es la cifra que da sentido a la pantalla— y sale
+ * «—» mientras D-02a impida calcularlo.
+ */
+const COLUMNAS_DE_OMISOS: ColDef[] = [
+  ['Cod. ref. catastral', 0],
+  ['Titular', 0],
+  ['Condicion', 0],
+  ['Area catastral', 1],
+  ['Area declarada', 1],
+  ['Diferencia de area', 1],
+  ['Impuesto omitido S/', 1],
+];
