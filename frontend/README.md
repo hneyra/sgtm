@@ -1,951 +1,216 @@
-# Frontend del SGTM
+# `frontend/` — el back-office del SGTM
 
-**Las 134 pantallas del manual están implementadas, y ninguna habla todavía con el backend real.**
-Doce módulos, 134 opciones, un renderizador y un catálogo portado del prototipo. Los datos llegan
-por HTTP desde un **proxy que simula la API**; el día que Spring Boot sirva las operaciones, se
-apaga el proxy y la interfaz no se entera ([ADR-0010](../docs/30-arquitectura/adr/ADR-0010-catalogo-portado-y-proxy-de-datos.md)).
+React 19 sobre Vite, TypeScript. **Implementa el rediseño de
+[`design/design-sgtm/`](../design/design-sgtm/)**: los doce módulos del catálogo —134
+opciones del manual— resueltos como cuatro a seis *destinos* por módulo sobre un mismo
+shell.
 
-## Arrancar
+**Casi todo es maqueta.** Los datos de muestra viven en `src/datos/` y lo que escribiría
+enseña un aviso con el texto del artboard. La excepción es **Catastro · Predios**, que
+lee y escribe contra el backend de verdad — ver más abajo.
 
 ```bash
-cd frontend
 yarn install
-yarn dev            # el back-office, en http://localhost:5173
-yarn dev:portal     # el portal del contribuyente, en http://localhost:5174/portal/
+yarn dev        # http://localhost:5180
+yarn build      # tsc + vite build
+yarn verificar  # solo los tipos
+yarn mirar      # recorre las 65 pantallas en Chromium y guarda una captura de
+                # cada una en .capturas/; falla si alguna da un error de consola
+                # o si el <main> se queda en blanco (que es como falla de verdad
+                # una pantalla sin conectar: en silencio)
 ```
 
-Requiere Node 22 o superior.
+`yarn mirar` necesita la vista previa levantada; si no está en el 5180, se le dice con
+`SGTM_BASE=http://localhost:5181 yarn mirar`. Con `SGTM_TOKEN=…` recorre las pantallas
+conectadas leyendo del backend; sin él, el backend contesta 401 y lo que se comprueba es
+que la pantalla lo diga bien — que también hay que verlo.
 
-| Comando                    | Qué hace                                                       |
-| -------------------------- | -------------------------------------------------------------- |
-| `yarn verificar`           | Contrato, lint, tipos y pruebas. **Antes de cualquier PR**     |
-| `yarn lint`                | ESLint, con las prohibiciones del proyecto                     |
-| `yarn typecheck`           | `tsc --build`, en modo estricto                                |
-| `yarn test`                | Vitest: dominio, cliente, proxy, catálogo, shell y las 134     |
-| `yarn format`              | Prettier. Si el build se queja del formato, no lo pelees       |
-| `yarn build`               | Construye **las dos** aplicaciones: back-office y portal       |
-| `yarn portar-catalogo`     | Regenera el catálogo desde `design/`                           |
-| `yarn generar-operaciones` | Regenera los tipos de la API desde el contrato                 |
-
-## El catálogo se porta; no se escriben 134 pantallas
-
-`scripts/portar-catalogo.mjs` lee los cinco archivos declarativos del prototipo
-(`design/sgtm-data-{1..5}.js`) y los parte en dos, que es **la decisión que sostiene todo lo
-demás**:
+## Cómo está armado
 
 ```
-estructura → apps/backoffice/src/catalogo/     qué campos, qué columnas, qué pestañas
-valor      → packages/api-mock/src/            qué dice cada campo, qué filas trae la tabla
+src/
+  ds/                 El sistema de diseño «Juris PE»
+    tokens/*.css      Los tokens tal cual vienen del diseño: color, tipografía,
+                      espaciado y las tres familias de Google Fonts
+    global.css        El bloque <helmet> que los trece artboards repiten, unido
+    Icono.tsx         Un icono es una lista de trazos sobre 24×24
+    iconos.ts         ICONOS (el riel) e ICO (~40 trazos compartidos)
+    componentes.tsx   Insignia · Seccion · Boton · Campo · Tabla · Kpi · Barra ·
+                      FilaDeLista · Aviso · Pestanias · Dato · Codigo · Esqueleto…
+  shell/
+    Shell.tsx         Riel de 68 px · panel de destinos de 246 px · cabecera
+                      pegajosa · barra de contexto · paleta de comandos (Ctrl-K)
+    modulos.ts        El registro de los doce módulos: destinos, pastillas,
+                      acción primaria, documento y sesión de cada uno
+    preferencias.ts   Entidad, acento, densidad, tema y ejercicio; soles/miles/pct
+  modulos/<k>/        Un módulo por carpeta, cargado con `lazy()`
+  datos/<k>.ts        Sus datos de muestra
 ```
 
-La estructura la sabe la interfaz sin preguntar. El valor se **pide por HTTP** a la operación que
-cada pantalla declara —`GET /api/v1/catastro/fichas`— con el mismo cliente que hablará con Spring
-Boot. Por eso la pantalla se dibuja entera antes de que llegue la respuesta, y por eso conectar el
-backend no es reescribir nada.
+La ruta vive en el hash —`#/catastro/predios`—, así que una pantalla concreta se puede
+compartir por su URL sin que haga falta un servidor que la sirva.
 
-Los archivos generados llevan `.generado.ts` en el nombre y **no se editan a mano**: se regeneran.
+## Las cuatro decisiones que explican el resto
 
-## El contrato manda sobre los tipos
+**El shell es uno solo.** Los trece artboards lo repiten idéntico —comprobado línea a
+línea—, así que vive en `Shell.tsx` y un módulo solo dice qué destino está activo y qué
+dibuja dentro. Lo único que cambia por módulo son sus destinos, su acción primaria y su
+sesión, y eso es dato: `modulos.ts`.
 
-Los tipos de las **174 operaciones del contrato** no se escriben: los genera `scripts/generar-operaciones.mjs`
-desde [`sgtm-v1.yaml`](../docs/50-api/openapi/sgtm-v1.yaml) hacia
-`packages/api-client/src/operaciones.generado.ts`. `yarn verificar` regenera y compara, así que el
-contrato y la interfaz no pueden divergir en silencio:
+**Inicio trae su propio shell.** No es un módulo: es la respuesta a «a quién atiendes».
+Con sesión del personal enseña el panel de recaudación con el riel; con sesión de un
+contribuyente el riel desaparece —quien entra con su DNI no navega por módulos— y queda
+el panel del contribuyente a 880 px.
+
+**Las cifras derivadas se derivan.** El avance de la recaudación, el total de la deuda,
+el descuento del beneficio y el número de predios que decide si procede la deducción de
+pensionista salen de una cuenta sobre los datos, no de un literal. Cambiar una fila de
+`src/datos/` mueve todo lo que depende de ella, que es lo que hace que la maqueta se
+pueda leer como si fuera el sistema.
+
+**El acento, la densidad y la entidad son configuración, no cromo.** El artboard los
+expone como props del lienzo —cuatro acentos, tres densidades y el nombre de la
+municipalidad— porque el producto es multi-municipal: una instalación atiende a muchas.
+Aquí viven en `preferencias.ts` y el shell los escribe sobre `document.documentElement`,
+listos para que los fije la instalación; **no se les dibuja un panel de ajustes**, porque
+el diseño no dibuja ninguno y un producto no le pide al cajero que elija su color
+corporativo. El modo oscuro sí tiene conmutador: los tokens traen la paleta oscura
+completa, y una paleta a la que no se llega no es una paleta.
+
+**Los estilos son los del artboard, en línea.** No hay clases de utilidad ni una
+reescritura «más limpia»: el objetivo declarado es que la pantalla se vea idéntica al
+diseño. Lo único que se movió a clases son los `hov-*`, porque React no tiene
+pseudoclases en línea.
+
+## Un defecto del bloque oscuro, medido
+
+`colors.css` redefine `--accent-soft` en `[data-theme="dark"]` y **no** `--accent-ink`,
+así que la pareja se rompe: el navy más oscuro sobre el relleno oscuro da **1,15:1** —y
+esa pareja es la cifra de cada indicador, el código en pastilla, el selector de ejercicio
+y el destino activo del panel—. Los tres `*-fg` semánticos, que la interfaz usa también
+como texto sobre la superficie y no solo dentro de su insignia, quedaban en 1,77:1,
+1,87:1 y 3,27:1.
+
+Se corrige al final de `colors.css`, con las dos caras a la vez —el relleno de la
+insignia se oscurece y el texto se aclara—, de modo que cada par sigue valiendo dentro de
+la insignia (7,80:1 el más bajo) y además se lee sobre la tarjeta (8,63:1 el más bajo).
+Las cifras están medidas, no estimadas.
+
+## Predios, conectado
+
+`Catastro · Predios` es el primer submódulo que habla con el backend. Todo lo demás
+sigue siendo maqueta.
+
+```
+src/api/cliente.ts      La única puerta por la que salen las peticiones. Ningún
+                        `fetch` suelto en ninguna pantalla. Traduce el RFC 9457 del
+                        backend a un `ErrorDeApi` con su `codigo` estable.
+src/api/catastro.ts     Los tipos, campo por campo, de los `record` del backend, y
+                        las cinco operaciones que sirve `PredioController`.
+src/api/useRecurso.ts   Una lectura con sus cuatro estados. Cancela la anterior,
+                        descarta la que vuelve tarde y distingue cancelar de fallar.
+```
+
+| Qué | Contra qué |
+|---|---|
+| El padrón, con paginación | `GET /catastro/predios` |
+| Buscar por código | el filtro `codRefCatastral`, que acota por **prefijo** |
+| Filtrar por sector, estado y ficha | `codigoDeSector` · `estado` · `fichado` |
+| El desplegable de sectores | `GET /catastro/sectores` |
+| El titular, al abrir el predio | `GET /catastro/predios/{id}/titulares` |
+| Inscribir un predio | `POST /catastro/predios` |
+| Retirarlo del padrón y devolverlo | `POST …/{id}/baja` · `POST …/{id}/reactivacion` |
+
+En desarrollo no hay CORS que configurar: `vite.config.ts` proxea `/api` al backend, así
+que el navegador habla con su propio origen. Se apunta a otro sitio con
+`VITE_SGTM_BACKEND`.
+
+Mientras no exista la puerta de sesión, el token sale de `VITE_SGTM_TOKEN` o de
+`localStorage['sgtm.token']`; cuando la haya, cambia una sola función —`token()` en
+`cliente.ts`—. **Caduca a los 15 minutos y no se renueva solo**: al vencer, la pantalla
+dice «La sesión no vale» y no ofrece reintentar, porque reintentar no lo arregla.
+
+### Desplegado con el resto del sistema
+
+`despliegue/compose.yaml` construye este directorio como el servicio **`interfaz`** y lo
+publica en `${SGTM_PUERTO_INTERFAZ:-8081}`.
 
 ```bash
-yarn generar-operaciones      # escribe operaciones.generado.ts
-yarn comprobar-operaciones    # falla si no cuadra con el yaml (lo corre `yarn verificar`)
+cd despliegue
+docker compose up -d --build interfaz     # reconstruye solo la interfaz
+docker compose logs -f interfaz
 ```
 
-Un campo renombrado en el `yaml` renombra la propiedad generada, y el código escrito contra el
-nombre viejo **deja de compilar**. Se comprobó renombrando `codRefCatastral` de verdad y
-compilando con `tsc`: el error es `'codRefCatastral' does not exist in type
-'{ readonly renombrado: string; }'`.
+Si `docker ps` da «permission denied» sobre `/var/run/docker.sock` y `getent group docker`
+te lista igualmente, es que la sesión arrancó **antes** de que te añadieran al grupo: la
+pertenencia se resuelve al iniciar sesión. Sin cerrarla, `sg docker -c "…"` corre un
+comando con el grupo aplicado.
 
-El generador además **rechaza el contrato** antes de generar nada si viola una regla del proyecto:
-un parámetro o campo de municipalidad (regla 2), un importe declarado como número (regla 1,
-RNF-055) o una respuesta con cifras de deuda sin `fechaCalculo` (regla 9, RNF-075). Cada guarda
-tiene su contrato de muestra que la viola en `verificaciones/generador-de-operaciones.test.ts`.
+`Dockerfile` compila con Vite y sirve el resultado con nginx sin root; `nginx.conf`
+reenvía `/api/v1` a `aplicacion:8080` **por la red del compose**. Ese reenvío no es
+comodidad: el backend **no tiene ninguna configuración de CORS** —un preflight desde otro
+origen sale 401 sin una sola cabecera `Access-Control-*`—, así que servir la API desde el
+mismo origen es lo único que hace que la interfaz la alcance.
 
-**Lo que el generador no inventa:** los esquemas de cuerpo y respuesta. El contrato de hoy declara
-verbo, ruta y parámetros; el esquema de cada recurso se escribe cuando su backend existe, y hasta
-entonces la respuesta se tipa como `CuerpoSinEsquema`, que es exactamente lo que el `yaml` dice.
+`VITE_SGTM_API` es un argumento de **construcción**: Vite la resuelve al compilar, no al
+arrancar, y cambiarla exige reconstruir la imagen. Por eso vale `/api/v1` y nunca una URL
+absoluta —un dominio horneado en el paquete sobrevive a cualquier cambio de configuración
+y las dos mitades acaban apuntando a sitios distintos, en verde y sin síntoma—.
 
-## La pantalla se usa: registro en la ruta, búsqueda en la URL
+**Ningún token se hornea en la imagen.** `VITE_SGTM_TOKEN` es para una vista previa local;
+meterlo en la imagen dejaría una credencial dentro de un artefacto que se publica.
 
-`GET /api/v1/rentas/vehiculos/{placa}` se pedía con la cadena `ejemplo`, así que la pantalla
-parecía funcionar mientras mostraba un registro que no era de nadie. Ya no: **sin placa no hay
-petición**, y quien la trae es la ruta.
+### La puerta de sesión
 
-```
-/rentas-registro/vehiculos                 la pantalla, esperando un registro
-/rentas-registro/vehiculos/ABC-123         la ficha de esa placa, y su enlace se comparte
-/catastro/calles?nombreDeCalle=SANTA+ROSA&orden=nombre&pagina=2
-```
-
-**Todo el estado de la búsqueda vive en la URL** (FRO-04 §5): los filtros, el orden y la página.
-Recargar no lo pierde, el botón «atrás» funciona, y quien atiende en ventanilla puede pegar el
-enlace de lo que está mirando. Lo único que se queda en el componente es el borrador de lo que se
-está escribiendo y aún no se ha buscado.
-
-| Qué                 | Dónde vive                    | Qué viaja                                 |
-| ------------------- | ----------------------------- | ----------------------------------------- |
-| El registro abierto | `/:modulo/:opcion/:codigo`    | Siempre: es el parámetro de la ruta       |
-| Filtros             | `?nombreDeCalle=…`            | Solo si el contrato declara ese parámetro |
-| Orden y página      | `?orden=…&sentido=…&pagina=…` | Solo si el contrato los declara           |
-
-**Filtrar, ordenar y paginar son del servidor.** Ordenar en el cliente una página de un padrón de
-cientos de miles de filas ordena media tabla y miente. Por eso la cabecera pide otro orden y el
-paginador aparece **solo cuando la respuesta trae paginación**: cuántas filas hay solo lo sabe
-quien las tiene.
-
-Para que eso pueda viajar, el contrato declara ahora **los filtros de cada pantalla** y —en las de
-lectura con tabla— `pagina`, `tamano`, `orden` y `sentido`. Los nombres los calculan dos
-generadores en árboles distintos, y una prueba exige que coincidan.
-
-**Buscar por el identificador abre el registro**: si la búsqueda trae un valor para el parámetro de
-la ruta —`placa` en vehículos—, la pantalla navega a esa ficha. Donde el catálogo no dice cuál de
-los filtros es el identificador, el registro se abre por URL hasta que su módulo lo decida; y las
-filas de la tabla **no** enlazan a ninguna ficha, porque de las quince pantallas que abren registro
-y traen tabla, la primera columna es ese registro en una.
-
-## La puerta lateral: una opción con operación propia
-
-Las 134 pantallas piden la misma forma —`DatosDePantalla`— porque comparten renderizador. Fue la
-decisión correcta para dibujarlas todas, pero **no sobrevive al backend real**: una ficha catastral
-versionada, un cobro de caja y un padrón paginado no son la misma respuesta.
-
-Así que junto a `useDatosDePantalla` hay un camino por opción, y las dos conviven:
+Fuera de `localhost`, entrar sin sesión manda al **formulario de Keycloak**: código de
+autorización con PKCE (S256) contra el cliente `sgtm-backoffice`, que el realm ya declara
+como público con flujo estándar.
 
 ```
-operación tipada (del contrato) → leer → adaptar → los mismos bloques
+src/api/sesion.ts    entrar() · canjearSiVuelve() · reintentarLaSesion() · salir()
 ```
 
-| Pieza        | Qué hace                                                              | Dónde vive               |
-| ------------ | --------------------------------------------------------------------- | ------------------------ |
-| `parametros` | De dónde salen los valores de la petición: ruta y consulta            | La conexión de la opción |
-| `leer`       | **La frontera.** Valida el cuerpo que el contrato todavía no describe | La conexión de la opción |
-| `adaptar`    | Traduce el recurso del dominio a lo que dibujan los bloques. **Puro** | La conexión de la opción |
-
-`leer` es lo único que cambia el día que el backend sirva su recurso de verdad: el adaptador ya
-trabaja sobre el dominio, no sobre el transporte.
-
-La primera conectada es el **panel de recaudación** (`pantallas/inicio/recaudacion.ts`). Su
-ejercicio sale de la URL y **entra en la clave de cache**: `['operacion', 'inicio', { ejercicio }]`.
-Con la clave vieja —`['pantalla', id]`— consultar 2026 y después 2025 devolvería lo primero, que en
-ventanilla no es un problema de rendimiento sino mostrar cifras de un año como si fueran de otro.
-
-Un adaptador que pierda la `fechaCalculo` **no compila**: `DatosDePantalla` la exige, y
-`verificaciones/muestras/adaptador-sin-fecha.ts` lo demuestra compilando con `tsc`.
-
-**El primer módulo entero conectado es Seguridad** (`pantallas/seguridad/`), y es el primero porque
-los demás dependen de él: sin usuarios, grupos y permisos reales el filtrado por rol no tiene de
-dónde leer, y sin ejercicio de trabajo ninguna consulta sabe de qué año habla. Sus seis lecturas
-—módulos, accesos, grupos, usuarios, auditoría y parámetros— leen **el recurso que publica el
-backend**: `RespuestaPaginada` con su `contenido`, su página contada desde 0 y su `totalElementos`,
-no la forma que comparten las 134.
-
-Lo que el recurso no trae sale con **«—»**, no con un valor inventado: la unidad orgánica de un
-usuario, la caja en la que atiende, cuántos accesos tiene un grupo. Que se vea el hueco es el punto
-—dice qué falta y a quién le toca—, y el prototipo dibujaba esas columnas llenas.
-
-La bitácora manda **siempre** el ejercicio, aunque nadie lo escriba en un filtro: es la clave de
-partición de la tabla y su controlador lo exige. No sale de la URL, sale de la sesión.
-
-De **Catastro** hay **nueve opciones de doce**: el catálogo vial, los sectores, la consulta de
-fichas y las cuatro fichas. Las tres que faltan son las tablas de valuación, y no faltan por el
-frontend: su contenido es D-02, y en esa pantalla una cifra sin verificar **parece normativa**.
-
-Sus columnas salen de recursos que publican menos de lo que el prototipo dibuja, y el resto sale
-con «—». Donde eso importa más es en las cifras: el arancel por m², el valor de los bienes comunes
-y el autovalúo rural alimentan la valuación de un predio, y una cifra inventada ahí acaba en un
-valor mal emitido. Que falte se ve; que esté mal, no.
-
-### Catastro escribe: el alta guiada y el territorio operable
-
-Dos cosas que el prototipo dibujaba y no hacían nada.
-
-**El alta de una ficha son cuatro pasos, no cuarenta campos** (`catastro/AltaGuiadaDeFicha.tsx`).
-Se abre desde la acción «Nuevo» de la ficha urbana —la que ya estaba dibujada y muerta—, sustituye
-a los bloques mientras dura, y el orden no es cosmético: **el error caro se comete al principio**.
-Un código con un sector que no existe, o que ya está inscrito, no se descubre al pulsar «Guardar»;
-se descubre cuando dos predios colisionan y el padrón deja de cuadrar con el catastro. Por eso el
-paso 2 comprueba el sector contra el catálogo y avisa del duplicado —con quién lo tiene y un enlace
-a esa ficha— **antes** de pedir el resto. Las tres comprobaciones son operaciones de **lectura** que
-ya existían (`sectores`, `calles`, `consulta_fichas`, `contribuyentes`): ninguna se inventó, y el
-proxy no finge ninguna.
-
-**Nada se guarda hasta el paso 4.** Los tres primeros son borrador en el componente —lo único que
-FRO-04 §5 deja quedarse ahí— y el cierre no se habilita sin la observación que crea la v1.
-
-**Territorio** (`sectores`, `calles`) dibuja los conteos de `SectorConConteos` —manzanas, lotes y
-predios activos— **tal como llegan**, despliega las manzanas de un sector en su fila y da de alta
-sector, manzana y vía desde un panel lateral con observación obligatoria. Mientras la ruta la
-conteste el proxy los tres conteos salen «—», y eso es correcto: el proxy no inventa lo que el
-backend no le ha dado (ADR-0010 §4). Del desplegable de manzanas hoy sale la nota de que el backend
-todavía no las lista —hay `POST` para darlas de alta y ningún `GET` que las devuelva—; el día que
-las publique, se pintan solas.
-
-Y una advertencia de dominio que la tabla necesita: **un predio sin sector no cuenta en ninguno**,
-así que la suma de «Predios inscritos» puede ser menor que el padrón. Es información —hay predios
-sin ubicación territorial asignada—, no un descuadre.
-
-### Lo que le cuesta al ciudadano abrir el portal
-
-El portal es el único flujo del sistema que no usa alguien de la municipalidad: se entra desde un
-teléfono, una vez al año, con la red que haya. Hasta #298 su ruta era el arranque del back-office
-más el trozo de «Inicio» —**147.4 KB medidos**, con el presupuesto de entonces en 152, y dentro
-los 11.5 KB del catálogo de navegación de los doce módulos, con sus 134 opciones, sus iconos y
-sus resúmenes, que el ciudadano se descargaba para no usarlos nunca—. Esa era la conversación que el número dejaba
-abierta, y ADR-0016 §3 la cerró: la tercera condición de
-[ADR-0009](../docs/30-arquitectura/adr/ADR-0009-plataforma-frontend.md)
-—el paquete arrastra código que solo usa el back-office— se cumplía, y basta con una de las tres.
-
-Ahora el portal es **`apps/portal`**: su propio paquete, sin el shell y sin el catálogo, servido en
-`/portal/` del mismo origen. `yarn comprobar-compilaciones` mide el paquete de cada aplicación por
-separado y presupuesta los dos — salida del 2026-08-28; la cifra vigente la imprime cada corrida, y
-los presupuestos (156 el arranque, 84 el portal, 11 cada módulo) viven comentados con su historia en
-`scripts/comprobar-compilaciones.mjs`:
-
-```
-Portal: 79.1 KB comprimidos de 82.
-Arranque: 155.8 KB comprimidos de 156. Doce trozos por modulo, cada uno con su tope de 11.
-```
-
-**79.1 donde había 147.4** —68.3 KB menos, un 46 %—, y el margen es de tres kilobytes a propósito:
-el portal es una pantalla, no doce módulos, y no tiene por qué crecer. La bajada son tres cosas:
-62.3 KB de shell y catálogo que la separación se llevó; **4.2 KB más al dejar de pedir con
-`pedirOperacion`** —que resuelve la ruta leyendo el mapa entero de las operaciones del contrato
-(169 entonces, 84 de ellas de escritura; hoy son 175) y lo metía en la aplicación destinada a ser
-pública—; y **1.8 KB más con ADR-0020**, que es lo que conviene mirar: el portal **ganó** la sesión
-del ciudadano y **bajó**, porque con ella se fueron la caja de documento, los tres tipos del
-prototipo, el adaptador de las seis rejillas de la unificada y la segunda lectura del padrón. Lo que
-ahora dibuja es una respuesta ya compuesta por el servidor, y componer en el servidor pesa cero en
-el teléfono. El portal declara **una** ruta en `apps/portal/src/lecturas.ts` y pide con
-`solicitar()`; que cuadre con el contrato lo comprueba `verificaciones/portal-separado.test.ts`,
-que no viaja al navegador. De los 79, unos 60
-son React y el cliente de consultas; lo propio del portal —su pantalla, los adaptadores de
-`@sgtm/lectura` y la puerta de sesión— no llega a 20. Bajar de ahí es cambiar de biblioteca, no de
-pantalla.
-
-Y lo que el navegador guarda de todo eso lo dice `nginx.conf`, **para las dos aplicaciones**: los
-activos con huella (`/assets/` y `/portal/assets/`) un año e inmutables, los dos `index.html` con
-`no-cache`. Se escriben como expresión regular porque un prefijo no alcanza al portal, y
-`verificaciones/politica-de-cache.test.ts` simula la precedencia de nginx para comprobar **qué regla
-gana** en cada ruta: buscar el texto en el archivo pasaba en verde con la configuración anterior,
-que ya lo contenía y dejaba al ciudadano sin ninguna cabecera de caché.
-
-### El ciudadano entra por su propia puerta (ADR-0020)
-
-Con #57 se cierra lo que la separación dejó dicho y no podía hacer: **hay realm ciudadano**
-(`sgtm-ciudadano`), con **emisor distinto** del de funcionarios, y el portal se sirve tras **su**
-puerta —`<ProveedorDeSesion quienEntra="ciudadano">`—, no tras la del back-office. El aviso de
-«todavía no hay acceso del ciudadano» se retira porque con la puerta puesta sería falso.
-
-**Y se va la caja de documento**, que es la mitad del cambio. Hasta aquí el portal preguntaba
-«¿quién eres?» y mandaba lo tecleado a `GET /rentas/contribuyentes?dNI=…`: un endpoint que contesta
-por cualquiera a quien teclee ocho dígitos. Ahora el sujeto llega **firmado** en el claim
-`numero_documento` del token, la operación —`GET /portal/situacion`— no tiene ni un parámetro, y el
-servidor recorre las municipalidades, compone y suma. Que aquí no viaje ningún documento es una
-regla de código fuente: `verificaciones/portal-separado.test.ts` la comprueba, y el parámetro `doc`
-desapareció del contrato por el generador (`SUPRIMIDOS`), no a mano.
-
-La guarda que hacía `identidadesQueCoinciden` **no se perdió: cambió de forma**. Ya no hay listado
-del padrón que filtrar, así que lo que se comprueba es que la situación que llegó sea la del
-documento **de este token** (`esLaSituacionDe`, en `@sgtm/lectura`): el proxy no filtra (ADR-0010) y
-una situación de otra persona no se distingue de la propia mirándola —trae un nombre, un código y
-unas cifras que existen—.
-
-**Y la opción `portal` de las 134 sigue en el catálogo**, con su id, su ruta y su permiso: es la
-vista del funcionario, y no gana backend —servirle `/portal/**` a un funcionario sería devolver el
-endpoint que ADR-0020 quita—.
-
-Las dos aplicaciones enseñan **las mismas cifras a la misma fecha de cálculo** porque leen la
-respuesta con los mismos adaptadores de `@sgtm/lectura`: la ficha 360° lee la identidad del padrón y
-las seis secciones de `consulta_unificada`; el portal lee la situación compuesta, cuyo resumen y
-cuyas obligaciones vienen con **la misma forma** —`ImporteActualizado`, las cinco partes sumadas por
-el servidor—. Lo que cambia es el ancho: en 360 px no hay siete columnas, así que cada fila se lee
-como pares rótulo/valor.
-
-### La copia se ve como copia
-
-**Fiscalización trabaja sobre copias** y solo escribe en el padrón por transferencia (ARQ-01 §3.5).
-Si la pantalla no lo dice, el fiscalizador cierra el acta creyendo que ya cambió algo que no ha
-cambiado, se va, y el contribuyente sigue con su declaración antigua y su recibo antiguo hasta que
-alguien se da cuenta meses después.
-
-La constante `AVISOS` de `pantallas/prosa-textos.ts` —que el renderizador consulta con `avisoDe`,
-en `pantallas/prosa.ts`— declara, **por opción**, lo que una pantalla tiene que decir siempre
-—antes de que nadie teclee—. Por opción y no por módulo a propósito: la lista de omisos también es de
-fiscalización y **no** es una copia de nada —es una consulta contra el padrón de verdad—, así que
-decirle lo mismo sería mentir en la dirección contraria. Hay una prueba para cada mitad.
-
-### Quince pantallas tienen su acto detrás de una acción secundaria
-
-El renderizador habilita solo la última acción —«la última es la primaria», FRO-03 §5— y solo la
-primaria escribe. Cuando el acto de la pantalla **no es la última que dibujó el prototipo**, ese
-acto no se puede ejecutar: «Emitir · Imprimir certificado» deja el emitir apagado, y «Calcular ·
-Notificar · Resolver» deja apagados los dos que importan. Cuatro pantallas más —las hojas de
-resolución y de constancia— no declaran ninguna acción: el prototipo las modela como papel.
-
-`verificaciones/actos-inalcanzables.test.ts` no lo arregla, y es deliberado: **cuál de las acciones
-del manual es el acto de cada pantalla es una decisión de diseño**, no una que se pueda deducir del
-catálogo. Lo que hace es impedir que la lista crezca en silencio.
-
-### Que ninguna cifra se recomponga, comprobado por el otro lado
-
-La regla de ESLint impide **escribir** aritmética con importes. No impide que una cifra llegue
-transformada por otro camino: un formateador, un redondeo «de presentación», una suma metida en un
-adaptador.
-
-`pruebas/cifras.ts` lo mira por el otro lado: lo que se ve en la pantalla tiene que estar **tal
-cual** en lo que sirvió la API. Lo usan Tránsito —el desglose de la papeleta se determinó el día de
-la infracción— e Infracciones administrativas, que es lo que su issue pide: reusar el de #77, no
-duplicarlo.
-
-### Trece reportes, una hoja
-
-Tránsito tiene trece reportes y la tentación es escribir trece pantallas. Lo que hay es **un**
-bloque de hoja parametrizado al que se le conectan trece operaciones, y no es una preferencia de
-estilo: trece copias divergen a la primera corrección, y la hoja que sale de la municipalidad con
-firma no puede depender de cuál de las trece se tocó por última vez.
-
-La evidencia de que es el mismo bloque es que el `e2e` de A4 vale para las dos: la constancia de
-Consultas y la hoja informativa de Tránsito pasan la misma prueba sin tocar nada más que la ruta.
-Si cada reporte tuviera su copia, cada uno necesitaría la suya.
-
-**La papeleta muestra su desglose guardado, no uno recalculado.** El importe se determinó el día de
-la infracción con los parámetros de ese día; recalcularlo al mostrar es el error clásico de este
-módulo, y haría que la pantalla dejara de decir lo que dice el documento que se notificó. Hay una
-prueba que comprueba que cada cifra que se ve está **tal cual** en lo que sirvió la API.
-
-### …y trece hojas, una entrada del menú
-
-Que las trece compartan bloque no impedía que compitieran con las diez operaciones del módulo:
-Tránsito llegaba a la barra lateral con veintitrés entradas. Desde [ADR-0014](../docs/30-arquitectura/adr/ADR-0014-navegacion-centrada-en-la-atencion.md)
-§5 son **una**, «Reportes», que abre el **centro de reportes**: las hojas a la izquierda y, a la
-derecha, la pantalla de la elegida con sus criterios y su hoja. La barra queda en once.
-
-Lo que hace que esto no sea una regresión encubierta:
-
-- **Cada hoja conserva su id de opción, su ruta y su permiso.** `/transito/transito-record-conductor`
-  sigue cayendo en su hoja, ahora dentro del layout. El centro **no tiene ruta propia**: la entrada
-  del menú lleva a una hoja concreta —la primera que el usuario puede ver—, así que no hay una
-  opción nueva sin permiso que la cubra.
-- **El renderizador no se bifurca.** La hoja la dibuja `Pantalla` con los bloques de siempre;
-  `CentroDeReportes` es una envoltura de navegación. La evidencia sigue siendo la de arriba: el
-  `e2e` de A4 de la hoja de Tránsito pasa **sin tocar el spec**.
-- **El carril se filtra con `useCatalogoVisible`**, como el menú, el hub y la paleta: una lista que
-  enseñara lo que los permisos niegan sería una superficie de exploración nueva. Y va marcado
-  `data-no-imprimible`: lo que sale firmado es la hoja, no la lista de hojas.
-
-**El pliegue se declara en la tabla del portador, no en el componente.** Un grupo de
-`scripts/grupos-por-tarea.mjs` puede llevar `{ centro: true }`; el portador lo emite como
-`centroDeReportes` del módulo y la barra, el hub y el centro leen de ahí. Infracciones administrativas
-(4 hojas) y Autorizaciones y licencias (7) ya lo hicieron en la fase 1c exactamente así: una marca
-en esa tabla y `yarn portar-catalogo`, no una lista de ids cableada en tres sitios. El siguiente
-módulo que quiera el suyo tiene el mismo coste.
-
-Y de paso salió una fuga que llevaba tiempo: **el nivel módulo de la barra lateral se dibujaba del
-catálogo entero**, no del visible. Entrar por URL a un módulo cuyas opciones no se tienen listaba
-las opciones igualmente (los nombres, no las pantallas). Ahora se resuelve contra
-`useCatalogoVisible`, que es lo que ADR-0014 daba por hecho.
-
-### Una prueba que espera solo al título no comprueba nada
-
-El título de una pantalla lo da el catálogo de navegación y llega enseguida; **sus bloques llegan
-con el trozo del módulo**, que se carga aparte. Una prueba que espera solo al título mira una
-página a medio dibujar, y ahí cualquier comprobación pasa sola: no encuentra lo que busca porque
-todavía no está.
-
-Le pasó a un `e2e` de este repositorio —lo destapó un cambio de tiempos— y le pasó después a las
-propias pruebas de Coactiva, que daban verde sobre doce pantallas vacías. Por eso esas esperan a
-que exista la barra de acciones antes de mirar nada. **Al escribir una prueba sobre una pantalla,
-esperar a algo que solo aparece con los datos.**
-
-### Lo irreversible se confirma diciendo qué va a pasar, y sobre cuántos
-
-«¿Estás seguro?» no da ninguna información nueva: quien pulsa siempre está seguro. Lo que hace
-falta saber es **qué va a pasar** —«vas a generar valores, y eso no se deshace»— y, cuando la
-pantalla lo sabe, **sobre cuántos**: «sobre 4,182 valores · S/ 3.84 M».
-
-La lista de lo que no se deshace cubría anular, dar de baja, emitir, reversar y prescribir. Le
-faltaban tres de los cuatro actos que [#75](https://github.com/hneyra/sgtm/issues/75) nombra:
-**generar una tanda de valores**, **notificar** —el acuse sostiene el plazo, y un plazo mal
-notificado tumba el procedimiento— y **pasar a coactiva**. Se mira la etiqueta de la acción y no la
-operación porque es lo que el usuario lee: si el botón dice «Derivar a coactiva», eso es lo que
-cree que va a hacer.
-
-El alcance está cableado y probado en el bloque, no en una pantalla, y por un motivo que conviene
-saber: **una pantalla que escribe no carga sus datos** (#64), así que hoy ninguna conoce su propio
-alcance al abrirse. Lo conocerá la emisión masiva cuando «Simular» rellene su tabla, que es #38.
-
-### Tras cobrar, entra el siguiente contribuyente
-
-En ventanilla se cobra cientos de veces al día y siempre igual: se identifica al contribuyente, se
-elige qué paga, se cobra, y **entra el siguiente**. Si tras cobrar hay que ir a buscar el campo de
-identificación —con el ratón, o tabulando desde donde quedara el foco—, ese gesto se paga en cada
-cobro (RNF-082, FRO-03 §6).
-
-`useFocoTrasGuardar` devuelve el foco al primer campo escribible de la búsqueda cuando una escritura
-termina bien, y **solo en el flanco**: recolocarlo en cada dibujo dejaría al cajero sin poder mover
-el foco a ningún otro sitio. Las dos mitades tienen su prueba, y la segunda necesita provocar un
-render de más para poder distinguirse — sin eso, «una vez» y «en cada render» se ven igual.
-
-### Nueve formularios que no guardan sin observación
-
-Rentas · Registro es el módulo que más escribe: de sus quince opciones, **nueve tienen verbo de
-escritura**. Ahí la regla 10 deja de ser una regla escrita, así que hay una prueba que las recorre
-todas y exige que su acción primaria siga deshabilitada mientras no haya observación. Habilitándola
-sin ella, se ponen rojas nueve.
-
-Y **SoD-2** (REQ-03 §4): quien cobra no puede dar de baja lo que cobra. Un perfil de cajero no ve
-`alta_deuda` ni `baja_deuda`, y sí ve el padrón sin poder tocarlo. La interfaz lo esconde; el
-servidor lo impide — las dos cosas hacen falta, y esta solo es la comodidad.
-
-### Ninguna cifra sin su fecha, y no solo en la banda de totales
-
-No existe «la deuda»: existe `deudaActualizadaA(fecha)` (regla 9, RNF-075). Eso ya lo hacía cumplir
-`Importe`, que no compila sin `fechaCalculo`, y una regla de ESLint con su muestra.
-
-Faltaba lo obvio: **que el usuario la vea**. La fecha vivía dentro de la banda de totales, así que
-las pantallas que enseñan cifras en una tabla y no tienen banda —**siete de las once de
-Consultas**— mostraban importes sin decir de cuándo eran. En ventanilla eso es responder «debe
-1,842.60» sin decir que esa cifra era la de anteayer.
-
-Ahora es un bloque propio, debajo de la descripción, en las 134: la fecha es de la **respuesta**,
-no de un bloque. Hay una prueba que recorre las once de Consultas y exige que cualquier pantalla
-con cifras la enseñe; sin el bloque, se ponen rojas trece.
-
-**Y la interfaz no suma.** El saldo del estado de cuenta sale vacío en vez de restado —el saldo
-proyectado es del backend—, los cuatro totales también, y `@sgtm/dominio` **no exporta ninguna
-función de sumar**. Esa ausencia es la medida, y hay una prueba que la fija: mientras no exista, no
-hay forma cómoda de componer una cifra que el backend no pueda sustentar.
-
-### La ficha enseña de cuándo es lo que muestra
-
-El backend de la ficha catastral **nunca sobrescribe**: actualizar crea la versión siguiente y
-cierra la anterior. Eso no sirve de nada si la pantalla no lo cuenta, así que las cuatro fichas
-traen un bloque con la versión que rige, su vigencia, de dónde salió, y el histórico completo:
-
-```
-Versión 3  [VIGENTE]   Desde 12/03/2026   FISCALIZACION · Acta de inspección 0244-2026
-
-  v3  Desde 12/03/2026        mrios · 12/03/2026
-      Fiscalización de campo: se verificó ampliación en el segundo piso no declarada.
-  v2  01/06/2021 — 11/03/2026 jcardenas · 01/06/2021
-      Declaración jurada del contribuyente por ampliación del primer piso.
-```
-
-**La observación es la mitad útil.** El diff dice que el área pasó de 120 a 180; solo la
-observación dice que fue una fiscalización de campo y no un error de tecleo, y es lo que se lee en
-voz alta cuando el contribuyente pregunta por qué le subió el recibo. Va entera, sin recortar.
-
-Y la ficha responde **a una fecha**: `?fecha=2022-01-01` devuelve la que regía entonces, que es
-exactamente la pregunta de una reclamación.
-
-### El código de referencia catastral se compone, no se teclea
-
-Son **veintitrés dígitos en diez tramos** —`DDPPddSSMMMLLLEEeeppUUU`, el ubigeo delante del
-sector—, y tecleados de corrido un dígito de más o de menos no se ve al escribirlo: se ve cuando
-dos predios colisionan o cuando un padrón entero deja de cuadrar con el catastro. Repartido en
-tramos con su nombre, la posición equivocada se ve mientras se escribe (RF-005).
-
-**Los tramos no se copian: se leen.** Salen de `ComposicionCatastral.DEL_MANUAL`, en el backend, y
-`codigo-catastral.test.tsx` abre ese archivo Java y exige que las dos listas coincidan tramo a
-tramo. Es la misma precaución que tomó la clase al recibir su composición en vez de cablearla:
-**D-10 sigue abierta** —el manual da 23 posiciones y los ejemplos del prototipo traen 21—, y el día
-que se cierre se cambia un sitio, no dos.
-
-Lo que **no** cambia: el componente compone **un solo valor de cadena**, sin rellenar con ceros y
-sin separadores. Lo que viaja al filtro, a la URL y a la petición es exactamente lo que viajaba con
-la caja de texto, y unos tramos finales en blanco son una búsqueda por prefijo —que el backend
-resuelve por rango, nunca con `LIKE`, por RLS—. Pegar el código entero lo reparte, un tramo lleno
-salta al siguiente, y copiar desde cualquier tramo copia el código completo.
-
-**El mecanismo es acotado y opt-in por opción y campo.** `pantallas/composicion.ts` es un registro
-por opción —como `prosa-textos.ts` y `escrituras.ts`—, y `Filtros` le pregunta si ese campo tiene
-control propio; sin declaración dibuja su `Campo` de texto de siempre. El renderizador no se bifurca y las
-otras 133 pantallas no se enteran. Está declarado donde el campo **es** el código catastral: la
-consulta de fichas y las fichas urbana y económica. `codEdificacion` es el código sin el tramo de
-unidad y `codUnidadCatastralUc` (`11024-0418`) no es un código catastral: troquelarlos diría de
-ellos algo que no es cierto, y además impediría escribirlos.
-
-### La ficha se abre por arriba: resumen, índice y acto
-
-Una ficha catastral son hasta once pestañas de campos. Tres cosas se componen **alrededor** de los
-bloques comunes, declaradas en el mismo registro por opción:
-
-| Qué                  | Qué resuelve                                                                      |
-| -------------------- | --------------------------------------------------------------------------------- |
-| **Cabecera-resumen** | Cuál ficha, de quién, de qué uso y **de cuándo**, antes de bajar al versionado    |
-| **Índice**           | Las secciones declaradas, en una columna que **desplaza**: no recarga ni refiltra |
-| **Acto**             | «Actualizar catastro», con el predio ya puesto en la ruta                         |
-
-La cabecera **no pide nada nuevo**: el código sale de la ruta, el uso y el área de terreno de los
-campos que ya compone el adaptador, y la vigencia del mismo `versionado` que dibuja el histórico. Y
-lo que el recurso no publica sale con «—»: `FichaResource` no trae titular —lo tiene
-contribuyentes— y no trae el área construida total, que es la **suma** de los pisos, y la interfaz
-no suma (RNF-083).
-
-El índice lista **exactamente** lo que dibuja `Formulario` —las secciones de la pestaña abierta— y
-usa sus mismas anclas: un índice calculado aparte enseñaría entradas que no llevan a ningún sitio en
-cuanto una pantalla cambiara de pestañas. Va marcado `data-no-imprimible`.
-
-El acto importa porque **una ficha es de lectura**: sus cinco acciones del prototipo estaban las
-cinco apagadas, y de «estoy viendo esta ficha» a «voy a corregirla» había que volver al menú y
-buscar el predio otra vez. Ahora la primaria es un enlace a «Actualización del catastro» con el
-código en la ruta, y las que siguen sin acto —«Nuevo», «Deshacer»— se quedan como estaban: apagadas
-y visibles, hasta que #320 traiga el alta guiada. Solo lo declaran las dos fichas que se abren
-**por el código catastral**: mandarle a esa pantalla un código de edificación o una unidad rural
-sería ofrecer un botón que lleva a un 404.
-
-**Las cuatro fichas no entran en `actos-inalcanzables.test.ts` y nunca entraron**: esa lista mira
-las pantallas con verbo de escritura, y las fichas son `GET`. La lista queda igual.
-
-**Las conexiones no crecen por delante del backend.** Hoy son doce operaciones, las mismas que
-enumera `IMPLEMENTADAS` en el `ContratoDeApiTest`. Conectar una opción cuyo endpoint no existe
-obligaría a inventarse su respuesta en el proxy, que es lo que [ADR-0010](../docs/30-arquitectura/adr/ADR-0010-catalogo-portado-y-proxy-de-datos.md)
-decidió no hacer, y hay una prueba que lo comprueba enumerando las once de Catastro que siguen
-sin conectar.
-
-## El ejercicio de trabajo es de la sesión, y se ve siempre
-
-Cambiarlo en «Cambiar el año de trabajo» cambia lo que muestran los otros once módulos, así que no
-vive en esa pantalla: vive en `app/ejercicio.tsx`, por encima de las rutas, y se pinta en la
-cabecera de las 134 —también en móvil, donde el resto de la cabecera derecha se oculta—. Una cifra
-de 2025 mostrada como si fuera de 2026 no es un fallo de formato: es una respuesta equivocada a
-quien vino a preguntar cuánto debe.
-
-Y **vaciar la caché es parte de cambiarlo**, en el mismo turno. Es el mismo caso que cambiar de
-municipalidad (FRO-01 §4) con otra cara: lo guardado se pidió con el año anterior, y si sobrevive
-al cambio la primera pantalla que se dibuje enseña cifras del año viejo bajo el rótulo del nuevo.
-El valor inicial sale del reloj del cliente, y es una carencia anotada: el backend guarda el
-ejercicio en la sesión pero solo lo publica como respuesta del `PUT` que lo cambia —no hay
-`GET /seguridad/sesion`—, así que al recargar la pestaña no hay a quién preguntárselo.
-
-## La sesión: PKCE, token en memoria y renovación que no se lleva el formulario
-
-Authorization Code con **PKCE** contra el proveedor OIDC (ADR-0005, FRO-01 §5). Sin secreto de
-cliente: no hay dónde guardarlo en un navegador.
-
-| Regla                         | Cómo                                                                                    |
-| ----------------------------- | --------------------------------------------------------------------------------------- |
-| Token **en memoria**          | Nunca `localStorage`, `sessionStorage` ni la URL: la barra se limpia al canjear         |
-| Renovación silenciosa         | Con refresh token en cookie `HttpOnly`; la petición no manda ningún secreto             |
-| Expiración durante el trabajo | Se avisa y se renueva **sin desmontar nada**                                            |
-| Cierre de sesión              | Vacía la caché de TanStack Query y el estado en memoria                                 |
-| Cambio de municipalidad       | **Vacía la caché antes** de pedir el token nuevo                                        |
-| `401` durante el trabajo      | Se renueva una vez y se repite la petición; si falla, a la puerta con la ruta de vuelta |
-
-Lo único que se guarda en el navegador es el **verificador de PKCE**, mientras el navegador va y
-vuelve del proveedor. No es el token: es de un solo uso, sin su código de autorización no abre
-nada, y se borra al canjearlo. Guardarlo en memoria no es una opción —la redirección recarga la
-página— y la alternativa sería no usar PKCE.
-
-**Que la renovación no desmonte nada** no es un detalle de implementación: el manual describe
-fichas y declaraciones que se llenan en varios minutos, y perder una por expiración es el defecto
-que más duele de los que se pueden cometer aquí. Hay una prueba que escribe en un formulario,
-caduca el token y comprueba que el texto sigue ahí.
-
-Del token se lee el nombre del usuario, el nombre de la municipalidad y hasta cuándo dura. **No hay
-identificador de municipalidad que mandar**, así que no se puede mandar (regla 2, FRO-01 §4).
-
-```bash
-# Con proveedor de identidad:
-VITE_SGTM_OIDC_CLIENTE=sgtm-backoffice \
-VITE_SGTM_OIDC_AUTORIZACION=https://identidad.gob.pe/oauth2/authorize \
-VITE_SGTM_OIDC_TOKEN=https://identidad.gob.pe/oauth2/token \
-VITE_SGTM_OIDC_FIN_DE_SESION=https://identidad.gob.pe/oauth2/logout yarn dev
-```
-
-Sin esas variables no hay proveedor y la aplicación arranca igual, que es como se trabaja contra el
-proxy de datos. En producción, un despliegue sin ellas es un despliegue mal configurado.
-
-## Visibilidad por rol
-
-> **Que la interfaz oculte una opción es comodidad, no seguridad** (REQ-03 §5). La comprobación es
-> del servidor, que responde `403` igual. Esto reduce el error y la superficie de exploración; no
-> protege nada por sí solo.
-
-**Las 134 opciones son 134 accesos**: el identificador de la opción del catálogo **es** la clave
-del permiso, así que una opción nueva es permisible sin tocar una línea de permisos. Hay una prueba
-que lo verifica contando.
-
-| Qué se filtra                 | Dónde                                                                     |
-| ----------------------------- | ------------------------------------------------------------------------- |
-| La navegación de dos niveles  | Los módulos y sus opciones                                                |
-| El hub de cada módulo         | Un módulo sin opciones visibles **no existe** para ese usuario            |
-| La paleta de comandos         | Es la que se olvida: si encuentra lo que el menú esconde, no esconde nada |
-| «Recientes» de `localStorage` | Se cruza con lo que se puede ver **ahora**: no resucita lo perdido        |
-| Las acciones de escritura     | `registro` o `modificación`; ver sin poder tocar es un perfil normal      |
-
-**Negación por omisión** (REQ-03 §1, regla 5): sin permiso explícito no hay acceso. Sin proveedor
-de identidad no hay permisos que aplicar —se trabaja como contra el proxy—; con proveedor y sin
-claim, no se ve nada, que dice la verdad mucho mejor que un menú completo que falla en cada
-pulsación.
-
-Los permisos efectivos —la unión de los del usuario y los de sus grupos, ya recortados por vigencia
-y habilitación— los calcula **el servidor**. Aquí llega el resultado, y **el sitio donde se lee es
-uno solo**: si #9 y #12 deciden que viajen por una operación del contrato en vez de por el token,
-cambia esa función y nada más.
-
-## La escritura: sin observación no se guarda
-
-**Toda modificación de datos exige observación del usuario** (regla 10 de CLAUDE.md, RNF-052). No
-es un `placeholder` amable: es la condición de guardado, y por eso vive en **un solo sitio**
-—`pantallas/escritura.ts`— y no en cada pantalla. Una pantalla que se olvidara de pedirla no podría
-guardar, porque no hay otra forma de guardar.
-
-| Qué resuelve             | Cómo                                                                                 |
-| ------------------------ | ------------------------------------------------------------------------------------ |
-| Observación obligatoria  | Sin texto, la acción primaria no se habilita                                         |
-| Idempotencia             | Una clave por intento, **estable mientras dure**; cambia al corregir lo que se manda |
-| Sin reintento automático | `mutations: { retry: false }`, con la prueba que lo fija                             |
-| Errores por campo        | `ProblemaDeApi.errores` pintado junto a su campo, sin reescribirlo                   |
-| Un envío por pulsación   | Pulsar dos veces rápido manda una vez                                                |
-| Lo irreversible          | Se confirma diciendo **qué** va a pasar, no «¿estás seguro?»                         |
-
-La clave de idempotencia es la que más cuesta si se hace mal en las dos direcciones: regenerarla en
-cada reintento convierte un reintento en un segundo cobro, y no regenerarla nunca hace que corregir
-un dato devuelva el resultado del intento anterior. Cambia **cuando cambia lo que se manda**.
-
-**Abrir una pantalla que escribe ya no escribe**: las operaciones con verbo de escritura no se
-piden al montar —abrir «Copias de seguridad» no puede lanzar un respaldo—, se piden cuando alguien
-pulsa.
-
-Lo hace cumplir una regla de ESLint: **`useMutation` fuera de `escritura.ts` no pasa el lint**, con
-su muestra en `verificaciones/muestras/escritura-sin-observacion.tsx`. No se puede pedirle a ESLint
-que compruebe que un formulario «tiene» un campo; lo que sí se puede es dejar un solo camino.
-
-### La lista blanca: lo que no está declarado no viaja
-
-El cuerpo lleva la observación y **nada más**, salvo los campos que la opción declare uno a uno en
-`pantallas/escrituras.ts`. Mientras una opción no esté ahí, su formulario **no se puede escribir**:
-negación por omisión, como la autorización del manual.
-
-```ts
-cambiar_anio: { campos: { cambiarAlAno: { campo: 'ejercicio', entero: true } }, … }
-cambiar_clave: { campos: {}, … }   // ninguno, y esa ausencia es la función
-```
-
-Dos nombres por campo porque son dos vocabularios: la clave del catálogo sale del prototipo
-—`cambiarAlAno`, de «Cambiar al año»— y el nombre del cuerpo lo declara el backend —`ejercicio`—.
-Ninguno cede; la traducción vive en el registro.
-
-**Cambiar contraseña es el caso que justifica el mecanismo.** El backend no acepta ninguna clave: su
-cuerpo es solo la observación, y lo que devuelve es a dónde tiene que ir la interfaz —el proveedor
-de identidad (ADR-0005)—. Con la lista blanca vacía, los tres campos de clave que el prototipo
-dibuja no se pueden escribir, así que el valor **no llega al estado de React**, ni a la caché de
-consultas, ni a la URL, ni a ningún almacenamiento: no existe. No se borra después; nunca entra.
-
-## Los cuatro estados
-
-El prototipo no los diseña: dibuja la pantalla con datos y ya. Contra el proxy eso se nota poco;
-contra un backend real, una consulta que tarda, un filtro sin resultados o una red caída son el
-estado normal de la pantalla varias veces al día.
-
-| Estado          | Dónde       | Qué dice                                                                     |
-| --------------- | ----------- | ---------------------------------------------------------------------------- |
-| **Carga**       | Cada bloque | Esqueleto, no girador, y del tamaño de lo que sustituye                      |
-| **Vacío**       | Cada bloque | Distingue «ningún resultado para esta búsqueda» de «todavía no hay»          |
-| **Error**       | La pantalla | El mensaje del backend **sin reescribir** (RNF-080), su traza y «Reintentar» |
-| **Sin permiso** | La pantalla | Que falta permiso, **sin revelar qué hay detrás**                            |
-
-El error y el sin permiso son de la pantalla entera porque hay **una petición por pantalla**: no
-puede fallar la tabla y no el formulario si las dos salen de la misma respuesta. Y ninguno de los
-dos dibuja la estructura: entrar sin permiso no puede filtrar ni las columnas de lo que hay detrás.
-
-**Sin red la pantalla lo dice**: `fetch` rechaza con un error del navegador que no significa nada
-para quien atiende, así que `solicitar()` lo convierte en un `ProblemaDeApi` con el mismo formato
-que los del backend. La **traza se copia de un gesto**, porque se dicta por teléfono.
-
-Cinco de los diez bloques se dibujan del catálogo —descripción, portal, filtros, pestañas y barra
-de acciones— y no esperan a nadie: no tienen carga ni vacío. El formulario vacío tampoco es un
-error: es un formulario listo para llenarse.
-
-## Lo que se descarga, y lo que cuesta
-
-El catálogo de las 134 pantallas son 445 KB de fuente: **más que la aplicación**. Servido de una
-vez, una municipalidad con red mala espera por las 134 para abrir una. Así que va **partido por
-módulo** y se carga al entrar en él:
-
-|                     | Antes       | Al partirlo     |
-| ------------------- | ----------- | --------------- |
-| Arranque            | 162,7 KB gz | **117,8 KB gz** |
-| Entrar en Catastro  | —           | 7,4 KB gz       |
-| Entrar en Tesorería | —           | 4,4 KB gz       |
-
-Las cifras son las de la partición; desde entonces el arranque ha crecido con cada módulo
-conectado —las conexiones y las escrituras declaradas viajan en él por diseño— y hoy se mide
-contra un presupuesto de 156 KB, con su historia comentada en `scripts/comprobar-compilaciones.mjs`.
-
-Lo que viaja siempre es la **navegación** —el menú, los títulos y los resúmenes—, porque los
-necesitan el hub, la cabecera y la paleta de comandos: si el título viviera en el archivo del
-módulo, buscar «papeleta» obligaría a descargar los doce.
-
-`yarn comprobar-compilaciones` mide el arranque y cada trozo contra un **presupuesto** y falla al
-superarlo. Subir el umbral es una decisión, no un trámite: se cambia en el script y se dice en el
-PR por qué vale la pena.
-
-Las **tres familias tipográficas se sirven desde el propio proyecto** (`estilos/tipografias/`,
-subconjuntos `latin` y `latin-ext`): una municipalidad con red mala no debería depender de un
-tercero para que su sistema se vea legible. Se regeneran con `node scripts/traer-tipografias.mjs`.
-
-## Los caminos completos
-
-Las 134 pantallas se comprueban montadas, y eso vale para la estructura. Lo que no dice nada de un
-camino de usuario —buscar, elegir, llenar, guardar, imprimir— es justo el que rompe una
-integración. `yarn e2e` recorre en Chromium **seis caminos**: los tres que más cuestan si fallan
-(FRO-03 §6) y tres que se añadieron después, cada uno cuando su pantalla lo pidió.
-
-| Camino                          | Qué exige                                                                           |
-| ------------------------------- | ----------------------------------------------------------------------------------- |
-| **Cobro en caja**               | Se completa **sin tocar el ratón** (RNF-082): la prueba solo escribe y pulsa teclas |
-| **Consulta del portal**         | Cabe en un viewport de 360 px, sin desplazamiento horizontal                        |
-| **Impresión de un reporte**     | Una hoja A4 vertical, con sus dos líneas de firma y sin la interfaz (RNF-084)       |
-| **Inicio: a quién atiendes**    | Las tres franjas se preguntan y se abren con el teclado (ADR-0016 §1, #296)         |
-| **Determinación simulada**      | Se pide con el teclado, y la memoria de cálculo sale con su conjunto sellado (#395) |
-| **El listado de módulos**       | La barra lista los doce con sus recuentos, y estos suman las 134 opciones           |
-
-La primera encontró un hueco real: **la paleta de comandos no se podía operar con el teclado** —se
-escribía, y luego había que apuntar y hacer clic—. Ahora se elige con ↑ ↓ y se abre con Enter.
-
-> **Las tres pantallas siguen sin validar con usuarios reales** (FRO-03 §6). Automatizar un camino
-> no es validarlo: dice que se puede completar, no que sea el camino que quien atiende usaría.
-
-## El proxy de datos
-
-`@sgtm/api-mock` sustituye `fetch` e intercepta lo que cuelga de `/api/v1`. Responde las 134
-operaciones del catálogo —una por pantalla; el contrato entero tiene 174— con los datos de
-ejemplo del prototipo, con latencia simulada para que los estados de carga se vean, y devuelve
-`ProblemDetails` con 404 a lo que no existe.
-
-```bash
-# Contra el backend real, el día que exista:
-VITE_SGTM_PROXY_DE_DATOS=false SGTM_API=http://localhost:8080 yarn dev
-```
-
-Con la bandera apagada el empaquetador descarta la rama entera: el juego de datos **no se compila
-en producción**. Se comprobó midiendo las dos compilaciones.
-
-### Apagarlo operación por operación
-
-El backend no va a existir de golpe: llega contexto por contexto, en seis ondas. Apagar el proxy
-entero dejaría las 134 pantallas sin nadie que conteste, así que hay un modo intermedio —**backend
-real donde exista, proxy donde todavía no**—: `packages/api-mock/src/servidas.ts` lista las rutas
-que el backend ya sirve, y esas el proxy las deja pasar.
-
-```ts
-export const YA_SERVIDAS: readonly OperacionServida[] = []; // hoy, ninguna
-```
-
-**Una ruta declarada que el backend no sirve falla ruidosamente** —`502` con el nombre del archivo
-que hay que corregir— en vez de caer al proxy en silencio: un respaldo callado esconde justo lo que
-se quiere ver.
-
-La lista **crece hasta cubrir las 134 y entonces desaparece**: con el backend sirviéndolo todo, se
-apaga el proxy y se borra el archivo. El modo intermedio es transitorio y su final es parte del
-trabajo.
-
-**Añadir una línea ahí no es configurar: es afirmar algo, y hay quien lo comprueba** (#400,
-`verificaciones/rutas-encendidas.test.ts`). De cada entrada se exige:
-
-| Se exige                                                                            | Porque si no                                                                                                                 |
-| ----------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------- |
-| Que sea una operación del contrato, letra por letra                                 | Una errata no casa con nada: no deja pasar nada, no dispara el `502` y deja la integración parada con aspecto de estar hecha |
-| Que alguna pantalla declare cómo consumirla                                         | El camino común pide `DatosDePantalla`, la forma que el backend no sirve: la tabla saldría **vacía en silencio** (#363)      |
-| Que si la interfaz lee lo que vuelve, el proxy se lo dé ya con la forma del backend | Lo mismo, medido en la mitad que importa: sólo se rompe por la forma quien mira la respuesta                                 |
-
-En el mismo archivo está el censo —cuántas se pueden encender hoy y cuántas necesitan trabajo
-antes—, con sus cifras fijadas: moverlas es una línea del diff.
-
-**Y la forma no se compara a ojo.** `recursos.ts` copia a mano la forma de cada `Resource`, así que
-el backend la **deriva** de sus controladores a `docs/50-api/formas-de-la-api.json` y
-`verificaciones/formas-del-backend.test.ts` compara las dos. Un campo que el proxy publica y el
-`Resource` no tiene es rojo —al encender la ruta, la columna que lo dibuje se queda vacía—; uno que
-el backend manda y el proxy no publica se cuenta, porque no rompe nada y sí dice que el proxy
-describe un recurso más pobre que el real.
-
-### Los dos procesos, juntos
-
-```bash
-# Terminal 1 — el backend
-cd backend && ./gradlew bootRun
-
-# Terminal 2 — la interfaz, con el reenvío de Vite a Spring Boot
-cd frontend && SGTM_API=http://localhost:8080 yarn dev
-```
-
-`yarn dev` sirve en `http://localhost:5173` y reenvía `/api` a `SGTM_API`; el proxy de datos sigue
-instalado y contesta todo lo que no esté en `servidas.ts`. Para trabajar **solo** contra el backend:
-`VITE_SGTM_PROXY_DE_DATOS=false`.
-
-**Lo que el proxy no hace, a propósito:** no filtra, no ordena, no pagina, no valida y no persiste.
-Fingir la semántica de `?uso=Comercio` sería inventar un comportamiento que el backend no ha
-decidido, y la interfaz acabaría construida contra esa invención.
-
-## Estructura
-
-```
-frontend/
-├── apps/backoffice/src/
-│   ├── app/             Shell, cabecera, barra lateral de dos niveles, paleta de comandos
-│   ├── catalogo/        Las 134 pantallas como datos tipados (generado)
-│   ├── pantallas/       El renderizador, sus diez bloques y las opciones conectadas
-│   │   └── inicio/      Primera opción con operación tipada y adaptador propios
-│   └── estilos/         Shell y bloques, con los tokens de Juris PE
-├── apps/portal/src/     El portal del contribuyente: una pantalla, sin shell ni catálogo (#298)
-├── packages/
-│   ├── design-system/   Tokens y los componentes que usan las pantallas
-│   ├── dominio/         Importe, Fecha, Estado y su formateo
-│   ├── api-client/      Cliente HTTP tipado y el contrato de datos de una pantalla
-│   ├── api-mock/        El proxy de datos (generado + el encaminamiento de proxy.ts)
-│   ├── lectura/         Los adaptadores del contribuyente que las dos aplicaciones comparten
-│   └── sesion/          La puerta de sesión: token, renovación y permisos efectivos
-├── scripts/             El portador del catálogo y el generador de operaciones
-└── verificaciones/      Las reglas del proyecto, con una muestra que viola cada una
-```
-
-**Dos aplicaciones y un solo origen.** `apps/portal` nació en #298 al cumplirse la tercera condición
-de ADR-0009, y con él los dos paquetes que las dos comparten: `@sgtm/sesion` —la puerta que ya
-existía, movida entera, porque el portal se sirve tras la misma sesión— y `@sgtm/lectura` —los
-lectores del contrato y los adaptadores de `contribuyentes` y `consulta_unificada`—. Copiar
-cualquiera de los dos habría producido dos versiones del mismo lector que se separan a la primera
-corrección, y una de ellas enseñando el importe sin su fecha.
-
-**Los directorios por módulo aparecen cuando una opción necesita código propio, y no antes**, la
-regla que [FRO-01 §2](../docs/60-frontend/arquitectura-frontend.md) recoge: las 134
-pantallas son un catálogo y un renderizador, así que `pantallas/catastro/` vacío no serviría a
-nadie. El primero en aparecer fue `pantallas/inicio/`, con la conexión del panel de recaudación.
-
-## Las diez plantillas de contenido
-
-Un renderizador compone, en el orden de [FRO-03 §5](../docs/60-frontend/mapa-de-pantallas.md), los
-bloques que declare cada descriptor: descripción, panel de indicadores, portal ciudadano, filtros,
-tabla, totales, pestañas, formulario por secciones, hoja de reporte y barra de acciones.
-
-## Las reglas que este código hace cumplir
-
-| Regla                                           | Muestra que la viola                                 |
-| ----------------------------------------------- | ---------------------------------------------------- |
-| La interfaz no hace aritmética con importes     | `verificaciones/muestras/aritmetica-con-importes.ts` |
-| **Sin observación no se guarda**                | `escritura-sin-observacion.tsx`                      |
-| Un importe es texto, nunca `number`             | `importe-como-number.ts`                             |
-| El frontend jamás envía `municipalidadId`       | `municipalidad-en-el-cliente.ts`                     |
-| El token vive en memoria                        | `token-en-almacenamiento.ts`                         |
-| **Nada de `fetch` fuera de `@sgtm/api-client`** | `fetch-directo.ts`                                   |
-| Sin tildes en identificadores                   | `identificador-con-tilde.ts`                         |
-| `alicuota`, nunca `tasa`, para un porcentaje    | `tasa-en-vez-de-alicuota.ts`                         |
-| Todo importe se muestra con su fecha de cálculo | `importe-sin-fecha.tsx`                              |
-| `any` prohibido · sin `tabIndex` positivo       | `any-explicito.ts` · `tabindex-positivo.tsx`         |
-
-`verificaciones/reglas-de-eslint.test.ts` linta cada muestra y **exige que la regla la señale**. Se
-comprobó que la nueva puede fallar: al quitar la regla de `fetch`, su prueba se pone roja; al
-devolverla, vuelve a verde.
-
-La prohibición de `fetch` es la que sostiene el proxy: mientras todas las peticiones pasen por
-`solicitar()`, cambiar el proxy por el backend es apagar una bandera.
-
-La regla del almacenamiento **se estrechó** a lo que FRO-01 §5 prohíbe de verdad —guardar
-credenciales— porque FRO-03 §3 pide persistir las cinco opciones recientes en `localStorage`, y lo
-dice en la misma frase en que excluye el token.
-
-## Qué se verificó, y cómo
-
-| Verificación                                | Cómo                                                                    | Resultado                     |
-| ------------------------------------------- | ----------------------------------------------------------------------- | ----------------------------- |
-| Las 134 pantallas se dibujan                | `todas-las-pantallas.test.tsx` monta cada una y comprueba su título     | 134 en verde                  |
-| Los recuentos del menú suman 134            | Chromium: la barra lista los doce módulos (`listado-de-modulos.spec.ts`) | En verde                      |
-| El proxy responde el contrato               | 10 pruebas: rutas, verbos, parámetros, 404, instalación                 | En verde                      |
-| El catálogo está completo                   | 17 pruebas: 12 módulos, 134 opciones, bloques, rutas y endpoints únicos | En verde                      |
-| El juego de datos no llega a producción     | Dos compilaciones, con y sin la bandera                                 | 145 KB menos, chunk ausente   |
-| Las reglas de ESLint muerden                | Quitando la de `fetch`: su prueba se pone roja                          | Muerde                        |
-| Los seis listados leen el recurso real      | Quitando la guarda de `leerPaginado`: pinta media pantalla en silencio  | Roja                          |
-| La bitácora manda el ejercicio              | Quitándolo de la conexión                                               | Roja                          |
-| Cambiar de ejercicio vacía la caché         | Quitando `clear()`: la petición nueva encuentra lo viejo                | Rojas, dos                    |
-| La lista blanca filtra el cuerpo            | Mandando el borrador entero: viajan campos que el backend no acepta     | Rojas, dos                    |
-| La contraseña no se puede teclear           | Quitando `bloqueado` de los campos no declarados                        | Roja                          |
-| El catálogo vial no inventa columnas        | Rellenando sector, zona y arancel con lo del prototipo                  | Roja                          |
-| Las conexiones no van por delante           | Conectando una tabla de valuación, que no tiene contenido               | Roja                          |
-| La ficha enseña su versión                  | Quitando el bloque de versionado                                        | Rojas, cinco                  |
-| El histórico se pide                        | Quitando `historico=true` de la conexión                                | Roja                          |
-| Sin código no se pide ninguna ficha         | Quitando la guarda de la ruta y el `enabled`                            | Roja                          |
-| El arancel rural no se compone              | Poniéndole una cifra                                                    | Roja                          |
-| El desplegable no esconde lo servido        | Volviendo a dibujar solo las opciones del prototipo                     | Roja                          |
-| Los tramos son los de la clase Java         | Quitándole a la lista los tres del ubigeo, como decía el resumen        | Rojas, siete                  |
-| Pegar el código entero lo reparte           | Dejando en el tramo solo los dígitos que le caben                       | Rojas, tres                   |
-| Un tramo lleno salta al siguiente           | Quitando el salto de foco y el retroceso al tramo anterior              | Roja                          |
-| Lo compuesto viaja idéntico                 | Rellenando con ceros a la derecha hasta las 23 posiciones               | Rojas, dos                    |
-| El widget es del campo, no del bloque       | Dejando de consultar el registro: todo vuelve a la caja de texto        | Rojas, cinco                  |
-| El índice es opt-in por opción              | Dándoselo también a la consulta de fichas                               | Roja                          |
-| Y sus entradas llevan a su ancla            | Quitando el `anclaDe` del formulario                                    | Roja                          |
-| La cabecera enseña la vigencia servida      | Quitándole la versión que trae la respuesta                             | Roja                          |
-| Y no compone lo que el recurso no publica   | Rellenando titular y área construida con lo del prototipo               | Roja                          |
-| El acto de la ficha es alcanzable           | Quitando el enlace de la barra de acciones                              | Roja                          |
-| Ninguna cifra sin su fecha (las once)       | Quitando el bloque de fecha de cálculo                                  | Rojas, trece                  |
-| El saldo no se compone                      | Restando en la interfaz en vez de dejarlo vacío                         | Rojas, dos                    |
-| `@sgtm/dominio` no suma                     | Añadiéndole una función de sumar importes                               | Roja                          |
-| Nueve escrituras sin observación            | Habilitando la acción primaria sin ella                                 | Rojas, nueve                  |
-| La deuda del padrón no se inventa           | Rellenando predios y deuda con lo del prototipo                         | Roja                          |
-| El foco vuelve tras cobrar                  | Quitando el `focus()`                                                   | Rojas, dos                    |
-| Y no se queda clavado                       | Enfocando en cada render en vez de en el flanco                         | Roja                          |
-| Un reintento no es un segundo cobro         | Regenerando la clave de idempotencia en cada envío                      | Roja                          |
-| Notificar y pasar a coactiva confirman      | Quitándolos de la lista de lo irreversible                              | Rojas, cuatro                 |
-| La confirmación dice qué va a pasar         | Volviendo a «¿estás seguro?»                                            | Rojas, dos                    |
-| Y no se envía sin confirmar                 | Enviando lo irreversible directamente                                   | Rojas, tres                   |
-| Nada asentado se edita ni se quita          | Habilitando las acciones secundarias                                    | Rojas, cuatro                 |
-| Ningún estado solo por color                | Dejando la insignia sin texto                                           | Roja                          |
-| El auxiliar no ve emitir REC                | Haciendo que `puedeVer` devuelva cierto siempre                         | Roja                          |
-| Las hojas conservan sus firmas              | Quitándolas del bloque                                                  | Rojas, seis                   |
-| La interfaz no se imprime                   | Quitando la marca `data-no-imprimible`                                  | Rojas, seis                   |
-| Ninguna cifra se recompone al dibujar       | Alterando una celda numérica en la tabla                                | Roja                          |
-| Los reportes de otro módulo reusan la hoja  | Quitando las firmas del bloque                                          | Rojas, dos                    |
-| Una pantalla de trabajo se abre sin filtrar | Mandando la página aunque sea la primera                                | Roja                          |
-| Lo opcional arranca cerrado                 | Haciendo que `arrancaCerrada` devuelva falso                            | Roja                          |
-| El giro se busca por nombre                 | Impidiendo que el filtro `descripcion` viaje                            | Roja                          |
-| La lista de actos inalcanzables no crece    | Cambiando el patrón de lo irreversible                                  | Roja                          |
-| La copia se ve como copia                   | Quitando el aviso permanente                                            | Rojas, cuatro                 |
-| Y omisos no lo dice, porque no lo es        | Poniéndole el mismo aviso                                               | Roja                          |
-| Ni una cifra cambia de formato              | Recomponiendo una celda numérica                                        | Rojas, en tres módulos        |
-| El panel no calcula nada                    | Retocando un indicador o deduciendo el avance                           | Rojas, dos y dos              |
-| El panel dice su fecha de corte             | Quitando el bloque de fecha                                             | Roja                          |
-| El portal cabe en su presupuesto            | Bajándolo por debajo de lo medido: rojo con el número y qué hacer       | 80.9 KB de 84                 |
-| El portal no arrastra el back-office        | Importándole el catálogo —o metiéndoselo por `packages/lectura`—        | Rojas, una por rotura         |
-| Del portal no se escribe                    | Un `useMutation`, y una ruta que la tabla de lecturas no declara        | Rojas, dos                    |
-| Ni lleva el mapa de las operaciones         | Devolviéndole `pedirOperacion`, o una ruta que no es la del contrato    | Rojas, dos                    |
-| La opción `portal` sigue en las 134         | Quitándola del catálogo generado                                        | Rojas, diez                   |
-| El portal cabe en 360 px de verdad          | `min-width: 900px` en su columna, con el ancho del **dispositivo**      | Roja                          |
-| Las dos apps tienen política de caché       | Devolviendo el prefijo `/assets/` y la exacta `= /index.html`           | Rojas, dos (las del portal)   |
-| Al ciudadano no se le manda al shell        | Dibujándole en el portal la nota que nombra «Consulta de deuda»         | Rojas, dos                    |
-
-## Lo que todavía no está
-
-- **Ninguna operación sale todavía al backend real**: las conexiones ya hablan su idioma —el
-  recurso paginado de Seguridad, no la forma que comparten las 134— y quien lo contesta hoy es el
-  proxy, que también lo habla. Encenderlo es mover esas rutas a `servidas.ts` con un Spring Boot
-  levantado; sin él, una ruta ahí falla ruidosamente y por eso la lista sigue vacía.
-- **De las once opciones de Seguridad quedan tres sin conectar**, y las tres por lo mismo:
-  `permisos` no tiene `GET` con el que cargar la matriz —solo `PUT` para fijarla—, `miembros`
-  necesita elegir un usuario y el prototipo no dibuja ese selector, y `respaldo` es un `POST` que
-  consulta, así que abrir la pantalla no puede pedirlo (#64). Están detalladas en #70.
-- **Ya no es el backend quien hace esperar.** El servidor publica **171 de las 174 operaciones**
-  del contrato —quedan `GET /portal/deuda`, `POST /transito/reportes` y
-  `GET /transito/papeletas/{numero}/hoja-informativa`—, y lo que falta es conectar pantalla a
-  pantalla y apagar el proxy: es #400. Lo que no tiene atajo sigue sin tenerlo — fingir una
-  operación en el proxy sería construir la interfaz contra una invención.
-- **De Catastro quedan tres opciones sin conectar** —las tablas de valuación—, más la
-  actualización de la ficha, que escribe una tabla de pisos y el camino de escritura de hoy solo
-  lleva campos planos, y el reporte del contribuyente, que devuelve un PDF y no un recurso.
-- Las tres pantallas que [FRO-03 §6](../docs/60-frontend/mapa-de-pantallas.md) marca —caja, portal
-  y reportes— **no están validadas con usuarios reales**. Es un pendiente declarado.
-
-## Documentación
-
-[FRO-01 arquitectura](../docs/60-frontend/arquitectura-frontend.md) ·
-[FRO-02 design system](../docs/60-frontend/design-system.md) ·
-[FRO-03 mapa de pantallas](../docs/60-frontend/mapa-de-pantallas.md) ·
-[FRO-04 estándares](../docs/60-frontend/estandares-de-codigo-frontend.md) ·
-[ADR-0009](../docs/30-arquitectura/adr/ADR-0009-plataforma-frontend.md) ·
-[ADR-0010](../docs/30-arquitectura/adr/ADR-0010-catalogo-portado-y-proxy-de-datos.md) ·
-[ADR-0016](../docs/30-arquitectura/adr/ADR-0016-el-inicio-pregunta-la-ficha-compone.md)
+Tres decisiones que explican el resto:
+
+**Rutas relativas, nunca un dominio.** Keycloak se sirve bajo `/kc` del mismo origen, así
+que el realm por omisión es `/kc/realms/sgtm`. Un dominio escrito ahí quedaría horneado en
+el paquete —Vite resuelve `import.meta.env` al compilar— y, como la misma imagen se
+despliega en varios sitios, las dos mitades acabarían apuntando a servidores distintos, en
+verde y sin un solo síntoma.
+
+**El 401 vuelve a la puerta en vez de guardar un token de refresco.** Un refresco es una
+credencial de vida larga en `localStorage`; pedir otro código no lo es. Con la sesión de
+Keycloak viva el navegador va y vuelve **sin enseñar nada** —comprobado: token caducado,
+ningún formulario, de vuelta en el mismo destino con token nuevo—, y si no lo está, sale el
+formulario, que es lo que tiene que salir. Una guarda de diez segundos impide el bucle
+cuando el canje funciona y la API sigue negando: en vez de rebotar sin fin, se para y la
+pantalla dice qué pasa.
+
+**El canje ocurre antes de montar React.** Limpia la URL y restituye el destino: hacerlo en
+un efecto significaría montar dos veces, y la primera con `?code=` en la barra, así que
+quien pidió `#/catastro/predios` acabaría en Inicio.
+
+En `localhost` no hay puerta —el puerto de la vista previa no está entre las URIs de
+retorno del cliente, y el rebote acabaría en «Invalid parameter: redirect_uri»—: ahí sigue
+la caja para pegar un token a mano.
+
+### Lo que la conexión NO hace, y por qué se dice en pantalla
+
+**No hay columna de titular en la lista.** El backend no la publica a propósito
+(ADR-0015 §2.4): publicarla convertiría «quien puede listar predios» en «quien puede
+cosechar la correlación predio→persona de toda la municipalidad». Se resuelve al abrir
+el predio, de uno en uno y dejando su rastro en la bitácora. La tabla lo dice en su pie.
+
+**El uso, las áreas y el autovalúo salen «—».** Son datos de la **ficha**, que la sirve
+otra superficie (`/catastro/fichas/…`) y no está conectada. Poner ahí la cifra del
+prototipo le inventaría a ese predio un autovalúo que no tiene, y es indistinguible de
+uno correcto en cuanto sale de la pantalla. Una franja lo explica sobre la ficha.
+
+**Manzana, lote, uso y conciliación no filtran.** El endpoint no los acota. Salen en la
+tabla y el bloque de filtros dice dónde se buscan de verdad, en vez de dibujar
+desplegables que se teclean y no hacen nada.
+
+## Portar un artboard
+
+Está escrito en [`PORTAR.md`](PORTAR.md): qué se copia literal, qué se deriva, cómo se
+traduce `sc-if`/`sc-for`/`style-hover`, y qué primitivo compartido usar en cada caso.

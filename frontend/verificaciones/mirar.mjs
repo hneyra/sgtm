@@ -1,0 +1,108 @@
+/**
+ * Recorre cada destino de cada módulo en un navegador de verdad y guarda una
+ * captura, informando de cualquier error de consola. No compara con nada: sirve
+ * para VER lo que se dibuja, que es lo que el objetivo de este frontend pide.
+ *
+ *   node verificaciones/mirar.mjs [modulo] [--alto=1600]
+ *
+ * Necesita una vista previa levantada (`yarn dev`) y el Chromium de Playwright.
+ */
+import { chromium } from 'playwright-core';
+import { mkdir, rm } from 'node:fs/promises';
+import { build } from 'esbuild';
+import { pathToFileURL } from 'node:url';
+
+/* El registro de módulos es la única fuente de las rutas: se compila al vuelo
+   en vez de repetirlo aquí, porque una lista copiada se queda vieja sin ruido. */
+const temporal = new URL('./.modulos.mjs', import.meta.url);
+await build({
+  entryPoints: ['src/shell/modulos.ts'],
+  outfile: temporal.pathname,
+  bundle: true,
+  format: 'esm',
+  platform: 'node',
+  logLevel: 'silent',
+});
+const { MODULOS } = await import(pathToFileURL(temporal.pathname).href);
+await rm(temporal, { force: true });
+
+const BASE = process.env.SGTM_BASE ?? 'http://localhost:5180';
+const SALIDA = process.env.SGTM_CAPTURAS ?? '.capturas';
+const soloModulo = process.argv[2]?.startsWith('--') ? null : process.argv[2];
+const alto = Number(process.argv.find((a) => a.startsWith('--alto='))?.slice(7) ?? 1600);
+
+await mkdir(SALIDA, { recursive: true });
+const navegador = await chromium.launch();
+const contexto = await navegador.newContext({ viewport: { width: 1440, height: alto } });
+
+/* Con token, las pantallas conectadas leen del backend; sin él contestan 401 y
+   se comprueba que lo dicen bien, que también hay que verlo. */
+const TOKEN = process.env.SGTM_TOKEN;
+if (TOKEN) await contexto.addInitScript((t) => localStorage.setItem('sgtm.token', t), TOKEN);
+const pagina = await contexto.newPage();
+
+const fallos = [];
+let vistas = 0;
+/* Cuantas peticiones al API salieron y cuantas volvieron 401. Con un token
+   caducado, TODAS lo hacen: las pantallas dibujan su aviso de sesion —asi que
+   ni el `<main>` queda vacio ni hay error de consola— y este recorrido informa
+   en verde sin haber mirado una sola pantalla conectada. Es el mismo agujero
+   que `flujos.mjs` ya cerro, y aqui es mas facil de pasar por alto porque este
+   arnes tambien sirve SIN token a proposito. */
+let alApi = 0;
+let sinAutenticar = 0;
+pagina.on('response', (r) => {
+  if (!r.url().includes('/api/v1')) return;
+  alApi++;
+  if (r.status() === 401) sinAutenticar++;
+});
+
+for (const m of MODULOS) {
+  if (soloModulo && m.k !== soloModulo) continue;
+  const paradas = [
+    ...m.destinos.map((d) => d.k),
+    ...(m.accion ? [m.accion.k] : []),
+    ...(m.documento ? [m.documento.k] : []),
+  ];
+  for (const d of paradas.length ? paradas : ['panel']) {
+    const errores = [];
+    /* Que el backend NIEGUE una petición no es que la interfaz esté rota: es
+       una respuesta, y la pantalla tiene que saber dibujarla. Lo que sí se
+       cuenta es cualquier otro error de consola. */
+    const esRespuestaDelApi = (t) => /Failed to load resource/.test(t) && /40[13]|404|409|422|500/.test(t);
+    const oyeConsola = (msg) => msg.type() === 'error' && !esRespuestaDelApi(msg.text()) && errores.push(msg.text());
+    const oyePagina = (e) => errores.push('PAGEERROR: ' + e.message);
+    pagina.on('console', oyeConsola);
+    pagina.on('pageerror', oyePagina);
+    await pagina.goto(`${BASE}/#/${m.k}/${d}`, { waitUntil: 'networkidle' });
+    await pagina.waitForTimeout(700);
+    await pagina.screenshot({ path: `${SALIDA}/${m.k}-${d}.png` });
+    pagina.off('console', oyeConsola);
+    pagina.off('pageerror', oyePagina);
+    vistas++;
+    if (errores.length) fallos.push(`${m.k}/${d}\n  ${errores.join('\n  ')}`);
+    /* Una pantalla que no dibuja nada bajo el shell no falla: se queda en
+       blanco, y eso no lo dice ningún error de consola. */
+    const cuerpo = await pagina.locator('main').innerText().catch(() => '');
+    if (cuerpo.trim().length < 40) fallos.push(`${m.k}/${d}\n  el <main> está prácticamente vacío`);
+  }
+}
+
+await navegador.close();
+
+/* Solo cuando se pidio token: sin el, un 401 en todo es lo esperado y correcto. */
+if (TOKEN && alApi > 0 && sinAutenticar === alApi) {
+  console.error(
+    `\nEl token no vale: las ${alApi} peticiones volvieron 401.\n` +
+      'Las pantallas dibujaron su aviso de sesion, asi que este recorrido no ha mirado\n' +
+      'ninguna pantalla conectada. Consigue un token fresco y vuelve a correrlo.',
+  );
+  process.exit(2);
+}
+
+console.log(`${vistas} pantallas recorridas · capturas en ${SALIDA}/`);
+if (fallos.length) {
+  console.error(`\n${fallos.length} con problema:\n\n${fallos.join('\n\n')}`);
+  process.exit(1);
+}
+console.log('ninguna con errores de consola ni con el cuerpo vacío');

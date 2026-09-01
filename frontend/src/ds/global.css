@@ -1,0 +1,56 @@
+/* ============================================================
+   Estilos globales del back-office. Es el bloque <helmet> que los
+   trece artboards de `design/design-sgtm/` repiten idéntico, unido
+   una sola vez: si un artboard lo trae, aquí está.
+   ============================================================ */
+@import './tokens/fonts.css';
+@import './tokens/colors.css';
+@import './tokens/typography.css';
+@import './tokens/spacing.css';
+
+@keyframes fadeIn { from { opacity: 0; transform: translateY(4px) } to { opacity: 1; transform: none } }
+@keyframes subir { from { opacity: 0; transform: translateY(8px) } to { opacity: 1; transform: none } }
+@keyframes brillo { from { background-position: 100% 50% } to { background-position: 0 50% } }
+
+html, body { background: var(--bg); color: var(--ink); margin: 0; font-family: var(--font-sans); -webkit-font-smoothing: antialiased }
+#raiz { min-height: 100vh }
+* { box-sizing: border-box }
+a { color: var(--accent); text-decoration: none; border-bottom: 1px solid transparent }
+a:hover { border-bottom-color: var(--accent) }
+input, select, textarea, button { font: inherit; color: inherit }
+input:focus-visible, select:focus-visible, textarea:focus-visible, button:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px }
+input:focus, select:focus, textarea:focus { border-color: var(--accent); box-shadow: 0 0 0 3px var(--accent-soft); outline: none }
+::placeholder { color: var(--ink-4) }
+::-webkit-scrollbar { width: 9px; height: 9px }
+::-webkit-scrollbar-thumb { background: var(--line-2); border-radius: 9px }
+
+/* El esqueleto de carga: dos nombres porque los artboards usan los dos. */
+[data-esq], [data-esqueleto] {
+  background: linear-gradient(90deg, var(--bg-elev) 25%, var(--line) 37%, var(--bg-elev) 63%);
+  background-size: 400% 100%; animation: brillo 1.4s ease infinite; border-radius: 6px;
+}
+
+/* Una celda que ocupa la fila entera de una rejilla de formulario. */
+[data-ancho="1"] { grid-column: 1 / -1 }
+
+/* `!important` porque el `position: sticky` del cajón va en su `style` en
+   línea, y un estilo en línea gana a cualquier hoja sin él: sin esto el
+   panel seguía en el flujo reservando 246 px en tablet. */
+@media (max-width: 1180px) {
+  [data-panel] { position: fixed !important; z-index: 60; inset: 0 auto 0 68px !important; height: auto !important; transform: translateX(calc(-100% - 68px)); transition: transform .18s ease }
+  [data-panel][data-open="1"] { transform: none; box-shadow: var(--shadow-3) }
+  [data-navtoggle] { display: inline-flex !important }
+  [data-scrim][data-open="1"] { display: block !important }
+}
+@media (max-width: 860px) { [data-sm-hide] { display: none !important } }
+@media print { [data-noprint] { display: none !important } }
+@media (prefers-reduced-motion: reduce) { * { animation-duration: .01ms !important } }
+
+/* Los artboards escriben `style-hover` como atributo. Aquí ese gesto vive en
+   una clase, porque React no tiene pseudoclases en línea. */
+.hov-acento:hover { background: var(--accent-soft) !important }
+.hov-linea:hover { border-color: var(--ink-3) !important }
+.hov-linea-4:hover { border-color: var(--ink-4) !important }
+.hov-acento-2:hover { background: var(--accent-2) !important }
+.hov-blanco:hover { background: rgba(255,255,255,.12) !important }
+.hov-elev:hover { background: var(--bg-elev) !important }

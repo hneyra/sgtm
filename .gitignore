@@ -10,6 +10,8 @@ backend/buildSrc/.kotlin/
 .idea/
 *.iml
 
+frontend-old/
+
 # Frontend
 node_modules
 dist/

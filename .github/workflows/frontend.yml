@@ -1,20 +1,33 @@
 # Verificación del frontend.
 #
-# Es el mismo `yarn verificar` que hay que pasar antes de un PR (FRO-04 §10),
-# más dos comprobaciones que solo tienen sentido en CI:
+# Es lo que hay que pasar antes de un PR, y lo que hay que pasar aquí es lo
+# mismo: tipos, compilación, y las tres comprobaciones que sujetan las reglas
+# por las que esta interfaz existe.
 #
-#   1. Que el catálogo generado siga cuadrando con el prototipo. Se regenera y
-#      se exige que no haya diferencias: un `design/` que cambia sin regenerar
-#      deja la interfaz describiendo pantallas que ya no son las del manual, y
-#      eso no lo detecta ninguna prueba.
-#   2. Que la aplicación compile para producción, que el juego de datos de
-#      ejemplo no llegue a ella y que el paquete no pase de su presupuesto.
+# <h2>Las tres, y por qué son éstas</h2>
 #
-# Y un segundo trabajo con navegador: los caminos completos, en Chromium.
+#   1. `mirar` — las 65 pantallas se dibujan, sin errores de consola y sin
+#      cuerpo vacío. Es la red más ancha y la más barata.
+#   2. `sin-red` — con TODAS las peticiones a `/api/v1` abortadas, ninguna
+#      pantalla enseña una cifra. Es la regla que gobierna esta interfaz: lo que
+#      el backend no sostiene sale «—» con su motivo, nunca la cifra del
+#      prototipo. Y mide el momento en que esa regla se rompe sin que nadie lo
+#      vea, porque con datos delante la pantalla parece correcta siempre.
+#   3. `paleta` — la paleta de comandos se opera sólo con el teclado. Está aquí
+#      porque **ya se rompió una vez**: el frontend anterior lo tenía, se perdió
+#      al reescribir, y nada lo notó.
+#
+# <h2>Por qué no hace falta backend</h2>
+#
+# Las tres corren contra `vite preview` sin token y sin servidor: `sin-red`
+# aborta las peticiones a propósito, y las otras dos no dependen de ninguna.
+# Eso las hace deterministas aquí, que es lo que un flujo bloqueante necesita.
+# Lo que sí exige backend —`flujos.mjs`, que opera cada botón contra el servidor
+# de verdad— se corre a mano contra el entorno levantado, y no se finge aquí:
+# una verificación que en CI mide otra cosa deja de decir lo que dice.
 #
 # El contrato (`docs/50-api/openapi/sgtm-v1.yaml`) entra en los caminos que
-# disparan este flujo porque los tipos de la API se generan de él: un cambio de
-# contrato que no se regenere tiene que ponerse rojo aquí, y no en el navegador.
+# disparan este flujo porque los tipos de la API salen de él.
 #
 # El backend no está aquí: sus verificaciones bloqueantes necesitan Docker y un
 # PostgreSQL de verdad (`./gradlew verificarAislamiento`), y montar eso es una
@@ -24,18 +37,20 @@ name: Frontend
 on:
   pull_request:
     paths:
-      ['frontend/**', 'design/**', 'docs/50-api/**', '.github/workflows/frontend.yml']
+      ['frontend/**', 'docs/50-api/**', '.github/workflows/frontend.yml']
   push:
     branches: [main]
     paths:
-      ['frontend/**', 'design/**', 'docs/50-api/**', '.github/workflows/frontend.yml']
+      ['frontend/**', 'docs/50-api/**', '.github/workflows/frontend.yml']
 
 permissions:
   contents: read
 
 jobs:
   verificar:
+    name: Tipos y compilación
     runs-on: ubuntu-latest
+    timeout-minutes: 10
     defaults:
       run:
         working-directory: frontend
@@ -52,34 +67,14 @@ jobs:
       - name: Instalar dependencias
         run: yarn install --frozen-lockfile
 
-      - name: El catálogo generado cuadra con el prototipo
-        run: |
-          yarn portar-catalogo
-          git diff --exit-code -- \
-            apps/backoffice/src/catalogo \
-            packages/api-mock/src/respuestas.generado.ts \
-            || {
-              echo "::error::El catálogo generado no cuadra con design/. Corre «yarn portar-catalogo» y añade el resultado."
-              exit 1
-            }
-
-      - name: Lint, tipos y pruebas
+      - name: Tipos
         run: yarn verificar
 
-      # Compila dos veces —con la bandera del proxy y sin ella— y comprueba que
-      # el juego de datos de ejemplo y el codigo del proxy **no** llegan a
-      # produccion. Se comprobo que muerde: quitando la bandera de `main.tsx`,
-      # el paso se pone rojo.
-      - name: Compilar, y que el juego de datos no llegue a produccion
-        run: yarn comprobar-compilaciones
+      - name: Compilar para producción
+        run: yarn build
 
-  # Seis caminos: los tres que mas cuestan si fallan (FRO-03 §6) —el cobro en
-  # caja solo con teclado, el portal en un movil y la impresion de un reporte en
-  # A4— mas el inicio con teclado, la determinacion simulada y el listado de los
-  # doce modulos, cuyos recuentos suman las 134 opciones. Van en su propio
-  # trabajo porque necesitan navegador.
-  extremo-a-extremo:
-    name: Caminos completos
+  navegador:
+    name: Las 65 pantallas, en un navegador de verdad
     runs-on: ubuntu-latest
     timeout-minutes: 15
     defaults:
@@ -99,15 +94,34 @@ jobs:
         run: yarn install --frozen-lockfile
 
       - name: Instalar Chromium
-        run: npx playwright install --with-deps chromium
+        run: npx playwright-core install --with-deps chromium
 
-      - name: Los caminos completos, en un navegador de verdad
-        run: yarn e2e
+      - name: Compilar y servir
+        run: |
+          yarn build
+          npx vite preview --port 5210 --strictPort &
+          # Sin `wait-on`: es una dependencia mas que descargar para hacer lo
+          # que hacen tres lineas, y en un flujo bloqueante cada descarga es
+          # una forma nueva de ponerse rojo por algo que no se esta midiendo.
+          for i in $(seq 1 60); do
+            curl -sf -o /dev/null http://localhost:5210/ && break
+            sleep 1
+          done
+          curl -sf -o /dev/null http://localhost:5210/
 
-      - name: Publicar la traza de lo que fallara
+      - name: Las 65 pantallas se dibujan
+        run: SGTM_BASE=http://localhost:5210 node verificaciones/mirar.mjs
+
+      - name: Con la red cortada, ninguna enseña una cifra
+        run: SGTM_BASE=http://localhost:5210 node verificaciones/sin-red.mjs
+
+      - name: La paleta se opera con el teclado
+        run: SGTM_BASE=http://localhost:5210 node verificaciones/paleta.mjs
+
+      - name: Publicar las capturas de lo que fallara
         if: failure()
         uses: actions/upload-artifact@v4
         with:
-          name: trazas-de-extremo-a-extremo
-          path: frontend/test-results/
+          name: capturas-del-navegador
+          path: frontend/.capturas/
           retention-days: 7

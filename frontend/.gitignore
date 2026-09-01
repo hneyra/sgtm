@@ -1,0 +1,11 @@
+node_modules/
+dist/
+*.local
+.DS_Store
+tsconfig.tsbuildinfo
+.capturas/
+dist-puerta
+dist-shell
+dist-rentas
+dist-mio
+dist-jr

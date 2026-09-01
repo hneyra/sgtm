@@ -1,0 +1,144 @@
+/*
+ * Lo que queda del artboard `Seguridad.dc.html`: la ESTRUCTURA de la pantalla
+ * de «Sistema» y el mapa de las once opciones del manual a los cuatro destinos.
+ *
+ * <h2>Lo que se fue, y por que</h2>
+ *
+ * Este archivo tenia ademas cuatro grupos, siete usuarios, nueve accesos, sus
+ * permisos y siete filas de bitacora. La pantalla los usaba **como respaldo**:
+ * cuando la lectura del backend fallaba —un 403, un 500, la red caida— dibujaba
+ * el arbol de la maqueta sin decirlo, y quien miraba quien tiene la llave de la
+ * caja leia los permisos de una municipalidad que no existe.
+ *
+ * No se arreglo poniendo un `if` mas: se **borraron los datos**. Un respaldo que
+ * no esta en el modulo no se puede reintroducir por descuido, y una mutacion que
+ * intente volver a el ni siquiera compila. Las cifras que si son reales se leen
+ * de `api/seguridad.ts`, y las que no tiene el backend se dicen con un guion.
+ */
+
+/* ══════════ Sistema ══════════ */
+
+export type CampoDeSistema = {
+  k: string;
+  l: string;
+  t?: 'text' | 'sel' | 'clave' | 'chk' | 'ro';
+  v?: string | boolean;
+  o?: string[];
+  ph?: string;
+  ayuda?: string;
+  ancho?: boolean;
+};
+
+export type PanelDeSistema = {
+  label: string;
+  titulo: string;
+  nota: string;
+  campos: CampoDeSistema[];
+  /**
+   * Lo que impide ejecutar la accion primaria, cuando algo lo impide.
+   *
+   * Con texto, la primaria nace apagada y **este texto es su `title`** y la nota
+   * que se lee al lado (RNF-082): un boton apagado sin motivo obliga a
+   * adivinar. Vacio, la accion se puede hacer.
+   */
+  impedimento: string;
+  pie: string;
+  primaria: string;
+};
+
+/**
+ * Las cuatro pestañas de «Sistema».
+ *
+ * <h2>Ninguna cifra tributaria se dibuja aqui</h2>
+ *
+ * El artboard rellenaba «Parametros» con la UIT en 5 350,00, el IPM en 1,0206,
+ * el interes moratorio en 0,90 % y el derecho de emision en 4,50. **Ninguna
+ * salia de ninguna parte**, y la UIT publicada del ejercicio no es esa. Una
+ * cifra tributaria no se teclea en una pantalla (regla 5): entra por el corpus
+ * verificado a doble firma y se publica al conjunto sellado del ejercicio. Los
+ * campos se quedan de solo lectura con un guion y dicen de donde vendrian.
+ */
+export const panelesDeSistema = (ejercicio: string): PanelDeSistema[] => [
+  {
+    label: 'Ejercicio de trabajo',
+    titulo: 'Cambiar el ejercicio de trabajo',
+    nota: 'Cambiar el ejercicio de trabajo es un acto: lleva observación y exige el privilegio Especial sobre «cambiar_anio», porque decide sobre qué año escriben los doce módulos y hacerlo con una caja abierta produce recibos con el año equivocado. El selector de la cabecera NO es eso: sólo acota lo que las consultas piden, y vive en el navegador.',
+    campos: [
+      { k: 'ejActual', l: 'Ejercicio actual', t: 'ro', v: ejercicio },
+      { k: 'ejNuevo', l: 'Cambiar a', t: 'sel', v: ejercicio, o: ['2026', '2025', '2024', '2023'] },
+      { k: 'ejMotivo', l: 'Motivo del cambio', t: 'ro', ancho: true, v: '—', ayuda: 'Lo llevará la petición cuando el acto se conecte (#557)' },
+    ],
+    /* El artboard avisaba aquí de «una caja abierta (C-3, turno mañana)». No hay
+       ninguna lectura de turnos abiertos en el contrato, así que el aviso no
+       podía ser más que decorado — y decorado que dice que NO cambies algo. */
+    impedimento:
+      'El acto no se puede hacer desde aquí todavía: PUT /seguridad/sesion/ejercicio existe y no lo llama nadie, ' +
+      'y conectarlo tal cual daría 403 a quien no tenga el privilegio Especial sobre «cambiar_anio» cada vez ' +
+      'que cambie de año en una lista. Separar el filtro de vista del acto registrado está en el issue #557.',
+    pie: 'El cambio se anotará en la bitácora con tu usuario, la hora y el motivo.',
+    primaria: 'Cambiar el ejercicio',
+  },
+  {
+    label: 'Parámetros',
+    titulo: 'Parámetros del sistema',
+    nota: 'Con qué juego de valores se emitió cada ejercicio. La UIT, el IPM, los intereses y los derechos de emisión no se teclean: se publican al conjunto del ejercicio desde el corpus normativo, con dos firmas distintas, y sellarlo lo vuelve inmutable. Esta lectura publica el conjunto y su estado, no sus cifras una a una.',
+    /* Las ocho cajas de cifras del artboard —UIT, IPM, interés moratorio, de
+       fraccionamiento, custodia, derecho de emisión, caducidad e intentos— se
+       retiran enteras. `GET /seguridad/parametros` SÍ existe y se lee (la tabla
+       de abajo), pero publica la IDENTIDAD del conjunto y no sus cifras, a
+       propósito: su javadoc dice que la pregunta que contesta esta pantalla es
+       «con qué juego de valores se emitió este ejercicio». Dibujar ocho guiones
+       con rótulo de UIT no informaría de nada; lo que informa es el conjunto. */
+    campos: [],
+    impedimento:
+      'Un parámetro tributario no entra por una pantalla: entra por el corpus verificado a doble firma y ' +
+      'se publica al conjunto del ejercicio, que una vez sellado no admite una cifra más. Aquí no hay nada ' +
+      'que guardar.',
+    pie: 'Un parámetro mal puesto no da error: da cifras equivocadas en todo el sistema.',
+    primaria: 'Guardar parámetros',
+  },
+  {
+    label: 'Mi contraseña',
+    titulo: 'Cambiar mi contraseña',
+    nota: 'La contraseña no vive en este sistema: la guarda el proveedor de identidad (ADR-0005). Lo que el backend hace es iniciar el cambio y mandarte allí; por eso su petición no lleva ningún campo de contraseña, ni la vieja ni la nueva.',
+    /* El artboard dibujaba tres cajas de contraseña —actual, nueva y repetir—.
+       `PUT /seguridad/usuarios/{id}/clave` recibe SOLO una observación: lo tecleado
+       ahí no viajaba a ninguna parte y se quedaba en el estado de React. Se
+       retiran: no hay campo porque no hay a dónde mandarlo. */
+    campos: [{ k: 'cMotivo', l: 'Motivo del cambio', t: 'ro', ancho: true, v: '—', ayuda: 'Es lo único que la petición lleva: ninguna contraseña' }],
+    impedimento:
+      'La interfaz no sabe cuál de los usuarios del padrón eres: el endpoint pide el id del usuario y la ' +
+      'sesión sólo publica el mapa de permisos. Mientras tanto, la contraseña se cambia en el proveedor de identidad.',
+    pie: 'El backend no recibe ninguna contraseña: registra el acto y te manda al proveedor de identidad.',
+    primaria: 'Cambiar la contraseña',
+  },
+  {
+    label: 'Copias de seguridad',
+    titulo: 'Copias de seguridad',
+    nota: 'Una copia sin restauración probada no es una copia. La tabla es la que el backend registra; la columna que importaría —la última restauración verificada— no es un campo suyo.',
+    campos: [],
+    impedimento:
+      'La aplicación no ejecuta respaldos ni restauraciones: los hace el proceso de despliegue, y darle a ' +
+      'sgtm_app lo que haría falta sería deshacer la separación de privilegios. Aquí sólo se consulta.',
+    pie: 'Probar una restauración no toca la base en producción: se restaura en un entorno aparte y se comprueba el cuadre de caja.',
+    primaria: 'Probar una restauración',
+  },
+];
+
+/* ══════════ Paleta ══════════ */
+
+/** Las once opciones de menú del manual que este módulo resume, con el destino
+ *  al que van a parar. */
+export const OPCIONES_DE_PALETA: [string, string][] = [
+  ['Módulos', 'accesos'],
+  ['Usuarios', 'accesos'],
+  ['Grupos', 'accesos'],
+  ['Accesos y políticas', 'accesos'],
+  ['Miembros', 'accesos'],
+  ['Permisos', 'accesos'],
+  ['Auditoría', 'auditoria'],
+  ['Cambiar el año', 'sistema'],
+  ['Cambiar contraseña', 'sistema'],
+  ['Parámetros', 'sistema'],
+  ['Copias de seguridad', 'sistema'],
+];

@@ -1,0 +1,105 @@
+/* ============================================================
+   Colors — Juris PE
+   Editorial palette: warm cream paper, near-black ink, navy authority.
+   Base tokens first, then semantic aliases.
+   ============================================================ */
+:root {
+  /* —— Paper / surfaces —— */
+  --bg: #f6f4ef;          /* page — warm cream "paper" */
+  --bg-elev: #fbfaf6;     /* slightly raised fill (toolbars, inputs) */
+  --bg-card: #ffffff;     /* cards, sheets */
+
+  /* —— Ink (text) ramp —— */
+  --ink: #1a1612;         /* primary text — warm near-black */
+  --ink-2: #3d362e;       /* secondary text */
+  --ink-3: #6b6258;       /* tertiary / metadata */
+  --ink-4: #9a9085;       /* faint / disabled */
+
+  /* —— Hairlines —— */
+  --line: #e6e1d6;        /* default border / divider */
+  --line-2: #d8d2c4;      /* stronger border (inputs, controls) */
+
+  /* —— Accent — navy (institutional authority) —— */
+  --accent: #1F3A5F;      /* primary brand navy */
+  --accent-2: #2a4d7a;    /* hover / lighter navy */
+  --accent-soft: #e7ecf3; /* tint fill behind accent text */
+  --accent-ink: #0e1f33;  /* darkest navy for text on soft tint */
+
+  /* —— Accent alternates (offered as brand variants) —— */
+  --accent-tierra: #7C2D12;   /* terracotta / earth */
+  --accent-moss:   #1f5f3a;   /* moss green */
+  --accent-coral:  #c8553d;   /* coral */
+  --accent-slate:  #444444;   /* neutral slate */
+
+  /* —— Semantic accents —— */
+  --gold: #b8893d;        /* annotations, highlights */
+  --crimson: #8b2e2e;     /* dissent / votos singulares / FUNDADA-INFUNDADA */
+  --moss-green: #4a6b3a;  /* firm / vinculante / verified states */
+
+  /* —— Source badge colors (corpus origin) —— */
+  --src-tc-bg: #e8ecf3;   --src-tc-fg: #1F3A5F;   /* Tribunal Constitucional */
+  --src-cs-bg: #f0e6dc;   --src-cs-fg: #7C2D12;   /* Corte Suprema */
+  --src-ep-bg: #e8efe6;   --src-ep-fg: #2d4a26;   /* El Peruano */
+
+  /* —— Fallo / status semantics —— */
+  --ok-bg: #e8efe6;   --ok-fg: #2d4a26;    /* FUNDADA, verified, firme */
+  --bad-bg: #f3e6e1;  --bad-fg: #7C2D12;   /* INFUNDADA, rejected */
+}
+
+/* —— Dark mode (warm, low-glare reading) —— */
+[data-theme="dark"] {
+  --bg: #0f0e0c;
+  --bg-elev: #16140f;
+  --bg-card: #1c1914;
+  --ink: #f0ece2;
+  --ink-2: #d6cfbf;
+  --ink-3: #a39988;
+  --ink-4: #6b6353;
+  --line: #2a2620;
+  --line-2: #3a352c;
+  --accent-soft: #1c2a3f;
+}
+
+/* ——————————————————————————————————————————————————————————————
+   Tokens que el prototipo usa y esta copia no traía. Valores tomados de
+   frontend/packages/design-system/src/estilos/tokens/colors.css y de
+   estilos/componentes.css (que redeclara los dos de advertencia en :root
+   por este mismo motivo).
+   —————————————————————————————————————————————————————————————— */
+:root {
+  --warn-bg: #f6ecd9;      /* insignia de atención: vencido, por notificar */
+  --warn-fg: #8a6420;      /* 4,61:1 sobre el relleno */
+  --error-texto: #7C2D12;  /* texto de error sobre la superficie, no sobre insignia */
+  --accent-contraste: #ffffff; /* lo que se lee encima del acento */
+}
+
+/* ——————————————————————————————————————————————————————————————
+   Lo que el bloque oscuro se dejaba, medido en vez de supuesto.
+
+   `[data-theme="dark"]` redefine `--accent-soft` y NO `--accent-ink`, así que
+   la pareja se rompe: el navy más oscuro sobre el relleno oscuro da **1,15:1**
+   —la cifra de cada indicador del panel, del código en pastilla, del ejercicio
+   de la cabecera y del destino activo—. Y los tres `*-fg` semánticos, que la
+   interfaz usa también como texto SOBRE la superficie y no solo dentro de su
+   insignia, quedan en 1,77:1 (ok), 1,87:1 (bad) y 3,27:1 (warn).
+
+   Se corrigen las dos caras a la vez: el relleno de la insignia se oscurece y
+   el texto se aclara, de modo que cada par sigue valiendo dentro de la insignia
+   —7,8:1 el más bajo— y además se lee sobre la tarjeta —8,6:1 el más bajo—.
+   —————————————————————————————————————————————————————————————— */
+[data-theme="dark"] {
+  --accent-ink: #b9cee8;   /* 8,99:1 sobre --accent-soft · 10,89:1 sobre la tarjeta */
+
+  --ok-bg: #1e2c1a;    --ok-fg: #a3c795;    /* 7,80:1 dentro · 9,31:1 sobre la tarjeta */
+  --bad-bg: #33170f;   --bad-fg: #e5a892;   /* 8,15:1 dentro · 8,63:1 sobre la tarjeta */
+  --warn-bg: #332810;  --warn-fg: #e3c68c;  /* 8,76:1 dentro · 10,62:1 sobre la tarjeta */
+
+  --error-texto: #e5a892;
+  --src-tc-bg: #1c2a3f; --src-tc-fg: #b9cee8;
+  --src-cs-bg: #2e1c12; --src-cs-fg: #e5b795;
+  --src-ep-bg: #1e2c1a; --src-ep-fg: #a3c795;
+
+  --gold: #d7a95c;
+  --crimson: #d98b8b;
+  --moss-green: #9ec48a;
+}
