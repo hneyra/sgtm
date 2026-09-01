@@ -92,12 +92,18 @@ public class FraccionamientoCoactivoTesoreria implements FraccionamientoCoactivo
 
     @Override
     public ConvenioCoactivo registrar(
-            SolicitudDeConvenioCoactivo solicitud, Observacion observacion) {
+            SolicitudDeConvenioCoactivo solicitud,
+            @org.jspecify.annotations.Nullable String claveDeIdempotencia,
+            Observacion observacion) {
         Convenio guardado;
         try {
-            // Sin clave de idempotencia: este puerto lo llama coactiva desde su propio caso
-            // de uso, no un cliente HTTP que pueda reenviar el mismo intento (#606).
-            guardado = preconvenios.registrar(peticionDe(solicitud), null, observacion);
+            // Con su clave (#606). El comentario que estaba aqui decia que este puerto no lo
+            // llama un cliente HTTP, y era falso: al final de esta cadena esta
+            // `ConvenioCoactivoController.fraccionar`, que es un `@PostMapping("/convenios")`.
+            // Un reenvio del mismo intento abria un segundo convenio sobre la misma deuda,
+            // que es el defecto entero de este issue en la otra ruta.
+            guardado =
+                    preconvenios.registrar(peticionDe(solicitud), claveDeIdempotencia, observacion);
         } catch (RegistrarPreconvenio.SinDeudaQueFraccionar sinDeuda) {
             throw new SinDeudaCoactivaQueFraccionar(mensajeDe(sinDeuda), sinDeuda);
         } catch (CondicionesParametrizadas.CondicionSinParametrizar
