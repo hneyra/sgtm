@@ -5,9 +5,17 @@ React 19 sobre Vite, TypeScript. **Implementa el rediseño de
 opciones del manual— resueltos como cuatro a seis *destinos* por módulo sobre un mismo
 shell.
 
-**Casi todo es maqueta.** Los datos de muestra viven en `src/datos/` y lo que escribiría
-enseña un aviso con el texto del artboard. La excepción es **Catastro · Predios**, que
-lee y escribe contra el backend de verdad — ver más abajo.
+**Lee del backend de verdad.** Medido el 2026-09-01 contra el compose local: **41 de los
+65 destinos piden al abrirse**, y los 24 restantes no son «sin conectar» sino pantallas
+que primero necesitan un sujeto —una búsqueda, un número de expediente— o que escriben.
+
+Lo que queda en `src/datos/` **no son datos**: son los rótulos, las columnas, los motivos
+por los que un filtro está apagado y las notas de cada pantalla. Ninguna cifra. Las que
+había —«MEDINA MEDINA, RUFINA (SUC.)», «S/ 214,882» de deuda determinada, los tres
+cuadros normativos de valores escritos a mano— se retiraron cuando su pantalla pasó a
+leer del backend, y hoy el censo de constantes exportadas sin usar es **cero**. Lo que
+el backend no publique sale con el guion largo y su motivo, nunca con la cifra del
+artboard: es lo que mide `yarn sin-red`.
 
 ```bash
 yarn install

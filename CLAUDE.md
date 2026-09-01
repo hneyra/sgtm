@@ -22,14 +22,24 @@ doce contextos acotados tienen código, y la tabla «Verificar antes de afirmar�
 archivo— registra issue a issue qué se implementó y cómo se demostró. Las barreras se
 construyeron primero, a propósito; el negocio entró después, por encima de ellas.
 
-De la **interfaz web** existen **las 134 pantallas**, con las operaciones que el backend
-publica ya conectadas y el resto todavía en la forma común:
-[`frontend/`](frontend/README.md) porta el catálogo del prototipo a datos tipados y lo compone con
-**un** renderizador, sobre un shell con navegación de dos niveles y paleta de comandos. Los datos
-llegan por HTTP desde un **proxy que simula la API** ([`ADR-0010`](docs/30-arquitectura/adr/ADR-0010-catalogo-portado-y-proxy-de-datos.md));
-conectar el backend es apagarlo, no reescribir la interfaz. Su diseño de referencia —12 módulos,
-134 pantallas, design system Juris PE— está en
-[`design/`](design/design_handoff_sgtm_web/README.md). El contrato que backend y frontend comparten
+De la **interfaz web** existe una **implementación nueva**, escrita desde cero contra el
+rediseño de [`design/design-sgtm/`](design/design-sgtm/) y que **sustituyó a la anterior el
+2026-09-01**. Las 134 opciones del manual se resuelven como **65 destinos** —de cuatro a seis por
+módulo, más la acción del panel y su documento— sobre un mismo shell con carril de módulos y
+paleta de comandos.
+
+**Lee del backend directamente: no hay proxy de datos.** `ADR-0010` describe el
+[catálogo portado y el proxy](docs/30-arquitectura/adr/ADR-0010-catalogo-portado-y-proxy-de-datos.md)
+de la interfaz **anterior**, y ninguno de los dos existe hoy; el `frontend/` de ahora es un solo
+paquete de Vite —React 19 y TypeScript, sin workspaces, sin código generado y con `react` y
+`react-dom` como únicas dependencias de producción— cuya capa `src/api/` habla con
+`http://…/api/v1` y nada más. Medido el 2026-09-01: **41 de los 65 destinos piden al backend al
+abrirse**; los otros 24 no son «sin conectar» sino pantallas que primero necesitan un sujeto —una
+búsqueda, un número de expediente— o que escriben.
+
+Lo que la interfaz **no** dibuja es tan importante como lo que dibuja: una cifra que el backend no
+publique sale con el guion largo y su motivo, nunca con la del prototipo. Es lo que mide
+`sin-red`, abajo. El contrato que backend y frontend comparten
 está en [`docs/50-api/openapi/sgtm-v1.yaml`](docs/50-api/openapi/sgtm-v1.yaml), derivado de los
 `endpoint` que declara cada pantalla del prototipo. **Ese archivo no se edita a mano**: lo produce
 [`docs/50-api/generar-openapi.mjs`](docs/50-api/generar-openapi.mjs), y `--comprobar` exige en CI
@@ -94,11 +104,15 @@ Las reglas 1, 2, 6, 7 y las fechas están escritas como pruebas de ArchUnit; `SE
 agrega también la clase de muestra que la viola**, en `verificaciones/muestras/`: una regla que
 no puede fallar no protege nada.
 
-En el frontend, las que le tocan —1, 2, 8, 9 y el idioma— están como **reglas de ESLint**, con la
-misma exigencia: `frontend/verificaciones/muestras/` tiene una muestra por prohibición y
-`reglas-de-eslint.test.ts` exige que la regla la detecte. A ellas se suma una propia de la
-interfaz: **ninguna petición sale por `fetch` suelto**, todas pasan por `solicitar()` de
-`@sgtm/api-client`. Es lo que permite cambiar el proxy de datos por el backend con una bandera.
+En el frontend **no hay reglas de ESLint ni corredor de pruebas**, y conviene decirlo con todas
+las letras porque la interfaz anterior sí los tenía y la tabla de abajo está llena de sus
+mediciones. Lo que sujeta al `frontend/` de hoy son cuatro cosas, y ninguna es una prueba unitaria:
+`tsc -b --noEmit`, que caza el tipo que miente; y tres arneses que **operan un navegador de
+verdad** contra la compilación —`mirar`, `sin-red` y `paleta`—, más `vocabularios`, que compila las
+dos fuentes reales y compara. El más propio es `sin-red`: recorre los 65 destinos con **todas** las
+peticiones a `/api/v1` abortadas y falla si alguno enseña una cifra. Es la regla que gobierna esta
+interfaz, y es la que no se puede comprobar con datos delante, porque con datos la pantalla parece
+correcta siempre.
 
 Lista completa con su justificación:
 [`docs/30-arquitectura/estandares-de-codigo-backend.md`](docs/30-arquitectura/estandares-de-codigo-backend.md)
@@ -139,13 +153,16 @@ contextos acotados —todos con código ya—, `sgtm-indicadores` (el panel de r
 un contexto: ARQ-01 §3.13) y `sgtm-aplicacion` (ensambla y aloja las verificaciones).
 Límites de cada contexto: [`docs/30-arquitectura/contextos-acotados.md`](docs/30-arquitectura/contextos-acotados.md).
 
-Workspaces del frontend hoy: `apps/backoffice` (shell, catálogo y renderizador), `apps/portal`
-(el portal del contribuyente: **una** pantalla, sin shell ni catálogo) y los paquetes
-`@sgtm/dominio`, `@sgtm/api-client`, `@sgtm/design-system`, `@sgtm/api-mock` (el proxy de datos),
-`@sgtm/lectura` (los adaptadores del contribuyente que las dos aplicaciones comparten) y
-`@sgtm/sesion` (la puerta de sesión).
-**El catálogo se regenera con `yarn portar-catalogo` y los tipos de la API con
-`yarn generar-operaciones`, desde el contrato; los archivos `.generado.ts` no se editan a mano.**
+Estructura del frontend hoy: **un solo paquete, sin workspaces**. `src/shell/` (el carril de
+módulos, la paleta y el enrutado por `#/modulo/destino`), `src/modulos/<k>/` —doce, uno por módulo
+del manual, cada uno cargado con `lazy()`—, `src/api/` (una fachada por módulo sobre `solicitar()`,
+más la sesión OIDC y el renderizador común de fallo) y `src/datos/` (lo que la pantalla declara de
+sí misma: rótulos, columnas y motivos, **no cifras**).
+
+**Nada se genera**: no hay catálogo portado ni tipos derivados del contrato. Los tipos de `src/api/`
+se escriben leyendo el `Resource` del backend, campo por campo, y por eso cada uno lleva en su
+javadoc de qué clase de Java sale — un nombre inventado ahí compila, pasa el tipo y llega mal a
+ventanilla.
 
 **Dos aplicaciones, un solo origen, y las 134 siguen siendo 134.** `apps/portal` se separó por la
 **tercera** condición de [`ADR-0009`](docs/30-arquitectura/adr/ADR-0009-plataforma-frontend.md)
@@ -334,12 +351,17 @@ los respaldos escritos con la anterior; no hay `ALTER ROLE` que los vuelva a cif
 
 ```bash
 cd frontend
-yarn verificar                    # contrato, lint, tipos y pruebas. Lo que hay que pasar antes de un PR
-yarn comprobar-compilaciones      # el juego de datos no llega a produccion, y el presupuesto de paquete
-yarn e2e                          # los seis caminos completos en un navegador (Playwright)
-yarn test                         # incluye la prueba de que cada regla de ESLint muerde
-yarn generar-operaciones          # regenera los tipos de la API desde sgtm-v1.yaml
-yarn format                       # Prettier; mismo trato que spotlessApply
+yarn verificar                    # `tsc -b --noEmit`. Lo minimo antes de un PR
+yarn build                        # tipos y compilacion
+yarn mirar                        # los 65 destinos en Chromium: ni un error de consola, ni un <main> vacio
+yarn sin-red                      # los 65 CON LA RED CORTADA: ninguno puede ensenar una cifra
+yarn paleta                       # la paleta se opera solo con el teclado
+yarn vocabularios                 # los desplegables coinciden con el enumerado del backend, en las dos direcciones
+yarn flujos                       # opera los botones contra el backend real; NO esta en CI (necesita token)
+
+# `mirar`, `sin-red` y `paleta` van contra `yarn preview`, sin backend. `flujos` y `mirar`
+# necesitan SGTM_TOKEN, y cualquier 401 invalida la corrida: un token caducado a mitad del
+# recorrido dejaba este arnes en verde sin haber mirado nada.
 ```
 
 ## Verificar antes de afirmar
