@@ -29,8 +29,10 @@ import org.springframework.transaction.annotation.AnnotationTransactionAttribute
 import org.springframework.transaction.interceptor.TransactionInterceptor;
 import org.springframework.transaction.support.TransactionTemplate;
 import pe.gob.sgtm.auditoria.AuditoriaJdbc;
+import pe.gob.sgtm.auditoria.Operacion;
 import pe.gob.sgtm.auditoria.Origen;
 import pe.gob.sgtm.auditoria.OrigenContext;
+import pe.gob.sgtm.auditoria.RegistroDeAuditoria;
 import pe.gob.sgtm.compartido.Pagina;
 import pe.gob.sgtm.compartido.Paginacion;
 import pe.gob.sgtm.compartido.TenantContext;
@@ -60,11 +62,19 @@ class AdministrarSesionTest {
     private static final Clock RELOJ =
             Clock.fixed(Instant.parse("2026-08-18T10:00:00Z"), ZoneId.of("America/Lima"));
 
+    /** El mismo ejercicio, otro dia: lo que el rango de fechas tiene que dejar fuera (#544). */
+    private static final Clock OTRO_DIA =
+            Clock.fixed(Instant.parse("2026-03-05T09:00:00Z"), ZoneId.of("America/Lima"));
+
+    /** Una pagina que cabe entera: las aserciones de #544 miran quien esta y quien no. */
+    private static final Paginacion TODAS = Paginacion.de(0, 500, "fecha");
+
     private static BaseDeDatosDePrueba base;
     private static long municipalidadA;
     private static long municipalidadB;
 
     private static JdbcClient jdbc;
+    private static TenantTransactionManager gestorDeTransacciones;
     private static TransactionTemplate transaccion;
     private static AdministrarSesion sesion;
     private static AdministrarSeguridad administrar;
@@ -82,6 +92,7 @@ class AdministrarSesionTest {
 
         jdbc = JdbcClient.create(pool);
         TenantTransactionManager gestor = new TenantTransactionManager(pool);
+        gestorDeTransacciones = gestor;
         transaccion = new TransactionTemplate(gestor);
 
         AuditoriaJdbc auditoria = new AuditoriaJdbc(jdbc, RELOJ);
@@ -252,7 +263,12 @@ class AdministrarSesionTest {
             assertThat(
                             sesion.auditoria(
                                             new ConsultaDeAuditoria(
-                                                    EJERCICIO, null, null, "ALTA", null, null),
+                                                    EJERCICIO,
+                                                    null,
+                                                    null,
+                                                    Operacion.ALTA,
+                                                    null,
+                                                    null),
                                             PRIMERA)
                                     .contenido())
                     .allSatisfy(r -> assertThat(r.operacion()).isEqualTo("ALTA"));
@@ -279,6 +295,101 @@ class AdministrarSesionTest {
                                     .totalElementos())
                     .as("y deja fuera lo que no cae dentro")
                     .isZero();
+        }
+
+        /**
+         * Cada filtro que el contrato declara <b>descarta</b> lo que no pide (#544).
+         *
+         * <p>La prueba de arriba comprueba que lo devuelto cumple el criterio, y eso es la mitad:
+         * un filtro que no filtra la pasa igual —lo que devuelve <i>tambien</i> cumple, porque
+         * devuelve todo—. Es exactamente lo que hacia {@code accion}: {@code ?accion=ALTA} dejaba
+         * el total en las 1 441 filas que habia.
+         *
+         * <p>Asi que aqui se siembran las filas que cada filtro <b>tiene que dejar fuera</b>, con
+         * una clave propia para reconocerlas, y se mide el total: sin filtro estan las cuatro, con
+         * cada filtro falta la suya.
+         */
+        @Test
+        @DisplayName("cada filtro descarta lo que no pide, medido con filas sembradas para eso")
+        void cadaFiltroDescartaLoQueNoPide() {
+            String marca = "544-" + System.nanoTime();
+            // Las cuatro se distinguen en un solo dato cada una, para que la que falte
+            // diga cual es el filtro que actuo.
+            sembrar(RELOJ, "operador.a", "recibo", marca + "-patron", Operacion.ANULACION);
+            sembrar(RELOJ, "operador.a", "predio", marca + "-otra-tabla", Operacion.ANULACION);
+            sembrar(RELOJ, "operador.a", "recibo", marca + "-otra-operacion", Operacion.REVERSION);
+            sembrar(OTRO_DIA, "operador.z", "recibo", marca + "-otro-dia", Operacion.ANULACION);
+
+            assertThat(clavesDe(new ConsultaDeAuditoria(EJERCICIO, null, null, null, null, null)))
+                    .as("sin filtro estan las cuatro")
+                    .contains(
+                            marca + "-patron",
+                            marca + "-otra-tabla",
+                            marca + "-otra-operacion",
+                            marca + "-otro-dia");
+
+            assertThat(
+                            clavesDe(
+                                    new ConsultaDeAuditoria(
+                                            EJERCICIO, null, "recibo", null, null, null)))
+                    .as("«tabla» deja fuera la del predio")
+                    .contains(marca + "-patron")
+                    .doesNotContain(marca + "-otra-tabla");
+
+            assertThat(
+                            clavesDe(
+                                    new ConsultaDeAuditoria(
+                                            EJERCICIO,
+                                            null,
+                                            null,
+                                            Operacion.ANULACION,
+                                            null,
+                                            null)))
+                    .as("«operacion» deja fuera la reversion")
+                    .contains(marca + "-patron")
+                    .doesNotContain(marca + "-otra-operacion");
+
+            assertThat(
+                            clavesDe(
+                                    new ConsultaDeAuditoria(
+                                            EJERCICIO, "operador.a", null, null, null, null)))
+                    .as("«usuario» deja fuera lo que hizo otro")
+                    .contains(marca + "-patron")
+                    .doesNotContain(marca + "-otro-dia");
+
+            LocalDate hoy = LocalDate.now(RELOJ);
+            assertThat(clavesDe(new ConsultaDeAuditoria(EJERCICIO, null, null, null, hoy, hoy)))
+                    .as("el rango deja fuera lo de marzo")
+                    .contains(marca + "-patron")
+                    .doesNotContain(marca + "-otro-dia");
+
+            LocalDate marzo = LocalDate.now(OTRO_DIA);
+            assertThat(clavesDe(new ConsultaDeAuditoria(EJERCICIO, null, null, null, marzo, marzo)))
+                    .as("y al reves: pidiendo marzo no sale lo de agosto")
+                    .contains(marca + "-otro-dia")
+                    .doesNotContain(marca + "-patron");
+        }
+
+        /**
+         * El vocabulario del filtro es el del enumerado, y por eso no se puede pedir lo que no
+         * existe: {@code ELIMINACION} no compila (#544). Lo que llegaria por HTTP con esa palabra
+         * lo rechaza el controlador con 422 —{@code SesionControllerTest}—, en vez de acotar por
+         * ella y devolver una tabla vacia que se lee como «no hubo ninguna».
+         */
+        @Test
+        @DisplayName("las siete operaciones del enumerado son las siete que la bitacora admite")
+        void elVocabularioEsElDeLaBitacora() {
+            for (Operacion operacion : Operacion.values()) {
+                assertThat(
+                                sesion.auditoria(
+                                                new ConsultaDeAuditoria(
+                                                        EJERCICIO, null, null, operacion, null,
+                                                        null),
+                                                PRIMERA)
+                                        .contenido())
+                        .as("filtrar por %s no puede fallar contra el CHECK de la tabla", operacion)
+                        .allSatisfy(r -> assertThat(r.operacion()).isEqualTo(operacion.name()));
+            }
         }
 
         @Test
@@ -465,6 +576,45 @@ class AdministrarSesionTest {
                 return id;
             }
         }
+    }
+
+    /**
+     * Escribe una fila de auditoria tal como la escribe la aplicacion, con su reloj y su origen.
+     *
+     * <p>Por el escritor de produccion ({@code AuditoriaJdbc}) y no por SQL directo: la fila tiene
+     * que caer en la particion del ejercicio que decide ese mismo reloj, y con la RLS puesta.
+     */
+    private static void sembrar(
+            Clock reloj, String usuario, String tabla, String clave, Operacion operacion) {
+
+        Origen anterior = OrigenContext.actual();
+        OrigenContext.fijar(new Origen(usuario, "PC-SIEMBRA", "10.9.9.9"));
+        try {
+            new TransactionTemplate(gestorDeTransacciones)
+                    .execute(
+                            estado -> {
+                                new AuditoriaJdbc(jdbc, reloj)
+                                        .registrar(
+                                                RegistroDeAuditoria.enLaFechaDe(
+                                                        LocalDate.now(reloj),
+                                                        tabla,
+                                                        clave,
+                                                        operacion,
+                                                        Observacion.de(
+                                                                "Fila sembrada para medir el"
+                                                                        + " filtro de auditoria")));
+                                return null;
+                            });
+        } finally {
+            OrigenContext.fijar(anterior);
+        }
+    }
+
+    /** Las claves que devuelve esa consulta: lo que esta, y —sobre todo— lo que no. */
+    private static List<String> clavesDe(ConsultaDeAuditoria consulta) {
+        return sesion.auditoria(consulta, TODAS).contenido().stream()
+                .map(RegistroAuditado::clave)
+                .toList();
     }
 
     private static List<String> filas(String sql) throws SQLException {

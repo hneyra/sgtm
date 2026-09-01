@@ -2,9 +2,12 @@ package pe.gob.sgtm.seguridad.infraestructura.web;
 
 import java.time.Instant;
 import java.time.LocalDate;
+import java.util.Arrays;
 import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Locale;
 import java.util.Map;
+import java.util.stream.Collectors;
 import org.jspecify.annotations.Nullable;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
@@ -13,6 +16,7 @@ import org.springframework.web.bind.annotation.PutMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
+import pe.gob.sgtm.auditoria.Operacion;
 import pe.gob.sgtm.autorizacion.Privilegio;
 import pe.gob.sgtm.autorizacion.RequiereAcceso;
 import pe.gob.sgtm.dominio.Ejercicio;
@@ -24,7 +28,9 @@ import pe.gob.sgtm.seguridad.dominio.RegistroAuditado;
 import pe.gob.sgtm.seguridad.dominio.Respaldo;
 import pe.gob.sgtm.seguridad.dominio.Sesion;
 import pe.gob.sgtm.web.Api;
+import pe.gob.sgtm.web.CodigoDeError;
 import pe.gob.sgtm.web.ParametrosDePaginacion;
+import pe.gob.sgtm.web.ProblemaDeNegocio;
 import pe.gob.sgtm.web.RespuestaPaginada;
 
 /**
@@ -107,6 +113,11 @@ public class SesionController {
      * <p>El ejercicio es obligatorio: es la clave de particion, y sin el la consulta recorre todas.
      * Con el volumen que alcanza esta tabla eso es la diferencia entre una pantalla que responde y
      * una que hay que cancelar.
+     *
+     * <p>Los cinco filtros que acota son los cinco que el contrato declara, y no cuatro ni seis
+     * (#544): hasta este issue el contrato publicaba {@code accion} —que ningun parametro de aqui
+     * leia, asi que se tecleaba y devolvia el listado entero— y callaba {@code tabla} y {@code
+     * operacion}, que acotan desde #13.
      */
     @GetMapping(Api.RAIZ + "/seguridad/auditoria")
     @RequiereAcceso(acceso = "auditoria", privilegio = Privilegio.LECTURA)
@@ -121,11 +132,48 @@ public class SesionController {
 
         ConsultaDeAuditoria consulta =
                 new ConsultaDeAuditoria(
-                        new Ejercicio(ejercicio), usuario, tabla, operacion, desde, hasta);
+                        new Ejercicio(ejercicio),
+                        usuario,
+                        tabla,
+                        operacionOpcional(operacion),
+                        desde,
+                        hasta);
 
         return RespuestaPaginada.de(
                 administrar.auditoria(consulta, paginacion.aPaginacion("fecha")),
                 AuditoriaResource::de);
+    }
+
+    /**
+     * La palabra del filtro «Acción», resuelta contra el vocabulario que la bitacora guarda.
+     *
+     * <p>Una palabra que el enumerado no tiene <b>se rechaza</b> en vez de acotar por ella: la
+     * consulta seria {@code operacion = 'ELIMINACION'}, que no puede casar con nada, y lo que
+     * llegaria a la pantalla es una tabla vacia —indistinguible de «no hubo ninguna»— en vez de un
+     * error. Es el mismo trato que {@code LicenciaController} le da a su «Estado», y el motivo por
+     * el que el contrato publica el enumerado entero.
+     *
+     * <p>Sin valor no hay filtro, que es lo que significa el «Todas» del desplegable; esa palabra
+     * <b>no se traduce aqui</b>: no viaja (ver {@code pantallas/seguridad}).
+     */
+    private static @Nullable Operacion operacionOpcional(@Nullable String operacion) {
+        String texto = operacion == null ? "" : operacion.strip();
+        if (texto.isEmpty()) {
+            return null;
+        }
+        try {
+            return Operacion.valueOf(texto.toUpperCase(Locale.ROOT));
+        } catch (IllegalArgumentException noExiste) {
+            throw new ProblemaDeNegocio(
+                    CodigoDeError.VALIDACION,
+                    "La operacion va entre "
+                            + Arrays.stream(Operacion.values())
+                                    .map(Enum::name)
+                                    .collect(Collectors.joining(", "))
+                            + ": '"
+                            + operacion
+                            + "'");
+        }
     }
 
     /**

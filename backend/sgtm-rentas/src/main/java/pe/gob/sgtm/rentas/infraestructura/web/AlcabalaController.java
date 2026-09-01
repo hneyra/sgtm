@@ -12,6 +12,8 @@ import pe.gob.sgtm.autorizacion.Privilegio;
 import pe.gob.sgtm.autorizacion.RequiereAcceso;
 import pe.gob.sgtm.dominio.Dinero;
 import pe.gob.sgtm.dominio.Observacion;
+import pe.gob.sgtm.parametros.LectorDeParametros;
+import pe.gob.sgtm.parametros.ParametrosSellados;
 import pe.gob.sgtm.rentas.aplicacion.RegistrarAlcabala;
 import pe.gob.sgtm.web.Api;
 import pe.gob.sgtm.web.CodigoDeError;
@@ -23,6 +25,18 @@ import pe.gob.sgtm.web.ProblemaDeNegocio;
  * <p>{@code autoavaluoAjustado} llega en el cuerpo porque el ajuste por el IPM no está resuelto
  * todavía (D-11): quien complete esta pantalla lo trae ya calculado, igual que {@code
  * TransferenciaPredioController} recibe el valor de transferencia en vez de inventarlo.
+ *
+ * <h2>Lo que falta publicar se dice, y no es un 500 (#540)</h2>
+ *
+ * <p>La determinación lee del conjunto sellado del ejercicio de la transferencia la {@code UIT} y
+ * la {@code ALICUOTA_ALCABALA}. Que el ejercicio no tenga ningún conjunto sellado ({@code
+ * EjercicioSinSellar}) o que el conjunto no traiga una de las dos ({@code ParametroAusente}) salía
+ * como <b>500 {@code ERROR_INTERNO} con identificador de incidencia</b>: la operación se leía como
+ * «el servidor está roto» cuando lo que pasa es que falta publicar una cifra, y cada intento dejaba
+ * una incidencia ERROR en el registro por lo que hoy es el estado normal del sistema (D-02a
+ * abierta). Ahora es <b>422 nombrando la llave</b>, como en {@code PredialController} (#395) y
+ * {@code VehicularController} (#399), que ya lo hacían para {@code ParametroAusente}: esta pantalla
+ * y la de espectáculos eran las dos de Rentas que se habían quedado fuera.
  */
 @RestController
 @RequestMapping(Api.RAIZ + "/rentas/alcabala")
@@ -49,6 +63,9 @@ public class AlcabalaController {
             throw new ProblemaDeNegocio(CodigoDeError.NO_ENCONTRADO, mensajeDe(inexistente));
         } catch (RegistrarAlcabala.NoGravaAlcabala noGrava) {
             throw new ProblemaDeNegocio(CodigoDeError.VALIDACION, mensajeDe(noGrava));
+        } catch (ParametrosSellados.ParametroAusente
+                | LectorDeParametros.EjercicioSinSellar falta) {
+            throw new ProblemaDeNegocio(CodigoDeError.VALIDACION, mensajeDe(falta));
         } catch (IllegalArgumentException invalido) {
             throw new ProblemaDeNegocio(CodigoDeError.VALIDACION, mensajeDe(invalido));
         }

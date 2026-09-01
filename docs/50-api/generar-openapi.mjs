@@ -179,6 +179,26 @@ const SUPRIMIDOS = {
   // que se va es su parametro. Quien pregunta por su propia situacion usa
   // `portal_mi_situacion`, que no tiene ninguno.
   portal: ['doc'],
+  // `GET /seguridad/auditoria?accion=ALTA` se teclea y **no filtra**: medido
+  // sobre las 1 441 filas de la municipalidad 1, deja el total en 1 441 (#544).
+  //
+  // Y no es un filtro sin implementar: es `operacion` con el nombre del
+  // prototipo. La bitacora guarda UNA columna para esto —`auditoria.operacion`
+  // (V5), con su CHECK— y la propia grilla ya la dibuja en la columna «Acción».
+  // Publicar los dos nombres seria publicar dos veces el mismo dato, y hacer
+  // que `accion` filtrara obligaria a traducir ademas su vocabulario: de las
+  // cinco palabras del desplegable, dos coinciden letra por letra (ALTA,
+  // ACCESO), dos difieren solo en la tilde que ningun identificador de este
+  // proyecto lleva (MODIFICACIÓN, ANULACIÓN) y una **no existe ni puede
+  // existir** —ELIMINACIÓN: la aplicacion no borra (RNF-051, regla 4)—;
+  // mientras que BAJA, REVERSION y PERMISO, que la bitacora si registra, el
+  // desplegable no las ofrece. Traducir a ciegas es lo que #427 se nego a hacer
+  // con «ACTIVA» y VIGENTE, y aqui saldria peor: quien audita cambios de
+  // permisos —lo que ADR-0008 §5 anadio al manual— no tendria como pedirlos.
+  //
+  // Asi que el que se va es el nombre, no el filtro: `operacion` sube a
+  // DEL_BACKEND con el vocabulario del enumerado, y la pantalla manda ese.
+  auditoria: ['accion'],
 };
 
 /**
@@ -206,6 +226,33 @@ const DEL_BACKEND = {
       nombre: 'ejercicio',
       ejemplo: '2026',
       descripcion: 'Ejercicio de trabajo. Obligatorio: es la clave de particion de la bitacora',
+    },
+    // Los dos filtros que la bitacora si sabe acotar y el contrato no publicaba
+    // (#544). `operacion` ocupa el sitio del «Acción» que el prototipo dibuja
+    // —es el mismo dato con el nombre del backend, ver SUPRIMIDOS— y `tabla`
+    // va detras, porque es la columna «Opción» de la grilla leida al reves.
+    {
+      nombre: 'operacion',
+      ejemplo: 'ANULACION',
+      tras: 'usuario',
+      esquema:
+        '{ type: string, enum: [ALTA, MODIFICACION, BAJA, ANULACION, REVERSION, PERMISO, ACCESO] }',
+      descripcion: bloque(`
+        Que clase de acto se registro. El vocabulario es el del enumerado «Operacion» y el
+        del CHECK de «auditoria.operacion» (V5), letra por letra; cualquier otra palabra se
+        rechaza con 422 en vez de devolver una pagina vacia. No hay ELIMINACION: la
+        aplicacion no borra (RNF-051, regla 4), y lo que parece un borrado es una BAJA, una
+        ANULACION o una REVERSION.
+      `),
+    },
+    {
+      nombre: 'tabla',
+      ejemplo: 'recibo',
+      tras: 'operacion',
+      descripcion: bloque(`
+        Sobre que tabla se actuo, tal como la bitacora la nombra —«recibo», «predio»,
+        «sesion»—. Es lo que la grilla dibuja en la columna «Opción».
+      `),
     },
   ],
   // Las cuatro fichas responden **a una fecha**: sin ella, la que rige hoy; con

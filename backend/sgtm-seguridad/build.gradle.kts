@@ -16,6 +16,11 @@ dependencies {
     testImplementation(testFixtures(project(":sgtm-esquema")))
     testImplementation("org.springframework.boot:spring-boot-starter-jdbc")
     testImplementation("org.springframework:spring-aop")
+
+    // MockMvc para el endpoint de la bitacora: transporte sin base de datos, que
+    // es donde se ve que los filtros que el contrato declara son los que el
+    // controlador lee (#544).
+    testImplementation("org.springframework:spring-test")
     testRuntimeOnly(libs.postgresql)
 }
 

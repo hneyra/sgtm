@@ -14,6 +14,8 @@ import pe.gob.sgtm.autorizacion.Privilegio;
 import pe.gob.sgtm.autorizacion.RequiereAcceso;
 import pe.gob.sgtm.dominio.Dinero;
 import pe.gob.sgtm.dominio.Observacion;
+import pe.gob.sgtm.parametros.LectorDeParametros;
+import pe.gob.sgtm.parametros.ParametrosSellados;
 import pe.gob.sgtm.rentas.aplicacion.RegistrarEspectaculo;
 import pe.gob.sgtm.web.Api;
 import pe.gob.sgtm.web.CodigoDeError;
@@ -26,6 +28,16 @@ import pe.gob.sgtm.web.ProblemaDeNegocio;
  * <p>{@code organizadorId} llega como identificador, igual que {@code predioId} en {@code
  * TransferenciaPredioController}: quien completa esta pantalla ya vino de la búsqueda de
  * contribuyente (RF-004), que es quien resuelve el código.
+ *
+ * <h2>Lo que falta publicar se dice, y no es un 500 (#540)</h2>
+ *
+ * <p>El registro lee del conjunto sellado del ejercicio del evento la {@code
+ * ALICUOTA_ESPECTACULO:‹TIPO›} del artículo 57. Que el ejercicio no tenga ningún conjunto sellado
+ * ({@code EjercicioSinSellar}) o que el conjunto no traiga la alícuota de ese tipo ({@code
+ * ParametroAusente}) salía como <b>500 {@code ERROR_INTERNO} con identificador de incidencia</b>, y
+ * ninguna de las dos lo es: falta publicar una cifra, y decir cuál es lo único que separa «no hay
+ * ordenanza» de un impuesto calculado con una alícuota inventada. Ahora es <b>422 nombrando la
+ * llave</b>, como en {@code PredialController} (#395) y {@code VehicularController} (#399).
  */
 @RestController
 @RequestMapping(Api.RAIZ + "/rentas/espectaculos")
@@ -56,6 +68,9 @@ public class EspectaculoController {
                             dineroOpcionalDe(peticion.valorEntrada()),
                             dineroDe(peticion.ingresoDeclarado(), "ingresoDeclarado"),
                             observacion));
+        } catch (ParametrosSellados.ParametroAusente
+                | LectorDeParametros.EjercicioSinSellar falta) {
+            throw new ProblemaDeNegocio(CodigoDeError.VALIDACION, mensajeDe(falta));
         } catch (IllegalArgumentException invalido) {
             throw new ProblemaDeNegocio(CodigoDeError.VALIDACION, mensajeDe(invalido));
         }

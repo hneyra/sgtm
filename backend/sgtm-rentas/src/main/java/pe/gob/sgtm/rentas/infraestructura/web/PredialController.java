@@ -20,7 +20,9 @@ import pe.gob.sgtm.autorizacion.RequiereAcceso;
 import pe.gob.sgtm.dominio.Dinero;
 import pe.gob.sgtm.dominio.Ejercicio;
 import pe.gob.sgtm.dominio.Observacion;
+import pe.gob.sgtm.parametros.LectorDeParametros;
 import pe.gob.sgtm.parametros.ParametrosSellados;
+import pe.gob.sgtm.parametros.PoliticasDeRedondeoSelladas;
 import pe.gob.sgtm.rentas.aplicacion.CuadroPredialParametrizado;
 import pe.gob.sgtm.rentas.aplicacion.DeterminarPredial;
 import pe.gob.sgtm.rentas.aplicacion.DeterminarPredialMasivo;
@@ -65,6 +67,27 @@ import pe.gob.sgtm.web.RespuestaPaginada;
  * DERECHO_EMISION_PREDIAL}—, un predio de la base sin autovaluo declarado, un predio que no es del
  * contribuyente. Mismo trato que {@code TASA_ANUNCIO:‹CLASE›} en #51 y {@code BENEFICIO:‹CAMPANIA›}
  * en #72: quien opera tiene que enterarse de que le falta para poder pedirlo.
+ *
+ * <p><b>Y ahi entran tambien las dos que faltaban</b> (#540). Que el ejercicio no tenga ningun
+ * conjunto sellado ({@code EjercicioSinSellar}) y que el conjunto sellado no parametrice ningun
+ * punto de redondeo ({@code SinPuntosObservados}, con sus tres hermanas de {@link
+ * PoliticasDeRedondeoSelladas}) salian como <b>500 {@code ERROR_INTERNO} con identificador de
+ * incidencia</b>: nadie las traducia aqui y caian en el {@code @ExceptionHandler(Exception.class)}
+ * de {@code ManejadorDeErrores}. Dos consecuencias, y la segunda es la que no se ve:
+ *
+ * <ul>
+ *   <li>la interfaz no podia distinguir «falta publicar un parametro» —que se arregla publicandolo—
+ *       de «el servidor esta roto» —que se arregla llamando a alguien—, y un cliente que reintenta
+ *       un 500 reintenta para siempre;
+ *   <li>y cada intento <b>escribia una incidencia con nivel ERROR en el registro</b>. Con D-02a
+ *       abierta y ningun ejercicio sellado, eso es el estado <i>normal</i> del sistema hoy: el
+ *       registro de errores se llenaba de lo que no es un error. Es el mismo razonamiento por el
+ *       que #486 saco de ahi las peticiones ilegibles.
+ * </ul>
+ *
+ * <p>Lo que <b>no</b> cambia: un fallo de verdad del servidor sigue siendo 500 con su incidencia.
+ * Una traduccion demasiado ancha —convertirlo todo en 422— es peor que el defecto que arregla, y
+ * hay una prueba de contraste que lo mide.
  */
 @RestController
 @RequestMapping(Api.RAIZ + "/rentas/predial")
@@ -200,9 +223,13 @@ public class PredialController {
                 | DeterminarPredial.PredioRepetido
                 | DeterminarPredial.PredioAjeno mal) {
             throw new ProblemaDeNegocio(CodigoDeError.VALIDACION, mensajeDe(mal));
-        } catch (CuadroPredialParametrizado.ParametroDelPredialAusente falta) {
-            throw new ProblemaDeNegocio(CodigoDeError.VALIDACION, mensajeDe(falta));
-        } catch (ParametrosSellados.ParametroAusente falta) {
+        } catch (CuadroPredialParametrizado.ParametroDelPredialAusente
+                | ParametrosSellados.ParametroAusente
+                | LectorDeParametros.EjercicioSinSellar
+                | PoliticasDeRedondeoSelladas.SinPuntosObservados
+                | PoliticasDeRedondeoSelladas.MediaPolitica
+                | PoliticasDeRedondeoSelladas.EscalaNoEntera
+                | PoliticasDeRedondeoSelladas.ModoDesconocido falta) {
             throw new ProblemaDeNegocio(CodigoDeError.VALIDACION, mensajeDe(falta));
         }
     }
@@ -236,9 +263,13 @@ public class PredialController {
                                     Boolean.TRUE.equals(peticion.recalculaYaEmitidos()),
                                     simulacion),
                             observacion));
-        } catch (CuadroPredialParametrizado.ParametroDelPredialAusente falta) {
-            throw new ProblemaDeNegocio(CodigoDeError.VALIDACION, mensajeDe(falta));
-        } catch (ParametrosSellados.ParametroAusente falta) {
+        } catch (CuadroPredialParametrizado.ParametroDelPredialAusente
+                | ParametrosSellados.ParametroAusente
+                | LectorDeParametros.EjercicioSinSellar
+                | PoliticasDeRedondeoSelladas.SinPuntosObservados
+                | PoliticasDeRedondeoSelladas.MediaPolitica
+                | PoliticasDeRedondeoSelladas.EscalaNoEntera
+                | PoliticasDeRedondeoSelladas.ModoDesconocido falta) {
             throw new ProblemaDeNegocio(CodigoDeError.VALIDACION, mensajeDe(falta));
         } catch (IllegalArgumentException mal) {
             throw new ProblemaDeNegocio(CodigoDeError.VALIDACION, mensajeDe(mal));

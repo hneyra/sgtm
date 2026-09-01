@@ -11,6 +11,7 @@ import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
 import java.util.List;
@@ -29,6 +30,7 @@ import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestMethod;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
+import pe.gob.sgtm.auditoria.Operacion;
 
 /**
  * El contrato y el controlador tienen que decir lo mismo sobre <b>por donde viajan los datos</b>
@@ -45,7 +47,16 @@ import org.springframework.web.bind.annotation.RestController;
  * <p>Es exactamente lo que le pasaba a {@code POST /rentas/vehicular/calculo} desde #32: estaba en
  * {@code IMPLEMENTADAS}, el recuento decia que existia, y ninguna pantalla podia llamarla.
  *
- * <h2>Las dos comprobaciones</h2>
+ * <h2>El otro desajuste, el que ni siquiera llega al cuerpo (#544)</h2>
+ *
+ * <p>Un parametro que el contrato declara {@code in: query} y que <b>ningun metodo lee</b> no da
+ * error de ninguna clase: Spring lo ignora, la consulta sale sin acotar y el listado vuelve entero.
+ * Es peor que un 422, porque quien filtro cree estar mirando una parte. Le pasaba a {@code accion}
+ * en la bitacora, medido sobre 1 441 filas. Y su reverso —un {@code @RequestParam} que el contrato
+ * no declara— es un filtro que funciona y que ninguna pantalla puede mandar, porque el frontend
+ * solo manda lo que el contrato tiene.
+ *
+ * <h2>Las cinco comprobaciones</h2>
  *
  * <ul>
  *   <li>{@link #POR_LA_CONSULTA} es la tabla de las operaciones cuyos datos <b>tienen</b> que poder
@@ -57,6 +68,13 @@ import org.springframework.web.bind.annotation.RestController;
  *       #EL_MISMO_DESAJUSTE_TODAVIA_ABIERTO} de las que lo arrastran y todavia no se han corregido
  *       —cada una con su motivo—. Esa lista es el censo de la deuda: se acorta, nunca se alarga sin
  *       decir por que.
+ *   <li>{@link #LOS_DOS_DICEN_LO_MISMO}, las operaciones cuyos filtros tienen que coincidir letra
+ *       por letra en los dos lados. Tambien en las dos direcciones.
+ *   <li>El censo de los filtros que no filtran, que <b>no puede crecer</b>: {@link
+ *       #elCensoDeFiltrosQueNoFiltranNoCrece}.
+ *   <li>Y el vocabulario: cuando el contrato publica un {@code enum} para un filtro, tiene que ser
+ *       el del enumerado que la base guarda, o el contrato pasa a ser una segunda copia que nadie
+ *       compara con la primera.
  * </ul>
  */
 @DisplayName("Por donde viajan los datos: contrato y controlador (docs/50-api)")
@@ -144,6 +162,47 @@ class ParametrosDeLaConsultaTest {
      * pantalla no va a poder llamar a su operacion.
      */
     private static final Map<String, Set<String>> EL_MISMO_DESAJUSTE_TODAVIA_ABIERTO = Map.of();
+
+    /**
+     * Las operaciones cuyos filtros <b>tienen que coincidir letra por letra</b> en las dos mitades
+     * (#544).
+     *
+     * <p>El desajuste que esto vigila es el que las tres comprobaciones de #399 no podian ver,
+     * porque todas parten del cuerpo: aqui el dato no viaja mal, viaja <b>a ningun sitio</b>. La
+     * pantalla dibuja el filtro porque el contrato lo declara —el generador de tipos del frontend
+     * lo expone y {@code parametrosDeBusqueda} lo deja pasar—, quien atiende lo teclea, la peticion
+     * sale con el, y el total no se mueve. No hay error, ni 422, ni pagina vacia: sale <b>todo</b>,
+     * que es exactamente la lectura que quien filtra cree haber descartado. Y al reves: un
+     * parametro que el controlador lee y el contrato no declara es un filtro que funciona y que
+     * <b>ninguna pantalla puede mandar</b>.
+     *
+     * <p>Las dos mitades le pasaban a la vez a {@code GET /seguridad/auditoria}, medido sobre 1 441
+     * filas de la municipalidad 1: {@code ?accion=ALTA} devolvia las 1 441, y {@code tabla} y
+     * {@code operacion} —que si acotan desde #13— no estaban publicados.
+     *
+     * <p><b>Es una promesa por operacion, como {@link #POR_LA_CONSULTA}, y no la regla general</b>:
+     * la regla general no se puede encender hoy, y eso esta medido en {@link
+     * #elCensoDeFiltrosQueNoFiltranNoCrece}. Una entrada aqui compromete las dos direcciones a la
+     * vez y cuesta una linea; se anade cuando su operacion se revisa.
+     */
+    private static final Set<String> LOS_DOS_DICEN_LO_MISMO = Set.of("GET /seguridad/auditoria");
+
+    /**
+     * Cuantas operaciones arrastran hoy cada mitad del desajuste. Medido, no estimado (#544).
+     *
+     * <p>Son el techo de un censo que no se puede escribir entrada por entrada sin convertir cada
+     * PR ajeno en un ejercicio de contabilidad: el contrato esta <b>derivado del prototipo</b>
+     * (#312), asi que declara los filtros que cada pantalla dibuja, y los controladores se
+     * escribieron despues leyendo los suyos. De ahi salen las dos cifras.
+     *
+     * <p>Lo que estas dos constantes garantizan es que <b>no crezcan</b>: un filtro nuevo que no
+     * filtra, o uno que se lee sin publicar, ponen la prueba en rojo con la operacion dentro. Y
+     * bajan solas segun cada modulo se revisa; la que baja se ajusta en el mismo PR, que es donde
+     * se sabe por que.
+     */
+    private static final int OPERACIONES_CON_FILTRO_QUE_NADIE_LEE = 64;
+
+    private static final int OPERACIONES_QUE_LEEN_UN_FILTRO_SIN_PUBLICAR = 19;
 
     /** Una ruta del contrato: {@code "/ruta":} con dos espacios de sangria. */
     private static final Pattern RUTA_DEL_CONTRATO = Pattern.compile("  \"(/[^\"]*)\":");
@@ -284,6 +343,127 @@ class ParametrosDeLaConsultaTest {
     }
 
     @Test
+    @DisplayName("lo que el contrato declara de estas operaciones lo lee su controlador")
+    void loQueElContratoDeclaraLoLeeElControlador() throws IOException {
+        Map<String, Set<String>> contrato = parametrosDeConsultaDelContrato();
+        Map<String, Handler> publicados = handlersPublicados();
+
+        Map<String, Set<String>> huerfanos = new TreeMap<>();
+        for (String operacion : LOS_DOS_DICEN_LO_MISMO) {
+            Handler handler = publicados.get(operacion);
+            assertThat(handler).as("la operacion %s no esta publicada", operacion).isNotNull();
+            Set<String> sinLeer = new TreeSet<>(contrato.getOrDefault(operacion, Set.of()));
+            if (handler != null) {
+                sinLeer.removeAll(handler.deLaConsulta());
+                // Lo que se lee del cuerpo teniendolo declarado «in: query» es el desajuste de
+                // #399, y lo cuenta la comprobacion de arriba: aqui no se dice dos veces.
+                sinLeer.removeAll(handler.delCuerpo());
+            }
+            if (!sinLeer.isEmpty()) {
+                huerfanos.put(operacion, sinLeer);
+            }
+        }
+
+        assertThat(huerfanos)
+                .as(
+                        "el contrato declara estos parametros y el controlador no los lee de ningun"
+                                + " sitio: la pantalla los dibuja, quien atiende los teclea, viajan, y"
+                                + " el listado sale entero. Un filtro que no filtra es peor que uno que"
+                                + " no existe. O el controlador los lee, o se retiran del contrato en"
+                                + " docs/50-api/generar-openapi.mjs (SUPRIMIDOS), nunca a mano en el"
+                                + " yaml")
+                .isEmpty();
+    }
+
+    @Test
+    @DisplayName("y lo que su controlador lee lo declara el contrato, o nadie puede mandarlo")
+    void loQueElControladorLeeLoDeclaraElContrato() throws IOException {
+        Map<String, Set<String>> contrato = parametrosDeConsultaDelContrato();
+        Map<String, Handler> publicados = handlersPublicados();
+
+        Map<String, Set<String>> sinPublicar = new TreeMap<>();
+        for (String operacion : LOS_DOS_DICEN_LO_MISMO) {
+            Handler handler = publicados.get(operacion);
+            assertThat(handler).as("la operacion %s no esta publicada", operacion).isNotNull();
+            Set<String> ocultos =
+                    handler == null ? new TreeSet<>() : new TreeSet<>(handler.deLaConsulta());
+            ocultos.removeAll(contrato.getOrDefault(operacion, Set.of()));
+            if (!ocultos.isEmpty()) {
+                sinPublicar.put(operacion, ocultos);
+            }
+        }
+
+        assertThat(sinPublicar)
+                .as(
+                        "el controlador lee estos parametros de la consulta y el contrato no los"
+                                + " declara: el frontend solo manda lo que el contrato tiene, asi que"
+                                + " son filtros que funcionan y ninguna pantalla puede usar. Se"
+                                + " publican en docs/50-api/generar-openapi.mjs (DEL_BACKEND), nunca a"
+                                + " mano en el yaml")
+                .isEmpty();
+    }
+
+    @Test
+    @DisplayName("y el censo de los filtros que no filtran no crece")
+    void elCensoDeFiltrosQueNoFiltranNoCrece() throws IOException {
+        Map<String, Set<String>> contrato = parametrosDeConsultaDelContrato();
+        Map<String, Handler> publicados = handlersPublicados();
+
+        Map<String, Set<String>> queNadieLee = new TreeMap<>();
+        Map<String, Set<String>> sinPublicar = new TreeMap<>();
+        publicados.forEach(
+                (operacion, handler) -> {
+                    if (!contrato.containsKey(operacion)) {
+                        // Una ruta entera sin publicar es cosa de ContratoDeApiTest.
+                        return;
+                    }
+                    Set<String> sinLeer = new TreeSet<>(contrato.get(operacion));
+                    sinLeer.removeAll(handler.deLaConsulta());
+                    sinLeer.removeAll(handler.delCuerpo());
+                    if (!sinLeer.isEmpty()) {
+                        queNadieLee.put(operacion, sinLeer);
+                    }
+                    Set<String> ocultos = new TreeSet<>(handler.deLaConsulta());
+                    ocultos.removeAll(contrato.get(operacion));
+                    if (!ocultos.isEmpty()) {
+                        sinPublicar.put(operacion, ocultos);
+                    }
+                });
+
+        assertThat(queNadieLee)
+                .as(
+                        "estas operaciones declaran un filtro que ningun controlador lee: se teclea"
+                                + " y no filtra. La cifra es la medida de #544 y solo puede bajar; si"
+                                + " sube, la operacion nueva esta ahi dentro")
+                .hasSizeLessThanOrEqualTo(OPERACIONES_CON_FILTRO_QUE_NADIE_LEE);
+        assertThat(sinPublicar)
+                .as(
+                        "estas operaciones leen de la consulta un parametro que el contrato no"
+                                + " declara: filtra y ninguna pantalla puede mandarlo. Misma regla: la"
+                                + " cifra solo baja")
+                .hasSizeLessThanOrEqualTo(OPERACIONES_QUE_LEEN_UN_FILTRO_SIN_PUBLICAR);
+    }
+
+    @Test
+    @DisplayName("el vocabulario que el contrato publica es el que la bitacora puede guardar")
+    void elVocabularioPublicadoEsElDelEnumerado() throws IOException {
+        // El primer eslabon de tres: `Operacion` (V5) → el `enum` del contrato → el
+        // desplegable de la pantalla, que compara contra este mismo `enum`
+        // (`pantallas/seguridad/auditoria.test.tsx`). Sin esta prueba, el contrato
+        // seria una segunda copia del vocabulario que nadie compara con la primera,
+        // que es el hueco que #192 documento para las llaves de los parametros: una
+        // palabra que se queda vieja no da error, da una consulta que no encuentra
+        // nada.
+        assertThat(vocabularioDeLaOperacionEnElContrato())
+                .as(
+                        "el `enum` del parametro «operacion» de GET /seguridad/auditoria tiene que"
+                                + " ser el enumerado Operacion, letra por letra. Se declara en"
+                                + " docs/50-api/generar-openapi.mjs (DEL_BACKEND), nunca a mano")
+                .containsExactly(
+                        Arrays.stream(Operacion.values()).map(Enum::name).toArray(String[]::new));
+    }
+
+    @Test
     @DisplayName("todo cuerpo publicado es un record, o la regla de arriba deja de verlo")
     void todoCuerpoPublicadoEsUnRecord() {
         List<String> sinForma = new ArrayList<>();
@@ -317,7 +497,34 @@ class ParametrosDeLaConsultaTest {
     // ------------------------------------------------------------------
 
     /** Lo que un handler publicado sabe leer: de la consulta, y del cuerpo. */
-    private record Handler(Set<String> deLaConsulta, Set<String> delCuerpo) {}
+    private record Handler(Set<String> deLaConsulta, Set<String> delCuerpo) {
+
+        /** Los dos handlers de una misma operacion, sumados. */
+        Handler unido(Handler otro) {
+            Set<String> consulta = new TreeSet<>(deLaConsulta);
+            consulta.addAll(otro.deLaConsulta());
+            Set<String> cuerpo = new TreeSet<>(delCuerpo);
+            cuerpo.addAll(otro.delCuerpo());
+            return new Handler(consulta, cuerpo);
+        }
+    }
+
+    /** El {@code enum} que el contrato declara para el filtro «operacion» de la bitacora. */
+    private static List<String> vocabularioDeLaOperacionEnElContrato() throws IOException {
+        String yaml =
+                Files.readString(
+                        raizDelRepositorio().resolve("docs/50-api/openapi/sgtm-v1.yaml"),
+                        StandardCharsets.UTF_8);
+        int ruta = yaml.indexOf("  \"/seguridad/auditoria\":");
+        assertThat(ruta).as("la ruta de la bitacora esta en el contrato").isPositive();
+        int parametro = yaml.indexOf("- name: operacion", ruta);
+        assertThat(parametro).as("y declara el filtro «operacion»").isPositive();
+
+        Matcher vocabulario =
+                Pattern.compile("enum: \\[([^\\]]+)\\]").matcher(yaml.substring(parametro));
+        assertThat(vocabulario.find()).as("con su vocabulario dentro").isTrue();
+        return Arrays.stream(vocabulario.group(1).split(",")).map(String::strip).toList();
+    }
 
     private static Map<String, Set<String>> parametrosDeConsultaDelContrato() throws IOException {
         List<String> lineas =
@@ -405,23 +612,41 @@ class ParametrosDeLaConsultaTest {
                 String ruta = sinRaiz(base + primero(mapeo.path()));
                 Handler handler = new Handler(nombresDeConsulta(metodo), nombresDelCuerpo(metodo));
                 for (RequestMethod verbo : verbos(mapeo)) {
-                    publicados.put(verbo.name() + " " + ruta, handler);
+                    // Una misma operacion puede tener dos handlers: el contrato publica UNA ruta y
+                    // el controlador la parte por `params = "formato"` —el listado en JSON y el
+                    // mismo listado como documento—. Lo que la operacion sabe leer es la union de
+                    // los dos; quedarse con el ultimo declarado convertiria el orden del codigo
+                    // fuente en parte de la comprobacion.
+                    publicados.merge(verbo.name() + " " + ruta, handler, Handler::unido);
                 }
             }
         }
         return publicados;
     }
 
-    /** Los {@code @RequestParam} del metodo, con el nombre con el que viajan. */
+    /**
+     * Lo que el metodo lee de la consulta: sus {@code @RequestParam} y lo que Spring le enlaza.
+     *
+     * <p>Los dos, y no solo el primero: un parametro <b>sin anotar</b> cuyo tipo es un record —
+     * {@link pe.gob.sgtm.web.ParametrosDePaginacion} en las 100 lecturas paginadas— lo compone
+     * Spring de la consulta, componente a componente. Contarlo solo por su anotacion diria que
+     * ningun controlador lee {@code pagina}, y el contrato la declara en todas.
+     */
     private static Set<String> nombresDeConsulta(Method metodo) {
         Set<String> nombres = new LinkedHashSet<>();
         for (Parameter parametro : metodo.getParameters()) {
             RequestParam anotacion = parametro.getAnnotation(RequestParam.class);
-            if (anotacion == null) {
+            if (anotacion != null) {
+                String declarado =
+                        anotacion.name().isEmpty() ? anotacion.value() : anotacion.name();
+                nombres.add(declarado.isEmpty() ? parametro.getName() : declarado);
                 continue;
             }
-            String declarado = anotacion.name().isEmpty() ? anotacion.value() : anotacion.name();
-            nombres.add(declarado.isEmpty() ? parametro.getName() : declarado);
+            if (parametro.getAnnotations().length == 0 && parametro.getType().isRecord()) {
+                for (RecordComponent componente : parametro.getType().getRecordComponents()) {
+                    nombres.add(componente.getName());
+                }
+            }
         }
         return nombres;
     }
