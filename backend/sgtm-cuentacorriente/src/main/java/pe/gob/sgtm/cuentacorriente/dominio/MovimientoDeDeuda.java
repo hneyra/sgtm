@@ -78,6 +78,54 @@ public record MovimientoDeDeuda(
         }
     }
 
+    /**
+     * El mismo movimiento, cuota a cuota: uno por cada periodo del rango (#538).
+     *
+     * <p>Un rango de cuotas <b>no es una obligacion</b>, son {@code n}: {@link ClaveDeSaldo}
+     * compara el {@code periodo} por igualdad, asi que «cuotas 1 a 4 del predial 2026» son cuatro
+     * filas distintas de {@code saldo_proyectado} y cuatro cuentas distintas que cobrar. Aqui se
+     * expande, y el resto del camino sigue tratando una obligacion cada vez.
+     *
+     * <p><b>El desglose se repite entero en cada cuota, no se reparte entre ellas.</b> Repartir
+     * exigiria decidir donde cae el centimo que no cabe —{@code 100,00} entre tres son {@code
+     * 33,33} tres veces y sobra uno—, y eso es una politica de redondeo (D-03), no una division: el
+     * proyecto ya la tiene decidida para el cronograma de un convenio ({@code Cronograma}, #35) y
+     * resolverla exige un conjunto sellado que hoy no existe. Copiar no decide nada: cada centimo
+     * que sale es un centimo que entro.
+     *
+     * <p>Lo que si queda pendiente es que la <b>pantalla</b> lo diga, porque el rotulo del manual
+     * es «Insoluto (S/)» a secas junto a «Cuota desde»/«Cuota hasta» y no dice de cual de las dos
+     * cosas habla; ver el javadoc de {@code MovimientosDeDeudaController}.
+     *
+     * @param cuotas las cuotas que el acto abarca; {@link RangoDeCuotas#ANUAL} deja el movimiento
+     *     como esta
+     */
+    public List<MovimientoDeDeuda> enCadaCuota(RangoDeCuotas cuotas) {
+        Objects.requireNonNull(cuotas, "El acto abarca al menos una cuota");
+        List<MovimientoDeDeuda> unoPorCuota = new ArrayList<>(cuotas.cuantas());
+        for (int periodo : cuotas.periodos()) {
+            unoPorCuota.add(
+                    new MovimientoDeDeuda(
+                            sentido,
+                            new ClaveDeSaldo(
+                                    clave.contribuyenteId(),
+                                    clave.tributo(),
+                                    clave.ejercicio(),
+                                    periodo,
+                                    clave.predioId(),
+                                    clave.vehiculoId()),
+                            insoluto,
+                            reajuste,
+                            interes,
+                            gasto,
+                            fase,
+                            fechaValor,
+                            documentoOrigen,
+                            referenciaExterna));
+        }
+        return List.copyOf(unoPorCuota);
+    }
+
     /** La suma de las cuatro partes: lo que este movimiento incorpora o extingue en total. */
     public Dinero total() {
         return insoluto.mas(reajuste).mas(interes).mas(gasto);

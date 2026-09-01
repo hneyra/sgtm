@@ -10,6 +10,7 @@ import pe.gob.sgtm.cuentacorriente.dominio.CalculoDeDeuda;
 import pe.gob.sgtm.cuentacorriente.dominio.ClaveDeSaldo;
 import pe.gob.sgtm.cuentacorriente.dominio.DeudaActualizada;
 import pe.gob.sgtm.cuentacorriente.dominio.MovimientoDeDeuda;
+import pe.gob.sgtm.cuentacorriente.dominio.RangoDeCuotas;
 import pe.gob.sgtm.cuentacorriente.dominio.SentidoDelMovimiento;
 import pe.gob.sgtm.documentos.EmitirDocumento;
 import pe.gob.sgtm.documentos.FormatoDeDocumento;
@@ -67,27 +68,73 @@ public class RegistrarMovimientoDeDeuda {
     }
 
     /**
-     * Registra el movimiento y devuelve los asientos que produjo.
+     * Registra el movimiento sobre <b>una</b> obligacion: la que su propia clave identifica.
      *
-     * <p>{@code @Transactional} aqui y no solo en {@link RegistrarAsiento}: un movimiento con
-     * desglose produce varios asientos, y o entran todos o no entra ninguno. Media baja asentada
-     * —el insoluto si, el interes no— dejaria una deuda que no corresponde ni a antes ni a despues,
-     * y sin nada que dijera que falto la otra mitad.
+     * <p>Atajo de {@link #registrar(MovimientoDeDeuda, RangoDeCuotas, String, Observacion)} para
+     * quien no abarca ningun rango: los contextos que generan cargos por su cuenta —licencias,
+     * anuncios, tesoreria, coactiva— y que ya traen su propia transaccion.
      *
-     * @param codigoContribuyente el codigo que se imprime en el formato; el identificador ya viaja
-     *     dentro del movimiento, y el codigo es lo que el papel tiene que mostrar
-     * @param observacion por que se registra; sin ella no se guarda (regla 10, RNF-052)
+     * <p><b>Lleva su propio {@code @Transactional} y no lo hereda del metodo al que delega</b>: una
+     * llamada de un metodo de la clase a otro <b>no pasa por el proxy</b>, asi que la anotacion del
+     * otro seria inerte y este camino correria sin transaccion —y sin transaccion no hay {@code SET
+     * LOCAL}, de modo que la politica RLS no devuelve vacio: revienta (#486)—. Es el mismo defecto
+     * de auto-invocacion que #400 encontro en el importador de fichas.
      */
     @Transactional
     public Registro registrar(
             MovimientoDeDeuda movimiento, String codigoContribuyente, Observacion observacion) {
-        if (movimiento.sentido() == SentidoDelMovimiento.BAJA) {
-            verificarQueNoExcedeLaDeuda(movimiento);
-        }
+        return registrar(
+                movimiento,
+                RangoDeCuotas.deUnaSola(movimiento.clave().periodo()),
+                codigoContribuyente,
+                observacion);
+    }
+
+    /**
+     * Registra el acto sobre las cuotas que abarca y devuelve <b>todos</b> los asientos que
+     * produjo.
+     *
+     * <p>{@code @Transactional} aqui y no solo en {@link RegistrarAsiento}: un movimiento con
+     * desglose produce varios asientos, y o entran todos o no entra ninguno. Media baja asentada
+     * —el insoluto si, el interes no— dejaria una deuda que no corresponde ni a antes ni a despues,
+     * y sin nada que dijera que falto la otra mitad. Con un rango de cuotas la exigencia es la
+     * misma un escalon mas arriba: media baja de «cuotas 1 a 4» —tres si y la cuarta no, porque no
+     * cabia— dejaria un acto que ningun papel explica.
+     *
+     * <h2>Un acto, n obligaciones, un solo documento</h2>
+     *
+     * <p>El rango se expande a las {@code n} claves que de verdad se mueven ({@link
+     * MovimientoDeDeuda#enCadaCuota}) y cada una se comprueba y se asienta por separado —son
+     * obligaciones distintas y la deuda vigente de una no dice nada de la otra—. Lo que <b>no</b>
+     * se multiplica es el papel: la nota de abono o de cargo es <b>una</b>, la del acto, y lleva
+     * dentro las cuotas que cubre y sus asientos. Emitir una por cuota daria {@code n} numeros
+     * correlativos para un solo sustento documental y ninguna respuesta podria decir cual devolver.
+     *
+     * @param movimiento el desglose, la fase, la fecha valor y el sustento del acto; su clave
+     *     identifica el tributo, el ejercicio y la unidad, y el rango dice sobre que cuotas cae
+     * @param cuotas las cuotas que el acto abarca; {@link RangoDeCuotas#ANUAL} para la obligacion
+     *     que no se divide
+     * @param codigoContribuyente el codigo que se imprime en el formato; el identificador ya viaja
+     *     dentro del movimiento, y el codigo es lo que el papel tiene que mostrar
+     * @param observacion por que se registra; sin ella no se guarda (regla 10, RNF-052). Es
+     *     <b>una</b> para el acto y queda copiada en los {@code n} asientos: lo que se explica es
+     *     por que se dio de alta la deuda, no por que se dio de alta cada cuota
+     */
+    @Transactional
+    public Registro registrar(
+            MovimientoDeDeuda movimiento,
+            RangoDeCuotas cuotas,
+            String codigoContribuyente,
+            Observacion observacion) {
 
         List<Asiento> guardados = new ArrayList<>();
-        for (Asiento asiento : movimiento.enAsientos()) {
-            guardados.add(registrarAsiento.asentar(asiento, observacion));
+        for (MovimientoDeDeuda deLaCuota : movimiento.enCadaCuota(cuotas)) {
+            if (deLaCuota.sentido() == SentidoDelMovimiento.BAJA) {
+                verificarQueNoExcedeLaDeuda(deLaCuota);
+            }
+            for (Asiento asiento : deLaCuota.enAsientos()) {
+                guardados.add(registrarAsiento.asentar(asiento, observacion));
+            }
         }
         List<Asiento> asentados = List.copyOf(guardados);
 
@@ -96,7 +143,7 @@ public class RegistrarMovimientoDeDeuda {
                         FormatoDelMovimiento.tipoDe(movimiento.sentido()),
                         movimiento.clave().ejercicio(),
                         movimiento.documentoOrigen(),
-                        FormatoDelMovimiento.de(movimiento, asentados, codigoContribuyente),
+                        FormatoDelMovimiento.de(movimiento, cuotas, asentados, codigoContribuyente),
                         FormatoDeDocumento.PDF,
                         observacion);
 
