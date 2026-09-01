@@ -208,61 +208,52 @@ class EstadoDelEjercicioTest {
     }
 
     // ------------------------------------------------------------------
-    //  AC 2 — la fila de ACCESO
+    //  AC 2 — la bitacora: esta lectura NO deja fila, y por que
     // ------------------------------------------------------------------
 
     @Test
-    @DisplayName("deja su fila de ACCESO cuando el ejercicio SI esta sellado")
-    void dejaSuFilaDeAccesoCuandoEstaSellado() throws SQLException {
+    @DisplayName(
+            "no deja fila de ACCESO: es la unica lectura fuera del catalogo, y auditar aqui es una escritura sin cota")
+    void noDejaFilaDeAcceso() throws SQLException {
         fijarContexto(municipalidad);
         long antes = accesosAlEjercicio(SELLADO);
 
         administrar.estadoDelEjercicio(SELLADO);
-
-        assertThat(accesosAlEjercicio(SELLADO)).isEqualTo(antes + 1);
-    }
-
-    @Test
-    @DisplayName("y la deja tambien cuando NO lo esta, que hoy es el caso normal")
-    void dejaSuFilaDeAccesoCuandoNoEstaSellado() throws SQLException {
-        fijarContexto(municipalidad);
-        long antes = accesosAlEjercicio(SOLO_ABIERTO);
-
         administrar.estadoDelEjercicio(SOLO_ABIERTO);
-
-        assertThat(accesosAlEjercicio(SOLO_ABIERTO))
-                .as(
-                        "si solo quedara constancia de los ejercicios parametrizados, la bitacora"
-                                + " contaria justamente las consultas que no hacen falta")
-                .isEqualTo(antes + 1);
-    }
-
-    @Test
-    @DisplayName("la fila dice quien pregunto, por que ano y que se le contesto")
-    void laFilaDiceQuienPreguntoYQueSeLeContesto() throws SQLException {
-        fijarContexto(municipalidad, "cajero.ventanilla");
-
         administrar.estadoDelEjercicio(SIN_NINGUNA_VERSION);
 
-        try (Connection admin = base.conexionAdmin();
-                PreparedStatement sentencia =
-                        admin.prepareStatement(
-                                "SELECT usuario_id, operacion, datos_nuevos::text FROM auditoria"
-                                        + " WHERE municipalidad_id = ? AND tabla ="
-                                        + " 'conjunto_parametros' AND clave = ?"
-                                        + " ORDER BY id DESC LIMIT 1")) {
-            sentencia.setLong(1, municipalidad);
-            sentencia.setString(2, "ejercicio=" + SIN_NINGUNA_VERSION.valor());
-            try (ResultSet fila = sentencia.executeQuery()) {
-                assertThat(fila.next()).isTrue();
-                assertThat(fila.getString(1)).isEqualTo("cajero.ventanilla");
-                assertThat(fila.getString(2)).isEqualTo("ACCESO");
-                assertThat(fila.getString(3))
-                        .as("quien recorra 1990 a 2100 deja su nombre en cada intento")
-                        .contains("\"ejercicio\": 2040")
-                        .contains("\"sellado\": false");
-            }
-        }
+        assertThat(accesosAlEjercicio(SELLADO))
+                .as(
+                        "el AC 2 pedia la fila, y medirlo cambio la respuesta: este endpoint es el"
+                                + " unico del sistema FUERA del catalogo —SESION_PROPIA, para que"
+                                + " un cajero pueda preguntarlo sin el permiso de parametros—, y"
+                                + " los cinco escritores de ACCESO que ya existen estan todos"
+                                + " detras de un acceso del catalogo o de la cadena firmada del"
+                                + " ciudadano. Auditar aqui deja una escritura SIN COTA al alcance"
+                                + " de cualquier token valido sobre una tabla append-only por"
+                                + " diseno: sin DELETE (regla 4, RNF-051), sin poda y sin limite de"
+                                + " peticiones. Recorrer 1990..2100 en bucle la haria crecer sin"
+                                + " que nada lo pare")
+                .isEqualTo(antes);
+    }
+
+    @Test
+    @DisplayName("y la lectura es de solo lectura: readOnly, no una transaccion de escritura")
+    void laTransaccionEsDeSoloLectura() throws Exception {
+        org.springframework.transaction.annotation.Transactional anotacion =
+                AdministrarParametros.class
+                        .getMethod("estadoDelEjercicio", Ejercicio.class)
+                        .getAnnotation(
+                                org.springframework.transaction.annotation.Transactional.class);
+
+        assertThat(anotacion)
+                .as("sin transaccion no hay SET LOCAL y la politica RLS revienta con 500 (#486)")
+                .isNotNull();
+        assertThat(anotacion.readOnly())
+                .as(
+                        "declararla de escritura invitaria a volver a meterle una fila de bitacora,"
+                                + " que es justo lo que la prueba de arriba impide")
+                .isTrue();
     }
 
     // ------------------------------------------------------------------
@@ -303,9 +294,10 @@ class EstadoDelEjercicioTest {
     }
 
     @Test
-    @DisplayName("preguntar desde una municipalidad no deja rastro en la otra")
-    void preguntarNoDejaRastroEnLaVecina() throws SQLException {
+    @DisplayName("preguntar no deja rastro en NINGUNA de las dos municipalidades")
+    void preguntarNoDejaRastroEnNinguna() throws SQLException {
         fijarContexto(municipalidad);
+        long aqui = accesosDe(municipalidad, SELLADO_EN_LA_VECINA);
         long enLaVecina = accesosDe(municipalidadVecina, SELLADO_EN_LA_VECINA);
 
         administrar.estadoDelEjercicio(SELLADO_EN_LA_VECINA);
@@ -316,8 +308,11 @@ class EstadoDelEjercicioTest {
                                 + " que alguien pregunto desde otro (ADR-0020 §5)")
                 .isEqualTo(enLaVecina);
         assertThat(accesosDe(municipalidad, SELLADO_EN_LA_VECINA))
-                .as("la fila cae en la municipalidad que pregunta")
-                .isPositive();
+                .as(
+                        "y tampoco en la que pregunta: esta lectura no audita, porque es la unica"
+                                + " fuera del catalogo y auditarla dejaria una escritura sin cota"
+                                + " sobre una tabla append-only al alcance de cualquier token")
+                .isEqualTo(aqui);
     }
 
     // ------------------------------------------------------------------

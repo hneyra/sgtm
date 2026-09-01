@@ -167,23 +167,23 @@ class ParametrosControllerTest {
     }
 
     @Test
-    @DisplayName("preguntar deja su fila de ACCESO, tambien cuando la respuesta es que no")
-    void preguntarDejaSuFilaDeAcceso() throws Exception {
+    @DisplayName("preguntar no deja ninguna fila de bitacora, ni siquiera recorriendo el rango")
+    void preguntarNoDejaFilaDeBitacora() throws Exception {
         pedir(2027);
+        pedir(2028);
+        pedir(2029);
 
-        assertThat(bitacora).hasSize(1);
-        RegistroDeAuditoria registro = bitacora.get(0);
-        assertThat(registro.operacion().name()).isEqualTo("ACCESO");
-        assertThat(registro.tabla()).isEqualTo("conjunto_parametros");
-        assertThat(registro.clave()).isEqualTo("ejercicio=2027");
-        assertThat(registro.ejercicio())
+        assertThat(bitacora)
                 .as(
-                        "la particion de la bitacora es el ejercicio del ACTO: preguntar en 2026"
-                                + " por 2027 es un acto de 2026")
-                .isEqualTo(new Ejercicio(2026));
-        assertThat(registro.observacion().texto())
-                .as("la compone el sistema, porque aqui no hay usuario que observe (regla 10)")
-                .contains("2027");
+                        "el AC 2 pedia la fila; medirlo cambio la respuesta. Este es el unico"
+                                + " endpoint FUERA del catalogo (SESION_PROPIA), y los cinco"
+                                + " escritores de ACCESO que ya existen estan todos detras de un"
+                                + " acceso del catalogo o de la cadena firmada del ciudadano."
+                                + " Auditar aqui pone una escritura SIN COTA al alcance de"
+                                + " cualquier token valido sobre una tabla append-only: sin DELETE"
+                                + " (regla 4, RNF-051), sin poda y sin limite de peticiones —"
+                                + " recorrer 1990..2100 la haria crecer sin que nada lo pare")
+                .isEmpty();
     }
 
     // ------------------------------------------------------------------

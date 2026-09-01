@@ -1691,8 +1691,16 @@ const OPERACIONES_ADICIONALES = {
         calcula).
 
         **«No hay conjunto sellado» es 200 diciendo que no**, no un 404: la pregunta es si
-        se puede calcular y la respuesta puede ser que no. Un ejercicio **fuera del rango
+        **hay conjunto sellado** y la respuesta puede ser que no. Conviene no leerla como
+        «se puede calcular»: sin conjunto sellado seguro que **no** se puede, pero con él
+        el cálculo puede fallar igual si falta dentro alguna llave que la regla pida —el
+        422 que nombra la llave (#547, #562)—. Esta lectura adelanta la primera mitad, que
+        es la que hoy falla en todas las municipalidades. Un ejercicio **fuera del rango
         1990 a 2100** sí es distinto, y sale 422 nombrando el rango.
+
+        **No deja fila en la bitácora**, a diferencia de las demás lecturas que registran
+        \`ACCESO\`: es la única fuera del catálogo, y auditarla pondría una escritura sin
+        cota, sobre una tabla que no se poda, al alcance de cualquier token válido.
 
         Autenticada, pero **no es una opción del catálogo**: exigir \`parametros\` —del
         módulo Seguridad— dejaría esta lectura fuera del alcance de quien la necesita, y

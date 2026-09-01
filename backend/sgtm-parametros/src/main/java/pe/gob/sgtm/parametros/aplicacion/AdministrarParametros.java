@@ -82,26 +82,33 @@ public class AdministrarParametros {
      * permiso de {@code parametros} (REQ-03: quien opera el sistema no publica las cifras con las
      * que se calcula).
      *
-     * <p><b>«No hay conjunto sellado» es una respuesta, no un error.</b> La pregunta es «¿esta
-     * parametrizado?» y su respuesta puede ser que no; devolver vacio obligaria a quien pregunta a
-     * distinguir dos ausencias que aqui no son distintas —un ejercicio sin ninguna version y uno
-     * con la version abierta— porque para calcular las dos valen igual. Lo que si tiene que salir
-     * distinto es un ejercicio <b>fuera de rango</b>, y sale: {@link Ejercicio} lo rechaza en su
-     * constructor y el borde lo traduce a 422.
+     * <p><b>«No hay conjunto sellado» es una respuesta, no un error.</b> La pregunta es «¿hay
+     * conjunto sellado para este ejercicio?» —no «¿se puede calcular?», que depende ademas de que
+     * cada llave que la regla pida este dentro— y su respuesta puede ser que no; devolver vacio
+     * obligaria a quien pregunta a distinguir dos ausencias que aqui no son distintas —un ejercicio
+     * sin ninguna version y uno con la version abierta— porque para calcular las dos valen igual.
+     * Lo que si tiene que salir distinto es un ejercicio <b>fuera de rango</b>, y sale: {@link
+     * Ejercicio} lo rechaza en su constructor y el borde lo traduce a 422.
      *
-     * <p>La observacion la compone el sistema y no el usuario, porque aqui no hay usuario que
-     * observe: nadie escribe un motivo para preguntar si un ejercicio esta parametrizado. Es la
-     * excepcion que {@code ConObservacionEnLasEscrituras.SIN_USUARIO_QUE_OBSERVE} nombra con este
-     * metodo y su porque.
+     * <p><b>No deja fila en la bitacora, y es deliberado.</b> Es el unico endpoint del sistema
+     * fuera del catalogo de opciones —{@code SESION_PROPIA}, para que un cajero con {@code
+     * fraccionamiento} pueda preguntarlo sin necesitar el permiso de {@code parametros}—, y los
+     * cinco escritores de {@code Operacion.ACCESO} que ya existen estan todos detras de un acceso
+     * del catalogo o de la cadena firmada del ciudadano. Auditar aqui pondria una escritura <b>sin
+     * cota</b> al alcance de cualquier token valido, sobre una tabla que es append-only por diseno:
+     * no hay {@code DELETE} (regla 4, RNF-051), no hay poda y no hay limite de peticiones.
+     *
+     * <p>Y no hace falta: lo que se publica no es dato del padron sino si la propia instalacion
+     * tiene sellado un ejercicio suyo, igual que {@code permisos_de_la_sesion} (ADR-0013) y {@code
+     * sesion/municipalidad} (#555), que tampoco auditan. Lo que sigue detras del permiso de {@code
+     * parametros} son las cifras (REQ-03).
      */
-    @Transactional
+    @Transactional(readOnly = true)
     public EstadoDelEjercicio estadoDelEjercicio(Ejercicio ejercicio) {
         Objects.requireNonNull(ejercicio, "La pregunta es por un ejercicio concreto");
 
-        ConjuntoDeParametros sellado = repositorio.selladoVigenteDe(ejercicio).orElse(null);
-
-        registrarElAcceso(ejercicio, sellado);
-        return new EstadoDelEjercicio(ejercicio, sellado);
+        return new EstadoDelEjercicio(
+                ejercicio, repositorio.selladoVigenteDe(ejercicio).orElse(null));
     }
 
     /**
@@ -237,42 +244,6 @@ public class AdministrarParametros {
                                         CodigoDeError.NO_ENCONTRADO,
                                         "No hay ningun conjunto de parametros con identificador "
                                                 + id));
-    }
-
-    /**
-     * La fila de la bitacora de {@link #estadoDelEjercicio}, en su misma transaccion.
-     *
-     * <p>Se escribe <b>tambien cuando no hay conjunto sellado</b>, que hoy es el caso normal: si
-     * solo quedara constancia de los ejercicios parametrizados, la bitacora contaria justamente las
-     * consultas que no hacen falta. Es el mismo criterio de {@code
-     * ConsultaDeTitulares.registrarElAcceso}.
-     */
-    private void registrarElAcceso(Ejercicio ejercicio, @Nullable ConjuntoDeParametros sellado) {
-        auditoria.registrar(
-                RegistroDeAuditoria.enLaFechaDe(
-                                // Del reloj inyectado, no del ejercicio consultado: la particion
-                                // de la bitacora es el ejercicio del ACTO, y preguntar en 2026 por
-                                // 2024 es un acto de 2026.
-                                LocalDate.now(reloj),
-                                "conjunto_parametros",
-                                "ejercicio=" + ejercicio.valor(),
-                                Operacion.ACCESO,
-                                Observacion.de(
-                                        "Consulta de si el ejercicio "
-                                                + ejercicio.valor()
-                                                + " tiene conjunto de parametros sellado, antes de"
-                                                + " calcular (#605, ADR-0007)"))
-                        // Solo cifras: aqui no entra texto del usuario, asi que no hay comilla
-                        // que pueda romper el cast a jsonb.
-                        .con(
-                                null,
-                                "{\"ejercicio\":"
-                                        + ejercicio.valor()
-                                        + ",\"sellado\":"
-                                        + (sellado != null)
-                                        + ",\"conjuntoId\":"
-                                        + (sellado == null ? "null" : sellado.id())
-                                        + "}"));
     }
 
     /**

@@ -98,7 +98,10 @@ public class ParametrosController {
      * Si el ejercicio tiene conjunto sellado, y cual.
      *
      * <p><b>No lleva ninguna cifra</b>, y esa ausencia es la mitad de la decision: la pregunta que
-     * contesta es si se puede calcular, no con que valores. Tampoco lleva {@code usuarioSellado} ni
+     * contesta es si <b>hay conjunto sellado</b>, no con que valores — y no exactamente «si se
+     * puede calcular»: sin conjunto no se puede, pero con el el calculo puede fallar igual si falta
+     * dentro alguna llave que la regla pida (#547, #562). Lo que adelanta es la primera mitad, que
+     * es la que hoy falla en todas las municipalidades. Tampoco lleva {@code usuarioSellado} ni
      * {@code fechaSellado} —eso es de la pantalla de parametros, detras de su permiso—; aqui basta
      * la identidad del conjunto, que es lo que una determinacion guarda para poder repetirse.
      *
