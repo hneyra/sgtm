@@ -118,3 +118,38 @@ export function altaDeDeuda(peticion: PeticionDeMovimientoDeDeuda): Promise<unkn
 export function bajaDeDeuda(peticion: PeticionDeMovimientoDeDeuda): Promise<unknown> {
   return solicitar('/rentas/deuda/bajas', { metodo: 'POST', cuerpo: peticion });
 }
+
+
+/* ══════════ Indicadores y corrida ══════════ */
+
+/** Es `IndicadoresResource`. Los importes llevan su fecha (regla 9). */
+export type Indicadores = {
+  ejercicio: number;
+  fechaCalculo: string;
+  kpis: { label: string; value: string; note: string; importe: { importe: string; actualizadoA: string } | null }[];
+};
+
+/**
+ * El panel de recaudacion. Es el de INICIO (ARQ-01 §3.13), no el de un modulo:
+ * no hay ninguna operacion de «panel de Rentas», y Rentas toma de aqui el
+ * avance de cobranza porque es la unica lectura que lo publica.
+ */
+export function indicadores(ejercicio: string, senal?: AbortSignal): Promise<Indicadores> {
+  return solicitar('/indicadores/recaudacion', { parametros: { ejercicio }, senal });
+}
+
+/**
+ * La ultima corrida masiva del predial.
+ *
+ * **Devuelve 204 cuando no hay ninguna**, que es el estado de hoy: `solicitar`
+ * lo traduce a `undefined`, y la pantalla lo dice en vez de dibujar un embudo
+ * con ceros que se leeria como una corrida que salio vacia.
+ */
+export type CorridaPredial = {
+  etapas: { etapa: string; registros: number; monto: string | null; observados: number; estado: string }[];
+  observados: number;
+};
+
+export function ultimaCorridaPredial(senal?: AbortSignal): Promise<CorridaPredial | undefined> {
+  return solicitar('/rentas/predial/corridas/ultima', { senal });
+}

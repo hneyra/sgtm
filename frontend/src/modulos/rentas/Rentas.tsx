@@ -5,6 +5,8 @@ import {
   altaDeDeuda,
   bajaDeDeuda,
   buscarContribuyentes,
+  indicadores,
+  ultimaCorridaPredial,
   transferirPredio,
   transferirVehiculo,
 } from '../../api/rentas';
@@ -27,10 +29,8 @@ import {
   DJ_FILAS,
   DJ_META,
   DJ_TOTALES,
-  ETAPAS_DE_LA_EMISION,
   EXPEDIENTE,
   FILAS_DE_LA_BAJA,
-  KPIS_DEL_PANEL,
   OPCIONES_DE_RENTAS,
   RESUMEN_DEL_EXPEDIENTE,
   TIPOS_DE_DETERMINACION,
@@ -478,6 +478,16 @@ export default function Rentas({ dest, onDest }: PantallaProps) {
   const pasoActual = trDef.pasos[paso];
 
   const [registrando, setRegistrando] = useState(false);
+
+  /* ── El panel ─────────────────────────────────────────────────
+     No hay «panel de Rentas» en el contrato: el unico panel es el de
+     recaudacion, que es el de Inicio (ARQ-01 §3.13). De ahi sale el avance de
+     cobranza; el censo del padron, de su propia lectura; y el embudo, de la
+     ultima corrida masiva, que hoy no existe. */
+  const enPanel = dest === 'panel';
+  const censoDelPadron = useRecurso((s2) => buscarContribuyentes({}, { tamano: 1 }, s2), [], enPanel);
+  const kpisDeRecaudacion = useRecurso((s2) => indicadores(pref.ejercicio, s2), [pref.ejercicio], enPanel);
+  const corrida = useRecurso((s2) => ultimaCorridaPredial(s2), [], enPanel);
   /* La observación del acto. El manual no le dibuja campo y toda escritura la
      exige (regla 10), así que es un control añadido con su propio rótulo. */
   const [observacionDelActo, setObservacionDelActo] = useState('');
@@ -588,6 +598,61 @@ export default function Rentas({ dest, onDest }: PantallaProps) {
     }
   };
 
+  /* Los cuatro indicadores del panel. Dos los sostiene una lectura; los otros
+     dos salen «—» diciendo que falta, en vez de una cifra inventada. */
+  const avanceDeCobranza = kpisDeRecaudacion.datos?.kpis.find((k) => k.label === 'Avance de cobranza');
+  const kpisDelPanel = [
+    {
+      valor: censoDelPadron.cargando
+        ? '…'
+        : censoDelPadron.datos
+          ? censoDelPadron.datos.totalElementos.toLocaleString('es-PE')
+          : '—',
+      etiqueta: 'Contribuyentes en el padrón',
+      nota: 'Los que hay hoy, activos y de baja.',
+    },
+    {
+      /* «Predial determinado» no lo publica ningún KPI: el panel de recaudación
+         da recaudado, cartera y avance, no lo determinado por tributo. */
+      valor: '—',
+      etiqueta: `Predial determinado ${pref.ejercicio}`,
+      nota: 'Ninguna lectura publica lo determinado por tributo.',
+    },
+    {
+      valor: corrida.datos ? String(corrida.datos.observados) : '—',
+      etiqueta: 'Observados sin emisión',
+      nota: corrida.datos ? 'De la última corrida masiva.' : 'No hay ninguna corrida masiva todavía.',
+    },
+    {
+      valor: avanceDeCobranza?.value ?? '—',
+      etiqueta: 'Recaudado del emitido',
+      nota: avanceDeCobranza?.note ?? 'Del panel de recaudación.',
+    },
+  ];
+
+  /**
+   * El embudo de la emisión.
+   *
+   * `CorridaPredialResource.Etapa` publica `(etapa, registros, monto,
+   * observados, estado)` y **no `pct`**: la barra de avance del artboard no
+   * tiene origen, así que se dibuja sobre los registros de la etapa mayor. Y
+   * las etiquetas son las del backend —tres—, no las cinco del prototipo:
+   * ninguna de las cinco coincide letra por letra con ninguna de las tres, y
+   * traducirlas sería inventar el mapeo.
+   */
+  const etapasDeLaEmision = (() => {
+    const etapas = corrida.datos?.etapas ?? [];
+    if (etapas.length === 0) return [];
+    const mayor = Math.max(...etapas.map((e) => e.registros), 1);
+    return etapas.map((e) => ({
+      etapa: e.etapa,
+      pct: Math.round((e.registros / mayor) * 100),
+      registros: e.registros.toLocaleString('es-PE'),
+      estado: e.estado,
+      tono: e.observados > 0 ? 'warn' : 'ok',
+    }));
+  })();
+
   const esExpediente = (dest === 'padron' && sujeto !== null) || esNuevo;
   const esDeuda = dest === 'deuda';
 
@@ -663,9 +728,15 @@ export default function Rentas({ dest, onDest }: PantallaProps) {
             <section style={TARJETA}>
               <div style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '13px 16px', borderBottom: '1px solid var(--line)' }}>
                 <h2 style={H2}>Estado de la emisión {pref.ejercicio}</h2>
-                <span style={META}>Última corrida 28/01/2026 — 02:14 h</span>
+                <span style={META}>{corrida.datos ? `${corrida.datos.etapas.length} etapas` : 'sin corridas'}</span>
               </div>
-              {ETAPAS_DE_LA_EMISION.map((e) => (
+              {etapasDeLaEmision.length === 0 && (
+                <p style={{ margin: 0, padding: '16px', fontSize: 12.5, lineHeight: 1.55, color: 'var(--ink-3)', textWrap: 'pretty' }}>
+                  No hay ninguna corrida masiva del predial todavía, así que no hay emisión que seguir. El embudo aparece cuando se lance
+                  la primera; dibujarlo ahora con ceros se leería como una corrida que salió vacía.
+                </p>
+              )}
+              {etapasDeLaEmision.map((e) => (
                 <div key={e.etapa} style={{ display: 'flex', alignItems: 'center', gap: 14, padding: '12px 16px', borderBottom: '1px solid var(--line)' }}>
                   <span style={{ flex: '0 0 210px', fontSize: 13, color: 'var(--ink)' }}>{e.etapa}</span>
                   <span style={{ flex: 1, minWidth: 60, height: 6, borderRadius: 999, background: 'var(--accent-soft)', overflow: 'hidden' }}>
@@ -686,7 +757,7 @@ export default function Rentas({ dest, onDest }: PantallaProps) {
             </section>
 
             <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit,minmax(196px,1fr))', gap: 13 }}>
-              {KPIS_DEL_PANEL.map((k) => (
+              {kpisDelPanel.map((k) => (
                 <div
                   key={k.etiqueta}
                   style={{
