@@ -1,0 +1,65 @@
+package pe.gob.sgtm.seguridad.infraestructura.web;
+
+import static org.assertj.core.api.Assertions.assertThat;
+
+import org.junit.jupiter.api.DisplayName;
+import org.junit.jupiter.api.Test;
+import pe.gob.sgtm.autorizacion.Privilegio;
+import pe.gob.sgtm.autorizacion.RequiereAcceso;
+import pe.gob.sgtm.web.ParametrosDePaginacion;
+
+/**
+ * Las dos lecturas de #543 declaran su acceso <b>en el metodo</b>, y cual.
+ *
+ * <h2>Por que esto no lo cubre ArchUnit</h2>
+ *
+ * <p>La regla de {@code verificarArquitectura} exige la anotacion «en la clase <b>o</b> en cada
+ * endpoint». {@link PermisosDeUsuarioController} declara un {@code @RequestMapping} de clase y hoy
+ * un solo metodo: si mañana alguien le añade una escritura sin anotarla, heredaria el {@code
+ * LECTURA} de esta y ArchUnit seguiria en verde. Es el hueco que #431 encontro en {@code
+ * ProgramasController} y #489 en el alta de predio, aqui puesto por delante.
+ *
+ * <p>Y sobre {@link SeguridadController} la comprobacion dice otra cosa: <b>que acceso</b> exige la
+ * lectura nueva. Elegir uno u otro no es un detalle de estilo —decide quien puede abrir la pantalla
+ * que la consume— y no hay ninguna otra prueba que lo fije.
+ */
+@DisplayName("El acceso de las dos lecturas de un usuario (#543)")
+class AccesoDeLasLecturasDeUsuarioTest {
+
+    @Test
+    @DisplayName("los grupos de un usuario exigen LECTURA sobre «usuarios»")
+    void losGruposExigenLecturaSobreUsuarios() throws Exception {
+        RequiereAcceso enElMetodo =
+                SeguridadController.class
+                        .getMethod("gruposDeUsuario", long.class, ParametrosDePaginacion.class)
+                        .getAnnotation(RequiereAcceso.class);
+
+        assertThat(enElMetodo)
+                .as("la clase no declara ninguna: sin la del metodo esta lectura no tiene guardia")
+                .isNotNull();
+        assertThat(enElMetodo.acceso())
+                .as(
+                        "es una lectura SOBRE un usuario, y la grilla de «Usuarios del sistema» del"
+                                + " manual dibuja la columna «Grupo»; afiliarlo sigue siendo"
+                                + " «miembros» con REGISTRO")
+                .isEqualTo("usuarios");
+        assertThat(enElMetodo.privilegio()).isEqualTo(Privilegio.LECTURA);
+    }
+
+    @Test
+    @DisplayName("los permisos efectivos exigen LECTURA sobre «permisos»")
+    void losPermisosExigenLecturaSobrePermisos() throws Exception {
+        RequiereAcceso enElMetodo =
+                PermisosDeUsuarioController.class
+                        .getMethod("deUsuario", long.class)
+                        .getAnnotation(RequiereAcceso.class);
+
+        assertThat(enElMetodo)
+                .as("una escritura añadida despues no puede heredar en silencio este LECTURA")
+                .isNotNull();
+        assertThat(enElMetodo.acceso())
+                .as("la misma opcion del catalogo que la matriz de un grupo")
+                .isEqualTo("permisos");
+        assertThat(enElMetodo.privilegio()).isEqualTo(Privilegio.LECTURA);
+    }
+}

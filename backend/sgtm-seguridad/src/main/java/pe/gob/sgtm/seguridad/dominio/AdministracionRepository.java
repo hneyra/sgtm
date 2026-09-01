@@ -57,6 +57,21 @@ public interface AdministracionRepository {
 
     Optional<Miembro> miembro(long grupoId, long usuarioId);
 
+    /**
+     * A que grupos pertenece un usuario (#543).
+     *
+     * <p><b>Solo las pertenencias activas.</b> Una baja no se borra —la fila de {@code miembro}
+     * sigue ahi con {@code activo} en falso, RNF-051—, pero quien salio de un grupo ya no pertenece
+     * a el, y devolverlo aqui haria que la matriz de permisos atribuyera a un grupo lo que ese
+     * grupo ya no da.
+     *
+     * <p>Lo que <b>si</b> devuelve son los grupos inhabilitados o fuera de vigencia a los que se
+     * sigue perteneciendo: pertenecer y que el grupo surta efecto son dos cosas distintas, y {@link
+     * Grupo} publica su estado y su vigencia para que quien lea las separe. Esconderlos dejaria a
+     * quien administra sin saber por que alguien perdio sus permisos.
+     */
+    Pagina<Grupo> gruposDeUsuario(long usuarioId, Paginacion paginacion);
+
     /** Alta o baja de la pertenencia. Nunca borra: la fila queda con {@code activo} en falso. */
     Miembro guardar(Miembro miembro);
 }

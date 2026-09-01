@@ -31,6 +31,31 @@ import pe.gob.sgtm.web.ProblemaDeNegocio;
  *
  * <p>Las lecturas van en el mismo servicio y marcadas {@code readOnly}: no abren transaccion de
  * escritura y por tanto no exigen observacion, que es lo que la regla 10 distingue.
+ *
+ * <h2>Las ocho escrituras que ningun endpoint publica, censadas (#543)</h2>
+ *
+ * <p>{@link #registrarGrupo}, {@link #inhabilitarGrupo}, {@link #habilitarGrupo}, {@link
+ * #fijarVigenciaDeGrupo}, {@link #registrarUsuario}, {@link #inhabilitarUsuario}, {@link
+ * #habilitarUsuario} y {@link #fijarVigenciaDeUsuario} <b>solo las llaman las pruebas y {@code
+ * ImplantarMunicipalidad}</b>: no hay ninguna ruta en el contrato que llegue a ellas. Quedan
+ * nombradas aqui para que deje de ser un hallazgo cada vez que alguien mira, y porque el motivo no
+ * es el mismo para las dos mitades:
+ *
+ * <ul>
+ *   <li><b>Las cuatro de grupo</b> no tienen mas obstaculo que no habersele escrito su controlador:
+ *       un grupo es una fila de esta base y de ninguna otra.
+ *   <li><b>Las cuatro de usuario</b> si lo tienen, y es de diseño: un usuario son <b>dos
+ *       mitades</b> —la fila de {@code usuario} y la cuenta del proveedor de identidad (ADR-0005,
+ *       ADR-0012)—, y hoy la segunda se administra <b>declarativamente</b>, con un archivo por
+ *       municipalidad en {@code despliegue/identidad/} que reconcilia un guion. Publicar {@code
+ *       POST /seguridad/usuarios} exige decidir antes como se coordinan las dos —quien crea la
+ *       cuenta, que pasa si una de las dos falla, y que hace la reconciliacion con lo creado por
+ *       pantalla—, y eso es una decision que este issue no toma. Tiene issue propio: <b>#572</b>.
+ * </ul>
+ *
+ * <p>{@code AdministrarPermisos.fijarParaUsuario} esta en la misma situacion y por un motivo
+ * propio: es la excepcion de usuario, y escribirla sin poder <b>leerla</b> antes era administrar a
+ * ciegas. Leerla ya se puede ({@code GET /seguridad/usuarios/&#123;id&#125;/permisos}, #543).
  */
 @Service
 public class AdministrarSeguridad {
@@ -66,6 +91,23 @@ public class AdministrarSeguridad {
     @Transactional(readOnly = true)
     public Pagina<Usuario> usuarios(Paginacion paginacion) {
         return repositorio.usuarios(paginacion);
+    }
+
+    /**
+     * A que grupos pertenece un usuario (#543).
+     *
+     * <p>Sin esto no hay «heredado» que calcular: la matriz de permisos efectivos distingue lo
+     * propio de lo que viene del grupo, y quien la dibuja necesita saber a cuales pertenece.
+     *
+     * <p>Un usuario que no existe en esta municipalidad es <b>404</b>, no una pagina vacia. No
+     * pertenecer a ningun grupo y no existir son dos respuestas distintas y la segunda no se puede
+     * decir callando: una pagina vacia se leeria como «no tiene grupos», que es exactamente lo
+     * contrario de lo que hay que decirle a quien administra.
+     */
+    @Transactional(readOnly = true)
+    public Pagina<Grupo> gruposDeUsuario(long usuarioId, Paginacion paginacion) {
+        repositorio.usuario(usuarioId).orElseThrow(() -> noEncontrado("usuario", usuarioId));
+        return repositorio.gruposDeUsuario(usuarioId, paginacion);
     }
 
     // ------------------------------------------------------------------ grupos

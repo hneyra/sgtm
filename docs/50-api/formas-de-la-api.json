@@ -2616,6 +2616,7 @@
       "id": "entero",
       "acceso": "texto",
       "grupoId": "entero",
+      "usuarioId": "entero",
       "privilegios": [
         "texto"
       ]
@@ -2673,6 +2674,33 @@
     "totalPaginas": "entero",
     "hayMas": "booleano"
   },
+  "GET /seguridad/usuarios/{id}/grupos": {
+    "contenido": [
+      {
+        "id": "entero",
+        "nombre": "texto",
+        "descripcion": "texto",
+        "habilitado": "booleano",
+        "vigenciaDesde": "fecha",
+        "vigenciaHasta": "fecha"
+      }
+    ],
+    "pagina": "entero",
+    "tamano": "entero",
+    "totalElementos": "entero",
+    "totalPaginas": "entero",
+    "hayMas": "booleano"
+  },
+  "GET /seguridad/usuarios/{id}/permisos": [
+    {
+      "acceso": "texto",
+      "privilegios": [
+        "texto"
+      ],
+      "origen": "texto",
+      "grupoId": "entero"
+    }
+  ],
   "GET /tesoreria/convenios": {
     "contenido": [
       {
@@ -6316,6 +6344,7 @@
       "id": "entero",
       "acceso": "texto",
       "grupoId": "entero",
+      "usuarioId": "entero",
       "privilegios": [
         "texto"
       ]
