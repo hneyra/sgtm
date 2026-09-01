@@ -25,6 +25,8 @@ public record PeticionDeCalculoMasivo(
         @Nullable String ejercicio,
         @Nullable String alcance,
         @Nullable String sector,
+        @Nullable String codigoDesde,
+        @Nullable String codigoHasta,
         @Nullable String modalidad,
         @Nullable Boolean recalculaYaEmitidos,
         @Nullable Boolean simulacion,

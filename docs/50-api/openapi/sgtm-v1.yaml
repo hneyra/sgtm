@@ -2164,21 +2164,6 @@ paths:
             gana el del cuerpo (FiltroDeLaConsulta) y despues este.
           schema: { type: string }
           example: "2026"
-        - name: djN
-          in: query
-          required: false
-          description: "Filtro «DJ N°» de la pantalla"
-          schema: { type: string }
-        - name: tipoDeDeclaracion
-          in: query
-          required: false
-          description: "Filtro «Tipo de declaración» de la pantalla"
-          schema: { type: string }
-        - name: fechaDeDeclaracion
-          in: query
-          required: false
-          description: "Filtro «Fecha de declaración» de la pantalla"
-          schema: { type: string }
       requestBody:
         required: true
         content:
@@ -2198,7 +2183,26 @@ paths:
     post:
       operationId: predial_masivo
       summary: "Cálculo masivo del impuesto predial"
-      description: "Proceso batch de emisión anual. Recalcula todo el padrón para el ejercicio seleccionado y deja constancia de los contribuyentes observados que quedan fuera de la emisión."
+      description: >-
+        Recalcula el padrón declarado del ejercicio y deja constancia de los contribuyentes
+        **observados** que quedan fuera de la emisión (#523).
+
+        El `alcance` admite las **cuatro** palabras que el manual dibuja, letra por letra (#577):
+
+        - `TODOS` — todo el padrón declarado del ejercicio.
+        - `SECTOR` — los que tienen al menos un predio en el sector; exige `sector`. Se determina
+        igual sobre **todos** sus predios: la base es del contribuyente (NEG-05 §1) y recortarla al
+        sector produciría un error a la baja. El sector elige a quién se emite, no qué se le cobra.
+        - `RANGO_DE_CODIGO` — los que caen en un tramo de código de contribuyente; exige
+        `codigoDesde` y `codigoHasta`, extremos incluidos. Se compara como texto, que es el orden
+        con que la pantalla lista el padrón.
+        - `OBSERVADOS` — los que la **última corrida del ejercicio** dejó observados. Sin corrida
+        previa no recorre a nadie, y eso es lo correcto: «ninguno quedó observado» y «todavía no se
+        ha corrido» son dos cosas distintas.
+
+        Los dos interruptores que la pantalla dibuja y esta corrida no hace —arbitrios y cuponera— se
+        **rechazan** con 422 en vez de ignorarse: una corrida «correcta» a quien pidió además los
+        arbitrios sólo se notaría al buscar los recibos que nadie generó.
       tags: ["Rentas · Registro"]
       requestBody:
         required: true
@@ -2628,7 +2632,23 @@ paths:
     post:
       operationId: vehicular_calculo
       summary: "Cálculo del impuesto vehicular"
-      description: "Aplica el 1 % sobre la base imponible con un mínimo del 1.5 % de la UIT, por los tres ejercicios en que el vehículo permanece afecto."
+      description: >-
+        Determina —o simula— el impuesto al patrimonio vehicular de **un ejercicio**, sobre los
+        vehículos que el criterio elija: una placa, o todos los del contribuyente.
+
+        **Un ejercicio, no tres.** La descripción de esta operación prometía «por los tres ejercicios
+        en que el vehículo permanece afecto» y devolvía una determinación por vehículo del ejercicio
+        pedido (#577). Los tres ejercicios son la **afectación** —estructural, y `GET
+        /rentas/vehiculos` ya la publica como `afectoDesde`/`afectoHasta`—, no el alcance de este
+        cálculo: determinar tres a la vez asentaría tres deudas por un botón que dice «Calcular». Cada
+        fila de la respuesta dice de qué vehículo es, con su `placa`.
+
+        **`baseImponible` se llamaba `valorReferencial` y no lo era**: es el mayor entre el valor
+        de adquisición y el referencial del MEF (art. 32 LTM). Los dos operandos que la memoria del
+        cálculo compara no viajan, porque la determinación guarda la base y no de qué salió.
+
+        La marca `simulacion` del cuerpo es **obligatoria** y distingue calcular de asentar: no hay
+        omisión segura en ninguna de las dos direcciones.
       tags: ["Rentas · Registro"]
       parameters:
         - name: placa
@@ -2688,27 +2708,6 @@ paths:
       summary: "Espectáculos públicos no deportivos"
       description: "Grava el monto que se abona por presenciar el espectáculo. La tasa depende del tipo de evento y el organizador actúa como agente perceptor."
       tags: ["Rentas · Registro"]
-      parameters:
-        - name: nDeExpediente
-          in: query
-          required: false
-          description: "Filtro «Nº de expediente» de la pantalla"
-          schema: { type: string }
-        - name: organizador
-          in: query
-          required: false
-          description: "Filtro «Organizador» de la pantalla"
-          schema: { type: string }
-        - name: desde
-          in: query
-          required: false
-          description: "Filtro «Desde» de la pantalla"
-          schema: { type: string }
-        - name: hasta
-          in: query
-          required: false
-          description: "Filtro «Hasta» de la pantalla"
-          schema: { type: string }
       requestBody:
         required: true
         content:
@@ -8494,6 +8493,50 @@ paths:
               example:
                 modulos: [lectura, registro, modificacion, eliminacion, impresion, ejecucion, especial]
                 contribuyentes: [lectura]
+        "403":
+          $ref: "#/components/responses/SinMunicipalidad"
+  "/seguridad/sesion/municipalidad":
+    get:
+      operationId: municipalidad_de_la_sesion
+      summary: "Municipalidad de la sesión"
+      description: |
+        A quién pertenecen las cifras de la pantalla: la municipalidad a la que
+        pertenece la sesión, con su nombre tal como sale impreso.
+
+        **Sin ningún parámetro, y eso es la decisión.** El identificador sale del claim
+        `municipalidad_id` del token, se fija una vez con `SET LOCAL` y lo compara el
+        `WHERE` de la consulta (ARQ-03 §3.1). Admitir un identificador convertiría esta
+        lectura en un **directorio de municipalidades**: con el token de A no hay forma de
+        obtener el nombre de B, y un parámetro de más se rechaza con 422 nombrándolo.
+
+        Autenticada, pero **no es una opción del catálogo**: el rótulo de la entidad no es
+        de un módulo, es del sistema entero, y sin él las doce pantallas quedan sin decir
+        de quién son sus cifras. Cualquier sesión válida la lee, tenga los permisos que
+        tenga — el mismo trato que `permisos_de_la_sesion` (ADR-0013).
+
+        `nombre` es el nombre **completo**, con su tipo delante —«Municipalidad Distrital
+        de Catacaos»—, porque de ahí sale el membrete de las hojas que se imprimen; `tipo`
+        va aparte para quien necesite distinguir una distrital de una provincial y **no se
+        antepone**. `ubigeo` son los seis dígitos del distrito.
+      tags: ["Seguridad"]
+      responses:
+        200:
+          description: "La municipalidad a la que pertenece la sesión"
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [id, ubigeo, nombre, tipo]
+                properties:
+                  id: { type: integer, format: int64 }
+                  ubigeo: { type: string, minLength: 6, maxLength: 6 }
+                  nombre: { type: string }
+                  tipo: { type: string, enum: [DISTRITAL, PROVINCIAL] }
+              example:
+                id: 1
+                ubigeo: "200105"
+                nombre: "Municipalidad Distrital de Catacaos"
+                tipo: "DISTRITAL"
         "403":
           $ref: "#/components/responses/SinMunicipalidad"
   "/seguridad/usuarios/{id}/permisos":

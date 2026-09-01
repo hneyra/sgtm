@@ -31,9 +31,9 @@ import org.junit.jupiter.api.Test;
  *       explicito de lo que ya existe: no se puede publicar un endpoint sin anotarlo ahi, ni
  *       retirarlo sin quitarlo. Las operaciones restantes del contrato estan pendientes, y no se
  *       pueden exigir todavia sin dejar el build en rojo permanente —que es la forma segura de que
- *       nadie vuelva a mirar esta prueba—. Hoy quedan <b>tres</b> de las 177: {@code GET
- *       /portal/deuda}, {@code POST /transito/reportes} y {@code GET
- *       /transito/papeletas/{numero}/hoja-informativa}.
+ *       nadie vuelva a mirar esta prueba—. Hoy queda <b>una</b> de las 204, y no va a dejar de
+ *       quedar: {@code GET /portal/deuda} es la vista del funcionario, y ningun controlador la va a
+ *       servir (ADR-0016 §3).
  * </ul>
  */
 @DisplayName("Contrato de la API (docs/50-api)")
@@ -176,6 +176,11 @@ class ContratoDeApiTest {
                     "PUT /seguridad/grupos/{id}/permisos",
                     "GET /seguridad/grupos/{id}/permisos",
                     "GET /seguridad/sesion/permisos",
+                    // #555 — a quien pertenecen las cifras de la pantalla. Ninguna
+                    // operacion publicaba el nombre de la municipalidad de la sesion, asi
+                    // que la interfaz lo llevaba compilado y podia poner el membrete de una
+                    // municipalidad sobre los datos de otra.
+                    "GET /seguridad/sesion/municipalidad",
                     "PUT /seguridad/sesion/ejercicio",
                     "PUT /seguridad/usuarios/{id}/clave",
                     "GET /seguridad/auditoria",

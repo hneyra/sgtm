@@ -32,6 +32,7 @@ import pe.gob.sgtm.licencias.aplicacion.CompletarSeccionDelFue;
 import pe.gob.sgtm.licencias.aplicacion.ConsultaDeFue;
 import pe.gob.sgtm.licencias.aplicacion.DerechosDeTramiteParametrizados;
 import pe.gob.sgtm.licencias.aplicacion.EmitirLicenciaDeEdificacion;
+import pe.gob.sgtm.licencias.aplicacion.LecturaDelFue;
 import pe.gob.sgtm.licencias.aplicacion.PresentarFue;
 import pe.gob.sgtm.licencias.aplicacion.RevalidarLicenciaDeEdificacion;
 import pe.gob.sgtm.licencias.aplicacion.ValorizacionDelFue;
@@ -135,7 +136,9 @@ class EdificacionControllerTest {
         ValorizacionDelFue valorizaciones = new ValorizacionDelFue(cuadro);
         return MockMvcBuilders.standaloneSetup(
                         new EdificacionController(
-                                new ConsultaDeFue(expedientes, movimientos, padron, valorizaciones),
+                                new ConsultaDeFue(
+                                        new LecturaDelFue(expedientes, movimientos, padron),
+                                        valorizaciones),
                                 new PresentarFue(
                                         expedientes,
                                         padron,

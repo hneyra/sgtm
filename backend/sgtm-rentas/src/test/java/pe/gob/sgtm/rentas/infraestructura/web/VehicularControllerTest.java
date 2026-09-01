@@ -232,6 +232,32 @@ class VehicularControllerTest {
     }
 
     @Test
+    @DisplayName("la base imponible se llama «baseImponible», que es lo que es (#577)")
+    void laBaseImponibleSeLlamaBaseImponible() throws Exception {
+        MvcResult resultado =
+                mvc.perform(
+                                post("/api/v1/rentas/vehicular/calculo")
+                                        .param("placa", "V1H-882")
+                                        .param("ejercicio", "2026")
+                                        .contentType(MediaType.APPLICATION_JSON)
+                                        .content("{\"simulacion\":true}"))
+                        .andReturn();
+
+        String json = resultado.getResponse().getContentAsString();
+        assertThat(json)
+                .as(
+                        "se llamaba «valorReferencial» y no lo era: es el MAYOR entre el de"
+                                + " adquisicion y el referencial del MEF (art. 32 LTM). Un campo"
+                                + " con el nombre de otra cifra compila, pasa el lint, y lo que"
+                                + " llega a ventanilla es otra cosa (#427)")
+                .contains("\"baseImponible\":\"112800.00\"")
+                .doesNotContain("valorReferencial");
+        assertThat(json)
+                .as("y cada fila dice de que vehiculo es, que es lo que el AC 4 pide")
+                .contains("\"placa\":\"V1H-882\"");
+    }
+
+    @Test
     @DisplayName("mandarlo en el cuerpo ya no cambia nada: es una cifra normativa, no un dato")
     void elMinimoDelClienteYaNoEntra() throws Exception {
         MvcResult resultado =

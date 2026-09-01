@@ -61,6 +61,21 @@ export const TIPOS_DE_COBRANZA: readonly [string, string][] = [
 export const COBRANZAS_DEL_PROTOTIPO_SIN_BACKEND =
   'A cuenta, sólo gastos, beneficio total o parcial del año, adelanto de convenio, contado total y prescripción';
 
+/**
+ * Los dos de `EstadoDeRecibo` (#548). No hay un tercero.
+ *
+ * El prototipo escribe «Emitido» y «Anulado» con minúsculas y el enumerado los
+ * declara en mayúsculas; lo que viaja es la clave, y «Todos» **no es un valor**:
+ * es no mandar el parámetro. Mandarlo contesta 422 —«Estado de recibo
+ * desconocido: 'Todos'. Se admite EMITIDO o ANULADO»—, que es lo que impide que
+ * un filtro que no se entiende devuelva la lista entera a quien creía haberla
+ * acotado.
+ */
+export const ESTADOS_DE_RECIBO: readonly [string, string][] = [
+  ['EMITIDO', 'Emitido'],
+  ['ANULADO', 'Anulado'],
+];
+
 /** Los cinco estados de `EstadoDeConvenio`. Ni «Cumplido» ni «En riesgo». */
 export const ESTADOS_DE_CONVENIO: readonly [string, string][] = [
   ['PRECONVENIO', 'Preconvenio'],

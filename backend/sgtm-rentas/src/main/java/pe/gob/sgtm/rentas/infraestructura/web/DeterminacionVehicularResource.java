@@ -8,7 +8,23 @@ import pe.gob.sgtm.rentas.dominio.predial.Determinacion;
  * Una determinación vehicular tal como sale por HTTP. Campos en español {@code camelCase} (ARQ-04
  * §3).
  *
- * <p>{@code valorReferencial} y {@code montoDeterminado} viajan como texto y no como {@link
+ * <h2>Se llama {@code baseImponible} porque es la base imponible (#577)</h2>
+ *
+ * <p>Se llamaba {@code valorReferencial} y <b>no era el valor referencial del MEF</b>: es {@code
+ * Determinacion#baseImponible}, o sea el <b>mayor</b> entre el de adquisicion y el referencial
+ * (art. 32 de la Ley de Tributacion Municipal). Un campo llamado {@code valorReferencial} que trae
+ * otra cifra es la clase de trampa que #427 encontro con {@code CertificadoResource.solicitante}:
+ * compila, pasa el lint, y lo que llega a ventanilla es otra cosa. Aqui ademas la cifra
+ * <b>coincide</b> con el valor referencial en la mayoria de los casos —el de adquisicion suele ser
+ * menor—, asi que el nombre equivocado solo se delataria en los vehiculos recien comprados, que son
+ * justo los que mas valen.
+ *
+ * <p>Los dos operandos que la memoria del calculo compara <b>no viajan</b>, y no por descuido:
+ * {@code Determinacion} guarda la base y no de que salio. Publicarlos exige guardarlos, y eso es
+ * una columna mas de {@code determinacion} — otro issue, con su migracion. Mientras tanto el nombre
+ * dice lo que hay.
+ *
+ * <p>{@code baseImponible} y {@code montoDeterminado} viajan como texto y no como {@link
  * pe.gob.sgtm.dominio.Dinero}: son la cifra fija con que se determinó, no un saldo que cambie con
  * el tiempo —mismo motivo que {@code ArbitrioResource}—, así que no necesitan {@code
  * ImporteActualizado} para cumplir la regla de ArchUnit {@code TODA_CIFRA_DE_LA_WEB_LLEVA_SU_FECHA}
@@ -25,7 +41,8 @@ import pe.gob.sgtm.rentas.dominio.predial.Determinacion;
  * @param vehiculoId el vehículo determinado
  * @param placa su placa
  * @param contribuyenteId de quién es
- * @param valorReferencial la base imponible: el valor del vehículo en la tabla del ejercicio
+ * @param baseImponible el mayor entre el valor de adquisición y el referencial del MEF; no es «el
+ *     valor referencial», y por eso ya no se llama así (#577)
  * @param montoDeterminado el impuesto resultante
  * @param simulacion si es {@code true}, esta determinación no se guardó (modo simulación, RF-025)
  */
@@ -35,7 +52,7 @@ public record DeterminacionVehicularResource(
         long vehiculoId,
         String placa,
         long contribuyenteId,
-        String valorReferencial,
+        String baseImponible,
         String montoDeterminado,
         boolean simulacion) {
 

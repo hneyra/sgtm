@@ -22,8 +22,10 @@ import pe.gob.sgtm.autorizacion.RequiereAcceso;
 import pe.gob.sgtm.dominio.Ejercicio;
 import pe.gob.sgtm.dominio.Observacion;
 import pe.gob.sgtm.seguridad.aplicacion.AdministrarSesion;
+import pe.gob.sgtm.seguridad.aplicacion.MunicipalidadDeLaSesion;
 import pe.gob.sgtm.seguridad.aplicacion.PermisosDeLaSesion;
 import pe.gob.sgtm.seguridad.dominio.ConsultaDeAuditoria;
+import pe.gob.sgtm.seguridad.dominio.Municipalidad;
 import pe.gob.sgtm.seguridad.dominio.RegistroAuditado;
 import pe.gob.sgtm.seguridad.dominio.Respaldo;
 import pe.gob.sgtm.seguridad.dominio.Sesion;
@@ -34,18 +36,48 @@ import pe.gob.sgtm.web.ProblemaDeNegocio;
 import pe.gob.sgtm.web.RespuestaPaginada;
 
 /**
- * Sesion, auditoria y respaldos: las cuatro operaciones que cierran el modulo de seguridad (RF-124
- * a RF-126).
+ * Sesion, auditoria y respaldos: las operaciones que cierran el modulo de seguridad (RF-124 a
+ * RF-126), mas las tres que <b>no son opciones del catalogo</b> sino la sesion hablando de si misma
+ * —sus permisos (ADR-0013), su municipalidad (#555) y su ejercicio de trabajo—.
  */
 @RestController
 public class SesionController {
 
     private final AdministrarSesion administrar;
     private final PermisosDeLaSesion permisos;
+    private final MunicipalidadDeLaSesion municipalidad;
 
-    public SesionController(AdministrarSesion administrar, PermisosDeLaSesion permisos) {
+    public SesionController(
+            AdministrarSesion administrar,
+            PermisosDeLaSesion permisos,
+            MunicipalidadDeLaSesion municipalidad) {
         this.administrar = administrar;
         this.permisos = permisos;
+        this.municipalidad = municipalidad;
+    }
+
+    /**
+     * A quien pertenecen las cifras de la pantalla: la municipalidad de la sesion (#555, RF-121).
+     *
+     * <p><b>Sin ningun parametro, y eso es la mitad de la decision.</b> Admitir un identificador
+     * convertiria esta lectura en un directorio de municipalidades —quien pregunta elegiria de
+     * quien pregunta— y el aislamiento pasaria a depender de que nadie cambie un numero en la barra
+     * de direcciones. El identificador sale del token, se fija una vez con {@code SET LOCAL} y lo
+     * compara el {@code WHERE} de la consulta (regla 2, ARQ-03 §3.1). Un parametro de mas ni
+     * siquiera se ignora: {@code GuardiaDeParametros} lo rechaza con {@code 422} nombrandolo
+     * (#539).
+     *
+     * <p>Declara el centinela {@link RequiereAcceso#SESION_PROPIA}, igual que {@link
+     * #permisosDeLaSesion()} y por el mismo motivo (ADR-0013): <b>no es una opcion del catalogo</b>
+     * y no hay privilegio que configurar. El rotulo de la entidad no es de un modulo, es del
+     * sistema entero: sin el, las doce pantallas quedan sin decir de quien son sus cifras, y quien
+     * no tenga ningun permiso tampoco puede leer mal nada por saber en que municipalidad esta —lo
+     * sabe ya, se lo dice su propio token—.
+     */
+    @GetMapping(Api.RAIZ + "/seguridad/sesion/municipalidad")
+    @RequiereAcceso(acceso = RequiereAcceso.SESION_PROPIA, privilegio = Privilegio.LECTURA)
+    public MunicipalidadResource municipalidadDeLaSesion() {
+        return MunicipalidadResource.de(municipalidad.actual());
     }
 
     /**
@@ -192,6 +224,30 @@ public class SesionController {
     }
 
     // ------------------------------------------------------------------
+
+    /**
+     * El rotulo de la entidad, tal como sale impreso.
+     *
+     * <p>{@code nombre} es la columna <b>verbatim</b>: el nombre completo, con su tipo delante
+     * —«Municipalidad Distrital de Catacaos»—, que es lo que declara la implantacion y lo que
+     * encabeza los documentos. {@code tipo} va aparte para quien necesite distinguir una distrital
+     * de una provincial, y <b>no se antepone</b>: componer «Municipalidad » + tipo + « de » +
+     * nombre da «Municipalidad Distrital de Municipalidad Distrital de Catacaos», y eso no se ve
+     * hasta que esta impreso.
+     *
+     * <p>{@code ubigeo} lo pide un segundo consumidor: el alta de predio de Catastro prefijaba el
+     * distrito con seis digitos compilados, y los del padron de la piloto son otros.
+     */
+    public record MunicipalidadResource(long id, String ubigeo, String nombre, String tipo) {
+
+        static MunicipalidadResource de(Municipalidad municipalidad) {
+            return new MunicipalidadResource(
+                    municipalidad.id(),
+                    municipalidad.ubigeo(),
+                    municipalidad.nombre(),
+                    municipalidad.tipo());
+        }
+    }
 
     /** Cuerpo del cambio de ejercicio. Sin municipalidad: no la acepta y no la necesita. */
     public record CambioDeEjercicio(int ejercicio, String observacion) {}
