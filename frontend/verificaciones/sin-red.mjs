@@ -48,6 +48,12 @@ const CIFRAS = [
   { nombre: 'importe', re: /S\/\s?-?\d[\d.,]*/g },
   { nombre: 'millares', re: /(?<![\d.,])\d{1,3}(?:,\d{3})+(?![\d.,])/g },
   { nombre: 'porcentaje', re: /\d+[.,]\d+\s?%/g },
+  /* Un importe SIN su «S/» delante. Existe porque los hay: «Monto deducido
+     (S/) 0.00» lleva el símbolo en la etiqueta y la cifra sola en la celda, y
+     así se escapaba del patrón de arriba. Exactamente dos decimales, que es la
+     forma del dinero: un año no casa, «1.0206» tampoco, y un porcentaje ya lo
+     caza su propio patrón. */
+  { nombre: 'importe suelto', re: /(?<![\d.,%])\d[\d,]*\.\d{2}(?![\d%])/g },
 ];
 
 const navegador = await chromium.launch();
@@ -61,6 +67,28 @@ if (process.env.SGTM_TOKEN) {
 const pagina = await contexto.newPage();
 await pagina.route('**/api/v1/**', (r) => r.abort());
 
+/**
+ * Abre lo que nace plegado antes de mirar.
+ *
+ * `innerText` no ve lo que está oculto, así que una sección cerrada era un
+ * escondite perfecto: la de «Emisión y cuotas» del predial llevaba dentro el
+ * derecho de emisión, las cuatro cuotas y sus cuatro vencimientos —cifras del
+ * conjunto sellado— y esta comprobación pasaba en verde por encima.
+ */
+async function desplegarlo(pagina) {
+  for (let vuelta = 0; vuelta < 3; vuelta++) {
+    const plegados = pagina.locator('[aria-expanded="false"]');
+    const cuantos = await plegados.count();
+    if (cuantos === 0) break;
+    for (let i = 0; i < cuantos; i++) {
+      await plegados.nth(i).click({ timeout: 900 }).catch(() => {});
+    }
+    await pagina.waitForTimeout(160);
+  }
+  await pagina.evaluate(() => document.querySelectorAll('details').forEach((d) => (d.open = true)));
+  await pagina.waitForTimeout(200);
+}
+
 const sucias = [];
 let vistas = 0;
 
@@ -72,10 +100,14 @@ for (const m of MODULOS) {
     await pagina.goto(`${BASE}/${ruta}`, { waitUntil: 'domcontentloaded' });
     await pagina.waitForTimeout(900);
     vistas++;
+    await desplegarlo(pagina);
     const texto = await pagina.locator('body').innerText();
     for (const { nombre, re } of CIFRAS) {
       const halladas = [...texto.matchAll(re)].map((x) => x[0]).filter((x) => !/^S\/\s?[—-]$/.test(x));
-      if (halladas.length) sucias.push({ ruta, nombre, halladas: [...new Set(halladas)].slice(0, 6) });
+      if (halladas.length) {
+        const unicas = [...new Set(halladas)];
+        sucias.push({ ruta, nombre, halladas: unicas.slice(0, 6), total: unicas.length });
+      }
     }
   }
 }
@@ -88,6 +120,9 @@ if (!sucias.length) {
   process.exit(0);
 }
 console.log(`\n${sucias.length} pantallas afirman una cifra que no han podido leer:\n`);
-for (const s of sucias) console.log(`  ${s.ruta.padEnd(30)} ${s.nombre.padEnd(11)} ${s.halladas.join(' · ')}`);
+for (const s of sucias) {
+  const mas = s.total > s.halladas.length ? ` … y ${s.total - s.halladas.length} más` : '';
+  console.log(`  ${s.ruta.padEnd(30)} ${s.nombre.padEnd(14)} ${s.halladas.join(' · ')}${mas}`);
+}
 console.log('\nCon el backend caído sólo puede salir «—» y el motivo. Una cifra aquí es del prototipo.');
 process.exit(1);
