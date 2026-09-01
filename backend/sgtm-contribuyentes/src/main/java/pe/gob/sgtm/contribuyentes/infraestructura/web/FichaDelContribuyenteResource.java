@@ -5,6 +5,7 @@ import java.util.List;
 import org.jspecify.annotations.Nullable;
 import pe.gob.sgtm.contribuyentes.aplicacion.ConsultaDeLaFichaDelContribuyente;
 import pe.gob.sgtm.contribuyentes.dominio.Contacto;
+import pe.gob.sgtm.contribuyentes.dominio.Contribuyente;
 import pe.gob.sgtm.contribuyentes.dominio.Domicilio;
 import pe.gob.sgtm.contribuyentes.dominio.ResponsableSolidario;
 
@@ -21,6 +22,7 @@ import pe.gob.sgtm.contribuyentes.dominio.ResponsableSolidario;
  */
 public record FichaDelContribuyenteResource(
         ContribuyenteResource contribuyente,
+        DatosPersonalesResource datosPersonales,
         LocalDate aLaFecha,
         @Nullable DomicilioResource domicilioFiscal,
         @Nullable DomicilioResource domicilioProcesal,
@@ -31,6 +33,7 @@ public record FichaDelContribuyenteResource(
     public static FichaDelContribuyenteResource de(ConsultaDeLaFichaDelContribuyente.Ficha ficha) {
         return new FichaDelContribuyenteResource(
                 ContribuyenteResource.de(ficha.contribuyente()),
+                DatosPersonalesResource.de(ficha.contribuyente()),
                 ficha.aLaFecha(),
                 ficha.domicilioFiscal() == null
                         ? null
@@ -50,6 +53,32 @@ public record FichaDelContribuyenteResource(
      * se borra nada (regla 4), y {@code documentoOrigen} es lo que sostiene la notificacion si
      * alguien la impugna.
      */
+    /**
+     * Los tres datos personales que el expediente dibuja y la grilla no publica (#552).
+     *
+     * <p>Van <b>aqui</b> y no en {@link ContribuyenteResource}, y la diferencia importa: aquel es
+     * la fila de una <b>grilla de busqueda</b> y su javadoc dice por que no los lleva —«lo que no
+     * se publica no se filtra»—. La ficha es otra cosa: es la pantalla por la que se corrige el
+     * padron, y desde #552 esos tres campos <b>se pueden guardar</b> por {@code PUT
+     * /rentas/contribuyentes/&#123;id&#125;}. Un campo que se puede escribir y no se puede leer
+     * deja a la pantalla dibujando una caja vacia sobre un dato que si existe.
+     *
+     * <p>{@code conyugeId} es el identificador interno y no el nombre: resolverlo costaria una
+     * consulta mas por ficha, y quien lo necesite lo pide como pide cualquier otro contribuyente.
+     */
+    public record DatosPersonalesResource(
+            @Nullable LocalDate fechaNacimiento,
+            @Nullable String estadoCivil,
+            @Nullable Long conyugeId) {
+
+        public static DatosPersonalesResource de(Contribuyente contribuyente) {
+            return new DatosPersonalesResource(
+                    contribuyente.fechaNacimiento(),
+                    contribuyente.estadoCivil(),
+                    contribuyente.conyugeId());
+        }
+    }
+
     public record DomicilioResource(
             long id,
             String tipo,
