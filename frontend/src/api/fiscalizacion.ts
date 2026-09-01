@@ -84,14 +84,27 @@ export type FilaDeOmisos = {
   impuestoOmitidoS: string | null;
 };
 
+/**
+ * Lo que la deteccion de omisos deja acotar, y **solo eso**.
+ *
+ * Llevaba dos campos mas —`contribuyente` y `fechaDeConsulta`— que ninguna
+ * operacion lee. Hasta #539 eso era silencioso: Spring ignoraba el parametro que
+ * ningun argumento reclama, la consulta salia sin acotar y quien preguntaba por
+ * una persona recibia el padron de omisos entero. Desde #602 hay un guardia
+ * sobre `/api/v1/**` que contesta **422 nombrando el parametro**, asi que
+ * dejarlos declarados seria una trampa para el proximo que los rellene: se ven
+ * como un filtro y son un error garantizado.
+ *
+ * Medido: `?contribuyente=C-000001` y `?fechaDeConsulta=2026-09-01` dan los dos
+ * «Parametro desconocido». Ninguna pantalla los rellenaba, asi que retirarlos no
+ * cambia una sola peticion —comprobado en el navegador: la deteccion pide
+ * `?ejercicio&pagina&tamano` y nada mas—.
+ */
 export type FiltroDeOmisos = {
   ejercicio?: string;
   sector?: string;
   /** `OMISO` | `SUBVALUADOR`. */
   condicion?: string;
-  contribuyente?: string;
-  /** La fecha a la que se resuelve, que es la de la regla 9. */
-  fechaDeConsulta?: string;
 };
 
 /**
