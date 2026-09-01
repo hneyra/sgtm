@@ -148,6 +148,27 @@ public record MovimientoDeDeuda(
      * insoluto y la deuda no bajaria.
      */
     public List<Asiento> enAsientos() {
+        return enAsientos(false);
+    }
+
+    /**
+     * Los asientos del movimiento, declarando si la unidad es de un <b>titular anterior</b> (#653).
+     *
+     * <p>La declaracion no se deriva de nada: la hace quien registra el movimiento, y por eso entra
+     * como argumento hasta aqui en vez de mirarse en el padron. Un alta sobre la unidad de otro es
+     * legitima cuando la deuda es de un ejercicio anterior a la transferencia —el arbitrio de 2024
+     * se le cobra a quien era titular en 2024—, y lo unico que separa ese acto del error de teclear
+     * el predio equivocado es que alguien lo diga. Sin esta columna la fila del libro y su fila de
+     * auditoria quedaban <b>identicas</b> a las de un alta sobre la unidad propia.
+     */
+    public List<Asiento> enAsientos(boolean unidadDeTitularAnterior) {
+        // Sin unidad no hay nada que declarar. La peticion puede traer la marca y ninguna unidad
+        // —el cuerpo declara las dos cosas por separado—, y grabarla entonces afirmaria de una
+        // obligacion sin predio ni vehiculo que «su unidad es de otro», que no significa nada. Es
+        // ademas lo que hace de `asiento_titular_anterior_ck` (V71) una invariante de verdad y no
+        // una restriccion que el propio sistema puede violar.
+        boolean declarada =
+                unidadDeTitularAnterior && (clave.predioId() != null || clave.vehiculoId() != null);
         TipoAsiento tipo =
                 sentido == SentidoDelMovimiento.ALTA ? TipoAsiento.CARGO : TipoAsiento.ABONO;
         ActoDelLibro acto =
@@ -155,10 +176,10 @@ public record MovimientoDeDeuda(
                         ? ActoDelLibro.ALTA_DEUDA
                         : ActoDelLibro.BAJA_DEUDA;
         List<Asiento> asientos = new ArrayList<>();
-        agregarSiTraeImporte(asientos, Concepto.INSOLUTO, insoluto, tipo, acto);
-        agregarSiTraeImporte(asientos, Concepto.REAJUSTE, reajuste, tipo, acto);
-        agregarSiTraeImporte(asientos, Concepto.INTERES, interes, tipo, acto);
-        agregarSiTraeImporte(asientos, Concepto.GASTO, gasto, tipo, acto);
+        agregarSiTraeImporte(asientos, Concepto.INSOLUTO, insoluto, tipo, acto, declarada);
+        agregarSiTraeImporte(asientos, Concepto.REAJUSTE, reajuste, tipo, acto, declarada);
+        agregarSiTraeImporte(asientos, Concepto.INTERES, interes, tipo, acto, declarada);
+        agregarSiTraeImporte(asientos, Concepto.GASTO, gasto, tipo, acto, declarada);
         return List.copyOf(asientos);
     }
 
@@ -167,7 +188,8 @@ public record MovimientoDeDeuda(
             Concepto concepto,
             Dinero monto,
             TipoAsiento tipo,
-            ActoDelLibro acto) {
+            ActoDelLibro acto,
+            boolean unidadDeTitularAnterior) {
         if (monto.esCero()) {
             return;
         }
@@ -186,6 +208,7 @@ public record MovimientoDeDeuda(
                         monto,
                         fechaValor,
                         documentoOrigen,
-                        acto));
+                        acto,
+                        unidadDeTitularAnterior));
     }
 }

@@ -275,11 +275,12 @@ class ConteoDeLaDeteccionTest {
         assertThat(contar(DeteccionRepositoryJdbc.CONTEO_SIN_CONDICION, sinFiltros()))
                 .as(
                         "el JOIN de ficha_catastral NO se puede quitar del conteo aunque tampoco lo"
-                                + " use: ficha_vigente_uq es PARCIAL —solo garantiza una version"
-                                + " abierta—, asi que dos versiones cerradas pueden cubrir la misma"
-                                + " fecha y la pagina devuelve dos filas de ese predio. Un conteo que"
-                                + " no las vea diria un total menor que las filas que la grilla ensena,"
-                                + " y la ultima pagina saldria vacia sin que nada lo explique")
+                                + " use: ficha_vigente_uq es PARCIAL —solo impide dos versiones"
+                                + " ABIERTAS—, asi que una abierta y una cerrada pueden cubrir la"
+                                + " misma fecha y la pagina devuelve dos filas de ese predio. Un"
+                                + " conteo que no las vea diria un total menor que las filas que la"
+                                + " grilla ensena, y la ultima pagina saldria vacia sin que nada lo"
+                                + " explique")
                 .isEqualTo(filasDeLaPagina)
                 .isEqualTo(4L);
     }
@@ -587,8 +588,13 @@ class ConteoDeLaDeteccionTest {
      * Una segunda version de ficha del primer predio que <b>tambien</b> cubre la fecha de corte.
      *
      * <p>El esquema lo admite: {@code ficha_vigente_uq} es parcial —{@code WHERE vigencia_hasta IS
-     * NULL}—, asi que la version cerrada y la abierta pueden solaparse. Con ella, ese predio sale
-     * dos veces en la grilla, y el conteo tiene que decir dos.
+     * NULL}—, asi que solo impide dos versiones ABIERTAS y la cerrada puede solaparse con la
+     * abierta. Con ella, ese predio sale dos veces en la grilla, y el conteo tiene que decir dos.
+     *
+     * <p>El camino de escritura no produce este solape —{@code ActualizarFichaCatastral} cierra la
+     * anterior el dia antes de abrir la nueva—, asi que se siembra por SQL: lo que se prueba no es
+     * que el sistema lo escriba, sino que el conteo diga lo que la grilla ensena <b>sea cual sea el
+     * dato</b>, que es lo que un padron migrado puede traer.
      */
     private static void sembrarFichaQueSeSuperpone(long municipalidadId) throws SQLException {
         try (Connection app = base.conexion(BaseDeDatosDePrueba.APP)) {

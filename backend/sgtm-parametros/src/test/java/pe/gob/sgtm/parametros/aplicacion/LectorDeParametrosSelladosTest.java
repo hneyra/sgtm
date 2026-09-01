@@ -220,6 +220,157 @@ class LectorDeParametrosSelladosTest {
                 .isInstanceOf(LectorDeParametros.ConjuntoNoSellado.class);
     }
 
+    @Test
+    @DisplayName("#659 — con las cinco UIT dentro, 2026 se resuelve con la de 2026")
+    void laUitQueRigeElEjercicio() throws SQLException {
+        Ejercicio ejercicio = new Ejercicio(2040);
+        ConjuntoDeParametros conjunto =
+                administrar.abrirVersion(ejercicio, Observacion.de("Se abre el ejercicio 2040"));
+        // El historico entero, como lo publica parametros-2026.csv: una fila por ejercicio.
+        // Se siembra en un orden que NO es el que se espera leer, porque el defecto de #659 se
+        // colaba precisamente por el orden: `ORDER BY p.tipo, p.clave` empata en las cinco.
+        for (int anio : new int[] {2038, 2041, 2040, 2039, 2037}) {
+            administrar.agregarParametro(
+                    conjunto.id(),
+                    parametroConVigencia(
+                            "UIT_FICTICIA", null, anio * 100L, anio + "-01-01", anio + "-12-31"),
+                    Observacion.de("Se incorpora la UIT ficticia de " + anio));
+        }
+        administrar.sellar(conjunto.id(), Observacion.de("Se sella 2040 con el historico dentro"));
+
+        ParametrosSellados sellados = lector.vigenteEn(ejercicio);
+
+        assertThat(sellados.numero("UIT_FICTICIA", null))
+                .as(
+                        "hasta #659 sobrevivia una cualquiera de las cinco y el ejercicio se"
+                                + " determinaba con la de otro año: 234,00 donde deben ser 180,00")
+                .contains(
+                        new pe.gob.sgtm.dominio.ValorNormativo(
+                                new java.math.BigDecimal("204000.000000")));
+    }
+
+    @Test
+    @DisplayName("#659 — se resuelve con el ejercicio del conjunto, no con el reloj (regla 6)")
+    void seResuelveConElEjercicioDelConjunto() throws SQLException {
+        // El mismo historico, sellado para DOS ejercicios distintos. Si la resolucion mirara el
+        // reloj —que en esta prueba esta fijado en 2026— los dos conjuntos darian la misma cifra,
+        // y recalcular una determinacion vieja daria hoy otro importe.
+        long[] cifras = new long[2];
+        int[] ejercicios = {2042, 2043};
+        for (int i = 0; i < ejercicios.length; i++) {
+            Ejercicio ejercicio = new Ejercicio(ejercicios[i]);
+            ConjuntoDeParametros conjunto =
+                    administrar.abrirVersion(
+                            ejercicio, Observacion.de("Se abre el ejercicio " + ejercicio));
+            for (int anio : ejercicios) {
+                administrar.agregarParametro(
+                        conjunto.id(),
+                        parametroConVigencia(
+                                "UIT_POR_EJERCICIO",
+                                null,
+                                anio * 100L,
+                                anio + "-01-01",
+                                anio + "-12-31"),
+                        Observacion.de("Se incorpora la UIT ficticia de " + anio));
+            }
+            administrar.sellar(conjunto.id(), Observacion.de("Se sella " + ejercicio));
+            cifras[i] =
+                    lector.vigenteEn(ejercicio)
+                            .exigirNumero("UIT_POR_EJERCICIO", null)
+                            .valor()
+                            .longValue();
+        }
+
+        assertThat(cifras[0]).isEqualTo(204_200L);
+        assertThat(cifras[1])
+                .as("cada conjunto resuelve con SU ejercicio: recalcular 2042 en 2043 no lo mueve")
+                .isEqualTo(204_300L);
+    }
+
+    @Test
+    @DisplayName("#659 — la llave con una sola vigencia se sigue resolviendo igual")
+    void laLlaveConUnaSolaVigenciaSigueIgual() throws SQLException {
+        Ejercicio ejercicio = new Ejercicio(2044);
+        ConjuntoDeParametros conjunto =
+                administrar.abrirVersion(ejercicio, Observacion.de("Se abre el ejercicio 2044"));
+        // Vigencia abierta por arriba, que es la forma de casi todo el corpus: los tramos del
+        // predial rigen «desde 2004-11-15» y sin fecha de fin.
+        administrar.agregarParametro(
+                conjunto.id(),
+                parametroConVigencia("TRAMO_FICTICIO", "1", 20L, "2004-11-15", null),
+                Observacion.de("Se incorpora el tramo ficticio"));
+        administrar.sellar(conjunto.id(), Observacion.de("Se sella 2044"));
+
+        assertThat(lector.vigenteEn(ejercicio).numero("TRAMO_FICTICIO", "1"))
+                .as("filtrar por vigencia no puede dejar fuera lo que rige indefinidamente")
+                .isPresent();
+    }
+
+    @Test
+    @DisplayName("#659 — lo que rige PARTE del ejercicio sigue dentro: no se ancla al 1 de enero")
+    void loQueRigeParteDelEjercicioSigueDentro() throws SQLException {
+        Ejercicio ejercicio = new Ejercicio(2047);
+        ConjuntoDeParametros conjunto =
+                administrar.abrirVersion(ejercicio, Observacion.de("Se abre el ejercicio 2047"));
+        // La forma de una campaña de beneficio: rige de marzo a junio, no el ejercicio entero
+        // (D-02b, #72). Resolver contra el 1 de enero la dejaria fuera del conjunto sin que nada
+        // lo dijera, que es el defecto de #659 con el signo cambiado.
+        administrar.agregarParametro(
+                conjunto.id(),
+                parametroConVigencia(
+                        "BENEFICIO_FICTICIO", "AMNISTIA", 50L, "2047-03-01", "2047-06-30"),
+                Observacion.de("Se incorpora la campaña ficticia"));
+        administrar.sellar(conjunto.id(), Observacion.de("Se sella 2047 con la campaña dentro"));
+
+        assertThat(lector.vigenteEn(ejercicio).numero("BENEFICIO_FICTICIO", "AMNISTIA"))
+                .as("la campaña es del ejercicio 2047 aunque no lo cubra entero")
+                .isPresent();
+    }
+
+    @Test
+    @DisplayName("#659 — la llave cuyas vigencias no alcanzan el ejercicio falta, y se dice")
+    void laLlaveQueNoAlcanzaElEjercicioFalta() throws SQLException {
+        Ejercicio ejercicio = new Ejercicio(2045);
+        ConjuntoDeParametros conjunto =
+                administrar.abrirVersion(ejercicio, Observacion.de("Se abre el ejercicio 2045"));
+        administrar.agregarParametro(
+                conjunto.id(),
+                parametroConVigencia("CADUCADO_FICTICIO", null, 7L, "2020-01-01", "2020-12-31"),
+                Observacion.de("Se incorpora un valor que caduco en 2020"));
+        administrar.sellar(conjunto.id(), Observacion.de("Se sella 2045"));
+
+        assertThatThrownBy(
+                        () -> lector.vigenteEn(ejercicio).exigirNumero("CADUCADO_FICTICIO", null))
+                .as(
+                        "un valor que caduco no es el valor del ejercicio: sustituirlo es el defecto"
+                                + " de #659 con otra cara")
+                .isInstanceOf(ParametrosSellados.ParametroAusente.class)
+                .hasMessageContaining("CADUCADO_FICTICIO");
+    }
+
+    @Test
+    @DisplayName("#659 — dos vigencias que se solapan en el ejercicio no se eligen: se dicen")
+    void dosVigenciasQueSeSolapanNoSeEligen() throws SQLException {
+        Ejercicio ejercicio = new Ejercicio(2046);
+        ConjuntoDeParametros conjunto =
+                administrar.abrirVersion(ejercicio, Observacion.de("Se abre el ejercicio 2046"));
+        administrar.agregarParametro(
+                conjunto.id(),
+                parametroConVigencia("SOLAPADO_FICTICIO", null, 1L, "2046-01-01", "2046-06-30"),
+                Observacion.de("Se incorpora la primera mitad"));
+        administrar.agregarParametro(
+                conjunto.id(),
+                parametroConVigencia("SOLAPADO_FICTICIO", null, 2L, "2046-04-01", "2046-12-31"),
+                Observacion.de("Se incorpora la segunda, que pisa a la primera"));
+        administrar.sellar(conjunto.id(), Observacion.de("Se sella 2046 con la contradiccion"));
+
+        assertThatThrownBy(() -> lector.vigenteEn(ejercicio))
+                .as("elegir una de las dos en silencio es exactamente lo que #659 cerro")
+                .isInstanceOf(LectorDeParametrosSellados.VigenciasQueSeSolapan.class)
+                .hasMessageContaining("SOLAPADO_FICTICIO")
+                .hasMessageContaining("2046-04-01");
+    }
+
     // ------------------------------------------------------------------
 
     /**
@@ -236,6 +387,39 @@ class LectorDeParametrosSelladosTest {
                                         + " no representa ninguna norma', 'carga', 'aprueba')"
                                         + " RETURNING id")) {
             sentencia.setString(1, clave);
+            try (ResultSet resultado = sentencia.executeQuery()) {
+                resultado.next();
+                long id = resultado.getLong(1);
+                carga.commit();
+                return id;
+            }
+        }
+    }
+
+    /**
+     * Publica un parametro <b>ficticio</b> con tipo, clave, valor y vigencia propios (#659).
+     *
+     * <p>Los tipos llevan {@code FICTICIA}/{@code FICTICIO} en el nombre a proposito: son valores
+     * inventados y ninguna regla los pide, de modo que sembrarlos no puede parecerse a cargar una
+     * cifra normativa sin su corpus (regla 5).
+     */
+    private static long parametroConVigencia(
+            String tipo, String clave, long valor, String desde, String hasta) throws SQLException {
+        try (Connection carga = base.conexion(BaseDeDatosDePrueba.CARGA_PARAMETROS);
+                PreparedStatement sentencia =
+                        carga.prepareStatement(
+                                "INSERT INTO parametro_tributario (municipalidad_id, tipo, clave,"
+                                        + " valor_numerico, vigencia_desde, vigencia_hasta,"
+                                        + " documento_fuente, usuario_carga, usuario_aprueba)"
+                                        + " VALUES (NULL, ?, ?, ?, CAST(? AS date),"
+                                        + " CAST(? AS date), 'Valor ficticio de prueba; no"
+                                        + " representa ninguna norma', 'carga', 'aprueba')"
+                                        + " RETURNING id")) {
+            sentencia.setString(1, tipo);
+            sentencia.setString(2, clave);
+            sentencia.setLong(3, valor);
+            sentencia.setString(4, desde);
+            sentencia.setString(5, hasta);
             try (ResultSet resultado = sentencia.executeQuery()) {
                 resultado.next();
                 long id = resultado.getLong(1);

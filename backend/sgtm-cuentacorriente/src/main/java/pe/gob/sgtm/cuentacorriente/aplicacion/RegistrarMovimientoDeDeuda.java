@@ -172,7 +172,12 @@ public class RegistrarMovimientoDeDeuda {
             }
         }
         return asentarYEmitir(
-                movimiento, porCuota, cuotas.etiqueta(), codigoContribuyente, observacion);
+                movimiento,
+                porCuota,
+                cuotas.etiqueta(),
+                codigoContribuyente,
+                comprobacion,
+                observacion);
     }
 
     /**
@@ -231,7 +236,12 @@ public class RegistrarMovimientoDeDeuda {
         exigirQueLaUnidadSeaDelContribuyente(movimiento, comprobacion);
         List<MovimientoDeDeuda> partes = repartir(movimiento, cuotas);
         return asentarYEmitir(
-                movimiento, partes, etiquetaDe(partes), codigoContribuyente, observacion);
+                movimiento,
+                partes,
+                etiquetaDe(partes),
+                codigoContribuyente,
+                comprobacion,
+                observacion);
     }
 
     // ------------------------------------------------------------------
@@ -241,11 +251,19 @@ public class RegistrarMovimientoDeDeuda {
             List<MovimientoDeDeuda> porCuota,
             String etiquetaDeLasCuotas,
             String codigoContribuyente,
+            ComprobacionDeUnidad comprobacion,
             Observacion observacion) {
+
+        // La declaracion viaja hasta la fila del libro (#653). Que la comprobacion llegara solo
+        // hasta `exigirQueLaUnidadSeaDelContribuyente` era el defecto: el acto se admitia y no
+        // quedaba dicho en ninguna parte que se hubiera declarado, asi que su fila de auditoria
+        // era indistinguible de la de un alta sobre la unidad propia.
+        boolean deTitularAnterior =
+                comprobacion == ComprobacionDeUnidad.DECLARADA_DE_TITULAR_ANTERIOR;
 
         List<Asiento> guardados = new ArrayList<>();
         for (MovimientoDeDeuda deLaCuota : porCuota) {
-            for (Asiento asiento : deLaCuota.enAsientos()) {
+            for (Asiento asiento : deLaCuota.enAsientos(deTitularAnterior)) {
                 guardados.add(registrarAsiento.asentar(asiento, observacion));
             }
         }
@@ -412,7 +430,11 @@ public class RegistrarMovimientoDeDeuda {
          * <p>No es una puerta trasera: la deuda de un ejercicio anterior a una transferencia
          * <b>es</b> del titular de entonces, asi que un alta sobre la unidad de otro puede ser
          * exactamente lo que corresponde. Lo que separa ese caso del error es que alguien lo diga,
-         * y la observacion del acto queda con la constancia de que se dijo.
+         * y <b>la declaracion queda escrita como dato</b> en cada asiento del movimiento —{@code
+         * cuenta_corriente_asiento.unidad_de_titular_anterior}, V71— y, con el, en su fila de
+         * auditoria (#653). Hasta entonces la marca solo servia para dejar pasar el acto y no
+         * quedaba dicha en ninguna parte, asi que la fila era indistinguible de la de un alta sobre
+         * la unidad propia.
          */
         DECLARADA_DE_TITULAR_ANTERIOR,
 

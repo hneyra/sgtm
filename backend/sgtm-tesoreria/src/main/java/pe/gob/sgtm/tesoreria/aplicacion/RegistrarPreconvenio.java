@@ -4,6 +4,7 @@ import java.time.Clock;
 import java.time.LocalDate;
 import java.util.List;
 import java.util.Objects;
+import java.util.Optional;
 import org.jspecify.annotations.Nullable;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -52,12 +53,25 @@ import pe.gob.sgtm.tesoreria.dominio.TipoDeGarantia;
  * y este metodo no escribe ninguno, asi que lo que sale de aqui es siempre un {@code PRECONVENIO}.
  * La formalizacion es otro acto, con su recibo, y vive en {@link FormalizarConvenio}.
  *
- * <h2>Reejecutar no duplica</h2>
+ * <h2>Reejecutar no duplica, pero reenviar el mismo intento tampoco (#606)</h2>
  *
- * <p>Cada llamada produce un convenio <b>nuevo</b>, con su propio numero: no hay «regenerar el
- * cronograma de este». Y dentro de un convenio, que sus cuotas y su deuda acogida no se puedan
- * escribir dos veces lo garantizan {@code convenio_cuota_uq} (V3) y {@code convenio_deuda_uq}
- * (V31), en la base y no en un {@code if}.
+ * <p>Cada llamada <b>con una clave distinta</b> produce un convenio nuevo, con su propio numero: no
+ * hay «regenerar el cronograma de este». Y dentro de un convenio, que sus cuotas y su deuda acogida
+ * no se puedan escribir dos veces lo garantizan {@code convenio_cuota_uq} (V3) y {@code
+ * convenio_deuda_uq} (V31), en la base y no en un {@code if}.
+ *
+ * <p>Lo que faltaba era el <b>reenvio del mismo intento</b>: tras un 500 o un tiempo de espera
+ * agotado, quien atiende no sabe si escribio, y repetir abria otro preconvenio con otro numero
+ * sobre la misma deuda. Con la cabecera {@code Idempotency-Key}, el reenvio devuelve el convenio de
+ * la primera vez.
+ *
+ * <p><b>La guarda es la base, no el {@code if}.</b> Quitar la lectura previa de {@link
+ * ConvenioRepository#porClaveDeIdempotencia} dejando el indice sigue produciendo <b>un solo</b>
+ * convenio —{@code convenio_idempotencia_uq} (V70) rechaza el segundo {@code INSERT}—; lo unico que
+ * se pierde es poder contestar con el convenio de la primera vez en vez de con un 409. Es la
+ * leccion de #188: la restriccion sostiene la regla, la lectura sostiene el mensaje. Y no se puede
+ * al reves: entre el {@code SELECT} y el {@code INSERT} cabe otra peticion, asi que dos envios
+ * simultaneos pasarian los dos por cualquier comprobacion escrita en Java.
  */
 @Service
 public class RegistrarPreconvenio {
@@ -124,15 +138,42 @@ public class RegistrarPreconvenio {
      * metodo transaccional. Escondida dentro de un objeto de peticion, la comprobacion no la
      * encuentra y la regla dejaria de proteger nada.
      *
+     * <p>La clave de idempotencia va <b>aparte</b> de {@link Peticion} y no dentro: {@code
+     * Peticion} es lo que la pantalla de fraccionamiento pide, y la clave es una cabecera del
+     * transporte —el mismo reparto que {@code RegistrarAnuncio} y que {@code
+     * ReciboRepository#emitir}—.
+     *
+     * @param claveDeIdempotencia la cabecera {@code Idempotency-Key}; opcional
      * @throws SinDeudaQueFraccionar si la seleccion no tiene deuda a la fecha de corte
      * @throws CondicionesDelConvenio.DemasiadasCuotas si se piden mas de las que admite la
      *     ordenanza
      * @throws CondicionesParametrizadas.CondicionSinParametrizar si falta el interes o el maximo
+     * @throws ClaveDeOtraPeticion si esa clave registro el convenio de otro contribuyente
+     * @throws ConvenioRepository.ClaveRepetida si dos envios del mismo intento corren a la vez
      */
     @Transactional
-    public Convenio registrar(Peticion peticion, Observacion observacion) {
+    public Convenio registrar(
+            Peticion peticion, @Nullable String claveDeIdempotencia, Observacion observacion) {
         Objects.requireNonNull(peticion, "No se registra sin peticion");
         Objects.requireNonNull(observacion, "Sin observacion no se guarda (regla 10, RNF-052)");
+
+        String clave = limpiar(claveDeIdempotencia);
+        if (clave != null) {
+            Optional<Convenio> yaRegistrado = convenios.porClaveDeIdempotencia(clave);
+            if (yaRegistrado.isPresent()) {
+                // El reenvio: mismo doble clic, mismo convenio, ningun numero de mas. La lectura
+                // esta para poder contestar algo util; quien impide de verdad el duplicado es
+                // `convenio_idempotencia_uq`, porque entre este SELECT y el INSERT cabe otra
+                // peticion.
+                Convenio anterior = yaRegistrado.get();
+                if (anterior.contribuyenteId() != peticion.contribuyenteId()) {
+                    // Una clave reusada para otro intento no es un reenvio: devolver el convenio
+                    // de la primera vez imprimiria en ventanilla el acuerdo de OTRA persona.
+                    throw new ClaveDeOtraPeticion(anterior.numero().impreso());
+                }
+                return anterior;
+            }
+        }
 
         Simulacion simulada = simular(peticion);
         NumeroDeConvenio numero = convenios.siguienteNumero(Ejercicio.de(peticion.fecha()));
@@ -156,7 +197,7 @@ public class RegistrarPreconvenio {
                         null,
                         observacion);
 
-        Convenio guardado = convenios.registrar(convenio);
+        Convenio guardado = convenios.registrar(convenio, clave);
         auditoria.registrar(
                 RegistroDeAuditoria.enLaFechaDe(
                                 peticion.fecha(),
@@ -169,6 +210,15 @@ public class RegistrarPreconvenio {
     }
 
     // ------------------------------------------------------------------
+
+    /** Una cabecera vacia o en blanco es no traer clave, no traer la cadena vacia. */
+    private static @Nullable String limpiar(@Nullable String clave) {
+        if (clave == null) {
+            return null;
+        }
+        String limpia = clave.strip();
+        return limpia.isEmpty() ? null : limpia;
+    }
 
     private static Dinero totalDe(List<DeudaAcogida> acogible) {
         Dinero total = Dinero.CERO;
@@ -302,6 +352,26 @@ public class RegistrarPreconvenio {
             Objects.requireNonNull(condiciones, "La simulacion dice con que condiciones se hizo");
             Objects.requireNonNull(total, "La simulacion dice cuanto acoge");
             Objects.requireNonNull(aLaFecha, "Toda cifra indica su fecha (RNF-075, regla 9)");
+        }
+    }
+
+    /**
+     * Esa clave de idempotencia registro el convenio de otro contribuyente.
+     *
+     * <p>Un reenvio es el <b>mismo</b> intento repetido. Si la clave viene con otro sujeto, quien
+     * la manda no esta reintentando: esta reusando una clave vieja, y devolverle el convenio de la
+     * primera vez le imprimiria en ventanilla el acuerdo de otra persona. Quien llama responde 409.
+     */
+    public static final class ClaveDeOtraPeticion extends RuntimeException {
+
+        @java.io.Serial private static final long serialVersionUID = 1L;
+
+        ClaveDeOtraPeticion(String numero) {
+            super(
+                    "Esa clave de idempotencia ya registro el convenio "
+                            + numero
+                            + ", que es de otro contribuyente: reenviar un intento devuelve lo de"
+                            + " la primera vez, no lo de otra peticion. Use una clave nueva");
         }
     }
 

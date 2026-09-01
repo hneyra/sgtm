@@ -42,6 +42,11 @@ import pe.gob.sgtm.dominio.Ejercicio;
  * @param acto de que acto nace, cuando el libro lo sabe: un alta o una baja de deuda (#601). {@code
  *     null} no es «se desconoce», es «no nacio de ninguno de los dos» —una emision, una cobranza,
  *     una reversion—; ver {@link ActoDelLibro}
+ * @param unidadDeTitularAnterior quien registro el movimiento declaro que la unidad NO es del
+ *     contribuyente al que se le carga, porque la deuda es de un ejercicio anterior a la
+ *     transferencia (#635, #653). Es una <b>declaracion</b>, no un hecho derivado: lo que separa el
+ *     acto legitimo del error es que alguien lo diga, y sin esta columna la fila quedaba
+ *     indistinguible de un alta sobre la unidad propia
  */
 public record Asiento(
         @Nullable Long id,
@@ -61,7 +66,58 @@ public record Asiento(
         @Nullable Long asientoReversadoId,
         @Nullable String usuarioId,
         @Nullable String motivo,
-        @Nullable ActoDelLibro acto) {
+        @Nullable ActoDelLibro acto,
+        boolean unidadDeTitularAnterior) {
+
+    /**
+     * La forma anterior a #653, que deja la declaracion en {@code false}.
+     *
+     * <p>Existe para no tocar los diez sitios que construyen un asiento por motivos que nada tienen
+     * que ver con esto —una emision, una cobranza, una reversion, un movimiento de fase—: ninguno
+     * de ellos puede declarar nada, porque ninguno recibe la declaracion de quien atiende. {@code
+     * false} ahi no es un valor por omision escogido por comodidad: es lo que de verdad ocurrio,
+     * <b>nadie lo declaro</b>.
+     */
+    public Asiento(
+            @Nullable Long id,
+            Ejercicio ejercicio,
+            long contribuyenteId,
+            String tributo,
+            Concepto concepto,
+            TipoAsiento tipo,
+            Fase fase,
+            @Nullable Integer periodo,
+            @Nullable Long predioId,
+            @Nullable Long vehiculoId,
+            @Nullable String referenciaExterna,
+            Dinero monto,
+            LocalDate fechaValor,
+            String documentoOrigen,
+            @Nullable Long asientoReversadoId,
+            @Nullable String usuarioId,
+            @Nullable String motivo,
+            @Nullable ActoDelLibro acto) {
+        this(
+                id,
+                ejercicio,
+                contribuyenteId,
+                tributo,
+                concepto,
+                tipo,
+                fase,
+                periodo,
+                predioId,
+                vehiculoId,
+                referenciaExterna,
+                monto,
+                fechaValor,
+                documentoOrigen,
+                asientoReversadoId,
+                usuarioId,
+                motivo,
+                acto,
+                false);
+    }
 
     /** El ancho de {@code tributo varchar(20)}. */
     private static final int TRIBUTO_MAXIMO = 20;
@@ -224,6 +280,49 @@ public record Asiento(
             LocalDate fechaValor,
             String documentoOrigen,
             @Nullable ActoDelLibro acto) {
+        return nuevoDelActo(
+                ejercicio,
+                contribuyenteId,
+                tributo,
+                concepto,
+                tipo,
+                fase,
+                periodo,
+                predioId,
+                vehiculoId,
+                referenciaExterna,
+                monto,
+                fechaValor,
+                documentoOrigen,
+                acto,
+                false);
+    }
+
+    /**
+     * El mismo asiento del acto, declarando ademas que la unidad es de un titular anterior (#653).
+     *
+     * <p>Lo llena {@link MovimientoDeDeuda#enAsientos(boolean)}, que es el unico sitio que recibe
+     * la declaracion de quien registra el movimiento. Componer la constancia dentro del texto de la
+     * observacion seria la otra salida, y se descarto: la observacion la exige la regla 10 para que
+     * sea <b>del usuario</b>, y anadirle texto del sistema la convierte en otra cosa —es la misma
+     * mutacion que #488 midio y rechazo—.
+     */
+    public static Asiento nuevoDelActo(
+            Ejercicio ejercicio,
+            long contribuyenteId,
+            String tributo,
+            Concepto concepto,
+            TipoAsiento tipo,
+            Fase fase,
+            @Nullable Integer periodo,
+            @Nullable Long predioId,
+            @Nullable Long vehiculoId,
+            @Nullable String referenciaExterna,
+            Dinero monto,
+            LocalDate fechaValor,
+            String documentoOrigen,
+            @Nullable ActoDelLibro acto,
+            boolean unidadDeTitularAnterior) {
         return new Asiento(
                 null,
                 ejercicio,
@@ -242,7 +341,8 @@ public record Asiento(
                 null,
                 null,
                 null,
-                acto);
+                acto,
+                unidadDeTitularAnterior);
     }
 
     /**
@@ -321,7 +421,8 @@ public record Asiento(
                 asientoReversadoId,
                 usuarioId,
                 otroMotivo,
-                acto);
+                acto,
+                unidadDeTitularAnterior);
     }
 
     /**
@@ -365,6 +466,9 @@ public record Asiento(
                 // El acto se COPIA, como todo lo demas: la reversion de una baja sigue
                 // siendo del acto de esa baja. Que no la cuente «lo cargado» no lo decide
                 // esta columna sino `asiento_reversado_id IS NULL`, que #56 ya puso.
-                original.acto());
+                original.acto(),
+                // Y la declaracion tambien: reversar un alta declarada de titular anterior no
+                // deshace la declaracion, la contabiliza al reves.
+                original.unidadDeTitularAnterior());
     }
 }

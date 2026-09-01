@@ -629,11 +629,13 @@ trabajo cuyo resultado se descarta entero, y además **no pueden cambiar el núm
 - `fd` entra por la clave primaria de `ficha_catastral`, o sea a lo sumo una.
 
 El que sí podría multiplicar —`f`, la ficha vigente— **se queda en el conteo**: `ficha_vigente_uq`
-es *parcial* (`WHERE vigencia_hasta IS NULL`), así que sólo garantiza **una versión abierta**, y dos
-versiones cerradas pueden cubrir la misma fecha. La página devuelve dos filas de ese predio; un
-conteo que no las viera diría un total menor que las filas que la grilla enseña, y la última página
-saldría vacía sin que nada lo explicara. Eso lo fija una prueba con esa siembra exacta, no este
-párrafo.
+es *parcial* (`WHERE vigencia_hasta IS NULL`), así que impide dos versiones **abiertas** y nada más;
+una abierta y una cerrada pueden cubrir la misma fecha. La página devuelve dos filas de ese predio;
+un conteo que no las viera diría un total menor que las filas que la grilla enseña, y la última
+página saldría vacía sin que nada lo explicara. El camino de escritura no las produce
+—`ActualizarFichaCatastral` cierra la anterior el día antes de abrir la nueva—, pero un padrón
+migrado sí puede traerlas, y **el conteo tiene que decir lo que la grilla enseña sea cual sea el
+dato**. Eso lo fija una prueba con esa siembra exacta, no este párrafo.
 
 **Medido.** Misma forma que §7.1 —PostgreSQL 16.10, conexión de **`sgtm_app`** con RLS activa,
 `SET LOCAL app.municipalidad_id` dentro de una transacción, el padrón de Catacaos (14 422 predios,

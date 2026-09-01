@@ -1,6 +1,5 @@
 package pe.gob.sgtm.indicadores.dobles;
 
-import java.time.Instant;
 import java.time.LocalDate;
 import java.util.ArrayList;
 import java.util.Collection;
@@ -37,6 +36,7 @@ public final class LibroDeMentira implements RecaudacionDelLibro, CarteraDelLibr
     private LocalDate desde;
     private LocalDate hasta;
     private Ejercicio ejercicioPedido;
+    private LocalDate fechaDeCorteDeLaCartera;
 
     public LibroDeMentira conRecaudado(
             String tributo, Ejercicio ejercicio, int mes, String importe, long abonos) {
@@ -51,11 +51,8 @@ public final class LibroDeMentira implements RecaudacionDelLibro, CarteraDelLibr
         return this;
     }
 
-    public LibroDeMentira conPendiente(
-            String tributo, String importe, long obligaciones, Instant proyectadoDesde) {
-        pendiente.add(
-                new PendienteDeUnTributo(
-                        tributo, Dinero.de(importe), obligaciones, proyectadoDesde));
+    public LibroDeMentira conPendiente(String tributo, String importe, long obligaciones) {
+        pendiente.add(new PendienteDeUnTributo(tributo, Dinero.de(importe), obligaciones));
         return this;
     }
 
@@ -69,6 +66,17 @@ public final class LibroDeMentira implements RecaudacionDelLibro, CarteraDelLibr
 
     public Ejercicio ejercicioPedido() {
         return ejercicioPedido;
+    }
+
+    /**
+     * La fecha de corte con que se pidio la cartera.
+     *
+     * <p>Se anota porque desde #639 esa fecha <b>decide la cifra</b>: la cartera es el insoluto
+     * pendiente hasta ella. Si el panel pasara otra —el ano del reloj, o el 31 de diciembre—, el
+     * total seguiria siendo plausible y estaria contando la cuota que aun no vence.
+     */
+    public LocalDate fechaDeCorteDeLaCartera() {
+        return fechaDeCorteDeLaCartera;
     }
 
     @Override
@@ -95,6 +103,7 @@ public final class LibroDeMentira implements RecaudacionDelLibro, CarteraDelLibr
     @Override
     public CarteraPendiente pendientePorTributo(Ejercicio ejercicio, LocalDate aLaFecha) {
         this.ejercicioPedido = ejercicio;
+        this.fechaDeCorteDeLaCartera = aLaFecha;
         return new CarteraPendiente(pendiente, ejercicio, aLaFecha);
     }
 }

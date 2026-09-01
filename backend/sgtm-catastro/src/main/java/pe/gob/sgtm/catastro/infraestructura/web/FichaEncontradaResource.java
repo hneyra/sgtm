@@ -2,6 +2,7 @@ package pe.gob.sgtm.catastro.infraestructura.web;
 
 import org.jspecify.annotations.Nullable;
 import pe.gob.sgtm.catastro.dominio.FichaEncontrada;
+import pe.gob.sgtm.dominio.AreaM2;
 
 /**
  * Una fila de la grilla de consulta, tal como sale por HTTP.
@@ -20,6 +21,12 @@ import pe.gob.sgtm.catastro.dominio.FichaEncontrada;
  * <p>Nulo cuando la version no declara ninguna construccion —un terreno sin construir—, y no cero:
  * el cero seria un area declarada, y confundir «no hay» con «declaro cero» esconde un error de
  * captura. La pantalla pinta un guion, que no es un cero.
+ *
+ * <p><b>Las areas viajan tipadas</b> (#607). Las escribe el serializador que {@code
+ * ConfiguracionDeJson} registra para {@code AreaM2}, o sea la cifra sola —{@code "360.00"}—, y la
+ * unidad la pone la cabecera de la columna. Metida dentro del dato obliga a cada consumidor a
+ * recortarla antes de comparar, y era la diferencia por la que el mismo predio decia «360.00 m2»
+ * aqui y «360.00» en fiscalizacion.
  */
 public record FichaEncontradaResource(
         long id,
@@ -30,8 +37,8 @@ public record FichaEncontradaResource(
         @Nullable String lote,
         String tipo,
         int version,
-        String areaTerreno,
-        @Nullable String areaConstruida,
+        AreaM2 areaTerreno,
+        @Nullable AreaM2 areaConstruida,
         String uso,
         String vigenciaDesde,
         @Nullable String titular) {
@@ -46,8 +53,8 @@ public record FichaEncontradaResource(
                 fila.lote(),
                 fila.tipo().name(),
                 fila.version(),
-                fila.areaTerreno().toString(),
-                fila.areaConstruida() == null ? null : fila.areaConstruida().toString(),
+                fila.areaTerreno(),
+                fila.areaConstruida(),
                 fila.uso(),
                 fila.vigenciaDesde().toString(),
                 fila.titular());

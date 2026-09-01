@@ -45,6 +45,22 @@ public enum CodigoDeError {
     /** Se pidio ordenar por un campo que la operacion no admite. */
     ORDEN_NO_ADMITIDO(HttpStatus.UNPROCESSABLE_ENTITY, "No se puede ordenar por ese campo"),
 
+    /**
+     * El marco pedido contiene mas lotes de los que caben, y hay que acercarse (#611).
+     *
+     * <p>Es un codigo propio y no {@link #VALIDACION} porque las dos respuestas se arreglan de
+     * maneras opuestas: un {@code bbox} del reves o un {@code limite} fuera de rango dicen «esta
+     * peticion esta mal, corrigela», y este dice «la peticion esta bien, hay demasiado dentro:
+     * acercate». Con el mismo codigo, lo unico que las separaba era el texto en castellano, que se
+     * reescribe en cuanto alguien lo lee en voz alta — y entonces el plano deja de saber cuando
+     * puede ofrecer «acercarse» (ADR-0022 §2).
+     *
+     * <p>Las dos cifras —cuantos lotes hay y cual es el tope— viajan en {@code detalles}, como dato
+     * y no dentro de la frase, por lo mismo.
+     */
+    MARCO_CON_DEMASIADOS_LOTES(
+            HttpStatus.UNPROCESSABLE_ENTITY, "El marco contiene mas lotes de los que caben"),
+
     /** Lo pedido no existe en esta municipalidad. */
     NO_ENCONTRADO(HttpStatus.NOT_FOUND, "No se encontro lo solicitado"),
 
