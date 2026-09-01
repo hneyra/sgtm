@@ -68,7 +68,7 @@ class AlcabalaControllerTest {
     private static final Ejercicio EJERCICIO = new Ejercicio(2026);
 
     private static final String CUERPO =
-            "{\"transferenciaId\":5,\"autoavaluoAjustado\":\"200000.00\",\"observacion\":"
+            "{\"transferenciaId\":5,\"autovaluoAjustado\":\"200000.00\",\"observacion\":"
                     + "\"Liquidacion de alcabala pedida en ventanilla\"}";
 
     private final AuditoriaDePrueba auditoria = new AuditoriaDePrueba();
@@ -85,6 +85,26 @@ class AlcabalaControllerTest {
     @AfterEach
     void limpiarOrigen() {
         OrigenContext.limpiar();
+    }
+
+    /**
+     * <b>El nombre del campo del cuerpo, fijado por una prueba y no por un comentario</b> (#541).
+     *
+     * <p>Se llamaba {@code autoavaluoAjustado}, con una «a» de mas, contra el {@code autovaluo} que
+     * dice el resto del sistema —la columna, el rotulo del prototipo y los otros dos controladores
+     * de determinacion—. Renombrarlo no rompio ningun contrato: los cuerpos del contrato se
+     * declaran {@code type: object}, asi que ningun nombre de campo esta publicado, y la pantalla
+     * de alcabala no escribe (esta en {@code ACTOS_SIN_CAMPO} desde #385).
+     *
+     * <p>Se compara la lista <b>completa y en orden</b> y no solo que exista el campo: asi tambien
+     * se ve un campo nuevo que alguien anada a la lista blanca del cuerpo sin decirlo.
+     */
+    @Test
+    @DisplayName("el cuerpo se llama «autovaluoAjustado», con una sola «a»")
+    void elCuerpoDiceAutovaluo() {
+        assertThat(AlcabalaController.PeticionDeAlcabala.class.getRecordComponents())
+                .extracting(java.lang.reflect.RecordComponent::getName)
+                .containsExactly("observacion", "transferenciaId", "autovaluoAjustado");
     }
 
     @Test

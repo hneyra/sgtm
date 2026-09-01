@@ -199,6 +199,7 @@ const SUPRIMIDOS = {
   // Asi que el que se va es el nombre, no el filtro: `operacion` sube a
   // DEL_BACKEND con el vocabulario del enumerado, y la pantalla manda ese.
   auditoria: ['accion'],
+
 };
 
 /**
@@ -360,6 +361,27 @@ const DEL_BACKEND = {
       descripcion: 'Filtro «Tributo» de la pantalla, dentro de «Filtros del detalle»',
     },
   ],
+  // El ejercicio del calculo individual del predial, con su nombre (#541).
+  //
+  // La pantalla dibuja «Año» —de ahi sale `ano`— y el cuerpo de la operacion lo
+  // llama `ejercicio`, que es como se llama en el dominio, en la columna y en el
+  // otro endpoint del mismo controlador (`/rentas/predial/corridas/ultima`). Dos
+  // nombres para el mismo dato en la misma operacion obligaban al cliente a saber
+  // cual toca en cada mitad. El canonico es `ejercicio` y se declara tambien en la
+  // consulta; `ano` se queda como el alias que produce el rotulo del prototipo, y
+  // el controlador lee los dos (`PredialController`).
+  predial_individual: [
+    {
+      nombre: 'ejercicio',
+      ejemplo: '2026',
+      tras: 'ano',
+      descripcion: bloque(`
+        El ejercicio que se determina, con el nombre que lleva en el cuerpo y en el
+        dominio. «ano» es el mismo dato con el rotulo del prototipo; si vienen los dos,
+        gana el del cuerpo (FiltroDeLaConsulta) y despues este.
+      `),
+    },
+  ],
   // La deuda de cada fila se actualiza a una fecha, y la fila la dice (regla 9).
   consulta_vehiculos: [
     {
@@ -446,6 +468,26 @@ const DEL_BACKEND = {
  * pantalla que todavia no la tiene.
  */
 const DESCRIPCIONES = {
+  // Rentas · Registro (#541)
+  arbitrios: bloque(`
+    Las cuotas de arbitrio ya determinadas de un ejercicio: una fila por servicio y mes (#31,
+    RF-022). **Solo lectura.** La determinación existe —\`DeterminarArbitrios\`— y **no la publica
+    ningún controlador ni ningún proceso**, así que hoy esta consulta lee una tabla que ninguna
+    instalación llena; publicarla está bloqueada por D-02b, porque sus tasas son de ordenanza
+    local.
+
+    El ejercicio se pide con \`ejercicio\`, que es como se llama el dato en el resto del sistema;
+    \`anio\` es su alias y hace lo mismo. Sin ninguno de los dos, el ejercicio del reloj del
+    servidor.
+
+    **«Zona» y «Uso» no se sirven, y se rechazan con 422 en vez de ignorarse.** No es falta de
+    consulta: los valores que la pantalla ofrece —«Zona 1»…«Zona 4», y cinco usos en
+    mayúsculas— **no existen en el sistema**. La zona es la del sector del predio y el uso el
+    de su ficha catastral, los dos texto libre por municipalidad («Urbana», «Casa habitación»),
+    así que ninguna de esas nueve opciones casaría con ningún dato y la respuesta sería la tabla
+    vacía, que se lee como «no hay cuotas». Se acota por código predial. La pantalla los dibuja
+    bloqueados con su motivo, como los de #322 y #398.
+  `),
   // Cuenta corriente (#72)
   constancia: bloque(`
     Vista previa del documento que se entrega al contribuyente. Se imprime con el mismo
@@ -572,6 +614,40 @@ const DESCRIPCIONES = {
  * la clase de cosa por la que alguien confia en una lista que no filtro nada.
  */
 const DESCRIPCIONES_DE_FILTRO = {
+  // Uno de los dos hace falta, y hasta #541 ninguno: sin contribuyente esto
+  // respondia 200 con cero filas sobre 14 422 predios, que se lee como «esta
+  // persona no tiene predios». Ahora es 422, como su hermana /rentas/vehiculos.
+  predios_rentas: {
+    contribuyente:
+      'Codigo del contribuyente. Uno de los dos —este o «codContribuyente»— es OBLIGATORIO:' +
+      ' sin ninguno, 422. Y un codigo que no esta en el padron es 404, no una pagina vacia' +
+      ' (#541).',
+    codContribuyente:
+      'Filtro «Cod. Contribuyente» de la pantalla. Uno de los dos —este o «contribuyente»— es' +
+      ' OBLIGATORIO: sin ninguno, 422.',
+  },
+  // El ejercicio de los arbitrios tiene dos nombres, y el canonico es el de la
+  // pantalla (#541): `anio` es el que arrastra el `endpoint` del prototipo. Y los
+  // dos desplegables se rechazan en vez de ignorarse, que es el patron de #322.
+  arbitrios: {
+    anio:
+      'Alias de «ejercicio», el que trae el endpoint del prototipo. Si vienen los dos, manda' +
+      ' «ejercicio» (ArbitriosController).',
+    ejercicio:
+      'Filtro «Ejercicio» de la pantalla, y el nombre canonico del dato. Ausente, el ejercicio' +
+      ' del reloj del servidor.',
+    zona:
+      'Filtro «Zona» de la pantalla. NO SE SIRVE: se rechaza con 422 con cualquier valor. La' +
+      ' zona de un predio la pone su sector (sector.zona, V1) y es texto libre por' +
+      ' municipalidad —la carga real escribe «Urbana»/«Rustica»—, asi que ninguna de las cuatro' +
+      ' opciones que el prototipo ofrece casa con ningun dato: filtrar por ellas devolveria la' +
+      ' tabla vacia, que se lee como «no hay cuotas». La pantalla lo dibuja bloqueado con su' +
+      ' motivo (#322, #398, #541).',
+    uso:
+      'Filtro «Uso» de la pantalla. NO SE SIRVE, y por lo mismo que «zona»: el uso vive en' +
+      ' ficha_catastral.uso, tambien texto libre —«Casa habitacion», «Tienda de artesania»—, y' +
+      ' ninguno de los cinco usos en mayusculas del desplegable casa con el (#541).',
+  },
   consulta_fichas: {
     conciliadaConRentas:
       'Filtro «Conciliada con rentas» de la pantalla. Esta ruta no lo resuelve —el estado de' +

@@ -1,5 +1,5 @@
 /**
- * Impuesto de alcabala: la elección de base entre el valor de transferencia y el autoavalúo
+ * Impuesto de alcabala: la elección de base entre el valor de transferencia y el autovalúo
  * ajustado, y el cálculo sobre el exceso del tramo inafecto (#32, RF-026).
  *
  * <p>Sin Spring y sin JPA (regla 7). Grava únicamente la transferencia de un predio (TUO Ley de
