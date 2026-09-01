@@ -23,6 +23,7 @@ import {
   type Fila,
 } from '../../datos/transito';
 import { useRebote, useRecurso, type Estado } from '../../api/useRecurso';
+import { Descargas } from '../../api/descarga';
 import { ErrorDeApi, fijarToken } from '../../api/cliente';
 import { cuentaActual, hayPuerta } from '../../api/sesion';
 import {
@@ -42,6 +43,9 @@ import {
   recordVehicular,
   registrarDescargo,
   resumenDePapeletas,
+  REPORTES_DESCARGABLES,
+  descargarHojaInformativa,
+  descargarReporteDeTransito,
   resumenDeRecaudacion,
   resumenPorCodigo,
   resumenPorPlaca,
@@ -701,6 +705,20 @@ export default function Transito({ dest, onDest }: PantallaProps) {
   const reporteActivo = dest === 'reportes' && h.sinLectura === undefined && !faltaCriterio;
   const llavesDelReporte = [h.k, c('licencia'), c('documento'), c('placa'), c('conductor'), c('papeleta'), c('nDeConstancia'), c('usuarioQueEmitio'), c('codigoDeInfraccion'), c('iniciales2Letras'), c('desde'), c('hasta'), c('estado'), c('ano'), c('agrupadoPor')];
   const reporte = useRecurso((s) => pedirReporte(h.k, c, s), llavesDelReporte, reporteActivo);
+
+  /* ── El mismo reporte, como documento ────────────────────────
+     `?formato=PDF|XLS|RTF` lo sirve el propio endpoint desde #535 —antes
+     contestaba 500—, y no todos: los que no declaran el parámetro devuelven el
+     JSON de siempre sin decir nada, así que la lista es explícita. La descarga
+     lleva EXACTAMENTE los criterios de la hoja, que salen del mismo
+     `criteriosDelReporte`. */
+  const rutaDelDocumento = REPORTES_DESCARGABLES[h.k];
+  const sePuedeDescargar = rutaDelDocumento !== undefined || h.k === 'hoja_papeleta';
+  const impedimentoDeLaDescarga = faltaCriterio
+    ? 'Falta el criterio que este reporte exige'
+    : reporte.datos === null
+      ? 'No hay hoja leída: no hay qué descargar'
+      : undefined;
 
   /* ── Los tres actos que escriben ─────────────────────────────── */
   const proc = PROCESOS.find((p) => p.k === proceso) ?? PROCESOS[0];
@@ -1706,6 +1724,38 @@ export default function Transito({ dest, onDest }: PantallaProps) {
                     Los criterios que este reporte no usa no se dibujan; los que el contrato declara y ningún controlador lee —ordenación,
                     tipo de cobranza, gravedad— tampoco, porque tecleados no harían nada.
                   </p>
+                  {/* Las tres hojas sin lectura ya dicen arriba lo suyo, y lo
+                      suyo NO es «su endpoint no declara ?formato»: la constancia
+                      libre y las dos resoluciones de gerencia SÍ emiten el
+                      documento —son POST cuya respuesta es el archivo—, lo que
+                      no tienen es lectura ni formulario. Repetir aquí el motivo
+                      equivocado sería contradecir el aviso de al lado. */}
+                  <div style={{ padding: '12px 16px', borderTop: '1px solid var(--line)' }}>
+                    {h.sinLectura !== undefined ? (
+                      <p style={{ margin: 0, fontSize: 12, lineHeight: 1.55, color: 'var(--ink-3)', textWrap: 'pretty' }}>
+                        Sin hoja no hay archivo: el motivo es el de arriba.
+                      </p>
+                    ) : sePuedeDescargar ? (
+                      <Descargas
+                        traer={(f) =>
+                          h.k === 'hoja_papeleta'
+                            ? descargarHojaInformativa(c('papeleta'), f)
+                            : descargarReporteDeTransito(rutaDelDocumento!, criteriosDelReporte(h.k, c), f)
+                        }
+                        que="este reporte"
+                        acceso={ACCESO_DEL_REPORTE[h.k] ?? 'transito_reportes'}
+                        privilegio="impresion"
+                        impedimento={impedimentoDeLaDescarga}
+                      />
+                    ) : (
+                      <p style={{ margin: 0, fontSize: 12, lineHeight: 1.55, color: 'var(--ink-3)', textWrap: 'pretty' }}>
+                        <strong style={{ fontWeight: 600 }}>Este reporte no se puede descargar.</strong> Su endpoint no declara{' '}
+                        <code style={{ fontFamily: 'var(--font-mono)' }}>?formato</code>: pedírselo devuelve el mismo JSON que se está
+                        viendo, así que el archivo se llamaría <code style={{ fontFamily: 'var(--font-mono)' }}>.pdf</code> y no lo sería.
+                        La hoja se saca por la impresora con Ctrl+P.
+                      </p>
+                    )}
+                  </div>
                 </section>
 
                 {h.sinLectura && (
@@ -1868,6 +1918,48 @@ function filasDelPadron(filas: { numero: string; fechaInfraccion: string; placa:
 }
 
 /**
+ * Los criterios que ESTE reporte manda, en un solo sitio.
+ *
+ * Existe para que la hoja de la pantalla y el archivo que se descarga no puedan
+ * llevar filtros distintos. Escrito dos veces —una en la lectura y otra en la
+ * descarga— el defecto no falla en voz alta: el PDF sale, se ve bien, y dice
+ * otra cosa que lo que está en pantalla; nadie compara un archivo que ya se
+ * llevó el contribuyente. Aquí las dos leen el MISMO objeto.
+ *
+ * Los vacíos se van como `undefined`: `descargar()` y `solicitar()` no mandan un
+ * parámetro vacío, y un `estado=` en blanco es 422 en el servidor.
+ */
+function criteriosDelReporte(k: string, c: (llave: string) => string): Record<string, string | undefined> {
+  const v = (llave: string) => c(llave) || undefined;
+  switch (k) {
+    case 'record_conductor':
+      return { licencia: v('licencia'), documento: v('documento') };
+    case 'record_vehicular':
+      return { placa: c('placa') };
+    case 'padron':
+      return { desde: v('desde'), hasta: v('hasta'), estado: v('estado') };
+    /* Sin `ejecutor` ni `estadoDelExpediente`: el contrato los declara y el
+       backend los rechaza con 422 —viven en el expediente coactivo—. */
+    case 'padron_coactiva':
+      return { desde: v('desde'), hasta: v('hasta') };
+    case 'padron_constancias':
+      return { desde: v('desde'), hasta: v('hasta'), nDeConstancia: v('nDeConstancia'), usuarioQueEmitio: v('usuarioQueEmitio') };
+    case 'estado_cuenta':
+      return { conductor: v('conductor'), placa: v('placa') };
+    case 'resumen_recaudacion':
+      return { ano: v('ano') };
+    case 'resumen_papeletas':
+      return { desde: v('desde'), hasta: v('hasta'), agrupadoPor: v('agrupadoPor') };
+    case 'resumen_codigo':
+      return { codigoDeInfraccion: v('codigoDeInfraccion'), desde: v('desde'), hasta: v('hasta'), estado: v('estado') };
+    case 'resumen_placa':
+      return { iniciales2Letras: v('iniciales2Letras'), desde: v('desde'), hasta: v('hasta'), estado: v('estado') };
+    default:
+      return {};
+  }
+}
+
+/**
  * Pide la hoja elegida a la ruta que le toca y la devuelve ya en filas.
  *
  * Cada reporte tiene su propia forma de respuesta —un sobre paginado, un
@@ -1879,18 +1971,19 @@ async function pedirReporte(
   c: (llave: string) => string,
   senal: AbortSignal,
 ): Promise<HojaResuelta> {
-  const estado = (c('estado') || undefined) as EstadoDePapeleta | undefined;
+  const cr = criteriosDelReporte(k, c);
+  const estado = cr.estado as EstadoDePapeleta | undefined;
   const pag = { tamano: 50 };
 
   if (k === 'record_conductor' || k === 'record_vehicular' || k === 'padron' || k === 'padron_coactiva') {
     const p =
       k === 'record_conductor'
-        ? await recordDeConductor({ licencia: c('licencia') || undefined, documento: c('documento') || undefined }, pag, senal)
+        ? await recordDeConductor(cr, pag, senal)
         : k === 'record_vehicular'
-          ? await recordVehicular(c('placa'), pag, senal)
+          ? await recordVehicular(cr.placa ?? '', pag, senal)
           : k === 'padron'
-            ? await padronDePapeletas({ desde: c('desde') || undefined, hasta: c('hasta') || undefined, estado }, pag, senal)
-            : await padronCoactiva({ desde: c('desde') || undefined, hasta: c('hasta') || undefined }, pag, senal);
+            ? await padronDePapeletas({ ...cr, estado }, pag, senal)
+            : await padronCoactiva(cr, pag, senal);
     return {
       aLaFecha: p.contenido[0]?.actualizadoA ?? '',
       meta: [
@@ -1903,11 +1996,7 @@ async function pedirReporte(
   }
 
   if (k === 'padron_constancias') {
-    const p = await padronDeConstancias(
-      { desde: c('desde') || undefined, hasta: c('hasta') || undefined, nDeConstancia: c('nDeConstancia') || undefined, usuarioQueEmitio: c('usuarioQueEmitio') || undefined },
-      pag,
-      senal,
-    );
+    const p = await padronDeConstancias(cr, pag, senal);
     return {
       aLaFecha: '',
       meta: [['Emitidas', miles(p.totalElementos)]],
@@ -1917,7 +2006,7 @@ async function pedirReporte(
   }
 
   if (k === 'estado_cuenta') {
-    const p = await estadoDeCuenta({ conductor: c('conductor') || undefined, placa: c('placa') || undefined }, pag, senal);
+    const p = await estadoDeCuenta(cr, pag, senal);
     return {
       aLaFecha: '',
       meta: [['Papeletas pendientes', miles(p.totalElementos)]],
@@ -1980,7 +2069,7 @@ async function pedirReporte(
   }
 
   if (k === 'resumen_recaudacion') {
-    const r = await resumenDeRecaudacion(c('ano') ? Number(c('ano')) : undefined, senal);
+    const r = await resumenDeRecaudacion(cr.ano === undefined ? undefined : Number(cr.ano), senal);
     return {
       aLaFecha: r.actualizadoA,
       meta: [
@@ -2002,11 +2091,11 @@ async function pedirReporte(
 
   const r =
     k === 'resumen_codigo'
-      ? await resumenPorCodigo({ codigoDeInfraccion: c('codigoDeInfraccion') || undefined, desde: c('desde') || undefined, hasta: c('hasta') || undefined, estado }, senal)
+      ? await resumenPorCodigo({ ...cr, estado }, senal)
       : k === 'resumen_placa'
-        ? await resumenPorPlaca({ iniciales2Letras: c('iniciales2Letras') || undefined, desde: c('desde') || undefined, hasta: c('hasta') || undefined, estado }, senal)
+        ? await resumenPorPlaca({ ...cr, estado }, senal)
         : await resumenDePapeletas(
-            { desde: c('desde') || undefined, hasta: c('hasta') || undefined, agrupadoPor: (c('agrupadoPor') || undefined) as 'ANO' | 'MES' | 'ESTADO' | 'CODIGO' | 'PLACA' | undefined },
+            { ...cr, agrupadoPor: cr.agrupadoPor as 'ANO' | 'MES' | 'ESTADO' | 'CODIGO' | 'PLACA' | undefined },
             senal,
           );
   return {

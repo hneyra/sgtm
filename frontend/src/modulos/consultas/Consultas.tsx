@@ -9,12 +9,14 @@ import { usarPreferencias } from '../../shell/preferencias';
 import { ErrorDeApi, fijarToken } from '../../api/cliente';
 import { cuentaActual, hayPuerta } from '../../api/sesion';
 import { useRebote, useRecurso } from '../../api/useRecurso';
+import { Descargas } from '../../api/descarga';
 import {
   altasYBajas,
   buscarContribuyentes,
   buscarPredios,
   buscarVehiculos,
   constanciaDeNoAdeudo,
+  descargarConstancia,
   consultarValores,
   deudaDelContribuyente,
   deudasConBeneficio,
@@ -1081,19 +1083,37 @@ export default function Consultas({ dest, onDest }: PantallaProps) {
               <Nota style={{ flex: 1, minWidth: 200 }}>
                 La constancia se verifica a una fecha. En blanco, a hoy.
               </Nota>
-              {/* El PDF, el XLS y el RTF existen —`?formato=PDF|XLS|RTF`— y no se
-                  pueden pedir desde aquí: `solicitar()` es la única puerta de
-                  esta interfaz y devuelve JSON. El botón se queda apagado con el
-                  motivo en vez de prometer una descarga que no llega. */}
+              {/* Los tres formatos los emite el servidor desde esta misma ruta
+                  con `?formato`. No pasan por `solicitar()` —parsea JSON— sino
+                  por `descargar()`, que es la otra puerta del mismo `cliente.ts`
+                  y la que le pone el `Authorization`. */}
+              <Descargas
+                traer={(f) => descargarConstancia({ codContribuyente: cod, fecha: fecha || undefined }, f)}
+                que="la constancia"
+                acceso="constancia"
+                impedimento={constancia.datos === null ? 'No hay ninguna constancia leída: no hay qué descargar' : undefined}
+              />
+              {/* Y lo mismo con la impresora. Sin la guarda, un 404, un 403 o la
+                  respuesta que aún no ha llegado sacaban por la impresora la hoja
+                  entera —membrete, «Constancia de no adeudo», el párrafo que
+                  afirma que NO mantiene obligaciones y las dos líneas de firma—
+                  con la tabla vacía: un papel oficial en blanco sigue siendo un
+                  papel oficial, y este además afirma algo. Es el mismo defecto
+                  que la ficha del contribuyente ya tenía cerrado. */}
               <button
-                disabled
-                aria-disabled="true"
-                title="El servidor genera PDF, XLS y RTF, pero la puerta de peticiones de esta interfaz solo lee JSON: la descarga todavía no se puede pedir desde aquí."
-                style={{ ...BOTON_LINEA, cursor: 'not-allowed', opacity: 0.5 }}
+                onClick={() => window.print()}
+                disabled={constancia.datos === null}
+                title={constancia.datos === null ? 'No hay ninguna constancia leída: no hay qué imprimir' : undefined}
+                className={constancia.datos === null ? undefined : 'hov-acento-2'}
+                style={{
+                  ...BOTON_LINEA,
+                  border: 0,
+                  background: 'var(--accent)',
+                  color: 'var(--accent-contraste)',
+                  fontWeight: 500,
+                  ...(constancia.datos === null ? { cursor: 'not-allowed', opacity: 0.5 } : null),
+                }}
               >
-                Descargar PDF
-              </button>
-              <button onClick={() => window.print()} className="hov-acento-2" style={{ ...BOTON_LINEA, border: 0, background: 'var(--accent)', color: 'var(--accent-contraste)', fontWeight: 500 }}>
                 Imprimir esta hoja
               </button>
             </div>

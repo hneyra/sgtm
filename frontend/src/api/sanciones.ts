@@ -1,4 +1,5 @@
-import { solicitar, type RespuestaPaginada } from './cliente';
+import { descargar, solicitar, type RespuestaPaginada } from './cliente';
+import type { FormatoDeDocumento } from './descarga';
 
 /**
  * Lo que `sanciones` publica del procedimiento sancionador administrativo.
@@ -408,9 +409,9 @@ export type ReporteAdministrativo = {
 /**
  * El emisor de los tres reportes que el backend implementa.
  *
- * Sin `formato` contesta este JSON; con él, el documento. La interfaz no manda
- * `formato`: el navegador no puede descargar lo que `solicitar()` lee como
- * JSON, y ofrecer un botón que no descarga sería prometer lo que no pasa.
+ * Sin `formato` contesta este JSON, que es lo que la hoja dibuja; con él, el
+ * documento, y eso va por {@link descargarReporteAdministrativo} porque
+ * `solicitar()` parsea JSON y un PDF no cabe por ahí.
  *
  * **`observacion` no viaja, y es correcto**: `PeticionDeReporteAdministrativo`
  * no la declara porque emitir un reporte no modifica nada.
@@ -426,6 +427,49 @@ export function emitirReporteAdministrativo(
   senal?: AbortSignal,
 ): Promise<ReporteAdministrativo> {
   return solicitar('/infracciones/administrativas/reportes', { metodo: 'POST', cuerpo: peticion, senal });
+}
+
+/* ══════════ Los mismos reportes, como documento ══════════ */
+
+/**
+ * El resumen de multas administrativas, en PDF, XLS o RTF (RF-132).
+ *
+ * **Es un `POST`**, y por eso `descargar()` recibe método y cuerpo: el tipo de
+ * reporte y el formato viajan dentro, no en la consulta. Hacerlo con un `GET`
+ * inventado no vale — `ReporteAdministrativoController` no publica ninguno—.
+ */
+export function descargarReporteAdministrativo(
+  peticion: {
+    reporte: TipoDeReporteAdministrativo;
+    desde?: string;
+    hasta?: string;
+    agrupadoPor?: AgrupacionDelResumen;
+    estado?: string;
+  },
+  formato: FormatoDeDocumento,
+): Promise<void> {
+  return descargar('/infracciones/administrativas/reportes', {}, undefined, {
+    metodo: 'POST',
+    cuerpo: { ...peticion, formato },
+  });
+}
+
+/**
+ * El padrón de notificaciones, como documento. Aquí sí es `GET` con `?formato`.
+ *
+ * Pide `IMPRESION` y no `LECTURA`, como los once reportes de #53: saca del
+ * sistema un listado que en pantalla nadie llegó a ver entero.
+ */
+export function descargarPadronDeNotificaciones(
+  filtro: { desde?: string; hasta?: string; estado?: string },
+  formato: FormatoDeDocumento,
+): Promise<void> {
+  return descargar('/infracciones/administrativas/reportes/padron-notificaciones', { ...filtro, formato });
+}
+
+/** El resumen de recaudación, como documento. */
+export function descargarRecaudacionAdministrativa(ano: string | undefined, formato: FormatoDeDocumento): Promise<void> {
+  return descargar('/infracciones/administrativas/reportes/resumen-recaudacion', { ano, formato });
 }
 
 /* ══════════ Generación masiva de valores ══════════ */
