@@ -102,17 +102,6 @@ export const COLS_MOVIMIENTOS: ColDef[] = [
   ['Motivo', 0],
 ];
 
-export const COLS_BENEFICIO: ColDef[] = [
-  ['Año', 0],
-  ['Tributo', 0],
-  ['Unidad', 0],
-  ['Insoluto', 1],
-  ['Reajuste', 1],
-  ['Interés', 1],
-  ['Gastos', 1],
-  ['Total', 1],
-];
-
 export const COLS_CONSTANCIA: ColDef[] = [
   ['Tributo', 0],
   ['Ejercicio', 0],
@@ -121,6 +110,12 @@ export const COLS_CONSTANCIA: ColDef[] = [
   ['Fase', 0],
   ['Importe S/', 1],
 ];
+
+/* `COLS_BENEFICIO` se ha ido. Era la declaración de las ocho columnas con que
+   la maqueta del prototipo dibujaba la deuda acogida a una campaña de
+   beneficio. Se fue cuando la simulación pasó a leer del backend: las columnas
+   de esa tabla las declara ahora la pantalla, sobre los campos que el recurso
+   publica de verdad. */
 
 /* ══════════ Las notas de cada vista ══════════
    Dicen de dónde sale lo que se ve y qué NO se ve, que es la mitad que se

@@ -24,11 +24,11 @@ export const TRAMOS: readonly [string, string, number][] = [
   ['Unidad', 'unidad', 3],
 ];
 
-/** El código que ya está en uso. Se copia del artboard tal cual —allí es un
- *  literal de veintiún dígitos frente a los veintitrés que exigen los ocho
- *  tramos, así que la rama de «Código ya usado» no llega a dispararse—; lo
- *  único que cambia es el ubigeo, que aquí es el de Catacaos. */
-export const CODIGO_YA_USADO = '200104010420040101020';
+/* `CODIGO_YA_USADO` se ha ido. Era un literal de veintiun digitos copiado del
+   artboard con el ubigeo cambiado, y decidia por si solo si un codigo estaba
+   ocupado: la rama de «Codigo ya usado» se disparaba contra una cadena escrita a
+   mano y nunca contra el padron. Se fue cuando el alta paso a preguntarselo al
+   backend. */
 
 /* ══════════ Las seis secciones de la ficha ══════════
    Seis grupos donde el sistema actual pone once pestañas: lo que se agrupa es
@@ -457,49 +457,32 @@ export const DEFECTOS_DE_FICHA_NUEVA: ValoresDeFicha = {
 };
 
 /* ══════════ Panel del módulo ══════════ */
-export type Pendiente = { tipo: string; titulo: string; detalle: string; conteo: string; tono: 'ok' | 'warn' | 'bad'; dest: string };
 
-export const PENDIENTES: Pendiente[] = [
-  { tipo: 'Campo', titulo: 'Fichas con área verificada pendiente', detalle: 'Levantadas en el barrido del sector 03 y sin cerrar. El autovalúo no se recalcula hasta que se graben.', conteo: '14', tono: 'warn', dest: 'predios' },
-  { tipo: 'Rentas', titulo: 'Predios sin conciliar con el padrón', detalle: 'Tienen ficha catastral y no generan deuda predial. La conciliación se hace desde Rentas.', conteo: '208', tono: 'bad', dest: 'predios' },
-  { tipo: 'Valores', titulo: 'Tabla de aranceles {ejercicio} sellada', detalle: 'Publicada por el Ministerio de Vivienda. Ya se aplica a todo el padrón.', conteo: 'OK', tono: 'ok', dest: 'valores' },
-];
-
-export const KPIS: { valor: string; etiqueta: string; nota: string }[] = [
-  { valor: '18,412', etiqueta: 'Predios en el padrón', nota: 'Activos. Los dados de baja siguen en determinaciones ya emitidas.' },
-  { valor: '1,096', etiqueta: 'Manzanas en 5 sectores', nota: 'Un predio sin sector no cuenta en ninguno.' },
-  { valor: '96.4 %', etiqueta: 'Fichas con área verificada', nota: '662 predios siguen solo con área declarada.' },
-  { valor: 'S/ 198.40', etiqueta: 'Arancel mediano por m²', nota: 'Zona 2 — el tramo más frecuente del padrón.' },
-];
+/* `KPIS` y `PENDIENTES`, con el tipo `Pendiente`, se han ido. `KPIS` eran las
+   cuatro cifras de cabecera —«18,412 predios», «1,096 manzanas», «96.4 %»,
+   «S/ 198.40» de arancel mediano—, cuatro conteos de una captura que se
+   dibujaban iguales en toda municipalidad. `PENDIENTES` eran las tres tarjetas de
+   avisos de la maqueta del prototipo —«14 fichas con área verificada
+   pendiente», «208 predios sin conciliar»—, tres conteos que ninguna lectura
+   había contado y que se dibujaban iguales en toda municipalidad. Se fueron
+   cuando el panel pasó a leer del backend. */
 
 /* ══════════ Padrón de predios ══════════ */
-export type FiltroDelPadron =
-  | { label: string; tipo: 'sel'; valor: string; opts: string[] }
-  | { label: string; tipo: 'texto'; valor: string; ph: string };
-
-export const FILTROS: FiltroDelPadron[] = [
-  { label: 'Sector', tipo: 'sel', valor: 'Todos', opts: ['Todos', '01', '02', '03', '04', '05'] },
-  { label: 'Manzana', tipo: 'texto', valor: '', ph: '042' },
-  { label: 'Lote', tipo: 'texto', valor: '', ph: '004' },
-  { label: 'Uso', tipo: 'sel', valor: 'Todos', opts: ['Todos', 'Casa habitación', 'Comercio', 'Industria', 'Terreno sin construir', 'Servicios', 'Educación', 'Salud'] },
-  { label: 'Conciliada con rentas', tipo: 'sel', valor: 'Todas', opts: ['Todas', 'Sí', 'No'] },
-  { label: 'Estado de la ficha', tipo: 'sel', valor: 'Todas', opts: ['Todas', 'Verificada', 'Solo declarada', 'Sin ficha'] },
-];
-
 export const COLS_PREDIOS: readonly ColumnaDeTabla[] = [
   ['Cod. ref. catastral', 0], ['Titular', 0], ['Dirección', 0], ['Uso', 0],
   ['Área terreno m²', 1], ['Área const. m²', 1], ['Con rentas', 0],
 ];
 
-/** `[código, titular, dirección, uso, terreno, construido, estado, tono]`. */
-export const PREDIOS: readonly (readonly [string, string, string, string, string, string, string, 'ok' | 'warn' | 'bad'])[] = [
-  ['01-1042-0004', 'VILLEGAS PRADO, ROSA', 'CALLE BOLÍVAR 539', 'Casa habitación', '329.00', '136.00', 'Conciliada', 'ok'],
-  ['01-1042-0005', 'CHÁVEZ SAAVEDRA, CÉSAR', 'CALLE BOLÍVAR 543', 'Comercio', '212.00', '198.40', 'Conciliada', 'ok'],
-  ['01-1007-0001', 'ASOCIACIÓN PRO CASA DEL MAESTRO', 'CALLE SAN MARTÍN 102', 'Educación', '5,000.00', '1,240.00', 'Sin conciliar', 'warn'],
-  ['02-1188-0012', 'DISARTEX S.A.C.', 'AV. JOSÉ DE LAMA 1204', 'Industria', '1,840.00', '960.00', 'Conciliada', 'ok'],
-  ['03-1042-0088', 'RUFINO VALDERA, EDGAR YOEL', 'PASAJE EL ALTO 116', 'Terreno sin construir', '148.00', '—', 'Sin ficha', 'bad'],
-  ['05-2201-0004', 'SUC. TOMÁS MAZA GÓMEZ', 'CARRET. CATACAOS — PAITA KM 4', 'Casa habitación', '840.00', '96.00', 'Sin conciliar', 'warn'],
-];
+/* `PREDIOS` se ha ido. Eran las seis filas de la maqueta del prototipo —«VILLEGAS
+   PRADO, ROSA», «DISARTEX S.A.C.», con sus áreas y su columna «Con rentas» ya
+   conciliada—, seis predios de una captura dibujados bajo el padrón de cualquier
+   municipalidad. Se fueron cuando la grilla pasó a leer del backend. */
+
+/* `FILTROS` y su tipo `FiltroDelPadron` se han ido. Eran los seis filtros de la
+   maqueta del prototipo, con los sectores «01» a «05» y los usos escritos a mano
+   dentro: cinco sectores que son los de una captura y no los de ninguna
+   municipalidad. Se fueron cuando la consulta pasó a leer del backend, que es
+   quien sabe qué sectores y qué usos tiene el padrón que se está mirando. */
 
 /* ══════════ Mapa catastral ══════════ */
 /**
@@ -561,28 +544,15 @@ export const CAPAS: readonly CapaDelPlano[] = [
 ];
 
 /* ══════════ Territorio ══════════ */
-/** `[código, nombre, predios, manzanas]`. */
-export const SECTORES: readonly [string, string, string, number][] = [
-  ['01', 'CERCADO DE CATACAOS', '2,384 predios', 96],
-  ['02', 'ZONA INDUSTRIAL', '1,944 predios', 84],
-  ['03', 'BARRIO BUENOS AIRES', '3,018 predios', 112],
-  ['04', 'BELLAVISTA LÍMITE', '1,388 predios', 68],
-  ['05', 'EJE CARRETERA PAITA', '902 predios', 58],
-];
 
-export const MANZANAS_DEL_SECTOR = ['M-01', 'M-02', 'M-03', 'M-04', 'M-05', 'M-06', 'M-07', 'M-08'];
-
-export const COLS_VIAS: readonly ColumnaDeTabla[] = [
-  ['Código', 0], ['Tipo', 0], ['Nombre', 0], ['Zona', 0], ['Arancel S/ m²', 1], ['Estado', 0],
-];
-
-export const VIAS: readonly (readonly string[])[] = [
-  ['00001182', 'AVENIDA', 'JOSÉ DE LAMA', 'Zona 1', '412.60', 'ACTIVA'],
-  ['00001183', 'CALLE', 'SANTA ROSA', 'Zona 2', '198.40', 'ACTIVA'],
-  ['00001184', 'CALLE', 'LAMA', 'Zona 2', '198.40', 'ACTIVA'],
-  ['00001185', 'PASAJE', 'EL ALTO', 'Zona 3', '142.80', 'ACTIVA'],
-  ['00001186', 'CARRETERA', 'CATACAOS — PAITA', 'Zona 4', '96.20', 'INACTIVA'],
-];
+/* `SECTORES`, `MANZANAS_DEL_SECTOR`, `COLS_VIAS` y `VIAS` se han ido: el bloque
+   entero era la maqueta del prototipo. Los cinco sectores de Catacaos con su
+   nombre y su conteo de predios, ocho manzanas «M-01» a «M-08» que no son las de
+   ningún sector, y cinco vías con su código, su zona y su arancel al céntimo
+   —«JOSÉ DE LAMA · Zona 1 · 412.60»—, que es una cifra de valuación inventada.
+   Se fueron cuando el territorio pasó a leer del backend: los sectores y sus
+   manzanas salen de `GET /catastro/sectores`, y las vías de su propia lectura
+   con las columnas que el recurso publica. */
 
 /* ══════════ Valores del ejercicio ══════════ */
 export type TablaDeValores = {
@@ -595,73 +565,23 @@ export type TablaDeValores = {
 
 export const PESTANIAS_DE_VALORES = ['Aranceles de terreno', 'Valores unitarios', 'Depreciación'];
 
-/** Las tres tablas oficiales. El ejercicio entra en el rótulo, así que el
- *  título se compone con el que esté elegido en la cabecera. */
-export const tablasDeValores = (ejercicio: string): TablaDeValores[] => [
-  {
-    titulo: 'Aranceles vigentes ' + ejercicio,
-    conteo: '6 tramos',
-    cols: [['Vía', 0], ['Cuadra desde', 1], ['Cuadra hasta', 1], ['Zona', 0], ['Arancel S/ m²', 1], ['Variación', 1]],
-    filas: [
-      ['AV. JOSÉ DE LAMA', '1', '6', 'Zona 1', '412.60', '+4.2 %'],
-      ['AV. JOSÉ DE LAMA', '7', '14', 'Zona 1', '386.40', '+4.0 %'],
-      ['CALLE SANTA ROSA', '1', '12', 'Zona 2', '198.40', '+3.8 %'],
-      ['CALLE LAMA', '1', '10', 'Zona 2', '198.40', '+3.8 %'],
-      ['PASAJE EL ALTO', '1', '4', 'Zona 3', '142.80', '+3.2 %'],
-      ['CARRETERA CATACAOS — PAITA', '1', '8', 'Zona 4', '96.20', '+2.8 %'],
-    ],
-    nota: 'Aranceles aprobados por el Ministerio de Vivienda, Construcción y Saneamiento para el ejercicio ' + ejercicio + '.',
-  },
-  {
-    titulo: 'Valores unitarios de edificación — costa ' + ejercicio + ' (S/ por m²)',
-    conteo: '7 categorías',
-    cols: [['Cat.', 0], ['Muros y columnas', 1], ['Techos', 1], ['Pisos', 1], ['Puertas y ventanas', 1], ['Revestimientos', 1], ['Baños', 1], ['Inst. eléct. y sanit.', 1]],
-    filas: [
-      ['A', '451.28', '212.90', '148.36', '204.12', '286.44', '78.20', '212.10'],
-      ['B', '341.72', '162.14', '112.88', '158.42', '221.06', '58.72', '160.44'],
-      ['C', '256.18', '118.92', '84.36', '112.60', '162.18', '42.10', '118.32'],
-      ['D', '182.44', '86.20', '61.42', '78.14', '112.36', '28.44', '84.16'],
-      ['E', '124.36', '58.72', '41.20', '52.88', '76.42', '18.62', '56.44'],
-      ['F', '78.20', '34.16', '24.88', '31.44', '44.20', '10.36', '32.18'],
-      ['G', '41.62', '18.44', '12.36', '16.20', '22.88', '4.12', '16.44'],
-    ],
-    nota: 'La ficha declara una categoría A–G por cada una de las siete partidas. El sistema las suma y les aplica la depreciación.',
-  },
-  {
-    titulo: 'Depreciación por antigüedad y estado — ladrillo, casa habitación',
-    conteo: '6 rangos',
-    cols: [['Antigüedad', 0], ['Muy bueno %', 1], ['Bueno %', 1], ['Regular %', 1], ['Malo %', 1]],
-    filas: [
-      ['Hasta 5 años', '0', '3', '8', '15'],
-      ['6 a 10 años', '3', '8', '15', '24'],
-      ['11 a 20 años', '8', '17', '27', '39'],
-      ['21 a 30 años', '15', '25', '38', '52'],
-      ['31 a 40 años', '22', '33', '48', '64'],
-      ['Más de 40 años', '30', '42', '58', '76'],
-    ],
-    nota: 'El porcentaje depende del material predominante (MEP) y del estado de conservación (ECS) declarados por piso.',
-  },
-];
+/* `tablasDeValores` se ha ido. Eran las tres tablas normativas escritas a mano
+   —seis tramos de arancel con su variacion, los valores unitarios y la
+   depreciacion—, o sea cifras que multiplican el autovaluo de todo un padron
+   dibujadas desde una captura (regla 5). Se fue cuando la pantalla paso a leer
+   los cuadros publicados al conjunto del ejercicio, que es de donde tienen que
+   salir o no salir. */
+
 
 /* ══════════ Ficha del contribuyente (el documento) ══════════ */
-export const REPORTE_META: readonly [string, string][] = [
-  ['Contribuyente', 'VILLEGAS PRADO, ROSA'],
-  ['Código', '00000003542'],
-  ['D.N.I.', '03593174'],
-  ['Domicilio fiscal', 'CALLE BOLÍVAR 539 — CATACAOS'],
-  ['Calificación', '003 — PEQUEÑO CONTRIBUYENTE'],
-  ['Ejercicio', '{ejercicio}'],
-];
 
-export const COLS_REPORTE: readonly ColumnaDeTabla[] = [
-  ['Unidad', 0], ['Identificación', 0], ['Uso / clase', 0], ['Condición', 0], ['Deuda S/', 1],
-];
-
-export const FILAS_REPORTE: readonly (readonly string[])[] = [
-  ['01-1042-0004', 'CALLE BOLÍVAR 539', 'Casa habitación', 'PROPIETARIO', '0.00'],
-  ['01-1042-0004-02', 'CALLE BOLÍVAR 539 int. 2', 'Comercio', 'PROPIETARIO', '182.40'],
-  ['05-2201-0018', 'CARRET. CATACAOS — PAITA KM 4', 'Terreno sin construir', 'POSEEDOR', '96.20'],
-];
+/* `REPORTE_META`, `COLS_REPORTE` y `FILAS_REPORTE` se han ido, y eran la hoja
+   entera: el nombre, el código, el D.N.I. y el domicilio de una persona de la
+   maqueta del prototipo, y sus tres unidades con la deuda de cada una. La
+   pantalla la dibujaba con cualquier sesión y sin haber abierto ningún
+   contribuyente, y una vez impresa esa hoja no se distingue de una correcta. Se
+   fueron cuando el reporte pasó a leer del backend, que es quien sabe de quién
+   es la ficha y qué unidades tiene. */
 
 /* ══════════ Modalidades de la ficha ══════════ */
 /** `[clave, rótulo, ayuda]`. Las que no aplican no piden datos. */

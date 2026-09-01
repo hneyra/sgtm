@@ -1353,84 +1353,15 @@ export const COLS_DE_LA_BAJA: ColDef[] = [
 
 /* ══════════ Panel del módulo ══════════ */
 
-export type EtapaDeEmision = { etapa: string; pct: number; registros: string; estado: string; tono: 'ok' | 'warn' | 'bad' };
-
-export const ETAPAS_DE_LA_EMISION: EtapaDeEmision[] = [
-  { etapa: 'Lectura del padrón', pct: 100, registros: '62,418', estado: 'Completa', tono: 'ok' },
-  { etapa: 'Valuación de predios', pct: 100, registros: '78,204', estado: 'Completa', tono: 'ok' },
-  { etapa: 'Determinación del impuesto', pct: 100, registros: '61,884', estado: 'Completa', tono: 'ok' },
-  { etapa: 'Determinación de arbitrios', pct: 100, registros: '61,884', estado: 'Completa', tono: 'ok' },
-  { etapa: 'Generación de cuponeras', pct: 98, registros: '61,350', estado: '534 observados', tono: 'warn' },
-];
-
-export const KPIS_DEL_PANEL = [
-  { valor: '62,418', etiqueta: 'Contribuyentes en el padrón', nota: 'Activos. Los de baja siguen en determinaciones ya emitidas.' },
-  { valor: 'S/ 9.4 M', etiqueta: 'Predial determinado 2026', nota: 'Sobre 61,884 cuentas emitidas.' },
-  { valor: '534', etiqueta: 'Observados sin emisión', nota: 'Cada uno tiene una causa concreta y arreglable.' },
-  { valor: '41.2 %', etiqueta: 'Recaudado del emitido', nota: 'Al 31 de agosto. Dos cuotas vencidas de cuatro.' },
-];
+/* `ETAPAS_DE_LA_EMISION`, `KPIS_DEL_PANEL` y el tipo `EtapaDeEmision` se han
+   ido: el bloque entero era la maqueta del prototipo. Las cinco etapas de la
+   emisión con su porcentaje y sus registros, y los cuatro indicadores de la
+   cabecera —«62,418 contribuyentes», «S/ 9.4 M de predial determinado», «41.2 %
+   recaudado del emitido»—. Se dibujaban iguales en toda municipalidad y en todo
+   ejercicio, y un avance inventado se lee como el del padrón que se tiene
+   delante. Se fueron cuando el panel pasó a leer del backend. */
 
 /* ══════════ Padrón de contribuyentes ══════════ */
-
-export type FilaDelPadron = {
-  estado: string;
-  tono: 'ok' | 'warn' | 'bad';
-  codigo: string;
-  nombre: string;
-  doc: string;
-  dir: string;
-  unidades: string;
-  deuda: string;
-  /** La deuda se pinta en rojo cuando hay algo pendiente. */
-  deudaRoja: boolean;
-};
-
-export const PADRON: FilaDelPadron[] = [
-  {
-    estado: 'A',
-    tono: 'ok',
-    codigo: '00000025673',
-    nombre: 'SUC. RUFINA MEDINA MEDINA',
-    doc: 'DNI 03593174',
-    dir: 'URB. SANTA ROSA — EL ALTO 116',
-    unidades: '2 predios',
-    deuda: '1,842.60',
-    deudaRoja: true,
-  },
-  {
-    estado: 'A',
-    tono: 'ok',
-    codigo: '00000003541',
-    nombre: 'CASTILLO PASCUALA, MARÍA ELENA',
-    doc: 'DNI 44218937',
-    dir: 'CALLE LAMA 482',
-    unidades: '2 predios · 2 vehíc.',
-    deuda: '591.94',
-    deudaRoja: true,
-  },
-  {
-    estado: 'A',
-    tono: 'ok',
-    codigo: '00000006550',
-    nombre: 'DÍAZ MADRID, JULIO CÉSAR',
-    doc: 'DNI 02718844',
-    dir: 'C.P. BARRIO BUENOS AIRES',
-    unidades: '3 predios',
-    deuda: '9,412.15',
-    deudaRoja: true,
-  },
-  {
-    estado: 'I',
-    tono: 'bad',
-    codigo: '00000006551',
-    nombre: 'NOBLECILLA ARISMENDIZ SAC',
-    doc: 'RUC 20525118447',
-    dir: 'AV. JOSÉ DE LAMA 1180',
-    unidades: '1 predio',
-    deuda: '412.00',
-    deudaRoja: true,
-  },
-];
 
 export const COLS_DEL_PADRON: ColDef[] = [
   ['Est.', 0],
@@ -1442,13 +1373,14 @@ export const COLS_DEL_PADRON: ColDef[] = [
   ['Deuda hoy S/', 1],
 ];
 
-/** Los filtros rápidos del padrón. La clave va sin tilde; el rótulo la lleva. */
-export const CHIPS_DEL_PADRON: [clave: string, label: string][] = [
-  ['conDeuda', 'Con deuda vencida'],
-  ['sinConciliar', 'Predio sin conciliar'],
-  ['pensionista', 'Con beneficio vigente'],
-  ['juridica', 'Persona jurídica'],
-];
+/* `PADRON`, `CHIPS_DEL_PADRON` y el tipo `FilaDelPadron` se han ido. `PADRON`
+   eran cuatro personas de la maqueta del prototipo, con su código, su DNI o su
+   RUC, su domicilio y su deuda —«9,412.15»—, y se dibujaban antes de haber
+   buscado a nadie: cuatro filas que se leen como el padrón de la municipalidad
+   en sesión. Los filtros rápidos se fueron con ellas, porque ninguno de los
+   cuatro es un parámetro que la búsqueda del backend sepa leer. La consulta
+   dibuja ahora lo que devuelve `GET /rentas/contribuyentes`, o dice que no
+   encontró a nadie. */
 
 /* ══════════ Expediente: cabecera ══════════ */
 

@@ -135,37 +135,16 @@ export const DEFECTOS: Record<string, string | boolean> = {
 
 /* ══════════ Panel ══════════ */
 
-/** La entrada va fuera del embudo: 3,418 detectados son el universo del cruce
- *  catastro-rentas, y las cuatro etapas son la muestra de un programa. */
-export const ENTRADA = {
-  titulo: 'Detectados por el cruce de catastro contra rentas',
-  detalle: 'Otro conjunto: de aquí se elige la muestra de cada programa. No es una etapa del embudo.',
-  valor: '3,418',
-  dest: 'deteccion',
-};
-
-/** Etapa, detalle, predios y el destino al que lleva. La base del embudo son
- *  los 96 predios de la muestra del programa. */
-export const EMBUDO_BASE = 96;
-export const EMBUDO: [string, string, number, string][] = [
-  ['Programados', 'Muestra del PF-2026-014', 96, 'programas'],
-  ['Inspeccionados', 'Con acta cerrada', 84, 'actas'],
-  ['Con diferencia', 'El hallazgo sostiene una determinación', 61, 'resultados'],
-  ['Notificados', 'Con resolución entregada', 38, 'resultados'],
-];
-
-export const KPIS = [
-  { valor: '84 de 96', etiqueta: 'Muestra inspeccionada', nota: 'Quedan 12 predios por visitar antes del 30/09.' },
-  { valor: '63.5 %', etiqueta: 'Efectividad del programa', nota: '61 actas con diferencia sobre 96 inspecciones.' },
-  { valor: 'S/ 214,882', etiqueta: 'Deuda determinada', nota: 'Insoluto, reajuste e interés a la fecha de emisión.' },
-  { valor: '3', etiqueta: 'Determinaciones reclamadas', nota: 'De 38 notificadas. Cada una necesita su expediente de versiones.' },
-];
-
-export const RUTA: { riesgo: string; tono: 'bad' | 'warn'; predio: string; detalle: string; hora: string }[] = [
-  { riesgo: 'Alto', tono: 'bad', predio: '02-014-D-14-01 · CALLE SANTA ROSA 116', detalle: 'Subvaluación probable. Segundo piso visible en la ortofoto de 2024 y no declarado.', hora: '10:00' },
-  { riesgo: 'Alto', tono: 'bad', predio: '02-016-A-09-00 · AV. JOSÉ DE LAMA 1180', detalle: 'Omiso a la declaración. Industria con licencia de funcionamiento y sin ficha en rentas.', hora: '11:30' },
-  { riesgo: 'Medio', tono: 'warn', predio: '02-016-A-02-00 · CALLE TARAPACÁ 402', detalle: 'Segunda visita: el 09/08 estaba cerrado y quedó sin inspeccionar.', hora: '15:00' },
-];
+/* `KPIS`, `ENTRADA`, `EMBUDO_BASE`, `EMBUDO` y `RUTA` se han ido. `KPIS` eran
+   las cuatro cifras de cabecera —«84 de 96 inspeccionada», «63.5 % de
+   efectividad», «S/ 214,882 determinados»—, de una captura y no de ninguna
+   corrida. El resto era el embudo del
+   panel de la maqueta del prototipo —3 418 detectados, y de 96 programados a 38
+   notificados— y la ruta del día, con tres predios nombrados por su código
+   catastral y su dirección y un motivo de sospecha escrito para cada uno. Ni el
+   embudo ni la ruta salían de ningún sitio: se dibujaban iguales en toda
+   municipalidad y en todo programa. Se fueron cuando el panel pasó a leer del
+   backend. */
 
 /* ══════════ Detección ══════════ */
 
@@ -218,82 +197,27 @@ export const DET_VEHICULAR: CruceDeDeteccion = {
 
 /* ══════════ Programas ══════════ */
 
-export const PROGRAMAS: [string, string, 'ok' | 'warn' | 'bad', string, string][] = [
-  ['PF-2026-014', 'En ejecución', 'warn', 'Predial selectivo · sector 02 · subvaluación probable', '96 predios · R. Mendoza Cruz · 17/08 — 30/09'],
-  ['PF-2026-011', 'Cerrado', 'ok', 'Vehicular · cruce SUNARP del ejercicio 2026', '618 vehículos · L. Peña Sandoval · 02/05 — 30/06'],
-  ['PF-2025-032', 'Cerrado', 'ok', 'Predial masivo · sectores 01 y 03 · omisos', '1,412 predios · A. Vílchez Rojas · 01/09 — 20/12'],
-];
-
-/** El resumen del programa. La primera fila la pone el programa elegido. */
-export const PROG_RESUMEN: [string, string][] = [
-  ['Tipo', 'PREDIAL SELECTIVO'],
-  ['Criterio de riesgo', 'SUBVALUACIÓN'],
-  ['Fiscalizador', 'R. MENDOZA CRUZ'],
-  ['Muestra', '96 predios'],
-  ['Plazo', '17/08 — 30/09'],
-];
-
-export const MUESTRA_COLS: ColDef[] = [['Predio', 0], ['Contribuyente', 0], ['Uso declarado', 0], ['Área decl. m²', 1], ['Riesgo', 0], ['Estado', 0]];
-
-/** Seis celdas, el rótulo del botón y si ese botón es el primario. */
-export const MUESTRA: [string, string, string, string, string, string, string, 0 | 1][] = [
-  ['02-014-D-14-01', 'MEDINA MEDINA, RUFINA (SUC.)', 'Casa habitación', '164.50', 'Alto', 'Programado', 'Levantar acta', 1],
-  ['02-014-D-18-00', 'SILVA CÓRDOVA, ANA', 'Comercio', '82.00', 'Alto', 'Inspeccionado', 'Ver acta', 0],
-  ['02-016-A-02-00', 'REYES CHUNGA, PEDRO', 'Casa habitación', '120.00', 'Medio', 'Predio cerrado', 'Reprogramar', 0],
-  ['02-016-A-09-00', 'INVERSIONES DEL NORTE SAC', 'Industria', '640.00', 'Alto', 'Con acta', 'Ver acta', 0],
-];
+/* `PROGRAMAS`, `MUESTRA`, `PROG_RESUMEN` y `MUESTRA_COLS` se han ido.
+   `PROGRAMAS` eran tres programas de la maqueta con su fiscalizador y sus
+   fechas —«PF-2026-014», «R. Mendoza Cruz»— y `MUESTRA` cuatro predios con su
+   titular, su area y su riesgo ya calificado, «MEDINA MEDINA, RUFINA (SUC.)»
+   entre ellos: gente inventada bajo la pantalla que decide a quien se visita.
+   `PROG_RESUMEN` era el resumen del
+   programa de la maqueta del prototipo, con su fiscalizador y su plazo escritos
+   dentro, que se dibujaba igual con cualquier programa elegido; las columnas
+   iban con él. Se fueron cuando la pantalla pasó a leer del backend, que publica
+   el programa que de verdad se abrió. */
 
 /* ══════════ Resultados ══════════ */
 
-export type TablaDeResultados = {
-  titulo: string;
-  conteo: string;
-  min: string;
-  cols: ColDef[];
-  filas: string[][];
-  nota: string;
-};
-
-export const RES_POR_ACTA: TablaDeResultados = {
-  titulo: 'Actas con diferencia determinada',
-  conteo: '4 de 96',
-  min: '800px',
-  cols: [['Acta', 0], ['Predio', 0], ['Hallazgo', 0], ['Dif. m²', 1], ['Ejercicios', 0], ['Deuda omitida S/', 1], ['Estado', 0]],
-  filas: [
-    ['ACT-2026-00418', '02-014-D-14-01', 'Ampliación no declarada', '+33.50', '2022 — 2026', '1,842.60', 'Determinado'],
-    ['ACT-2026-00419', '02-014-D-18-00', 'Uso distinto al declarado', '0.00', '2024 — 2026', '944.10', 'Notificado'],
-    ['ACT-2026-00421', '02-016-A-09-00', 'Omiso a la declaración', '+640.00', '2021 — 2026', '18,412.00', 'Reclamado'],
-    ['ACT-2026-00424', '02-016-A-02-00', 'Sin observaciones', '0.00', '—', '0.00', 'Conforme'],
-  ],
-  nota: 'La deuda omitida incluye insoluto, reajuste e interés moratorio calculado a la fecha de emisión de la resolución de determinación.',
-};
-
-export const RES_POR_CONTRIB: TablaDeResultados = {
-  titulo: 'Deuda de fiscalización por contribuyente',
-  conteo: '4 registros · total S/ 581.65',
-  min: '760px',
-  cols: [['Contribuyente', 0], ['Unidad', 0], ['Año', 0], ['Cuota', 0], ['Tributo', 0], ['Fase', 0], ['Total S/', 1], ['Estado', 0]],
-  filas: [
-    ['ALBURQUEQUE INFANTE GENARO', 'SC-2346', '2010', '001', 'VEHICULAR-FIS', '002', '145.41', 'Pendiente'],
-    ['ALBURQUEQUE INFANTE GENARO', 'SC-2346', '2010', '002', 'VEHICULAR-FIS', '002', '145.41', 'Pendiente'],
-    ['ALBURQUEQUE INFANTE GENARO', 'SC-2346', '2010', '003', 'VEHICULAR-FIS', '002', '145.41', 'Pendiente'],
-    ['ALBURQUEQUE INFANTE GENARO', 'SC-2346', '2010', '004', 'VEHICULAR-FIS', '002', '145.42', 'Pendiente'],
-  ],
-  nota: 'Tributo S/ 500.00 · reajuste S/ 12.50 · interés S/ 58.35 · gastos S/ 10.80. La deuda de fiscalización lleva la fase 002 para distinguirla de la emitida en el registro ordinario.',
-};
-
-export const RES_TOTALES: [string, string, 0 | 1][] = [
-  ['Actas cerradas', '96', 0],
-  ['Con diferencia', '61', 0],
-  ['Deuda determinada', 'S/ 214,882.40', 0],
-  ['Efectividad', '63.5 %', 1],
-];
-
-export const VERSIONES: { n: string; titulo: string; detalle: string; fecha: string; usuario: string; tono: 'acento' | 'suave' | 'neutro' }[] = [
-  { n: '3', titulo: 'Liquidada — versión vigente', detalle: 'Área construida 198.00 m² y uso COMERCIO. Diferencia de 33.50 m² sobre lo declarado.', fecha: '12/08/2026 10:52', usuario: 'R. MENDOZA CRUZ', tono: 'acento' },
-  { n: '2', titulo: 'En proceso — corrección de gabinete', detalle: 'Se corrigió el ECS de MALO a BUENO tras revisar las fotografías del acta.', fecha: '13/08/2026 09:18', usuario: 'C. ANCAJIMA FLORES', tono: 'suave' },
-  { n: '1', titulo: 'Abierta — primer registro del proceso', detalle: 'Estado inicial tomado de la ficha catastral vigente al programar la visita.', fecha: '17/08/2026 08:00', usuario: 'SISTEMA', tono: 'neutro' },
-];
+/* `RES_POR_ACTA`, `RES_POR_CONTRIB`, `RES_TOTALES`, `VERSIONES` y el tipo
+   `TablaDeResultados` se han ido: el bloque entero era la maqueta del prototipo.
+   Cuatro actas con su predio, su hallazgo y su deuda omitida al céntimo; cuatro
+   cuotas a nombre de una persona; los totales del programa —«S/ 214,882.40
+   determinados», «63.5 % de efectividad»—; y el historial de versiones de un
+   acta, con la hora y el nombre de quien la corrigió. Ninguna de esas cifras
+   venía de ningún sitio, y una deuda determinada no se distingue de la buena al
+   leerla. Se fueron cuando los resultados pasaron a leer del backend. */
 
 /* ══════════ Resolución de determinación ══════════ */
 
