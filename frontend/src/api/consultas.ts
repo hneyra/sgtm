@@ -5,7 +5,7 @@ import type { FormatoDeDocumento } from './descarga';
  * Lo que el módulo de **Consultas** lee del backend.
  *
  * Los tipos son los `record` del backend campo por campo, con los nombres que
- * viajan —incluidos los raros: `dNI`, `rUC`, `codigoCont`—. Los importes llegan
+ * viajan —incluidos los raros: `dNI` y `rUC`—. Los importes llegan
  * como **texto** (RNF-055) y salen como texto: pasarlos por `Number` para
  * volver a formatearlos es como se pierde un decimal.
  *
@@ -14,6 +14,26 @@ import type { FormatoDeDocumento } from './descarga';
  * vez, y una lectura de Consultas no debería dejar de compilar porque otro
  * módulo reorganizó su archivo. Lo que se repite son diez líneas de tipos; lo
  * que se evita es un acoplamiento que nadie declaró.
+ *
+ * <h2>El código que no está en el padrón (#622)</h2>
+ *
+ * Las **nueve** lecturas que identifican al contribuyente por su código
+ * —predios, vehículos, deuda, pagos, valores, altas y bajas, la ficha
+ * unificada, el beneficio y la constancia— preguntan al padrón **antes** de
+ * listar, y un código que no figura en esta municipalidad es `404
+ * NO_ENCONTRADO` nombrándolo, nunca una página vacía. Medido contra el backend
+ * en marcha: con `C-999999` contestan 404 las nueve, y con `C-000001` contestan
+ * 200 las nueve. El `200` con cero filas queda para lo único que de verdad
+ * significa: está en el padrón y no tiene nada.
+ *
+ * **De ese 404 la pantalla no puede sacar el texto.** El mensaje son tres
+ * redacciones del mismo hecho —«En el padron de esta municipalidad no hay ningun
+ * contribuyente con codigo 'C-999999'» en seis, «No hay ningun contribuyente con
+ * el codigo C-999999 en esta municipalidad» en la unificada y el beneficio, y
+ * «No hay ningun contribuyente con el codigo C-999999» en la constancia—, así
+ * que quien quiera que las siete pestañas digan lo mismo tiene que converger por
+ * el **código**, que es estable por contrato, y dejar el texto del servidor
+ * donde es evidencia y no titular.
  */
 
 /* ══════════ Piezas comunes ══════════ */
@@ -191,17 +211,22 @@ export function pagosDelContribuyente(
 /**
  * Las altas y bajas de deuda.
  *
- * El parámetro del contribuyente se llama **`codigoCont`** aquí y
- * `codContribuyente` en las otras dos consultas del mismo módulo. No es una
- * errata: es lo que declara el contrato, y cambiarlo por comodidad deja la
- * pantalla mandando un filtro que el servidor no lee.
+ * **El parámetro del contribuyente ya no es `codigoCont`, y no es comodidad.**
+ * Hasta #622 ésta era la única lectura del expediente que llamaba al sujeto de
+ * otra manera, y el comentario que había aquí decía que cambiarlo dejaría a la
+ * pantalla mandando un filtro que el servidor no lee. Eso dejó de ser cierto: el
+ * contrato declara para esta ruta **los dos** nombres —`codigoCont` queda como
+ * alias, porque es el que la interfaz mandaba— y `AltasBajasController` los lee.
+ * Medido: `?codContribuyente=C-000001` devuelve sus asientos con 200, y con
+ * `C-999999` da 404. Se manda el nombre unificado para que las siete pestañas
+ * identifiquen al sujeto de una sola manera.
  *
  * `autoManual` tampoco se declara: el contrato lo tiene y el backend lo ignora
  * —nada en el libro marca todavía si un movimiento lo escribió una persona o
  * una emisión masiva—.
  */
 export function altasYBajas(
-  filtro: { codigoCont: string; ano?: string; tributo?: string; altaBaja?: Sentido },
+  filtro: { codContribuyente: string; ano?: string; tributo?: string; altaBaja?: Sentido },
   paginacion: Paginacion,
   senal?: AbortSignal,
 ): Promise<RespuestaPaginada<Asiento>> {
@@ -233,9 +258,14 @@ export type PredioEncontrado = {
  * contrato los tenga**: `ConsultaPrediosController` los acepta y no filtra con
  * ellos —`PrediosDelContribuyente` solo sabe listar los de una persona—. Un
  * filtro que viaja y no acota es peor que uno que no existe.
+ *
+ * El sujeto viaja como `codContribuyente`, el nombre unificado del expediente
+ * (#622); el contrato declara `contribuyente` como alias y el controlador lo
+ * sigue leyendo. Medido: los dos devuelven los dos predios de `C-000001` con 200
+ * y los dos dan 404 con `C-999999`.
  */
 export function prediosDelContribuyente(
-  filtro: { contribuyente: string; fecha?: string },
+  filtro: { codContribuyente: string; fecha?: string },
   paginacion: Paginacion,
   senal?: AbortSignal,
 ): Promise<RespuestaPaginada<PredioEncontrado>> {
@@ -278,8 +308,15 @@ export type VehiculoEncontrado = {
  * Los vehículos, por placa o por contribuyente.
  *
  * `placa` compara por **igualdad** sin el guion, no por prefijo: es lo que trae
- * ventanilla cuando busca un vehículo concreto. `contribuyente` compara el
- * código del padrón, también por igualdad.
+ * ventanilla cuando busca un vehículo concreto. `codContribuyente` compara el
+ * código del padrón, también por igualdad, y es el nombre unificado del
+ * expediente (#622): el contrato declara `contribuyente` como alias y el
+ * controlador lo sigue leyendo. Medido, los dos contestan igual —200 con cero
+ * vehículos para `C-000001`, 404 para `C-999999`—.
+ *
+ * **Buscar por placa no lleva 404**, y no es una excepción olvidada: quien busca
+ * una placa no ha dicho ningún código de contribuyente, así que ahí el 200 con
+ * cero filas sigue significando exactamente lo que dice.
  *
  * **`estado` solo admite `BAJA`**: el desplegable del prototipo ofrece
  * AFECTO/INAFECTO/EXONERADO/BAJA, que son la afectación calculada de cada fila
@@ -287,7 +324,7 @@ export type VehiculoEncontrado = {
  * el tipo es el único que sirve.
  */
 export function buscarVehiculos(
-  filtro: { placa?: string; nroMotor?: string; contribuyente?: string; estado?: 'BAJA'; fecha?: string },
+  filtro: { placa?: string; nroMotor?: string; codContribuyente?: string; estado?: 'BAJA'; fecha?: string },
   paginacion: Paginacion,
   senal?: AbortSignal,
 ): Promise<RespuestaPaginada<VehiculoEncontrado>> {
@@ -457,6 +494,13 @@ export type FichaUnificada = {
  *
  * `ordenarPor` y `direccion` se aceptan y **no se propagan**: siete rejillas de
  * siete tablas distintas no comparten columnas. Por eso no se declaran aquí.
+ *
+ * **Aquí el sujeto sigue llamándose `contribuyente`, y está medido**: pedirla
+ * con `?codContribuyente=C-000001` contesta `422 VALIDACION` «Parametro
+ * desconocido: 'codContribuyente'» —la guarda de #539—, porque ésta y la del
+ * beneficio son las dos únicas del expediente a las que el contrato no les
+ * declaró el nombre unificado. Mandarlo por simetría cambiaría un listado por un
+ * rechazo.
  */
 export function fichaUnificada(
   filtro: { contribuyente: string; impresion?: Alcance },
@@ -510,6 +554,9 @@ export const TIPOS_DE_PAPELETA = ['TRIBUTARIA', 'P. TRÁNSITO', 'P. ADMINISTRATI
 
 /**
  * La simulación del acogimiento.
+ *
+ * El sujeto va como `contribuyente` por lo mismo que en la ficha unificada:
+ * `?codContribuyente=` contesta 422 «Parametro desconocido», medido.
  *
  * `formaDePago` no se declara y no se manda: «CONTADO TOTAL» es lo que esta
  * consulta ya hace, y «PRECONVENIO» el backend lo **rechaza** con 422 porque
