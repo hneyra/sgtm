@@ -47,13 +47,29 @@ public final class FormatoDelMovimiento {
             RangoDeCuotas cuotas,
             List<Asiento> asentados,
             String codigoContribuyente) {
+        return de(movimiento, cuotas.etiqueta(), asentados, codigoContribuyente);
+    }
+
+    /**
+     * El mismo papel, diciendo las cuotas con un texto ya compuesto (#598).
+     *
+     * <p>Existe porque la baja repartida no cubre un <b>rango</b> sino las cuotas que de verdad
+     * tenian deuda —la fila decia «periodos 0 - 9» y se extinguieron la 1, la 2 y la 3—, y {@link
+     * RangoDeCuotas} no puede expresar eso: es un tramo continuo y ademas rechaza a proposito uno
+     * que empiece en 0.
+     */
+    public static ModeloDeDocumento de(
+            MovimientoDeDeuda movimiento,
+            String etiquetaDeLasCuotas,
+            List<Asiento> asentados,
+            String codigoContribuyente) {
 
         List<Campo> cabecera =
                 List.of(
                         Campo.de("Contribuyente", codigoContribuyente),
                         Campo.de("Tributo", movimiento.clave().tributo()),
                         Campo.de("Ejercicio", movimiento.clave().ejercicio().toString()),
-                        Campo.de("Cuota", cuotas.etiqueta()),
+                        Campo.de("Cuota", etiquetaDeLasCuotas),
                         Campo.de("Fase", movimiento.fase().name()),
                         Campo.de("Documento de origen", movimiento.documentoOrigen()));
 

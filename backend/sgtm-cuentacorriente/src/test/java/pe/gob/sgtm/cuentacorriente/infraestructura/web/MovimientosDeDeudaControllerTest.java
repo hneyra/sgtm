@@ -25,6 +25,7 @@ import pe.gob.sgtm.cuentacorriente.aplicacion.RegistrarMovimientoDeDeuda;
 import pe.gob.sgtm.cuentacorriente.dominio.Asiento;
 import pe.gob.sgtm.cuentacorriente.dominio.AsientoRepository;
 import pe.gob.sgtm.cuentacorriente.dominio.CargoAgregado;
+import pe.gob.sgtm.cuentacorriente.dominio.ClaveDeObligacion;
 import pe.gob.sgtm.cuentacorriente.dominio.ClaveDeSaldo;
 import pe.gob.sgtm.cuentacorriente.dominio.CriterioDeAltasBajas;
 import pe.gob.sgtm.cuentacorriente.dominio.CriterioDeConsulta;
@@ -328,6 +329,11 @@ class MovimientosDeDeudaControllerTest {
             // el ejercicio sin particion produce se mide contra PostgreSQL, en
             // AltaDeDeudaPorRangoFronteraTest: aqui no hay particiones que consultar.
             return List.of(new Ejercicio(2026), new Ejercicio(2027));
+        }
+
+        @Override
+        public List<Asiento> deTodosLosPeriodosDe(ClaveDeObligacion clave) {
+            throw noLoUsa();
         }
 
         @Override

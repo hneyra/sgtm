@@ -558,6 +558,155 @@ class AltaDeDeudaPorRangoFronteraTest {
         }
     }
 
+    // ------------------- la baja de una fila que agrega periodos (#598)
+
+    @Test
+    @DisplayName("la fila que agrega periodos se da de baja entera: tres asientos, no uno ni diez")
+    void laFilaAgregadaSeDaDeBajaEntera() throws Exception {
+        String codigo = crearContribuyente("R-0701", "70200701");
+        sembrarLaFilaDeLaGrilla(codigo, "RES-2026-1201");
+
+        MvcResult resultado = bajaRepartida(codigo, "444.90", "RES-2026-1202");
+
+        assertThat(resultado.getResponse().getStatus())
+                .as("respuesta: %s", resultado.getResponse().getContentAsString())
+                .isEqualTo(201);
+        assertThat(periodosGuardados("RES-2026-1202"))
+                .as(
+                        "la deuda esta en las cuotas 1, 2 y 3; la 0 y la 4 deben 0,00 y no"
+                                + " producen asiento — un abono de cero deja el papel con lineas"
+                                + " vacias y no dice nada")
+                .containsExactly(1, 2, 3);
+        assertThat(importesGuardados("RES-2026-1202"))
+                .as("y a cada una lo suyo: el servidor reparte porque es quien sabe cuanto hay")
+                .containsExactly(Dinero.de("148.30"), Dinero.de("148.30"), Dinero.de("148.30"));
+        assertThat(deudaDeLaFila(codigo))
+                .as("ni mas ni menos: la fila queda en cero")
+                .isEqualTo(Dinero.CERO);
+    }
+
+    @Test
+    @DisplayName("cargar el total sobre periodoDesde sigue siendo 422: esa cuota debe 0,00")
+    void cargarElTotalSobreElPrimerPeriodoSigueSiendo422() throws Exception {
+        String codigo = crearContribuyente("R-0702", "70200702");
+        sembrarLaFilaDeLaGrilla(codigo, "RES-2026-1203");
+
+        MvcResult resultado =
+                mvc.perform(
+                                post("/api/v1/rentas/deuda/bajas")
+                                        .contentType(MediaType.APPLICATION_JSON)
+                                        .content(
+                                                cuerpoDeBaja(
+                                                                codigo,
+                                                                "\"cuota\":0,",
+                                                                "444.90",
+                                                                "RES-2026-1204")
+                                                        .replace(",\"repartir\":true", "")))
+                        .andReturn();
+
+        assertThat(resultado.getResponse().getStatus()).isEqualTo(422);
+        assertThat(resultado.getResponse().getContentAsString())
+                .as(
+                        "es lo que la pantalla mandaba: `cuota = periodoDesde` con el importe"
+                                + " agregado. El mensaje habla de importes y la causa es que la"
+                                + " fila es un agregado")
+                .contains("solo se deben 0.00");
+    }
+
+    @Test
+    @DisplayName(
+            "y repetir el total en cada cuota del rango tampoco: intentaria extinguirlo tres veces")
+    void repetirElTotalEnCadaCuotaSigueSiendo422() throws Exception {
+        String codigo = crearContribuyente("R-0703", "70200703");
+        sembrarLaFilaDeLaGrilla(codigo, "RES-2026-1205");
+
+        MvcResult resultado =
+                mvc.perform(
+                                post("/api/v1/rentas/deuda/bajas")
+                                        .contentType(MediaType.APPLICATION_JSON)
+                                        .content(
+                                                cuerpoDeBaja(
+                                                                codigo,
+                                                                "\"cuotaDesde\":1,\"cuotaHasta\":3,",
+                                                                "444.90",
+                                                                "RES-2026-1206")
+                                                        .replace(",\"repartir\":true", "")))
+                        .andReturn();
+
+        assertThat(resultado.getResponse().getStatus())
+                .as("el desglose de #538 se REPITE en cada cuota, no se reparte")
+                .isEqualTo(422);
+        assertThat(periodosGuardados("RES-2026-1206")).isEmpty();
+    }
+
+    @Test
+    @DisplayName("una baja repartida de mas de lo que hay no se hace: ni una cuota queda tocada")
+    void unaBajaRepartidaDeMasNoSeHace() throws Exception {
+        String codigo = crearContribuyente("R-0704", "70200704");
+        sembrarLaFilaDeLaGrilla(codigo, "RES-2026-1207");
+
+        MvcResult resultado = bajaRepartida(codigo, "500.00", "RES-2026-1208");
+
+        assertThat(resultado.getResponse().getStatus()).isEqualTo(422);
+        assertThat(resultado.getResponse().getContentAsString())
+                .as("la guarda de BajaMayorQueLaDeuda sigue viva un escalon mas arriba")
+                .contains("444.90");
+        assertThat(periodosGuardados("RES-2026-1208"))
+                .as("o entra el acto entero o no entra: media baja no la explica nadie")
+                .isEmpty();
+        assertThat(deudaDeLaFila(codigo)).isEqualTo(Dinero.de("444.90"));
+    }
+
+    @Test
+    @DisplayName("el reparto se puede acotar a un tramo, y entonces solo toca ESE tramo")
+    void elRepartoSePuedeAcotar() throws Exception {
+        String codigo = crearContribuyente("R-0705", "70200705");
+        sembrarLaFilaDeLaGrilla(codigo, "RES-2026-1209");
+
+        // El tramo son las cuotas 2 y 3, no las dos primeras que deben algo: si el
+        // reparto ignorara el rango recorreria la 1 y la 2 y saldrian los mismos dos
+        // asientos por el mismo importe, y la prueba no lo distinguiria.
+        MvcResult resultado =
+                mvc.perform(
+                                post("/api/v1/rentas/deuda/bajas")
+                                        .contentType(MediaType.APPLICATION_JSON)
+                                        .content(
+                                                cuerpoDeBaja(
+                                                        codigo,
+                                                        "\"cuotaDesde\":2,\"cuotaHasta\":3,",
+                                                        "296.60",
+                                                        "RES-2026-1210")))
+                        .andReturn();
+
+        assertThat(resultado.getResponse().getStatus())
+                .as("respuesta: %s", resultado.getResponse().getContentAsString())
+                .isEqualTo(201);
+        assertThat(periodosGuardados("RES-2026-1210"))
+                .as("el tramo pedido y nada mas: la cuota 1 no se toca")
+                .containsExactly(2, 3);
+        assertThat(deudaDeLaFila(codigo))
+                .as("y se queda con lo que la cuota 1 sigue debiendo")
+                .isEqualTo(Dinero.de("148.30"));
+    }
+
+    @Test
+    @DisplayName("un alta no se reparte: no hay tope contra el que repartir")
+    void unAltaNoSeReparte() throws Exception {
+        String codigo = crearContribuyente("R-0706", "70200706");
+
+        MvcResult resultado =
+                mvc.perform(
+                                post("/api/v1/rentas/deuda/altas")
+                                        .contentType(MediaType.APPLICATION_JSON)
+                                        .content(
+                                                cuerpoDeBaja(
+                                                        codigo, "", "100.00", "RES-2026-1211")))
+                        .andReturn();
+
+        assertThat(resultado.getResponse().getStatus()).isEqualTo(422);
+        assertThat(resultado.getResponse().getContentAsString()).contains("no se reparte");
+    }
+
     // ------------------------------------------------------------------
 
     /** El {@code NA-2026-000007} de la respuesta. */
@@ -595,6 +744,81 @@ class AltaDeDeudaPorRangoFronteraTest {
     private static String cuerpoDelAno(String codigo, String ano, String documento) {
         return cuerpo(codigo, "\"cuota\":9,", documento)
                 .replace("\"ano\":\"2026\"", "\"ano\":\"" + ano + "\"");
+    }
+
+    private static void sembrarLaFilaDeLaGrilla(String codigo, String documento) throws Exception {
+        alta(codigo, "\"cuotaDesde\":1,\"cuotaHasta\":3,", "148.30", documento + "-VIVA");
+        for (String cuota : new String[] {"0", "4"}) {
+            alta(codigo, "\"cuota\":" + cuota + ",", "50.00", documento + "-A" + cuota);
+            mvc.perform(
+                            post("/api/v1/rentas/deuda/bajas")
+                                    .contentType(MediaType.APPLICATION_JSON)
+                                    .content(
+                                            conImporte(
+                                                    cuerpo(
+                                                            codigo,
+                                                            "\"cuota\":" + cuota + ",",
+                                                            documento + "-B" + cuota),
+                                                    "50.00")))
+                    .andReturn();
+        }
+    }
+
+    private static void alta(String codigo, String cuotas, String insoluto, String documento)
+            throws Exception {
+        mvc.perform(
+                        post("/api/v1/rentas/deuda/altas")
+                                .contentType(MediaType.APPLICATION_JSON)
+                                .content(conImporte(cuerpo(codigo, cuotas, documento), insoluto)))
+                .andReturn();
+    }
+
+    private static String conImporte(String cuerpo, String insoluto) {
+        return cuerpo.replace("\"insoluto\":\"100.00\"", "\"insoluto\":\"" + insoluto + "\"");
+    }
+
+    private static MvcResult bajaRepartida(String codigo, String insoluto, String documento)
+            throws Exception {
+        return mvc.perform(
+                        post("/api/v1/rentas/deuda/bajas")
+                                .contentType(MediaType.APPLICATION_JSON)
+                                .content(cuerpoDeBaja(codigo, "", insoluto, documento)))
+                .andReturn();
+    }
+
+    /** El cuerpo del acto repartido: sin cuotas es la fila entera. */
+    private static String cuerpoDeBaja(
+            String codigo, String cuotas, String insoluto, String documento) {
+        return conImporte(cuerpo(codigo, cuotas, documento), insoluto)
+                .replace("\"observacion\"", "\"repartir\":true,\"observacion\"");
+    }
+
+    /**
+     * Lo que la fila entera debe, leido de la tabla y no de la respuesta.
+     *
+     * <p>Cargos menos abonos de <b>todas</b> las cuotas de la obligacion, que es exactamente lo que
+     * la grilla agrega en una fila. Se lee por SQL directo a proposito: la respuesta del acto ya
+     * salia bien el dia del defecto.
+     */
+    private static Dinero deudaDeLaFila(String codigo) {
+        try (Connection app = base.conexion(BaseDeDatosDePrueba.APP)) {
+            ContextoDeTenant.fijar(app, municipalidad);
+            try (PreparedStatement sentencia =
+                    app.prepareStatement(
+                            "SELECT coalesce(sum(CASE WHEN a.tipo = 'CARGO' THEN a.monto"
+                                    + "                          ELSE -a.monto END), 0)"
+                                    + "  FROM cuenta_corriente_asiento a"
+                                    + "  JOIN contribuyente c ON c.id = a.contribuyente_id"
+                                    + " WHERE c.codigo_contribuyente = ?")) {
+                sentencia.setString(1, codigo);
+                try (ResultSet fila = sentencia.executeQuery()) {
+                    fila.next();
+                    return Dinero.de(fila.getBigDecimal(1).toPlainString());
+                }
+            }
+        } catch (SQLException excepcion) {
+            throw new IllegalStateException(excepcion);
+        }
     }
 
     private static String cuerpo(String codigo, String cuotas, String documento) {
