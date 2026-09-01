@@ -40,6 +40,27 @@ public interface PermisoRepository {
     Map<String, Set<Privilegio>> efectivosDe(String cuenta, LocalDate fecha);
 
     /**
+     * La misma matriz, pero de <b>otro</b> usuario y diciendo de donde viene cada fila (#543).
+     *
+     * <p>No es una variante por comodidad de la de arriba. Aquella sirve a la interfaz para
+     * dibujarse a si misma —el sujeto sale del token y lo unico que importa es que se puede—; esta
+     * sirve para <b>administrar a otro</b>, y ahi lo que hay que ver es la precedencia: si lo que
+     * manda es la excepcion del usuario o sus grupos. Aplanarlas juntas dejaria a quien administra
+     * sin poder distinguir un permiso propio de uno heredado, que es exactamente lo que la pantalla
+     * de la matriz existe para enseñar.
+     *
+     * <p>El sujeto va por <b>identificador</b> y no por cuenta porque asi lo nombra la ruta que la
+     * publica, y porque es lo que el resto de la administracion usa (grupo, miembro).
+     *
+     * <p>Misma regla que el guardia en todo lo demas: vigencia y habilitacion en los tres eslabones
+     * (RF-123), y un usuario deshabilitado o fuera de vigencia recibe la lista vacia. Resolverlo
+     * con otra regla mostraria en la matriz privilegios que despues responden 403.
+     *
+     * @see PermisoEfectivo
+     */
+    List<PermisoEfectivo> efectivosConOrigenDe(long usuarioId, LocalDate fecha);
+
+    /**
      * Cuantos usuarios habilitados y vigentes pueden hoy administrar permisos.
      *
      * <p>Existe para una sola cosa: impedir que el ultimo se quede sin el privilegio. Un sistema

@@ -161,6 +161,12 @@ class ContratoDeApiTest {
                     "GET /seguridad/accesos",
                     "GET /seguridad/grupos",
                     "GET /seguridad/usuarios",
+                    // #543 — la matriz de permisos efectivos de un usuario no se podia
+                    // reconstruir: no habia lectura de pertenencia a grupo (la ruta de
+                    // miembros era solo POST) ni de la excepcion de usuario, y sin `origen`
+                    // el cliente tendria que reimplementar la precedencia.
+                    "GET /seguridad/usuarios/{id}/grupos",
+                    "GET /seguridad/usuarios/{id}/permisos",
                     "POST /seguridad/grupos/{grupo}/miembros",
                     "PUT /seguridad/grupos/{id}/permisos",
                     "GET /seguridad/grupos/{id}/permisos",

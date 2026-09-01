@@ -1,10 +1,13 @@
 package pe.gob.sgtm.seguridad.infraestructura.web;
 
 import java.time.LocalDate;
+import java.util.List;
 import org.jspecify.annotations.Nullable;
+import pe.gob.sgtm.autorizacion.Privilegio;
 import pe.gob.sgtm.seguridad.dominio.Acceso;
 import pe.gob.sgtm.seguridad.dominio.Grupo;
 import pe.gob.sgtm.seguridad.dominio.Modulo;
+import pe.gob.sgtm.seguridad.dominio.PermisoEfectivo;
 import pe.gob.sgtm.seguridad.dominio.Usuario;
 
 /**
@@ -83,6 +86,36 @@ public final class Recursos {
                     usuario.habilitado(),
                     usuario.vigencia().desde(),
                     usuario.vigencia().hasta());
+        }
+    }
+
+    /**
+     * Un permiso <b>efectivo</b> de un usuario, con el origen que lo produjo (#543).
+     *
+     * <p>{@code origen} no es un adorno: es lo que impide que quien consume esta lectura tenga que
+     * reimplementar la regla de precedencia —una excepcion de usuario <b>sustituye</b> al grupo
+     * entero para ese acceso, otorgue o niegue—. El frontend la tenia invertida (calculaba {@code
+     * on = esPropio || esHeredado}), y esa forma es la que lo hace dificil de repetir.
+     *
+     * <p><b>Una fila con {@code privilegios} vacio no es una fila de mas.</b> Solo se produce
+     * cuando hay una excepcion que niega, y es la unica manera de distinguir «se le nego
+     * expresamente» de «nunca lo tuvo»; los accesos sobre los que no hay nada configurado,
+     * simplemente, no salen.
+     *
+     * @param grupoId el grupo del que hereda, o nulo si el origen es la excepcion <b>o</b> si la
+     *     union viene de mas de un grupo vigente y no hay uno solo que nombrar
+     */
+    public record PermisoEfectivoResource(
+            String acceso, List<String> privilegios, String origen, @Nullable Long grupoId) {
+
+        public static PermisoEfectivoResource de(PermisoEfectivo permiso) {
+            List<String> nombres =
+                    java.util.Arrays.stream(Privilegio.values())
+                            .filter(permiso.privilegios()::contains)
+                            .map(Enum::name)
+                            .toList();
+            return new PermisoEfectivoResource(
+                    permiso.codigoDeAcceso(), nombres, permiso.origen().name(), permiso.grupoId());
         }
     }
 

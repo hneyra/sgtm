@@ -65,6 +65,38 @@ class OrdenSeguroTest {
                 .hasMessageContaining("fechaRegistro");
     }
 
+    /**
+     * El desempate (#543): sin el, un listado cuya columna de orden empata no tiene orden.
+     *
+     * <p>Medido sobre los doce modulos del sistema, que tienen todos {@code orden = 0}: el orden
+     * relativo <b>cambia con el tamano de pagina</b> —el plan de ejecucion no es el mismo—, asi que
+     * dos paginas consecutivas pueden repetir una fila y omitir otra.
+     */
+    @Test
+    @DisplayName("el desempate declarado se anade a la clausula, y no se repite")
+    void elDesempateSeAnadeYNoSeRepite() {
+        OrdenSeguro conDesempate = OrdenSeguro.sobre("codigo", "orden", "id").desempatandoPor("id");
+
+        assertThat(conDesempate.clausula(Paginacion.de(0, 10, "orden")))
+                .as("sin esto, doce filas con el mismo «orden» salen como el plan quiera")
+                .isEqualTo("ORDER BY orden ASC, id ASC");
+        assertThat(
+                        conDesempate.clausula(
+                                new Paginacion(0, 10, "codigo", Paginacion.Direccion.DESCENDENTE)))
+                .as("el desempate va siempre ASC: lo que hace falta es que el orden sea total")
+                .isEqualTo("ORDER BY codigo DESC, id ASC");
+        assertThat(conDesempate.clausula(Paginacion.de(0, 10, "id")))
+                .as("ordenar por la propia columna de desempate no la repite")
+                .isEqualTo("ORDER BY id ASC");
+    }
+
+    @Test
+    @DisplayName("y el desempate tampoco admite nada que no sea un nombre de columna")
+    void elDesempateNoAdmiteCualquierCosa() {
+        assertThatThrownBy(() -> ORDEN.desempatandoPor("id DESC, (SELECT 1)"))
+                .isInstanceOf(IllegalArgumentException.class);
+    }
+
     @Test
     @DisplayName("una lista blanca no admite nada que no sea un nombre de columna")
     void laListaBlancaNoAdmiteCualquierCosa() {
