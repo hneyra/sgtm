@@ -65,6 +65,33 @@ public class SeguridadController {
     }
 
     /**
+     * A que grupos pertenece un usuario: {@code GET /seguridad/usuarios/{id}/grupos} (#543).
+     *
+     * <p>Sin esta lectura la matriz de permisos de un usuario no puede decir de donde le viene lo
+     * heredado, porque no se sabe de quien hereda. {@code /grupos/{grupo}/miembros} solo tenia el
+     * {@code POST} que afilia y desafilia, y el dominio solo sabia contestar por la pareja concreta
+     * —{@code miembro(grupoId, usuarioId)}—.
+     *
+     * <p><b>Su acceso es {@code usuarios} y no {@code miembros}</b>: es una lectura sobre un
+     * usuario, y la propia grilla de «Usuarios del sistema» del manual dibuja una columna «Grupo».
+     * Quien puede ver el padron de usuarios puede ver a que grupos pertenece cada uno; afiliarlo y
+     * desafiliarlo sigue exigiendo {@code miembros} con {@code REGISTRO}.
+     *
+     * <p>La anotacion va <b>en el metodo</b>, como las otras cinco de este controlador: cada
+     * operacion es una opcion distinta del catalogo. Aqui eso importa el doble, porque la clase no
+     * declara ninguna y una lectura sin la suya se quedaria sin guardia (regla de ArchUnit: «en la
+     * clase o en cada endpoint»).
+     */
+    @GetMapping("/usuarios/{id}/grupos")
+    @RequiereAcceso(acceso = "usuarios", privilegio = Privilegio.LECTURA)
+    public RespuestaPaginada<Recursos.GrupoResource> gruposDeUsuario(
+            @PathVariable("id") long usuario, ParametrosDePaginacion paginacion) {
+        return RespuestaPaginada.de(
+                administrar.gruposDeUsuario(usuario, paginacion.aPaginacion("nombre")),
+                Recursos.GrupoResource::de);
+    }
+
+    /**
      * Alta y baja de la pertenencia a un grupo.
      *
      * <p>Un solo endpoint para las dos, con {@code activo} en el cuerpo, porque la baja <b>no es un

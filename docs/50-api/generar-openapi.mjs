@@ -446,6 +446,25 @@ const DEL_BACKEND = {
  * pantalla que todavia no la tiene.
  */
 const DESCRIPCIONES = {
+  // Seguridad (#543)
+  permisos: bloque(`
+    Fija los niveles de accesibilidad de un grupo (RF-121). Recibe la lista **completa** de
+    accesos con sus privilegios y no un cambio incremental: la pantalla es una tabla de
+    casillas que se marcan y se desmarcan, y aceptar un delta obligaría a la interfaz a
+    calcular qué cambió — y a acertar. Un acceso ausente del cuerpo se queda como estaba;
+    para retirar, se manda con la lista de privilegios vacía.
+
+    **Puede contestar 409, y hay que saber contarlo**: un cambio que dejaría a la
+    municipalidad sin ningún usuario capaz de administrar permisos se rechaza. No es una
+    precaución teórica — el error más caro de esta pantalla es también el más fácil de
+    cometer, quitarse a uno mismo (o al grupo del que uno es el único miembro) el privilegio
+    que hacía falta para devolvérselo—, y de ahí no se sale por el sistema: hace falta entrar
+    por la base de datos. La comprobación corre **después** de escribir el cambio y dentro de
+    la misma transacción, porque lo que hay que verificar no es el estado actual sino el que
+    quedaría.
+
+    Exige la observación del usuario, obligatoria (RNF-052).
+  `),
   // Cuenta corriente (#72)
   constancia: bloque(`
     Vista previa del documento que se entrega al contribuyente. Se imprime con el mismo
@@ -691,6 +710,72 @@ const OPERACIONES_ADICIONALES = {
         Autenticada, pero **no es una opción del catálogo**: leer los permisos
         propios no revela nada que no se pueda enumerar probando cada endpoint
         (REQ-03 §5). Un usuario sin ningún permiso recibe \`{}\`, no un 403.
+      `),
+    },
+    // Y la matriz de OTRO usuario, que es la que se administra (#543). No sale
+    // de `permisos_de_la_sesion` —aquella no tiene sujeto, sale del token— ni de
+    // `permisos_de_grupo` —aquella devuelve lo configurado de un grupo, no lo
+    // efectivo de una persona—.
+    {
+      operationId: 'permisos_efectivos_de_usuario',
+      metodo: 'get',
+      ruta: '/api/v1/seguridad/usuarios/{id}/permisos',
+      titulo: 'Permisos efectivos de un usuario',
+      descripcionesDeRuta: {
+        id: 'El usuario, por el `id` que publica cada fila de `GET /seguridad/usuarios`',
+      },
+      descripcion: literal(`
+        Lo que un usuario **puede hacer**, opción por opción, con la precedencia ya
+        resuelta por el servidor (#543, RF-121).
+
+        **Cada fila dice de dónde viene**: \`origen: "EXCEPCION"\` cuando manda su
+        excepción de usuario, y \`origen: "GRUPO"\` cuando la hereda —con \`grupoId\`
+        cuando hay un solo grupo vigente que la otorga—. No es un adorno: una fila de
+        excepción **sustituye** al grupo entero para ese acceso, otorgue o niegue, y
+        publicar las dos listas por separado obligaría a quien pregunta a
+        reimplementar esa regla. Es exactamente la que no se puede equivocar: la
+        interfaz la tenía invertida y calculaba la unión, que convierte una excepción
+        que **restringe** en una que amplía.
+
+        **Una fila con \`privilegios: []\` no sobra**: sólo la produce una excepción que
+        niega, y es lo único que distingue «se le negó expresamente» de «nunca lo
+        tuvo». Las opciones sobre las que no hay nada configurado no aparecen.
+
+        Misma regla que el guardia en todo lo demás: vigencia y habilitación se
+        comprueban en el usuario, en el grupo y en la pertenencia (RF-123), así que un
+        usuario deshabilitado o fuera de vigencia recibe la lista **vacía**. Un \`id\`
+        que no existe en esta municipalidad es **404**, no una lista vacía: no tener
+        permisos y no existir son dos respuestas distintas.
+      `),
+    },
+  ],
+  // La pantalla «Usuarios del sistema» dibuja una columna «Grupo» y su endpoint
+  // —el listado— no la puede llenar: la pertenencia vive en `miembro`, y de esa
+  // tabla solo habia el POST que afilia (#543).
+  usuarios: [
+    {
+      operationId: 'grupos_del_usuario',
+      metodo: 'get',
+      ruta: '/api/v1/seguridad/usuarios/{id}/grupos',
+      titulo: 'Grupos a los que pertenece un usuario',
+      descripcionesDeRuta: {
+        id: 'El usuario, por el `id` que publica cada fila de `GET /seguridad/usuarios`',
+      },
+      paginacion: true,
+      descripcion: literal(`
+        A qué grupos pertenece un usuario (#543, RF-120). Sin esta lectura no hay
+        «heredado» que calcular en la matriz de permisos: se sabía qué da cada grupo y
+        no a cuáles pertenece cada persona —\`/seguridad/grupos/{grupo}/miembros\` es
+        sólo \`POST\`—.
+
+        **Sólo las pertenencias activas.** Una baja no se borra —la fila sigue ahí con
+        \`activo\` en falso (RNF-051)—, pero quien salió de un grupo ya no pertenece a
+        él. Lo que **sí** devuelve son los grupos inhabilitados o fuera de vigencia a
+        los que se sigue perteneciendo: pertenecer y surtir efecto son cosas distintas,
+        y cada grupo publica su estado y su vigencia para separarlas.
+
+        Un \`id\` que no existe en esta municipalidad es **404**; no pertenecer a ningún
+        grupo es una página vacía con **200**.
       `),
     },
   ],
