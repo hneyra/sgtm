@@ -24,7 +24,7 @@ class TransferenciaTest {
                         10L,
                         1L,
                         2L,
-                        "compraventa",
+                        TipoTransferencia.COMPRA_VENTA,
                         LocalDate.of(2026, 3, 1),
                         Dinero.de("150000.00"),
                         Porcentaje.de("40"),
@@ -37,7 +37,7 @@ class TransferenciaTest {
         assertThat(transferencia.vehiculoId()).isNull();
         assertThat(transferencia.tipoTransferencia())
                 .as("el tipo se guarda en mayusculas, como los demas catalogos de texto libre")
-                .isEqualTo("COMPRAVENTA");
+                .isEqualTo(TipoTransferencia.COMPRA_VENTA);
         assertThat(transferencia.porcentajeTransferido()).isEqualTo(Porcentaje.de("40"));
     }
 
@@ -49,7 +49,7 @@ class TransferenciaTest {
                         5L,
                         1L,
                         2L,
-                        "compraventa",
+                        TipoTransferencia.COMPRA_VENTA,
                         LocalDate.of(2026, 3, 1),
                         Dinero.de("15000.00"),
                         false,
@@ -74,7 +74,7 @@ class TransferenciaTest {
                                         null,
                                         1L,
                                         2L,
-                                        "COMPRAVENTA",
+                                        TipoTransferencia.COMPRA_VENTA,
                                         LocalDate.of(2026, 3, 1),
                                         Dinero.de("100"),
                                         Porcentaje.total(),
@@ -97,7 +97,7 @@ class TransferenciaTest {
                                         5L,
                                         1L,
                                         2L,
-                                        "COMPRAVENTA",
+                                        TipoTransferencia.COMPRA_VENTA,
                                         LocalDate.of(2026, 3, 1),
                                         Dinero.de("100"),
                                         Porcentaje.total(),
@@ -118,7 +118,7 @@ class TransferenciaTest {
                                         10L,
                                         1L,
                                         1L,
-                                        "COMPRAVENTA",
+                                        TipoTransferencia.COMPRA_VENTA,
                                         LocalDate.of(2026, 3, 1),
                                         Dinero.de("100"),
                                         Porcentaje.total(),
@@ -138,7 +138,7 @@ class TransferenciaTest {
                                         10L,
                                         1L,
                                         2L,
-                                        "COMPRAVENTA",
+                                        TipoTransferencia.COMPRA_VENTA,
                                         LocalDate.of(2026, 3, 1),
                                         Dinero.de("-1"),
                                         Porcentaje.total(),
@@ -161,7 +161,7 @@ class TransferenciaTest {
                                         5L,
                                         1L,
                                         2L,
-                                        "COMPRAVENTA",
+                                        TipoTransferencia.COMPRA_VENTA,
                                         LocalDate.of(2026, 3, 1),
                                         Dinero.de("100"),
                                         Porcentaje.total(),

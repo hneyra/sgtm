@@ -40,6 +40,7 @@ import pe.gob.sgtm.parametros.aplicacion.LectorDeParametrosSellados;
 import pe.gob.sgtm.parametros.dominio.ConjuntoDeParametros;
 import pe.gob.sgtm.parametros.infraestructura.ParametrosRepositoryJdbc;
 import pe.gob.sgtm.plataforma.tenant.TenantTransactionManager;
+import pe.gob.sgtm.rentas.dominio.TipoTransferencia;
 import pe.gob.sgtm.rentas.dominio.Transferencia;
 import pe.gob.sgtm.rentas.dominio.TransferenciaRepository;
 import pe.gob.sgtm.rentas.dominio.predial.Determinacion;
@@ -152,7 +153,8 @@ class RegistrarAlcabalaTest {
         @Test
         @DisplayName("cuando el autoavaluo ajustado es mayor, el impuesto se calcula sobre el")
         void calculaSobreElAutoavaluoCuandoEsMayor() {
-            long transferenciaId = registrarTransferencia(Dinero.de("40000.00"), "COMPRAVENTA");
+            long transferenciaId =
+                    registrarTransferencia(Dinero.de("40000.00"), TipoTransferencia.COMPRA_VENTA);
 
             Determinacion determinacion =
                     registrar.determinar(
@@ -169,7 +171,8 @@ class RegistrarAlcabalaTest {
         @Test
         @DisplayName("cuando el valor de transferencia es mayor, el impuesto se calcula sobre el")
         void calculaSobreElValorDeTransferenciaCuandoEsMayor() {
-            long transferenciaId = registrarTransferencia(Dinero.de("200000.00"), "COMPRAVENTA");
+            long transferenciaId =
+                    registrarTransferencia(Dinero.de("200000.00"), TipoTransferencia.COMPRA_VENTA);
 
             Determinacion determinacion =
                     registrar.determinar(
@@ -214,7 +217,7 @@ class RegistrarAlcabalaTest {
 
     // ------------------------------------------------------------------
 
-    private static long registrarTransferencia(Dinero valorTransferencia, String tipo) {
+    private static long registrarTransferencia(Dinero valorTransferencia, TipoTransferencia tipo) {
         long predioId = predioDeMentira();
         return requireId(
                 transaccion.execute(
@@ -243,7 +246,7 @@ class RegistrarAlcabalaTest {
                                                 predioId,
                                                 transferente,
                                                 adquiriente,
-                                                "ANTICIPO_DE_LEGITIMA_ENTRE_GOBIERNOS",
+                                                TipoTransferencia.ANTICIPO_DE_LEGITIMA,
                                                 LocalDate.of(2026, 6, 1),
                                                 valorTransferencia,
                                                 Porcentaje.total(),

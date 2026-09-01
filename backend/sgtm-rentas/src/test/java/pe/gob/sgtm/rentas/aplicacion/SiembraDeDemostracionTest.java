@@ -200,7 +200,7 @@ class SiembraDeDemostracionTest {
                                     ENCABEZADO
                                             + "PREDIO,"
                                             + CODIGO_PREDIAL
-                                            + ",,C-000014,C-000010,COMPRAVENTA,2026-03-18,"
+                                            + ",,C-000014,C-000010,COMPRA_VENTA,2026-03-18,"
                                             + "54000.00,40.00,true,ESC-DEMO-0002\n"),
                             PORQUE);
 
@@ -228,11 +228,11 @@ class SiembraDeDemostracionTest {
                                     ENCABEZADO
                                             + "PREDIO,"
                                             + codigo
-                                            + ",,C-000013,C-000009,COMPRAVENTA,2026-02-10,"
+                                            + ",,C-000013,C-000009,COMPRA_VENTA,2026-02-10,"
                                             + "96000.00,100.00,true,ESC-DEMO-0001\n"
                                             + "PREDIO,"
                                             + codigo
-                                            + ",,C-000009,C-000010,COMPRAVENTA,2026-06-05,"
+                                            + ",,C-000009,C-000010,COMPRA_VENTA,2026-06-05,"
                                             + "101000.00,100.00,true,ESC-DEMO-0004\n"),
                             PORQUE);
 
@@ -256,7 +256,7 @@ class SiembraDeDemostracionTest {
                                     ENCABEZADO
                                             + "PREDIO,"
                                             + CODIGO_PREDIAL
-                                            + ",,C-000010,C-000014,COMPRAVENTA,2026-03-18,"
+                                            + ",,C-000010,C-000014,COMPRA_VENTA,2026-03-18,"
                                             + "54000.00,40.00,true,ESC-DEMO-0002\n"),
                             PORQUE);
 
@@ -281,7 +281,7 @@ class SiembraDeDemostracionTest {
                     importar.importar(
                             new StringReader(
                                     ENCABEZADO
-                                            + "VEHICULO,,ZTR-101,,C-000009,COMPRAVENTA,2026-03-30,"
+                                            + "VEHICULO,,ZTR-101,,C-000009,COMPRA_VENTA,2026-03-30,"
                                             + "14500.00,100.00,true,CT-DEMO-0006\n"),
                             PORQUE);
 
@@ -312,10 +312,10 @@ class SiembraDeDemostracionTest {
                             new StringReader(
                                     ENCABEZADO
                                             + "PREDIO,20010499999999999999999,,C-000014,C-000010,"
-                                            + "COMPRAVENTA,2026-03-18,1.00,10.00,true,X\n"
+                                            + "COMPRA_VENTA,2026-03-18,1.00,10.00,true,X\n"
                                             + "PREDIO,"
                                             + CODIGO_PREDIAL
-                                            + ",,C-000014,C-000010,COMPRAVENTA,2026-03-18,"
+                                            + ",,C-000014,C-000010,COMPRA_VENTA,2026-03-18,"
                                             + "54000.00,40.00,true,ESC-DEMO-0002\n"),
                             PORQUE);
 
@@ -324,6 +324,37 @@ class SiembraDeDemostracionTest {
             assertThat(padron.transferenciasRegistradas())
                     .extracting(Transferencia::documentoOrigen)
                     .containsExactly("ESC-DEMO-0002");
+        }
+
+        /**
+         * El archivo tampoco puede inventarse el tipo del acto (#542).
+         *
+         * <p>Hasta #542 {@code tipoTransferencia} era texto libre: este mismo archivo escribia
+         * {@code COMPRAVENTA} y entraba, de modo que la siembra dejaba en la tabla una palabra que
+         * ninguna consulta por {@code COMPRA_VENTA} encuentra.
+         */
+        @Test
+        @DisplayName("un tipo que no es del vocabulario se rechaza nombrando el valor")
+        void unTipoQueNoEsDelVocabularioSeRechaza() {
+            long segundo = padron.sembrarContribuyente("C-000014", "DEMO Querevalu Eche Segundo");
+            padron.sembrarContribuyente("C-000010", "DEMO Ojeda Rivas Carmen");
+            padron.sembrarPredio(CODIGO_PREDIAL, segundo, LocalDate.of(2026, 1, 1));
+
+            InformeDeImportacion informe =
+                    importar.importar(
+                            new StringReader(
+                                    ENCABEZADO
+                                            + "PREDIO,"
+                                            + CODIGO_PREDIAL
+                                            + ",,C-000014,C-000010,COMPRAVENTA,2026-03-18,"
+                                            + "54000.00,40.00,true,ESC-DEMO-0002\n"),
+                            PORQUE);
+
+            assertThat(informe.nuevas()).isZero();
+            assertThat(informe.rechazadas()).hasSize(1);
+            assertThat(informe.rechazadas().getFirst().motivo())
+                    .contains("Tipo de transferencia desconocido: 'COMPRAVENTA'");
+            assertThat(padron.transferenciasRegistradas()).isEmpty();
         }
     }
 
@@ -391,7 +422,7 @@ class SiembraDeDemostracionTest {
                                             + "afectaAlcabala,documentoOrigen\n"
                                             + "PREDIO,"
                                             + CODIGO_PREDIAL
-                                            + ",,C-000013,C-000009,COMPRAVENTA,2026-06-05,"
+                                            + ",,C-000013,C-000009,COMPRA_VENTA,2026-06-05,"
                                             + "96000.00,100.00,true,ESC-DEMO-0001\n"),
                             PORQUE);
 

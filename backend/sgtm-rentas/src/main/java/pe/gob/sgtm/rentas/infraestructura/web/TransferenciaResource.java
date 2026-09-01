@@ -7,6 +7,9 @@ import pe.gob.sgtm.web.ImporteActualizado;
 /**
  * Una transferencia tal como sale por HTTP. Campos en español {@code camelCase} (ARQ-04 §3).
  *
+ * <p>{@code tipoTransferencia} viaja como el <b>nombre</b> del enumerado (#542): es el mismo
+ * vocabulario que el cuerpo acepta, asi que lo que vuelve se puede reenviar tal cual.
+ *
  * <p>{@code valorTransferencia} viaja como {@link ImporteActualizado}, con {@code
  * fechaTransferencia} como fecha de actualizacion: es un valor declarado en un acto ya cerrado, no
  * una cifra que cambie despues, pero la regla de ArchUnit {@code
@@ -35,7 +38,7 @@ public record TransferenciaResource(
                 transferencia.vehiculoId(),
                 transferencia.transferenteId(),
                 transferencia.adquirienteId(),
-                transferencia.tipoTransferencia(),
+                transferencia.tipoTransferencia().name(),
                 transferencia.fechaTransferencia().toString(),
                 new ImporteActualizado(
                         transferencia.valorTransferencia(), transferencia.fechaTransferencia()),
