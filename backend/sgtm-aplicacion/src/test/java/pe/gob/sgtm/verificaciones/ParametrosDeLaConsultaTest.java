@@ -242,6 +242,11 @@ class ParametrosDeLaConsultaTest {
      * devuelve: es el POST que COBRA los conceptos que llegan en el cuerpo. Se retiraron del
      * contrato ({@code SUPRIMIDOS} del generador) en vez de leerlos, porque leerlos aqui no podria
      * cambiar ni una fila de la respuesta.
+     *
+     * <p><b>Las dos cifras estan MEDIDAS, no contadas</b>, poniendo el techo a 0 y leyendo el «but
+     * was»: 60 y 18 sobre el arbol ya mezclado con #546. Es la leccion que ese issue aprendio por
+     * las malas —su techo se puso contando y quedo en 62 donde la medida era 61, y con esa holgura
+     * de una sola operacion la mutacion que este criterio existe para cazar no mordia—.
      */
     private static final int OPERACIONES_CON_FILTRO_QUE_NADIE_LEE = 60;
 
