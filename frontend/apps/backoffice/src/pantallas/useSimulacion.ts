@@ -203,10 +203,28 @@ function comoDatosDePantalla(respuesta: unknown): DatosDePantalla {
  * El 403 se separa del resto por lo mismo que en el camino de escritura: «no se
  * pudo, vuelve a intentarlo» al lado de una falta de permiso manda a alguien a
  * pulsar diez veces un boton que nunca va a funcionar.
+ *
+ * Y el **422 se separa por el mismo motivo, con un agravante** (#540): aqui la
+ * causa mas frecuente no es un dato mal tecleado sino que **falta publicar una
+ * cifra normativa** —el conjunto sellado del ejercicio, o una llave dentro de
+ * el—, que es el estado de todas las municipalidades mientras D-02a siga
+ * abierta. El servidor lo contesta **nombrando lo que falta**
+ * —`TRAMO_PREDIAL_LIMITE:2`, `DERECHO_EMISION_PREDIAL`,
+ * `ALICUOTA_ESPECTACULO:CINE`, «El ejercicio 2026 no tiene un conjunto de
+ * parametros sellado»—, y ese mensaje ya esta redactado en lenguaje del dominio
+ * (RNF-080): reescribirlo aqui perderia justamente el nombre, que es lo unico
+ * accionable que lleva. «Vuelve a intentarlo» encima de eso manda a pulsar el
+ * boton hasta que alguien publique una ordenanza.
+ *
+ * Es la misma separacion que `useLecturaPorPost` ya hacia por su lado, y por lo
+ * mismo.
  */
 function motivoDelFallo(error: unknown): string {
-  if (error instanceof ProblemaDeApi && error.problema.status === 403) {
-    return 'Tu perfil no puede pedir esta determinación. Habla con quien administra los permisos.';
+  if (error instanceof ProblemaDeApi) {
+    if (error.problema.status === 403) {
+      return 'Tu perfil no puede pedir esta determinación. Habla con quien administra los permisos.';
+    }
+    if (error.problema.status === 422) return error.problema.detail;
   }
   return 'No se pudo calcular ahora mismo. Vuelve a intentarlo; si sigue, avísale a sistemas.';
 }

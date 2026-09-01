@@ -19,6 +19,7 @@ import pe.gob.sgtm.compartido.Paginacion;
 import pe.gob.sgtm.dominio.Ejercicio;
 import pe.gob.sgtm.dominio.Observacion;
 import pe.gob.sgtm.dominio.Placa;
+import pe.gob.sgtm.parametros.LectorDeParametros;
 import pe.gob.sgtm.parametros.ParametrosSellados;
 import pe.gob.sgtm.rentas.aplicacion.ConsultaDeVehiculos;
 import pe.gob.sgtm.rentas.aplicacion.RegistrarDeterminacionVehicular;
@@ -82,6 +83,16 @@ import pe.gob.sgtm.web.ProblemaDeNegocio;
  * #188 —transcripción del artículo 34 al corpus, con sus dos firmas, y {@code publicar-parametros}—
  * y no cabe aquí: lo que sí cabe es que la operación lo diga en vez de calcular con un valor
  * inventado.
+ *
+ * <p><b>Y con la llave que falta va lo que la contiene</b> (#540): que el ejercicio no tenga ningún
+ * conjunto sellado ({@code EjercicioSinSellar}) y que el vehículo no figure en la tabla de valores
+ * referenciales del ejercicio ({@code SinValorReferencial}) salían como <b>500 {@code
+ * ERROR_INTERNO} con identificador de incidencia</b>, y las dos son lo mismo que la llave ausente:
+ * un dato normativo que todavía no se ha publicado. Un 500 le dice al cliente «reintenta», y
+ * reintentar no lo va a arreglar nunca; además cada intento dejaba una incidencia ERROR en el
+ * registro por lo que hoy es el estado normal del sistema (D-02a abierta).
+ *
+ * <p>Lo que <b>no</b> cambia: un fallo de verdad del servidor sigue siendo 500 con su incidencia.
  *
  * <h2>Simular y determinar, en la misma operación</h2>
  *
@@ -156,7 +167,9 @@ public class VehicularController {
                     // informa.
                 }
             }
-        } catch (ParametrosSellados.ParametroAusente falta) {
+        } catch (ParametrosSellados.ParametroAusente
+                | LectorDeParametros.EjercicioSinSellar
+                | RegistrarDeterminacionVehicular.SinValorReferencial falta) {
             throw new ProblemaDeNegocio(CodigoDeError.VALIDACION, mensajeDe(falta));
         }
         return ultimo == null

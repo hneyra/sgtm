@@ -217,3 +217,86 @@ describe('quien simula y quien no', () => {
     expect(simulacionDe('alcabala')?.cuerpo).toBeUndefined();
   });
 });
+
+/**
+ * **Lo que falta publicar se lee en la pantalla** (#540).
+ *
+ * Hasta este issue, las dos excepciones que dicen «este ejercicio no tiene
+ * conjunto de parametros sellado» y «el conjunto no parametriza ningun punto de
+ * redondeo» salian del backend como **500 `ERROR_INTERNO` con un UUID de
+ * incidencia**, y la interfaz no podia hacer nada con eso: «no se pudo, vuelve a
+ * intentarlo» encima de una ordenanza sin publicar manda a pulsar el boton para
+ * siempre. Ahora salen como **422 nombrando lo que falta**.
+ *
+ * Y de este lado faltaban las dos mitades:
+ *
+ *   1. `useSimulacion` redactaba el motivo **sin mirar el 422**, asi que el
+ *      mensaje del servidor —el unico que lleva el nombre de la llave— se perdia
+ *      y se sustituia por la frase reintentable;
+ *   2. y `Pantalla.tsx` **no leia `simulacion.error` en absoluto**: la peticion
+ *      fallaba y la pantalla se quedaba con sus importes en «—», sin una sola
+ *      linea que dijera por que. El campo estaba redactado desde #393 y no lo
+ *      dibujaba nadie.
+ *
+ * El contraste va con las dos: un fallo de verdad del servidor **sigue** diciendo
+ * «vuelve a intentarlo», porque ahi reintentar es exactamente lo que toca.
+ */
+describe('lo que falta publicar se dice en la pantalla, y lo roto se dice como roto', () => {
+  const responderALaDeterminacion = (problema: Record<string, unknown>): void => {
+    const debajo = globalThis.fetch;
+    globalThis.fetch = ((entrada: RequestInfo | URL, opciones?: RequestInit) => {
+      const url = typeof entrada === 'string' ? entrada : String(entrada);
+      if (url.includes('/rentas/predial/calculo-individual')) {
+        pedidas.push(url.replace(/^.*\/api\/v1/, ''));
+        return Promise.resolve(
+          new Response(JSON.stringify(problema), {
+            status: Number(problema['status']),
+            headers: { 'content-type': 'application/problem+json' },
+          }),
+        );
+      }
+      return debajo(entrada, opciones);
+    }) as typeof fetch;
+  };
+
+  it('un 422 que nombra la llave se lee tal cual, sin «vuelve a intentarlo»', async () => {
+    const usuario = userEvent.setup();
+    responderALaDeterminacion({
+      type: 'https://sgtm.gob.pe/errores/validacion',
+      title: 'Los datos enviados no son validos',
+      status: 422,
+      detail:
+        'El ejercicio 2026 no tiene un conjunto de parametros sellado. Calcular con uno abierto produciria una cifra que manana puede ser otra',
+      codigo: 'VALIDACION',
+    });
+    montarEnRuta(PREDIAL);
+
+    await usuario.click(await screen.findByRole('button', { name: 'Simular' }));
+
+    // El mensaje del servidor, entero: lo que hace falta saber es **cual**
+    // ejercicio, y reescribirlo aqui perderia justo eso (RNF-080).
+    await screen.findByText(/no tiene un conjunto de parametros sellado/);
+    expect(screen.getByText('No se calculó la determinación')).toBeTruthy();
+    expect(screen.queryByText(/Vuelve a intentarlo/)).toBeNull();
+  });
+
+  it('y un 500 de verdad sigue diciendo que se reintente', async () => {
+    const usuario = userEvent.setup();
+    responderALaDeterminacion({
+      type: 'https://sgtm.gob.pe/errores/error_interno',
+      title: 'No se pudo completar la operacion',
+      status: 500,
+      detail: 'No se pudo completar la operacion',
+      codigo: 'ERROR_INTERNO',
+      incidencia: '0bf66fe0-418f-474b-ab63-e33e955be544',
+    });
+    montarEnRuta(PREDIAL);
+
+    await usuario.click(await screen.findByRole('button', { name: 'Simular' }));
+
+    // Aqui reintentar SI es lo que toca, y el identificador de incidencia no se
+    // le ensena a quien atiende: lo pide quien atiende la incidencia.
+    await screen.findByText(/Vuelve a intentarlo/);
+    expect(screen.queryByText(/0bf66fe0/)).toBeNull();
+  });
+});

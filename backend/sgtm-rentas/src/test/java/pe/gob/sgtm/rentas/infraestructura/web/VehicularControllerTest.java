@@ -411,10 +411,122 @@ class VehicularControllerTest {
         assertThat(determinaciones.insertadas).isZero();
     }
 
+    // ------------------------------------------------- falta publicar, y se dice (#540)
+
+    @Test
+    @DisplayName("un ejercicio sin conjunto sellado es 422 y nombra el ejercicio, no 500")
+    void elEjercicioSinSellarSeNombra() throws Exception {
+        mvc = montarCon(lectorSinSellar());
+
+        MvcResult resultado =
+                mvc.perform(
+                                post("/api/v1/rentas/vehicular/calculo")
+                                        .param("placa", "V1H-882")
+                                        .param("ejercicio", "2026")
+                                        .contentType(MediaType.APPLICATION_JSON)
+                                        .content("{\"simulacion\":true}"))
+                        .andReturn();
+
+        assertThat(resultado.getResponse().getStatus())
+                .as("no es que el servidor este roto: es que nadie ha sellado 2026 (D-02a)")
+                .isEqualTo(422);
+        String cuerpo = resultado.getResponse().getContentAsString();
+        assertThat(cuerpo).contains("VALIDACION").contains("2026");
+        assertThat(cuerpo)
+                .as("un 500 traeria identificador de incidencia; esto no es una incidencia")
+                .doesNotContain("incidencia");
+        assertThat(determinaciones.insertadas).isZero();
+    }
+
+    @Test
+    @DisplayName("un vehiculo sin valor referencial en la tabla del ejercicio es 422, y lo nombra")
+    void elVehiculoSinValorReferencialSeNombra() throws Exception {
+        vehiculos.sinValorReferencial = true;
+
+        MvcResult resultado =
+                mvc.perform(
+                                post("/api/v1/rentas/vehicular/calculo")
+                                        .param("placa", "V1H-882")
+                                        .param("ejercicio", "2026")
+                                        .contentType(MediaType.APPLICATION_JSON)
+                                        .content("{\"simulacion\":true}"))
+                        .andReturn();
+
+        assertThat(resultado.getResponse().getStatus())
+                .as(
+                        "la tabla del MEF del ejercicio es un dato publicado como cualquier otro:"
+                                + " que falte la fila del vehiculo no es un fallo del servidor")
+                .isEqualTo(422);
+        assertThat(resultado.getResponse().getContentAsString())
+                .contains("V1H-882")
+                .doesNotContain("incidencia");
+    }
+
+    @Test
+    @DisplayName("y ninguna de las dos escribe una incidencia en el registro de errores")
+    void loQueFaltaPublicarNoEnsuciaElRegistro() throws Exception {
+        ch.qos.logback.classic.Logger registro =
+                (ch.qos.logback.classic.Logger)
+                        org.slf4j.LoggerFactory.getLogger(ManejadorDeErrores.class);
+        ch.qos.logback.core.read.ListAppender<ch.qos.logback.classic.spi.ILoggingEvent> anotados =
+                new ch.qos.logback.core.read.ListAppender<>();
+        anotados.start();
+        registro.addAppender(anotados);
+        try {
+            mvc = montarCon(lectorSinSellar());
+            mvc.perform(
+                    post("/api/v1/rentas/vehicular/calculo")
+                            .param("placa", "V1H-882")
+                            .param("ejercicio", "2026")
+                            .contentType(MediaType.APPLICATION_JSON)
+                            .content("{\"simulacion\":true}"));
+            mvc = montar(conjuntoCompleto());
+            vehiculos.sinValorReferencial = true;
+            mvc.perform(
+                    post("/api/v1/rentas/vehicular/calculo")
+                            .param("placa", "V1H-882")
+                            .param("ejercicio", "2026")
+                            .contentType(MediaType.APPLICATION_JSON)
+                            .content("{\"simulacion\":true}"));
+        } finally {
+            registro.detachAppender(anotados);
+        }
+
+        assertThat(
+                        anotados.list.stream()
+                                .filter(e -> e.getLevel() == ch.qos.logback.classic.Level.ERROR)
+                                .toList())
+                .as("el registro de incidencias es para defectos, no para cifras sin publicar")
+                .isEmpty();
+    }
+
     // ---------------------------------------------------------------- utilidades
 
+    /** Lo que ocurre HOY en todas las municipalidades: ningun conjunto sellado (D-02a). */
+    private static LectorDeParametros lectorSinSellar() {
+        return new LectorDeParametros() {
+            @Override
+            public ParametrosSellados vigenteEn(Ejercicio ejercicio) {
+                throw new LectorDeParametros.EjercicioSinSellar(ejercicio);
+            }
+
+            @Override
+            public ParametrosSellados porConjunto(IdentificadorDeConjunto identificador) {
+                throw new LectorDeParametros.ConjuntoNoSellado(identificador);
+            }
+
+            @Override
+            public IdentificadorDeConjunto conjuntoVigenteEn(Ejercicio ejercicio) {
+                throw new LectorDeParametros.EjercicioSinSellar(ejercicio);
+            }
+        };
+    }
+
     private MockMvc montar(ParametrosSellados sellados) {
-        LectorDeParametros lector = lector(sellados);
+        return montarCon(lector(sellados));
+    }
+
+    private MockMvc montarCon(LectorDeParametros lector) {
         RegistrarDeterminacionVehicular servicio =
                 new RegistrarDeterminacionVehicular(
                         vehiculos,
@@ -487,6 +599,9 @@ class VehicularControllerTest {
         private Dinero valorReferencial = Dinero.de("112800.00");
         private String buscadoPorContribuyente = "";
 
+        /** La tabla del ejercicio no trae la fila de este vehiculo (#540). */
+        private boolean sinValorReferencial;
+
         @Override
         public Optional<Vehiculo> findByPlaca(Placa placa) {
             return EL_VEHICULO.placa().equals(placa) ? Optional.of(EL_VEHICULO) : Optional.empty();
@@ -520,6 +635,9 @@ class VehicularControllerTest {
         @Override
         public Optional<ValorReferencial> buscar(
                 IdentificadorDeConjunto conjunto, String marca, String modelo, int anio) {
+            if (sinValorReferencial) {
+                return Optional.empty();
+            }
             return Optional.of(
                     new ValorReferencial(
                             EJERCICIO,
