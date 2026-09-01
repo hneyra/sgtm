@@ -46,12 +46,15 @@ import pe.gob.sgtm.cuentacorriente.aplicacion.MovimientosDelLibroCuentaCorriente
 import pe.gob.sgtm.cuentacorriente.aplicacion.RegistrarAsiento;
 import pe.gob.sgtm.cuentacorriente.dominio.Asiento;
 import pe.gob.sgtm.cuentacorriente.dominio.CalculoDeDeuda;
+import pe.gob.sgtm.cuentacorriente.dominio.ClaveDeSaldo;
 import pe.gob.sgtm.cuentacorriente.dominio.Concepto;
 import pe.gob.sgtm.cuentacorriente.dominio.CriterioDeAltasBajas;
 import pe.gob.sgtm.cuentacorriente.dominio.CriterioDeDeudaPorContribuyente;
 import pe.gob.sgtm.cuentacorriente.dominio.CriterioDePagos;
 import pe.gob.sgtm.cuentacorriente.dominio.Fase;
+import pe.gob.sgtm.cuentacorriente.dominio.MovimientoDeDeuda;
 import pe.gob.sgtm.cuentacorriente.dominio.ObligacionConDeuda;
+import pe.gob.sgtm.cuentacorriente.dominio.SentidoDelMovimiento;
 import pe.gob.sgtm.cuentacorriente.dominio.TipoAsiento;
 import pe.gob.sgtm.cuentacorriente.infraestructura.AsientoRepositoryJdbc;
 import pe.gob.sgtm.cuentacorriente.infraestructura.SaldoRepositoryJdbc;
@@ -264,8 +267,8 @@ class ConsultaUnificadaJdbcTest {
                     .hasSize(2);
             assertThat(ficha.pagos().contenido()).as("el abono del recibo").hasSize(1);
             assertThat(ficha.altasYBajas().contenido())
-                    .as("los tres cargos del desglose son movimientos de deuda")
-                    .hasSize(3);
+                    .as("el alta de deuda registrada; los tres cargos son la emision (#640)")
+                    .hasSize(1);
             assertThat(ficha.fraccionamientos().contenido()).hasSize(1);
             assertThat(ficha.valores().contenido()).hasSize(1);
             assertThat(ficha.declaraciones().contenido()).hasSize(1);
@@ -610,6 +613,12 @@ class ConsultaUnificadaJdbcTest {
         emitirValor(id);
         presentarDeclaracion(id, sufijo);
 
+        // Un ALTA de deuda de verdad, y al final: los tres cargos de arriba son la emision
+        // de la determinacion, que desde #640 no es un movimiento de esta seccion —lo que
+        // la pestana audita son los ACTOS de RF-043 y RF-044—. Va detras del convenio para
+        // no cambiar lo que aquel acogio.
+        asentarAltaDeDeuda(id, "PREDIAL", Dinero.de("60.00"));
+
         return codigo;
     }
 
@@ -632,6 +641,35 @@ class ConsultaUnificadaJdbcTest {
                                         LocalDate.of(2026, 1, 2),
                                         "DETERMINACION DE LA PRUEBA"),
                                 Observacion.de("Se asienta la deuda de la prueba")));
+    }
+
+    /**
+     * Un ALTA de deuda, por el camino que la produce de verdad: {@link
+     * MovimientoDeDeuda#enAsientos}, que es el unico sitio del sistema que estampa el acto del que
+     * nace el asiento. Un cargo escrito con {@code Asiento.nuevo} —la emision— no lleva acto y no
+     * sale en la relacion de altas y bajas, con razon (#640).
+     */
+    private void asentarAltaDeDeuda(long contribuyenteId, String tributo, Dinero monto) {
+        MovimientoDeDeuda alta =
+                new MovimientoDeDeuda(
+                        SentidoDelMovimiento.ALTA,
+                        new ClaveDeSaldo(contribuyenteId, tributo, EJERCICIO, 1, null, null),
+                        monto,
+                        Dinero.CERO,
+                        Dinero.CERO,
+                        Dinero.CERO,
+                        Fase.ORDINARIA,
+                        LocalDate.of(2026, 3, 4),
+                        "RES-ALTA DE LA PRUEBA",
+                        null);
+        transaccion.execute(
+                estado -> {
+                    for (Asiento asiento : alta.enAsientos()) {
+                        registrarAsiento.asentar(
+                                asiento, Observacion.de("Se da de alta la deuda de la prueba"));
+                    }
+                    return null;
+                });
     }
 
     private void asentarPago(long contribuyenteId, String tributo, Dinero monto) {
@@ -710,7 +748,7 @@ class ConsultaUnificadaJdbcTest {
                                     RELOJ.instant(),
                                     null,
                                     Observacion.de("Se registra el preconvenio de la prueba"));
-                    return convenios.registrar(convenio);
+                    return convenios.registrar(convenio, null);
                 });
     }
 

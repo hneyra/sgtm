@@ -201,6 +201,33 @@ public class AsientoRepositoryJdbc extends RepositorioJdbc implements AsientoRep
                 .list();
     }
 
+    /**
+     * La relacion de altas y bajas de un contribuyente (RF-045), que son <b>actos</b> y no todo el
+     * libro (#640).
+     *
+     * <h2>Lo que queda fuera, y por que</h2>
+     *
+     * <p>Un cobro de ventanilla no es una baja de deuda ni el cargo de la emision masiva es un
+     * alta, aunque los tres se escriban con los mismos conceptos del desglose. Se acota por {@code
+     * acto IS NOT NULL} porque es lo unico que los separa: {@link
+     * pe.gob.sgtm.cuentacorriente.dominio.MovimientoDeDeuda#enAsientos} —los actos de RF-043 y
+     * RF-044— es el unico sitio del sistema que estampa la columna, y un asiento sin acto no es uno
+     * del que se ignore el origen, es uno que <b>no nacio</b> de un alta ni de una baja (V68 §2).
+     *
+     * <h2>Los asientos anteriores a V68, dicho en vez de callado</h2>
+     *
+     * <p>Los que existian antes de esa migracion tienen {@code acto} nulo y <b>no se pueden
+     * reparar</b>: el libro no admite {@code UPDATE} (V7, regla 4) y el migrador no puede
+     * reescribir una tabla con {@code FORCE ROW LEVEL SECURITY} porque corre sin contexto de tenant
+     * (DAT-01 §0 cuarto hallazgo, medido igual en V64). Asi que <b>una baja anterior a V68 no sale
+     * en esta relacion</b>, y no hay forma de distinguirla de un cobro del mismo dia.
+     *
+     * <p><b>No se acota por fecha</b>, que era la otra salida: haria falta saber cuando se aplico
+     * V68 en <i>esta</i> instalacion —cada una la aplica el dia que despliega—, y ese dato no esta
+     * en ninguna tabla que la aplicacion pueda leer. Un corte inventado dejaria fuera bajas buenas
+     * o dentro cobros, con el mismo aspecto en los dos casos. Se dice, en cambio, en la descripcion
+     * que el contrato publica de la operacion, que es lo que llega a quien lee la pantalla (#312).
+     */
     @Override
     public Pagina<Asiento> altasYBajas(CriterioDeAltasBajas criterio, Paginacion paginacion) {
         List<String> condiciones = new ArrayList<>();
@@ -208,9 +235,14 @@ public class AsientoRepositoryJdbc extends RepositorioJdbc implements AsientoRep
 
         condiciones.add("c.codigo_contribuyente = :codigo");
         parametros.put("codigo", criterio.codigoContribuyente());
-        // Los cuatro conceptos del desglose: es lo que un alta o una baja produce. Un
-        // PAGO es un cobro, no un movimiento de deuda, y tiene su propia consulta.
-        condiciones.add("a.concepto IN ('INSOLUTO','REAJUSTE','INTERES','GASTO')");
+        // EL filtro de esta consulta, y el unico (#640). Acotar por los cuatro conceptos
+        // del desglose no separaba nada: el abono de una baja y el de una COBRANZA son
+        // columna a columna el mismo asiento —ABONO de concepto INSOLUTO—, asi que la
+        // pantalla que existe para auditar las altas y bajas listaba como baja cada pago
+        // de ventanilla, y como alta el cargo de la emision masiva y el que cristaliza el
+        // interes al cobrar. Lo que distingue un acto de un movimiento cualquiera es de
+        // que nace, y desde V68 el libro lo guarda.
+        condiciones.add("a.acto IS NOT NULL");
 
         if (criterio.ejercicio() != null) {
             condiciones.add("a.ejercicio = :ejercicio");
@@ -223,6 +255,13 @@ public class AsientoRepositoryJdbc extends RepositorioJdbc implements AsientoRep
         if (criterio.sentido() != null) {
             // Un alta incorpora deuda (CARGO) y una baja la extingue (ABONO): es la
             // misma equivalencia que MovimientoDeDeuda#enAsientos escribe al asentar.
+            //
+            // Se acota por `tipo` y NO por `acto`, y a proposito: la columna «A/B» de la
+            // pantalla dibuja el tipo del asiento, asi que filtrar por el acto dejaria el
+            // filtro diciendo una cosa y la columna otra —dos verdades sobre la misma
+            // fila, y la que se lee no seria la que filtro (#397)—. Donde se ve es en la
+            // REVERSION de una baja: copia el acto BAJA_DEUDA y es un CARGO, porque
+            // devuelve la deuda al padron; sale bajo «Alta», que es lo que su tipo dice.
             condiciones.add("a.tipo = :tipo");
             parametros.put(
                     "tipo",
@@ -250,8 +289,10 @@ public class AsientoRepositoryJdbc extends RepositorioJdbc implements AsientoRep
 
         condiciones.add("c.codigo_contribuyente = :codigo");
         parametros.put("codigo", criterio.codigoContribuyente());
-        // Un pago es un ABONO de concepto PAGO: los demas abonos son movimientos de
-        // deuda y los cubre altasYBajas (ver CriterioDePagos).
+        // Un pago es un ABONO de concepto PAGO (ver CriterioDePagos). Los demas abonos no
+        // son todos «movimientos de deuda»: el de una cobranza tambien es un ABONO de
+        // INSOLUTO, y desde #640 lo que separa un acto de un cobro es `acto`, no el
+        // concepto.
         condiciones.add("a.tipo = 'ABONO'");
         condiciones.add("a.concepto = 'PAGO'");
 

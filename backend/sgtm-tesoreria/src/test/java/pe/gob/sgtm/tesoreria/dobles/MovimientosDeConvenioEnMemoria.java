@@ -1,8 +1,11 @@
 package pe.gob.sgtm.tesoreria.dobles;
 
 import java.util.ArrayList;
+import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.Optional;
+import org.jspecify.annotations.Nullable;
 import pe.gob.sgtm.tesoreria.dominio.MovimientoDeConvenio;
 import pe.gob.sgtm.tesoreria.dominio.MovimientoDeConvenioRepository;
 import pe.gob.sgtm.tesoreria.dominio.TipoDeMovimientoDeConvenio;
@@ -10,18 +13,26 @@ import pe.gob.sgtm.tesoreria.dominio.TipoDeMovimientoDeConvenio;
 /**
  * Los movimientos de un convenio, en memoria. <b>Solo agrega</b>, como en la base.
  *
- * <p>Reproduce las dos unicidades de V31 —una formalizacion y un cierre por convenio— porque sin
- * ellas el doble dejaria pasar lo que la base rechaza y las pruebas de {@code FormalizarConvenio} y
- * {@code CerrarConvenio} probarian menos de lo que parece. Que la garantia funcione <b>bajo
- * concurrencia real</b> es otra cosa, y esa la hace {@code ConvenioJdbcTest} con hilos de verdad.
+ * <p>Reproduce las dos unicidades de V31 —una formalizacion y un cierre por convenio— y la de V70
+ * —una clave de idempotencia por movimiento— porque sin ellas el doble dejaria pasar lo que la base
+ * rechaza y las pruebas de {@code FormalizarConvenio} y {@code CerrarConvenio} probarian menos de
+ * lo que parece. Que la garantia funcione <b>bajo concurrencia real</b> es otra cosa, y esa la hace
+ * {@code ConvenioJdbcTest} con hilos de verdad.
  */
 public final class MovimientosDeConvenioEnMemoria implements MovimientoDeConvenioRepository {
 
     private final List<MovimientoDeConvenio> registrados = new ArrayList<>();
+    private final Map<String, Long> claves = new LinkedHashMap<>();
     private long siguienteId = 1;
 
     @Override
-    public MovimientoDeConvenio registrar(MovimientoDeConvenio movimiento) {
+    public MovimientoDeConvenio registrar(
+            MovimientoDeConvenio movimiento, @Nullable String claveDeIdempotencia) {
+        if (claveDeIdempotencia != null && claves.containsKey(claveDeIdempotencia)) {
+            throw new ClaveRepetida(
+                    "Ya se registro un acto con esa clave de idempotencia",
+                    new IllegalStateException("convenio_movimiento_idempotencia_uq"));
+        }
         if (movimiento.tipo() == TipoDeMovimientoDeConvenio.FORMALIZACION
                 && formalizacionDe(movimiento.convenioId()).isPresent()) {
             throw new ConvenioYaFormalizado(
@@ -51,7 +62,18 @@ public final class MovimientosDeConvenioEnMemoria implements MovimientoDeConveni
                         "cajero.prueba",
                         movimiento.observacion());
         registrados.add(guardado);
+        if (claveDeIdempotencia != null) {
+            claves.put(claveDeIdempotencia, guardado.id());
+        }
         return guardado;
+    }
+
+    @Override
+    public Optional<MovimientoDeConvenio> porClaveDeIdempotencia(String clave) {
+        Long id = claves.get(clave);
+        return id == null
+                ? Optional.empty()
+                : registrados.stream().filter(m -> m.id() != null && m.id().equals(id)).findFirst();
     }
 
     @Override
