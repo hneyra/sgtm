@@ -55,13 +55,20 @@ export type TablaDef = {
  * «Predios y vehículos» hasta #541: dos predios de la maqueta con su ubicación,
  * su área y un autovalúo de S/ 132,196.75, bajo el nombre de la persona que se
  * acabara de abrir.
+ *
+ * Desde #552 son seis, y las cuatro nuevas se reparten en dos familias que se
+ * dibujan distinto porque **se piden distinto**: `domicilios`, `contactos` y
+ * `responsables` son tres listas de la MISMA lectura —la ficha, que las trae en
+ * una sola transacción— y llegan como arreglos sin paginar; `predios`,
+ * `vehiculos` y `beneficios` son tres lecturas propias, cada una con su permiso
+ * y su sobre paginado.
  */
 export type BloqueDef = {
   titulo?: string;
   nota?: string;
   campos: CampoDef[];
   tabla?: TablaDef;
-  lectura?: 'predios' | 'vehiculos';
+  lectura?: 'predios' | 'vehiculos' | 'beneficios' | 'domicilios' | 'contactos' | 'responsables';
 };
 
 export type SeccionDef = { id: string; label: string; hint: string; conteo: string; bloques: BloqueDef[] };
@@ -76,30 +83,102 @@ export const EXPEDIENTE: SeccionDef[] = [
     id: 'ident',
     label: 'Identificación',
     hint: 'Quién es y cómo está calificado',
-    conteo: '14 campos',
+    conteo: '2 bloques',
     bloques: [
       {
+        titulo: 'Quién es',
+        nota:
+          'Sale de «GET /rentas/contribuyentes/{id}/ficha» y no se corrige aquí. El código y el documento son la identidad —el ' +
+          'código enlaza sus predios, sus recibos y sus asientos, y del documento se deriva la cuenta del ciudadano en el portal—, ' +
+          'así que cambiarlos no es corregir una ficha sino decidir que dos filas eran la misma persona: es otro acto, y el PUT no ' +
+          'lo admite.',
         campos: [
           { k: 'codigo', l: 'Código', t: 'ro' },
-          { k: 'tipoPersona', l: 'Tipo de persona', t: 'sel', o: ['NATURAL', 'JURÍDICA', 'SUCESIÓN INDIVISA', 'SOCIEDAD CONYUGAL'] },
-          { k: 'apPaterno', l: 'Apellido paterno', t: 'text' },
-          { k: 'apMaterno', l: 'Apellido materno', t: 'text' },
-          { k: 'nombres', l: 'Nombres', t: 'text' },
-          { k: 'razonSocial', l: 'Razón social', t: 'text', ancho: true, ph: 'Solo persona jurídica' },
-          { k: 'dni', l: 'D.N.I.', t: 'text' },
-          { k: 'ruc', l: 'R.U.C.', t: 'text' },
-          { k: 'nacimiento', l: 'Fecha de nacimiento', t: 'date' },
-          { k: 'sexo', l: 'Sexo', t: 'sel', o: ['MASCULINO', 'FEMENINO'] },
-          { k: 'estadoCivil', l: 'Estado civil', t: 'sel', o: ['SOLTERO(A)', 'CASADO(A)', 'VIUDO(A)', 'DIVORCIADO(A)', 'CONVIVIENTE'] },
-          { k: 'conyuge', l: 'Cónyuge', t: 'text' },
           {
-            k: 'calificacion',
-            l: 'Calificación del contribuyente',
-            t: 'sel',
-            o: ['001 — PRINCIPAL CONTRIBUYENTE', '002 — MEDIANO CONTRIBUYENTE', '003 — PEQUEÑO CONTRIBUYENTE'],
-            ayuda: 'Decide el trato de cobranza, no el impuesto',
+            k: 'documento',
+            l: 'Documento de identidad',
+            t: 'ro',
+            /* El manual dibuja dos cajas, «D.N.I.» y «R.U.C.», y el padrón
+               admite SEIS tipos —DNI, RUC, CE, PASAPORTE, PARTIDA y OTRO—: con
+               dos cajas, el carné de extranjería de un extranjero y la partida
+               de una sucesión indivisa no tendrían dónde salir, y la ficha se
+               leería como si esa persona no tuviera documento. Es una sola
+               caja porque el padrón guarda un solo documento, con su tipo. */
+            ayuda: 'El padrón guarda uno, con su tipo. El manual dibuja dos cajas —D.N.I. y R.U.C.— y los tipos admitidos son seis.',
           },
-          { k: 'estado', l: 'Estado', t: 'sel', o: ['A — ACTIVO', 'I — INACTIVO', 'B — BAJA', 'F — FALLECIDO', 'N — NO HABIDO'] },
+          {
+            k: 'tipoPersona',
+            l: 'Tipo de persona',
+            t: 'ro',
+            ayuda: 'Decide qué se puede guardar: una persona jurídica no tiene fecha de nacimiento ni condición especial. El PUT no lo cambia.',
+          },
+          {
+            k: 'estado',
+            l: 'Estado',
+            t: 'ro',
+            /* Los cinco valores del manual —ACTIVO, INACTIVO, BAJA, FALLECIDO,
+               NO HABIDO— no existen en el sistema: `contribuyente` tiene un
+               `activo` booleano y nada más, así que ese desplegable ofrecía
+               tres estados que no se pueden guardar y dos que son el mismo. No
+               se traduce ninguno, por lo mismo que #427 no tradujo «ACTIVA» a
+               VIGENTE: parecerse no es serlo. */
+            ayuda: 'Activo o inactivo, que es lo que el padrón guarda. La baja es otro acto: exige el privilegio ELIMINACIÓN y esta pantalla todavía no la ofrece.',
+          },
+        ],
+      },
+      {
+        titulo: 'Lo que se corrige aquí',
+        /* Los cinco campos que `PUT /rentas/contribuyentes/{id}` admite, y
+           ninguno más. Se van cuatro del manual y no por descuido:
+
+           - «Apellido paterno», «Apellido materno», «Nombres» y «Razón social»
+             son cuatro cajas para lo que el padrón guarda en UNA —
+             `nombre_razon_social`—: partirlo exigiría decidir en qué orden se
+             recompone, y el backend no lo puede decir. Van como el campo que
+             existe, con el rótulo de la grilla del propio manual.
+           - «Sexo» y «Calificación del contribuyente» no tienen columna ni en
+             la tabla ni en la petición: dibujarlos es prometer que se guardan.
+           - «Cónyuge» era una caja de texto para un nombre y lo que el padrón
+             enlaza es el IDENTIFICADOR de otro contribuyente; teclear ahí un
+             nombre habría mandado un 422 sobre alguien que sí está en el
+             padrón, que es el defecto que #427 midió con el «Solicitante» del
+             certificado. */
+        nota:
+          'Estos cinco viajan en «PUT /rentas/contribuyentes/{id}» y exigen la observación de quien guarda (regla 10). Lo que se ' +
+          'deja en blanco BORRA el dato —es una instrucción, no una omisión—; lo que no se toca no se manda.',
+        campos: [
+          { k: 'nombreRazonSocial', l: 'Nombre / razón social', t: 'text', ancho: true, ayuda: 'El padrón lo guarda entero, en un solo campo. El manual lo parte en apellidos, nombres y razón social; recomponerlo exigiría decidir el orden.' },
+          {
+            k: 'condicionEspecial',
+            l: 'Condición especial',
+            t: 'sel',
+            /* La primera opción es la vacía a propósito: es la que BORRA, y
+               sin ella el desplegable no tendría forma de decir «ninguna».
+               Los tres valores son los del `enum CondicionEspecial`, letra por
+               letra: aquí sí hay vocabulario cerrado. */
+            o: ['', 'PENSIONISTA', 'ADULTO_MAYOR', 'DISCAPACIDAD'],
+            ayuda: 'Se registra; no se aplica. Cuánto deduce un pensionista es un valor normativo que sigue bloqueado (D-02a).',
+          },
+          { k: 'fechaNacimiento', l: 'Fecha de nacimiento', t: 'date' },
+          {
+            k: 'estadoCivil',
+            l: 'Estado civil',
+            t: 'text',
+            /* El manual lo dibuja como desplegable —SOLTERO(A), CASADO(A)…— y
+               la columna es `varchar(20)` de texto libre, sin ninguna
+               restricción: no hay vocabulario que ofrecer. Con el desplegable,
+               un padrón que ya diga «CASADO» no casaría con ninguna opción y el
+               control se dibujaría en blanco; guardar entonces escribiría
+               «CASADO(A)» encima, dejando dos escrituras distintas de lo mismo
+               en el mismo padrón. */
+            ayuda: 'Texto libre de hasta 20 caracteres: la columna no tiene vocabulario cerrado, así que el desplegable del manual impondría uno que el sistema no tiene.',
+          },
+          {
+            k: 'conyugeId',
+            l: 'Cónyuge — código del padrón',
+            t: 'text',
+            ayuda: 'El código único del otro contribuyente; se resuelve contra el padrón antes de guardar. En blanco deshace el enlace. Nadie es su propio cónyuge.',
+          },
         ],
       },
     ],
@@ -108,54 +187,64 @@ export const EXPEDIENTE: SeccionDef[] = [
   {
     id: 'domicilio',
     label: 'Domicilio fiscal',
-    hint: 'A dónde se notifica; sale del catálogo vial de Catastro',
-    conteo: '16 campos',
+    hint: 'A dónde se notifica, y desde cuándo',
+    conteo: 'vigente e historial',
     bloques: [
       {
+        /* Los dieciséis campos del manual descomponían la dirección —tipo de
+           vía, vía, habilitación urbana, número, departamento, provincia,
+           distrito, edificación, interior, zona, manzana, lote, sub lote…— y el
+           padrón la guarda en UNA línea, con su referencia y su ubigeo. No hay
+           dónde escribir quince de esos dieciséis, y los tres de solo lectura
+           —departamento, provincia, distrito— salían con «PIURA / PIURA /
+           CATACAOS» de la maqueta bajo el nombre de cualquiera.
+
+           Y sobre todo: aquí no se muda a nadie. Cambiar de domicilio es cerrar
+           el anterior y abrir el nuevo en la misma transacción —«POST
+           /rentas/contribuyentes/{id}/domicilios»—, no reescribir una línea; si
+           fuera una edición, la dirección vieja desaparecería y con ella la
+           única prueba de por qué se notificó donde se notificó. */
+        titulo: 'Domicilio fiscal vigente',
+        nota:
+          'El que rige a la fecha de corte de la ficha, no «el último». Cambiarlo es una mudanza —cierra el tramo anterior y abre ' +
+          'otro— y es un acto distinto del que guarda esta pantalla: se registra en «POST /rentas/contribuyentes/{id}/domicilios», ' +
+          'que aquí todavía no está.',
         campos: [
-          {
-            k: 'tipoVia',
-            l: 'Tipo de vía',
-            t: 'sel',
-            o: ['01 — AV - AVENIDA', '02 — CA - CALLE', '03 — JR - JIRÓN', '04 — PS - PASAJE', '05 — CR - CARRETERA', '99 — NO ESPECIFICADO'],
-          },
-          { k: 'via', l: 'Vía', t: 'text', ancho: true },
-          { k: 'habUrbana', l: 'Habilitación urbana', t: 'text', ancho: true },
-          { k: 'numero', l: 'Número', t: 'text' },
-          { k: 'numAd', l: 'Número adicional', t: 'text' },
-          { k: 'dep', l: 'Departamento', t: 'ro' },
-          { k: 'prov', l: 'Provincia', t: 'ro' },
-          { k: 'dist', l: 'Distrito', t: 'ro' },
+          { k: 'domDireccion', l: 'Dirección', t: 'ro', ancho: true },
+          { k: 'domReferencia', l: 'Referencia', t: 'ro', ancho: true },
+          { k: 'domUbigeo', l: 'Ubigeo', t: 'ro' },
+          { k: 'domDesde', l: 'Vigente desde', t: 'ro' },
+          { k: 'domOrigen', l: 'Documento que lo sustenta', t: 'ro', ancho: true },
         ],
       },
       {
-        titulo: 'Edificación e interior',
+        titulo: 'Domicilio procesal',
+        nota: 'El que se señala para un procedimiento. La ficha lo publica aparte del fiscal, y también vigente a la fecha de corte.',
         campos: [
-          { k: 'nomEdif', l: 'Nombre de la edificación', t: 'text', ancho: true },
-          {
-            k: 'tipoEdif',
-            l: 'Tipo de edificación',
-            t: 'sel',
-            o: ['01 — CASA', '02 — EDIFICIO', '03 — QUINTA', '04 — CENTRO COMERCIAL', '99 — NO ESPECIFICADO'],
-          },
-          {
-            k: 'tipoInt',
-            l: 'Tipo de interior',
-            t: 'sel',
-            o: ['01 — DEPARTAMENTO', '02 — INTERIOR', '03 — OFICINA', '04 — TIENDA', '99 — NO ESPECIFICADO'],
-          },
-          { k: 'numInt', l: 'Núm. interior', t: 'text' },
+          { k: 'procDireccion', l: 'Dirección', t: 'ro', ancho: true },
+          { k: 'procDesde', l: 'Vigente desde', t: 'ro' },
+          { k: 'procOrigen', l: 'Documento que lo sustenta', t: 'ro', ancho: true },
         ],
       },
       {
-        titulo: 'Zona, sector y etapa',
-        campos: [
-          { k: 'zonaNombre', l: 'Nombre', t: 'text', ancho: true },
-          { k: 'mz', l: 'Manzana', t: 'text' },
-          { k: 'lt', l: 'Lote', t: 'text' },
-          { k: 'sublt', l: 'Sub lote', t: 'text' },
-          { k: 'dirAd', l: 'Dirección adicional', t: 'text', ancho: true },
-        ],
+        campos: [],
+        lectura: 'domicilios',
+        tabla: {
+          titulo: 'Historial de domicilios',
+          conteo: '',
+          min: '780px',
+          cols: [
+            ['Tipo', 0],
+            ['Dirección', 0],
+            ['Referencia', 0],
+            ['Ubigeo', 0],
+            ['Desde', 0],
+            ['Hasta', 0],
+            ['Documento', 0],
+          ],
+          filas: [],
+          nota: 'Los cerrados siguen aquí: no se borra nada (regla 4), y es lo que explica por qué una notificación de marzo se hizo donde se hizo.',
+        },
       },
     ],
   },
@@ -163,71 +252,64 @@ export const EXPEDIENTE: SeccionDef[] = [
   {
     id: 'contacto',
     label: 'Documentos y contacto',
-    hint: 'Documentos, contactos, gestores, teléfonos y correo',
-    conteo: '4 listas',
+    hint: 'Cómo se le ubica y quién responde con él',
+    conteo: '2 listas',
     bloques: [
       {
-        titulo: 'Documentos',
-        campos: [
-          {
-            k: 'tipoDoc',
-            l: 'Tipo de documento',
-            t: 'sel',
-            ancho: true,
-            o: [
-              '01 — NO PRESENTÓ DOCUMENTO',
-              '02 — DNI',
-              '03 — CARNET DE IDENTIDAD DE POLICÍA NACIONAL',
-              '04 — CARNET DE IDENTIDAD DE FUERZAS ARMADAS',
-              '05 — PARTIDA DE NACIMIENTO',
-              '06 — PASAPORTE',
-              '07 — CARNET DE EXTRANJERÍA',
-              '08 — OTROS (ESPECIFICAR)',
-              '09 — RUC',
-              '99 — NO ESPECIFICADO',
-            ],
-          },
-          { k: 'numDoc', l: 'Número de documento', t: 'text' },
-        ],
-        tabla: {
-          titulo: 'Documentos registrados',
-          conteo: '1 documento',
-          accion: '+ Añadir',
-          min: '420px',
-          cols: [
-            ['Tipo', 0],
-            ['Número', 0],
-            ['Registrado', 0],
-          ],
-          filas: [['02 — DNI', '03593174', '12/08/2026']],
-        },
-      },
-      {
+        /* El bloque «Documentos» del manual —un desplegable de diez tipos, una
+           caja de número y una tabla de documentos registrados— se va entero:
+           el padrón guarda UN documento de identidad, el que ya sale en
+           «Identificación», y no hay tabla de documentos ni operación que
+           añada otro. Su única fila era de la maqueta: «02 — DNI · 03593174 ·
+           12/08/2026».
+
+           Los ocho campos de «Contactos y gestores» tampoco se dibujan: dar de
+           alta un contacto es «POST /rentas/contribuyentes/{id}/contactos», con
+           su propia observación y su propio privilegio, y no algo que este
+           botón guarde. Lo que sí se puede hacer aquí es LEERLOS. */
         titulo: 'Contactos y gestores',
-        campos: [
-          { k: 'contacto', l: 'Nombre del contacto', t: 'text', ancho: true },
-          { k: 'cargo', l: 'Cargo', t: 'text' },
-          { k: 'email', l: 'Correo electrónico', t: 'text' },
-          { k: 'telefonos', l: 'Teléfonos', t: 'text' },
-          { k: 'gestor', l: 'Código de gestor', t: 'text' },
-          { k: 'gestorIni', l: 'Gestor desde', t: 'date' },
-          { k: 'gestorFin', l: 'Gestor hasta', t: 'date' },
-          { k: 'notifElec', l: 'Notificación electrónica', t: 'chk', ph: 'Autoriza notificar al correo' },
-        ],
+        nota:
+          'Teléfonos, correos y gestores, tal como la ficha los publica. Darlos de alta o de baja son actos aparte —«POST ' +
+          '/rentas/contribuyentes/{id}/contactos» y su PUT—, y esta pantalla todavía no los ofrece. Un contacto no se borra: se da ' +
+          'de baja, y por eso los no vigentes siguen en la lista.',
+        campos: [],
+        lectura: 'contactos',
         tabla: {
-          titulo: 'Teléfonos y correos',
-          conteo: '2 registros',
-          accion: '+ Añadir',
-          min: '460px',
+          titulo: 'Teléfonos, correos y gestores',
+          conteo: '',
+          min: '720px',
           cols: [
             ['Tipo', 0],
             ['Valor', 0],
-            ['Notifica', 0],
+            ['Nombre', 0],
+            ['Documento', 0],
+            ['Nota', 0],
+            ['Vigente', 0],
           ],
-          filas: [
-            ['01 — DOMICILIO 1', '073-413074', 'No'],
-            ['E-MAIL', 'FRUIZ159@GMAIL.COM', 'Sí'],
+          filas: [],
+        },
+      },
+      {
+        titulo: 'Responsables solidarios',
+        nota:
+          'Quién responde con él, y desde cuándo. El responsable es otro contribuyente del mismo padrón —para notificarle hace ' +
+          'falta su domicilio— y por eso la lista da su identificador, que es lo que la ficha publica.',
+        campos: [],
+        lectura: 'responsables',
+        tabla: {
+          titulo: 'Responsables solidarios',
+          conteo: '',
+          min: '720px',
+          cols: [
+            ['Responsable (id)', 0],
+            ['Vínculo', 0],
+            ['%', 1],
+            ['Desde', 0],
+            ['Hasta', 0],
+            ['Documento', 0],
           ],
+          filas: [],
+          nota: 'Un vínculo no se borra: se cierra con su fecha. La deuda de entonces sigue siendo suya, y una notificación de entonces se defiende enseñando que regía.',
         },
       },
     ],
@@ -315,40 +397,42 @@ export const EXPEDIENTE: SeccionDef[] = [
     id: 'beneficios',
     label: 'Beneficios y exoneraciones',
     hint: 'Deducciones, inafectaciones y amnistías',
-    conteo: '1 vigente',
+    conteo: '1 lista',
     bloques: [
       {
-        nota: 'La deducción de 50 UIT para pensionistas y adultos mayores exige predio único destinado a vivienda. Es la que más se solicita y la que más se deniega.',
-        campos: [
-          {
-            k: 'tipoBen',
-            l: 'Tipo de beneficio',
-            t: 'sel',
-            o: ['PENSIONISTA — DEDUCCIÓN 50 UIT', 'ADULTO MAYOR NO PENSIONISTA', 'PERSONA CON DISCAPACIDAD', 'INAFECTACIÓN', 'AMNISTÍA TRIBUTARIA'],
-          },
-          { k: 'benPredio', l: 'Código predial', t: 'text' },
-          { k: 'benExp', l: 'Nº de expediente', t: 'text' },
-          { k: 'benFecha', l: 'Fecha de solicitud', t: 'date' },
-          { k: 'benRes', l: 'Nº de resolución', t: 'text', ph: 'RES-0000-2026-MDC' },
-          { k: 'benEstado', l: 'Estado', t: 'sel', o: ['VIGENTE', 'EN TRÁMITE', 'DENEGADO', 'VENCIDO'] },
-        ],
+        /* Los seis campos eran el formulario de una SOLICITUD y no hay dónde
+           mandarla: `RegistrarBeneficio` existe y no se publica —el contrato no
+           declara ningún POST ni PUT en «/rentas/beneficios»—, así que el botón
+           «+ Solicitar» y sus seis cajas prometían un acto que no existe. La
+           tabla sí se lee, y sus dos filas eran de la maqueta: un expediente
+           2026-0281 con su resolución y su deducción de 50 UIT, dibujados bajo
+           el nombre de cualquiera que se abriera.
+
+           La columna «Deducción» del manual no está: `BeneficioResource`
+           publica el porcentaje y el monto por separado y juntarlos en una
+           celda obligaría a elegir cuál enseñar. Van los dos, cada uno en la
+           suya. */
+        nota:
+          'Los que la lectura de rentas publica para este contribuyente. Solicitarlos y cesarlos son actos que el contrato todavía ' +
+          'no declara, así que aquí sólo se leen. Cuánto deduce cada uno es un valor normativo bloqueado (D-02a): la lista dice lo ' +
+          'que la resolución concedió, no lo que se descontará.',
+        campos: [],
+        lectura: 'beneficios',
         tabla: {
           titulo: 'Beneficios del contribuyente',
-          conteo: '2 registros',
-          accion: '+ Solicitar',
-          min: '700px',
+          conteo: '',
+          min: '820px',
           cols: [
-            ['Expediente', 0],
             ['Tipo', 0],
-            ['Resolución', 0],
+            ['Tributo', 0],
+            ['Clase', 0],
+            ['%', 1],
+            ['Monto S/', 1],
             ['Vigencia', 0],
-            ['Deducción', 0],
-            ['Estado', 0],
+            ['Base legal', 0],
+            ['Documento', 0],
           ],
-          filas: [
-            ['2026-0281', 'PENSIONISTA', 'RES-0412-2026-MDC', '2026 — indefinida', '50 UIT', 'Vigente'],
-            ['2025-1102', 'AMNISTÍA 2025', 'ORD-018-2025-MDC', '2025', '100 % interés', 'Vencido'],
-          ],
+          filas: [],
         },
       },
     ],
@@ -358,15 +442,25 @@ export const EXPEDIENTE: SeccionDef[] = [
     id: 'obs',
     label: 'Observaciones y bitácora',
     hint: 'Quién tocó qué y cuándo',
-    conteo: '3 anotaciones',
+    conteo: 'sin lectura propia',
     bloques: [
       {
-        campos: [
-          { k: 'obs', l: 'Observación', t: 'area', ancho: true, ph: 'Lo que hay que saber antes de atenderlo' },
-          { k: 'registrado', l: 'Registrado por', t: 'ro' },
-          { k: 'modificado', l: 'Última modificación', t: 'ro' },
-          { k: 'fotos', l: 'Foto álbum personal', t: 'ro', ancho: true },
-        ],
+        /* Los cuatro campos se van. «Observación» era una caja de texto para
+           una nota del contribuyente y `contribuyente` no tiene esa columna;
+           «Registrado por», «Última modificación» y «Foto álbum personal»
+           salían con «MRIOS — 12/08/2026 09:14» y «2 imágenes» de la maqueta,
+           que es exactamente la forma de un dato traído del backend.
+
+           Y hay un motivo para no inventarles un origen: la observación que
+           este expediente sí exige es la de CADA cambio (regla 10, RNF-052), va
+           en la barra de guardado y queda en la bitácora de auditoría, que
+           tiene su propia pantalla y su propio permiso. Una caja de
+           «Observación» suelta aquí arriba se confundiría con ella. */
+        nota:
+          'Quién tocó qué y cuándo lo guarda la bitácora de auditoría, que tiene su propia pantalla y su propio permiso: esta ficha ' +
+          'no lo publica. La observación de cada corrección se pide al guardar —sin ella no se guarda (regla 10)— y es la que queda ' +
+          'anotada allí.',
+        campos: [],
       },
     ],
   },
@@ -1351,61 +1445,20 @@ export const OPCIONES_DE_RENTAS: [label: string, dest: string][] = [
 ];
 
 /* ══════════ Los valores por omisión del contribuyente ══════════
-   Lo que el artboard llama `defectos()`: el estado inicial de todos los campos
-   del expediente, de las determinaciones y de los movimientos de deuda. */
+   Lo que el artboard llama `defectos()`: el estado inicial de los campos de las
+   determinaciones y de los movimientos de deuda.
+
+   **Del expediente ya no queda ninguno** (#552). Eran los cincuenta y tres de
+   la maqueta —el código 00000025673, el DNI 03593174, «MEDINA MEDINA RUFINA»,
+   la calle 116 de la urbanización Santa Rosa, el correo FRUIZ159@GMAIL.COM, la
+   resolución RES-0412-2026-MDC de un beneficio de 50 UIT y «MRIOS — 12/08/2026
+   09:14»—, y se dibujaban en cuanto se abría a cualquiera: la ficha de una
+   persona bajo el nombre de otra, indistinguible de la suya porque el
+   formulario no dice de dónde saca lo que enseña. Ahora cada campo del
+   expediente sale de `GET /rentas/contribuyentes/{id}/ficha` o sale con el
+   guion largo y su motivo. */
 
 export const DEFECTOS: Record<string, string | boolean> = {
-  codigo: '00000025673',
-  tipoPersona: 'SUCESIÓN INDIVISA',
-  apPaterno: 'MEDINA',
-  apMaterno: 'MEDINA',
-  nombres: 'RUFINA',
-  razonSocial: '',
-  dni: '03593174',
-  ruc: '',
-  nacimiento: '1948-08-30',
-  sexo: 'FEMENINO',
-  estadoCivil: 'VIUDO(A)',
-  conyuge: '',
-  calificacion: '003 — PEQUEÑO CONTRIBUYENTE',
-  estado: 'A — ACTIVO',
-  tipoVia: '02 — CA - CALLE',
-  via: '99999999 — NO ESPECIFICADO',
-  habUrbana: '200104000 — CATACAOS',
-  numero: '116',
-  numAd: '',
-  dep: 'PIURA',
-  prov: 'PIURA',
-  dist: 'CATACAOS',
-  nomEdif: '',
-  tipoEdif: '99 — NO ESPECIFICADO',
-  tipoInt: '99 — NO ESPECIFICADO',
-  numInt: '',
-  zonaNombre: 'URB. SANTA ROSA — EL ALTO',
-  mz: '015',
-  lt: '001',
-  sublt: '',
-  dirAd: '',
-  tipoDoc: '02 — DNI',
-  numDoc: '03593174',
-  contacto: 'FERNANDO RUIZ INGA',
-  cargo: 'GERENTE',
-  email: 'FRUIZ159@GMAIL.COM',
-  telefonos: '969032194',
-  gestor: '00000001 — GESTOR 1',
-  gestorIni: '2026-01-01',
-  gestorFin: '2026-12-31',
-  notifElec: true,
-  tipoBen: 'PENSIONISTA — DEDUCCIÓN 50 UIT',
-  benPredio: '02-014-D-14-01',
-  benExp: '2026-0281',
-  benFecha: '2026-03-04',
-  benRes: 'RES-0412-2026-MDC',
-  benEstado: 'VIGENTE',
-  obs: 'MODIFICACIÓN DE PRUEBA',
-  registrado: 'MRIOS — 12/08/2026 09:14',
-  modificado: 'MRIOS — 03/07/2026 16:02',
-  fotos: '2 imágenes — 12/08/2026, 03/07/2026',
   deduccion: 'NO APLICA',
   resBen: '',
   inafectacion: 'NINGUNA',

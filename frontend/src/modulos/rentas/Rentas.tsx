@@ -4,10 +4,13 @@ import type { PantallaProps } from '../../App';
 import {
   altaDeDeuda,
   bajaDeDeuda,
+  beneficiosDelContribuyente,
   buscarContribuyentes,
   calcularVehicular,
+  corregirContribuyente,
   correrPredialMasivo,
   determinarPredial,
+  fichaDelContribuyente,
   indicadores,
   listarPrediosDelContribuyente,
   listarVehiculosDelContribuyente,
@@ -15,10 +18,13 @@ import {
   tipoDeTransferenciaDelBackend,
   transferirPredio,
   transferirVehiculo,
+  type BeneficioDelContribuyente,
   type CalculoVehicular,
   type Contribuyente,
+  type CorreccionDeContribuyente,
   type CorridaDePredial,
   type DeterminacionPredial,
+  type FichaDelContribuyente,
   type PeticionDeMovimientoDeDeuda,
   type PredioDelContribuyente,
   type VehiculoDelContribuyente,
@@ -778,6 +784,97 @@ function TablaLeida<T>({
   );
 }
 
+/**
+ * Una de las tres listas que vienen dentro de la ficha, no de una lectura propia.
+ *
+ * Domicilios, contactos y responsables llegan en **la misma respuesta** que el
+ * resto del expediente —`GET /rentas/contribuyentes/{id}/ficha` los trae en una
+ * sola transacción a propósito (#486)—, así que no tienen sobre paginado, ni
+ * error propio, ni permiso propio: o está la ficha o no está ninguna de las
+ * tres. Por eso no se dibujan con `TablaLeida`, que pagina y reparte fallos, y
+ * por eso el fallo se dice **una vez** arriba y aquí sólo se remite a él:
+ * repetir el mismo aviso tres veces haría creer que fallaron tres cosas.
+ *
+ * Y por eso hay que distinguir «no se preguntó» de «no hay ninguno»: son la
+ * misma forma —cero filas— y significan lo contrario (#595).
+ */
+function TablaDeLaFicha({
+  tabla,
+  estado,
+  filas,
+  vacia,
+  cuenta,
+}: {
+  tabla: TablaDef;
+  estado: { datos: FichaDelContribuyente | null; cargando: boolean; error: ErrorDeApi | null };
+  /** Qué filas salen de la ficha. Se llama sólo cuando la hay. */
+  filas: (ficha: FichaDelContribuyente) => string[][];
+  /** Qué decir cuando la ficha se leyó y esta lista viene vacía. */
+  vacia: string;
+  cuenta: (n: number) => string;
+}) {
+  const cuerpo = estado.datos === null ? [] : filas(estado.datos);
+  return (
+    <div style={{ borderTop: '1px solid var(--line)' }}>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap', padding: '11px 16px' }}>
+        <p style={{ margin: 0, flex: 1, fontSize: 13, fontWeight: 500 }}>{tabla.titulo}</p>
+        <span style={META}>
+          {estado.cargando ? 'consultando…' : estado.datos === null ? SIN_DATO : cuenta(cuerpo.length)}
+        </span>
+      </div>
+      <div style={{ borderTop: '1px solid var(--line)' }}>
+        <TablaDeDatos
+          cols={tabla.cols}
+          filas={cuerpo}
+          min={tabla.min}
+          vacia={
+            estado.cargando
+              ? 'Consultando la ficha…'
+              : estado.datos !== null
+                ? vacia
+                : estado.error !== null
+                  ? 'No se pudo leer la ficha del contribuyente: el aviso del principio del expediente dice por qué.'
+                  : 'No se ha preguntado: sin un contribuyente del padrón abierto no hay ficha que leer. Pasa con un expediente nuevo y con un código que el padrón no reconoce.'
+          }
+        />
+      </div>
+      {tabla.nota !== undefined && <p style={PIE}>{tabla.nota}</p>}
+    </div>
+  );
+}
+
+/**
+ * Toda clave que el expediente dibuja, computada **del catálogo** y no a mano.
+ *
+ * De aquí salen dos cosas: qué se borra al cambiar de contribuyente —para que lo
+ * tecleado sobre uno no se guarde sobre el siguiente— y, sobre todo, qué campos
+ * hay que comparar contra la lista blanca del PUT. Escrita a mano, un campo
+ * nuevo del catálogo no aparecería en ninguna de las dos comprobaciones y el
+ * silencio sería el de siempre: se teclea, no viaja, y nadie se entera.
+ */
+const CLAVES_DEL_EXPEDIENTE: string[] = EXPEDIENTE.flatMap((seccion) =>
+  seccion.bloques.flatMap((bloque) => bloque.campos.map((c) => c.k)),
+);
+
+/**
+ * Las cinco claves que `PUT /rentas/contribuyentes/{id}` admite, y ninguna más.
+ *
+ * Es **la misma lista blanca** que declara `CorreccionDeContribuyente`, aquí
+ * puesta a trabajar sobre el formulario: lo que se teclee en una clave que no
+ * esté aquí no compone el cuerpo y además **apaga el botón**, nombrando el
+ * campo. La otra salida —ignorarlo en silencio— es la que produce el defecto
+ * que #331 midió: quien atiende teclea, ve el dato en pantalla, guarda, y lo
+ * tecleado no llega a ninguna parte.
+ *
+ * `activo` no está, aunque el PUT lo admita: `activo = false` es la baja, exige
+ * el privilegio ELIMINACION y no es una corrección de ficha. Compartir botón
+ * con el nombre haría que un descuido diera de baja a quien se corregía.
+ */
+const CAMPOS_DE_LA_CORRECCION = ['nombreRazonSocial', 'condicionEspecial', 'fechaNacimiento', 'estadoCivil', 'conyugeId'] as const;
+
+/** El estado civil es `varchar(20)`; el dominio rechaza lo que pase de ahí. */
+const ESTADO_CIVIL_MAXIMO = 20;
+
 /** La cabecera pulsable de una sección plegable. */
 function Cabecera({
   abierta,
@@ -830,6 +927,12 @@ export default function Rentas({ dest, onDest }: PantallaProps) {
 
   const [vals, setVals] = useState<Record<string, string | boolean>>({});
   const [sucio, setSucio] = useState(false);
+  /* La observación de la corrección del expediente (regla 10, RNF-052). Va
+     aparte de `observacionDelActo` —la de la transferencia y la de los
+     movimientos de deuda— a propósito: son actos distintos, y una observación
+     escrita para uno no explica el otro. */
+  const [observacionDeLaCorreccion, setObservacionDeLaCorreccion] = useState('');
+  const [corrigiendo, setCorrigiendo] = useState(false);
   const [cerradas, setCerradas] = useState<Record<string, boolean>>({});
   const [sujeto, setSujeto] = useState<string | null>(null);
   const [q, setQ] = useState('');
@@ -900,9 +1003,11 @@ export default function Rentas({ dest, onDest }: PantallaProps) {
      dos tablas vacías sin motivo. */
   const [paginaDePredios, setPaginaDePredios] = useState(0);
   const [paginaDeVehiculos, setPaginaDeVehiculos] = useState(0);
+  const [paginaDeBeneficios, setPaginaDeBeneficios] = useState(0);
   useEffect(() => {
     setPaginaDePredios(0);
     setPaginaDeVehiculos(0);
+    setPaginaDeBeneficios(0);
   }, [contribuyenteAbierto?.codigo]);
 
   const prediosDelContribuyente = useRecurso(
@@ -915,6 +1020,120 @@ export default function Rentas({ dest, onDest }: PantallaProps) {
     [contribuyenteAbierto?.codigo, paginaDeVehiculos],
     contribuyenteAbierto !== null,
   );
+
+  /**
+   * La ficha del contribuyente abierto (#552).
+   *
+   * Es la lectura que le faltaba al expediente entero. Hasta aquí, de los
+   * cincuenta y pico campos que dibuja **ninguno** salía del backend: el código,
+   * el documento, el nombre partido en cuatro, los dieciséis del domicilio, los
+   * contactos, el beneficio y la bitácora eran constantes de la maqueta, y se
+   * dibujaban en cuanto se abría a cualquiera —la ficha de una persona bajo el
+   * nombre de otra, indistinguible de la suya—.
+   *
+   * Se pide por el **identificador interno** y no por el código, porque la ruta
+   * es `/rentas/contribuyentes/{id}/ficha`; el `id` sale de la fila que la
+   * búsqueda ya devolvió, así que no se pregunta por alguien que la lectura
+   * anterior no encontró.
+   *
+   * `fecha` va ausente: es hoy, con el reloj del servidor. Lo vigente se
+   * resuelve A ESA FECHA y no «lo último» (regla 9), y por eso la cabecera del
+   * domicilio dice a qué fecha rige lo que enseña.
+   */
+  const ficha = useRecurso(
+    (senal) => fichaDelContribuyente(contribuyenteAbierto!.id, undefined, senal),
+    [contribuyenteAbierto?.id],
+    contribuyenteAbierto !== null,
+  );
+
+  /**
+   * Los beneficios del contribuyente, de su propia lectura.
+   *
+   * Va aparte de la ficha porque es de **otro contexto y otro permiso**:
+   * `beneficios`, no `contribuyentes`. Quien tenga el padrón y no los beneficios
+   * ve el resto del expediente y el aviso de permiso sólo en esta lista, en vez
+   * de perder las seis secciones.
+   *
+   * Se pide por el **código** del padrón, no por el identificador: lo dice
+   * `CriterioDeBeneficio` campo por campo.
+   */
+  const beneficios = useRecurso(
+    (senal) => beneficiosDelContribuyente(contribuyenteAbierto!.codigo, { pagina: paginaDeBeneficios, tamano: UNIDADES_POR_PAGINA }, senal),
+    [contribuyenteAbierto?.codigo, paginaDeBeneficios],
+    contribuyenteAbierto !== null,
+  );
+
+  /**
+   * Quién es el cónyuge, resuelto para poder enseñarlo por su código.
+   *
+   * La ficha publica `conyugeId` —el identificador interno— y su javadoc dice
+   * por qué: resolver el nombre costaría una consulta más por ficha, «y quien lo
+   * necesite lo pide como pide cualquier otro contribuyente». Eso es
+   * exactamente lo que se hace aquí, y sólo cuando hay cónyuge.
+   *
+   * Importa para lo que se teclea, no para lo que se lee: el control pregunta
+   * por el **código del padrón** y no por el identificador, porque un número
+   * interno tecleado a mano enlazaría con quien no es sin que nada lo dijera
+   * —es el defecto del «Solicitante» que #427 midió, al revés—. Para que «no
+   * tocar el campo» signifique «no cambiar nada», el valor que se dibuja tiene
+   * que ser el mismo código que se teclearía.
+   */
+  const conyugeDeLaFicha = ficha.datos?.datosPersonales.conyugeId ?? null;
+  const conyugeActual = useRecurso(
+    (senal) => fichaDelContribuyente(conyugeDeLaFicha!, undefined, senal),
+    [conyugeDeLaFicha],
+    conyugeDeLaFicha !== null,
+  );
+
+  /**
+   * Lo que el expediente enseña de la ficha, campo por campo.
+   *
+   * Es el único origen de los controles del expediente: `valorDeClave` lo
+   * consulta antes que ningún valor por omisión, y del catálogo desaparecieron
+   * los que había. Lo que la ficha no publica no aparece aquí, y entonces el
+   * control sale con el guion largo —los de solo lectura— o en blanco —los que
+   * se escriben—, nunca con una cifra ni un texto que nadie ha dado.
+   */
+  const delExpediente: Record<string, string> = (() => {
+    const f = ficha.datos;
+    if (f === null) {
+      /* Sin ficha no hay dato: los de solo lectura dicen «—» y los que se
+         escriben se quedan vacíos. Un «—» dentro de una caja de texto viajaría
+         como texto la primera vez que alguien guardara. */
+      const enBlanco: Record<string, string> = {};
+      for (const clave of CLAVES_DEL_EXPEDIENTE) {
+        enBlanco[clave] = (CAMPOS_DE_LA_CORRECCION as readonly string[]).includes(clave) ? '' : ficha.cargando ? '…' : SIN_DATO;
+      }
+      return enBlanco;
+    }
+    const fiscal = f.domicilioFiscal;
+    const procesal = f.domicilioProcesal;
+    return {
+      codigo: f.contribuyente.codigo,
+      /* El tipo delante del número, que es como el padrón lo guarda: seis tipos
+         admitidos, y sin el tipo el número no se puede ni validar. */
+      documento: `${f.contribuyente.tipoDocumento} ${f.contribuyente.numeroDocumento}`,
+      tipoPersona: f.contribuyente.tipoPersona,
+      estado: f.contribuyente.activo ? 'ACTIVO' : 'INACTIVO',
+      nombreRazonSocial: f.contribuyente.nombreRazonSocial,
+      condicionEspecial: f.contribuyente.condicionEspecial ?? '',
+      fechaNacimiento: f.datosPersonales.fechaNacimiento ?? '',
+      estadoCivil: f.datosPersonales.estadoCivil ?? '',
+      /* Mientras la segunda lectura no vuelva, el campo queda vacío: enseñar el
+         identificador interno en una caja que pide un código haría que guardar
+         mandase el número equivocado. */
+      conyugeId: conyugeActual.datos?.contribuyente.codigo ?? '',
+      domDireccion: fiscal?.direccion ?? SIN_DATO,
+      domReferencia: fiscal?.referencia ?? SIN_DATO,
+      domUbigeo: fiscal?.ubigeo ?? SIN_DATO,
+      domDesde: fiscal?.vigenciaDesde ?? SIN_DATO,
+      domOrigen: fiscal?.documentoOrigen ?? SIN_DATO,
+      procDireccion: procesal?.direccion ?? SIN_DATO,
+      procDesde: procesal?.vigenciaDesde ?? SIN_DATO,
+      procOrigen: procesal?.documentoOrigen ?? SIN_DATO,
+    };
+  })();
+
   const cargando = padron.cargando;
   const vacio = !padron.cargando && padron.error === null && padron.datos !== null && filasDelPadron.length === 0;
   const [tipo, setTipo] = useState<ClaveDeDeterminacion>('predial');
@@ -968,7 +1187,13 @@ export default function Rentas({ dest, onDest }: PantallaProps) {
         },
         {
           etiqueta: 'Persona',
-          valor: contribuyenteAbierto.tipoPersona === 'JURIDICA' ? 'Jurídica' : 'Natural',
+          /* Tal como el padrón lo guarda. Decía «Jurídica» o «Natural» y son
+             CUATRO —`TipoPersona` declara además `SUCESION_INDIVISA` y
+             `SOCIEDAD_CONYUGAL`—, así que una sucesión indivisa salía rotulada
+             «Natural»: no es un matiz, es quién responde por la deuda y aparece
+             en cuanto muere un propietario. La celda de una ficha no traduce un
+             vocabulario del sistema a otro más corto (#427). */
+          valor: contribuyenteAbierto.tipoPersona,
           color: 'var(--ink)',
         },
         { etiqueta: 'Condición especial', valor: contribuyenteAbierto.condicionEspecial ?? '—', color: 'var(--ink)' },
@@ -1005,6 +1230,21 @@ export default function Rentas({ dest, onDest }: PantallaProps) {
     }
   }, [esNuevo, toast]);
 
+  /* Lo tecleado sobre un contribuyente NO se arrastra al siguiente. `vals` es
+     del módulo entero —lo comparten las determinaciones, las transferencias y
+     las dos hojas de deuda—, así que sólo se sueltan las claves del expediente:
+     sin esto, corregir un nombre, cambiar de persona y pulsar «Guardar cambios»
+     escribiría el nombre del primero sobre la ficha del segundo. La observación
+     se va con ellas por lo mismo: es el motivo de un cambio que ya no está. */
+  useEffect(() => {
+    setVals((s2) => {
+      const limpio = { ...s2 };
+      for (const clave of CLAVES_DEL_EXPEDIENTE) delete limpio[clave];
+      return limpio;
+    });
+    setObservacionDeLaCorreccion('');
+  }, [contribuyenteAbierto?.id]);
+
   const abrirExpediente = (codigo: string) => {
     setSucio(false);
     if (dest === 'padron') setSujeto(codigo);
@@ -1019,14 +1259,22 @@ export default function Rentas({ dest, onDest }: PantallaProps) {
     setSucio(true);
   };
   /**
-   * El valor de un campo, con la misma cadena para las tres funciones que lo
-   * necesitan: lo tecleado, el valor por omisión del propio campo y el del
-   * contribuyente. Antes `texto()` se saltaba el segundo eslabón y devolvía otra
-   * cosa que la que la pantalla enseñaba.
+   * El valor de un campo, con la misma cadena para las cuatro funciones que lo
+   * necesitan: lo tecleado, **lo que la ficha del contribuyente dice**, el valor
+   * por omisión del propio campo y el de la maqueta. Antes `texto()` se saltaba
+   * el segundo eslabón y devolvía otra cosa que la que la pantalla enseñaba.
+   *
+   * La ficha va delante de los dos por omisión y no detrás, y es lo que hace que
+   * el expediente enseñe a quien está abierto: los valores de la maqueta que
+   * había en `DEFECTOS` se fueron con #552, pero el orden importa igual —un
+   * campo del expediente que mañana ganara un `v` en el catálogo taparía el dato
+   * real del padrón—.
    */
   const valorDeClave = (k: string): string | boolean => {
     const v = vals[k];
     if (v !== undefined) return v;
+    const deLaFicha = delExpediente[k];
+    if (deLaFicha !== undefined) return deLaFicha;
     const propio = POR_OMISION_DEL_CAMPO[k];
     if (propio !== undefined) return propio;
     const d = DEFECTOS[k];
@@ -1040,6 +1288,165 @@ export default function Rentas({ dest, onDest }: PantallaProps) {
   /** Una casilla se lee como booleano, nunca comparando su texto. */
   const marcado = (k: string) => valorDeClave(k) === true;
   const campo = (f: CampoDef) => <CampoDeFormulario key={f.k} f={f} valor={valorDe(f)} onCambio={(v) => set(f.k, v)} />;
+
+  /* ── La corrección del contribuyente (#552) ───────────────────────────────
+     «Guardar cambios» decía «Contribuyente guardado» y no mandaba nada. Lo que
+     faltaba no era el botón: era saber QUÉ mandar. `PUT
+     /rentas/contribuyentes/{id}` admite cinco campos y el expediente dibujaba
+     cincuenta y tres de la maqueta, así que conectarlo tal cual habría escrito
+     el nombre de «MEDINA MEDINA RUFINA» sobre la ficha de quien estuviera
+     abierto. Ahora los campos salen de la ficha, y de ellos sólo viajan los
+     cinco, sólo los que cambiaron y sólo con la observación puesta. */
+
+  /**
+   * El código del cónyuge tecleado, resuelto contra el padrón.
+   *
+   * Lo que viaja es `conyugeId`, un identificador interno, y lo que se teclea es
+   * un código: sin resolverlo habría que pedirle a quien atiende un número que
+   * no aparece en ninguna pantalla, y cualquier número enlazaría con alguien.
+   * Se resuelve antes de habilitar el botón, no dentro del envío.
+   */
+  const conyugeTecleado = vals['conyugeId'] === undefined ? '' : String(vals['conyugeId']).trim();
+  const conyugeEscrito = useRebote(conyugeTecleado);
+  const conyugeBuscado = useRecurso(
+    (senal) => buscarContribuyentes({ codigo: conyugeEscrito }, { tamano: 2 }, senal),
+    [conyugeEscrito],
+    contribuyenteAbierto !== null && conyugeEscrito !== '',
+  );
+  const conyugeResuelto = (conyugeBuscado.datos?.contenido ?? []).find((c) => c.codigo === conyugeEscrito) ?? null;
+
+  /**
+   * Los campos del expediente que se han tecleado y **el PUT no admite**.
+   *
+   * Hoy no puede haber ninguno: los demás controles del expediente son de solo
+   * lectura y `CampoDeFormulario` no les dibuja ninguna entrada. Existe para el
+   * día que alguien haga editable uno —o añada al catálogo un campo que la
+   * petición no lleva—: entonces el botón se apaga nombrándolo, en vez de
+   * guardar en silencio todo lo demás y dejar ese dato sin viajar, que es el
+   * defecto de #331.
+   */
+  const camposQueElPutNoAdmite = CLAVES_DEL_EXPEDIENTE.filter(
+    (clave) => vals[clave] !== undefined && !(CAMPOS_DE_LA_CORRECCION as readonly string[]).includes(clave),
+  );
+
+  /** Lo tecleado en una clave de la corrección, o `undefined` si no se tocó. */
+  const tecleadoEnLaCorreccion = (clave: string): string | undefined =>
+    vals[clave] === undefined ? undefined : String(vals[clave]).trim();
+
+  /**
+   * Lo que de verdad cambia, comparado contra lo que la ficha dice.
+   *
+   * «Lo que no viene, no cambia» es la regla del PUT, así que un campo que se
+   * tecleó y quedó igual **no se manda**: mandarlo escribiría el mismo valor con
+   * otra fila de auditoría detrás. Y la cadena vacía sí se manda cuando la ficha
+   * traía algo, porque ahí es una instrucción —«bórralo»— y no una omisión.
+   */
+  const cambiosDeLaCorreccion: [clave: string, valor: string][] = CAMPOS_DE_LA_CORRECCION.filter((clave) => {
+    const tecleado = tecleadoEnLaCorreccion(clave);
+    return tecleado !== undefined && tecleado !== (delExpediente[clave] ?? '').trim();
+  }).map((clave) => [clave, tecleadoEnLaCorreccion(clave)!]);
+
+  /** Hay algo escrito sobre el expediente: la barra de guardado tiene por qué salir. */
+  const hayBorradorDelExpediente =
+    CLAVES_DEL_EXPEDIENTE.some((clave) => vals[clave] !== undefined) || observacionDeLaCorreccion !== '';
+
+  /**
+   * Lo que impide guardar la corrección, o `undefined` si nada lo impide.
+   *
+   * Se calcula ANTES de habilitar el botón y no dentro del envío: un acto que
+   * promete lo que no puede es peor que uno apagado que dice por qué (RNF-082).
+   */
+  const impedimentoDeLaCorreccion = (): string | undefined => {
+    if (esNuevo)
+      return 'El alta de un contribuyente todavía no está conectada: «POST /rentas/contribuyentes» existe y esta pantalla no lo llama. Aquí sólo se corrige a quien ya está en el padrón.';
+    if (contribuyenteAbierto === null)
+      return 'No hay ningún contribuyente abierto: sin saber a quién se corrige no hay nada que guardar.';
+    if (camposQueElPutNoAdmite.length > 0)
+      return `El expediente escribe ${camposQueElPutNoAdmite.map((c) => `«${c}»`).join(', ')}, y «PUT /rentas/contribuyentes/{id}» no admite ese campo: guardar lo dejaría sin viajar sin que nada lo dijera. Sólo viajan el nombre o razón social, la condición especial, la fecha de nacimiento, el estado civil y el cónyuge.`;
+    if (ficha.datos === null)
+      return ficha.cargando
+        ? 'Leyendo la ficha del contribuyente…'
+        : 'No se ha podido leer la ficha, así que no se sabe qué cambia: guardar mandaría campos que nadie ha comparado con lo que el padrón tiene.';
+    if (cambiosDeLaCorreccion.length === 0) return 'No hay ningún cambio que guardar: lo que no cambia, no se manda.';
+    if (observacionDeLaCorreccion.trim() === '') return 'Falta la observación: sin motivo no se guarda (regla 10).';
+    const nombre = tecleadoEnLaCorreccion('nombreRazonSocial');
+    if (nombre === '')
+      return 'El nombre o razón social no se puede dejar en blanco: es lo único que identifica a la persona en el padrón, y el dominio lo rechaza.';
+    const estadoCivil = tecleadoEnLaCorreccion('estadoCivil');
+    if (estadoCivil !== undefined && estadoCivil.length > ESTADO_CIVIL_MAXIMO)
+      return `El estado civil no pasa de ${ESTADO_CIVIL_MAXIMO} caracteres: es lo que la columna admite, y el dominio lo rechaza.`;
+    /* Una empresa no nace ni se casa: el dominio rechaza las dos cosas, y
+       decirlo aquí evita un 422 sobre un campo que la pantalla dejó teclear. */
+    if (contribuyenteAbierto.tipoPersona === 'JURIDICA') {
+      if ((tecleadoEnLaCorreccion('fechaNacimiento') ?? '') !== '')
+        return 'Una persona jurídica no tiene fecha de nacimiento: para una empresa la fecha que importa es la de constitución, y va en otro campo.';
+      if ((tecleadoEnLaCorreccion('condicionEspecial') ?? '') !== '')
+        return 'Una persona jurídica no puede ser pensionista, adulto mayor ni tener discapacidad: esas condiciones son de una persona natural.';
+    }
+    if (conyugeTecleado !== '') {
+      if (conyugeResuelto === null)
+        return conyugeBuscado.cargando || conyugeEscrito !== conyugeTecleado
+          ? 'Buscando al cónyuge en el padrón…'
+          : `El código «${conyugeTecleado}» no está en el padrón de contribuyentes: el cónyuge es otro contribuyente de esta municipalidad.`;
+      if (conyugeResuelto.id === contribuyenteAbierto.id)
+        return 'Nadie es su propio cónyuge: escribe el código del otro contribuyente, o deja el campo en blanco para deshacer el enlace.';
+    }
+    return undefined;
+  };
+
+  /**
+   * El cuerpo del PUT: la observación y **sólo** los cinco campos declarados.
+   *
+   * La asignación es campo a campo y no un `spread` del formulario a propósito:
+   * un objeto compuesto con lo que hubiera en `vals` dejaría entrar cualquier
+   * clave que el catálogo ganara, que es justo lo que la lista blanca del
+   * backend existe para impedir. Aquí se repite del lado del cliente para que el
+   * botón lo sepa antes de mandar.
+   */
+  const cuerpoDeLaCorreccion = (): CorreccionDeContribuyente => {
+    const cuerpo: CorreccionDeContribuyente = { observacion: observacionDeLaCorreccion.trim() };
+    for (const [clave, valor] of cambiosDeLaCorreccion) {
+      if (clave === 'nombreRazonSocial') cuerpo.nombreRazonSocial = valor;
+      else if (clave === 'condicionEspecial') cuerpo.condicionEspecial = valor;
+      else if (clave === 'fechaNacimiento') cuerpo.fechaNacimiento = valor;
+      else if (clave === 'estadoCivil') cuerpo.estadoCivil = valor;
+      /* El 0 borra el enlace, como la cadena vacía en los de texto. El
+         identificador sale de la resolución, nunca de lo tecleado. */
+      else if (clave === 'conyugeId') cuerpo.conyugeId = valor === '' ? 0 : conyugeResuelto!.id;
+    }
+    return cuerpo;
+  };
+
+  /** Suelta el borrador del expediente: lo tecleado y el motivo que lo explicaba. */
+  const soltarElBorradorDelExpediente = () => {
+    setVals((s2) => {
+      const limpio = { ...s2 };
+      for (const clave of CLAVES_DEL_EXPEDIENTE) delete limpio[clave];
+      return limpio;
+    });
+    setObservacionDeLaCorreccion('');
+    setSucio(false);
+  };
+
+  const guardarLaCorreccion = async () => {
+    if (contribuyenteAbierto === null || impedimentoDeLaCorreccion() !== undefined) return;
+    setCorrigiendo(true);
+    try {
+      await corregirContribuyente(contribuyenteAbierto.id, cuerpoDeLaCorreccion());
+      soltarElBorradorDelExpediente();
+      /* Se vuelven a pedir las dos, y no se compone nada con lo devuelto: la
+         franja de la cabecera sale de la búsqueda del padrón y los campos de la
+         ficha, así que dejar sólo una al día haría que las dos dijeran cosas
+         distintas de la misma persona. */
+      ficha.reintentar();
+      expediente.reintentar();
+      toast('Contribuyente corregido.');
+    } catch (error) {
+      toast(error instanceof ErrorDeApi ? error.mensaje : 'No se pudo guardar la corrección.', 'mal');
+    } finally {
+      setCorrigiendo(false);
+    }
+  };
 
   const plegable = (clave: string, abiertaPorDefecto: boolean) => {
     const cerrada = cerradas[clave];
@@ -1883,8 +2290,11 @@ export default function Rentas({ dest, onDest }: PantallaProps) {
             : expediente.error
               ? 'No se pudo leer este contribuyente'
               : (contribuyenteAbierto?.nombreRazonSocial ?? 'Ese código no está en el padrón'),
+          /* El tipo de persona va como el padrón lo guarda, por lo mismo que
+             en la franja de aquí abajo: son cuatro y decir «Natural» de una
+             sucesión indivisa cambia quién responde por la deuda. */
           ubic: contribuyenteAbierto
-            ? `${contribuyenteAbierto.tipoDocumento} ${contribuyenteAbierto.numeroDocumento} · ${contribuyenteAbierto.tipoPersona === 'JURIDICA' ? 'Jurídica' : 'Natural'}`
+            ? `${contribuyenteAbierto.tipoDocumento} ${contribuyenteAbierto.numeroDocumento} · ${contribuyenteAbierto.tipoPersona}`
             : '',
           estado: sucio ? 'Cambios sin guardar' : contribuyenteAbierto ? 'Del padrón' : '',
           estadoColor: sucio ? 'var(--warn-fg)' : 'var(--ok-fg)',
@@ -2246,6 +2656,19 @@ export default function Rentas({ dest, onDest }: PantallaProps) {
                 devuelto otra municipalidad. No se dibuja nada suyo mientras no se sepa quién es.
               </Aviso>
             )}
+            {/* El fallo de la ficha se dice UNA vez y aquí: de ella salen los
+                campos de cuatro secciones y tres de las listas, así que
+                repetirlo en cada bloque haría creer que fallaron siete cosas.
+                Los controles quedan con el guion largo y las tablas remiten a
+                este aviso. */}
+            {ficha.error !== null && (
+              <FalloDeLectura
+                error={ficha.error}
+                que="la ficha de este contribuyente"
+                acceso="contribuyentes"
+                alReintentar={ficha.reintentar}
+              />
+            )}
             <section style={TARJETA}>
               <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit,minmax(150px,1fr))', gap: 0, background: 'var(--bg-card)' }}>
                 {resumenDelExpediente.map((r) => (
@@ -2423,6 +2846,92 @@ export default function Rentas({ dest, onDest }: PantallaProps) {
                                     `${String(v.afectoDesde)} — ${String(v.afectoHasta)}`,
                                     v.estado,
                                   ]}
+                                />
+                              )}
+                              {bl.tabla && bl.lectura === 'beneficios' && (
+                                <TablaLeida
+                                  tabla={bl.tabla}
+                                  estado={beneficios}
+                                  pagina={paginaDeBeneficios}
+                                  irAPagina={setPaginaDeBeneficios}
+                                  cuenta={(n) => `${n} ${n === 1 ? 'beneficio' : 'beneficios'}`}
+                                  vacia="Este contribuyente no tiene ningún beneficio ni exoneración registrado."
+                                  sinPreguntar="No se ha preguntado: sin un contribuyente del padrón abierto no hay de quién listar beneficios. Pasa con un expediente nuevo, que todavía no está en el padrón, y con un código que el padrón no reconoce."
+                                  fila={(b: BeneficioDelContribuyente) => [
+                                    b.tipo,
+                                    b.tributo,
+                                    b.clase,
+                                    b.porcentaje ?? SIN_DATO,
+                                    b.monto ?? SIN_DATO,
+                                    /* Los dos extremos del tramo, tal como la
+                                       lectura los da. Sin `vigenciaHasta` no es
+                                       un error: es el que no vence. */
+                                    `${b.vigenciaDesde} — ${b.vigenciaHasta ?? 'sin vencimiento'}`,
+                                    b.baseLegal,
+                                    b.documentoOrigen,
+                                  ]}
+                                />
+                              )}
+                              {bl.tabla && bl.lectura === 'domicilios' && (
+                                <TablaDeLaFicha
+                                  tabla={bl.tabla}
+                                  estado={ficha}
+                                  cuenta={(n) => `${n} ${n === 1 ? 'tramo' : 'tramos'}`}
+                                  vacia="Este contribuyente no tiene ningún domicilio registrado. Sin uno vigente no hay a dónde notificarle."
+                                  filas={(f) =>
+                                    f.historialDeDomicilios.map((d) => [
+                                      d.tipo,
+                                      d.direccion,
+                                      d.referencia ?? SIN_DATO,
+                                      d.ubigeo ?? SIN_DATO,
+                                      d.vigenciaDesde,
+                                      /* Nulo es «el que rige», no un dato que
+                                         falte: se dice con palabras y no con el
+                                         guion largo, que aquí significaría que
+                                         la fecha no se publica. */
+                                      d.vigenciaHasta ?? 'vigente',
+                                      d.documentoOrigen,
+                                    ])
+                                  }
+                                />
+                              )}
+                              {bl.tabla && bl.lectura === 'contactos' && (
+                                <TablaDeLaFicha
+                                  tabla={bl.tabla}
+                                  estado={ficha}
+                                  cuenta={(n) => `${n} ${n === 1 ? 'registro' : 'registros'}`}
+                                  vacia="Este contribuyente no tiene ningún teléfono, correo ni gestor registrado."
+                                  filas={(f) =>
+                                    f.contactos.map((c) => [
+                                      c.tipo,
+                                      c.valor,
+                                      c.nombre ?? SIN_DATO,
+                                      c.documento ?? SIN_DATO,
+                                      c.observacion ?? SIN_DATO,
+                                      c.vigente ? 'Sí' : 'No',
+                                    ])
+                                  }
+                                />
+                              )}
+                              {bl.tabla && bl.lectura === 'responsables' && (
+                                <TablaDeLaFicha
+                                  tabla={bl.tabla}
+                                  estado={ficha}
+                                  cuenta={(n) => `${n} ${n === 1 ? 'vínculo' : 'vínculos'}`}
+                                  vacia="Nadie responde solidariamente con este contribuyente."
+                                  filas={(f) =>
+                                    f.responsables.map((r) => [
+                                      String(r.responsableId),
+                                      r.vinculo,
+                                      /* El porcentaje sólo lo llevan los
+                                         vínculos que reparten; en los demás el
+                                         recurso lo publica nulo. */
+                                      r.porcentaje ?? SIN_DATO,
+                                      r.vigenciaDesde,
+                                      r.vigenciaHasta ?? 'abierto',
+                                      r.documentoOrigen,
+                                    ])
+                                  }
                                 />
                               )}
                               {bl.tabla && bl.lectura === undefined && (
@@ -3532,12 +4041,13 @@ export default function Rentas({ dest, onDest }: PantallaProps) {
           En el artboard va fuera de `main`, pegada al fondo. Aquí vive dentro,
           y los márgenes negativos le devuelven el ancho completo que el
           `padding` de `main` le quitaría. */}
-      {/* Sólo en el expediente. `set()` marca `sucio` con CUALQUIER campo del
-          módulo, así que la barra salía también sobre el formulario de la
-          transferencia y sobre las dos hojas de deuda —donde teclear es
-          redactar el acto, no editar una ficha— diciendo «Cambios sin guardar»
-          de algo que ese botón no guarda. */}
-      {sucio && esExpediente && (
+      {/* Sale con el borrador del EXPEDIENTE y no con `sucio`. `set()` marca
+          `sucio` con cualquier campo del módulo, así que la barra salía también
+          sobre el formulario de la transferencia y sobre las dos hojas de deuda
+          —donde teclear es redactar el acto, no editar una ficha— diciendo
+          «Cambios sin guardar» de algo que este botón no guarda. Y sale también
+          con sólo la observación escrita, porque descartarla es descartar algo. */}
+      {esExpediente && hayBorradorDelExpediente && (
         <div
           style={{
             position: 'sticky',
@@ -3564,18 +4074,32 @@ export default function Rentas({ dest, onDest }: PantallaProps) {
               background: 'var(--warn-bg)',
               borderRadius: 999,
               padding: '5px 12px',
+              flex: '0 0 auto',
             }}
           >
             <Icono d={ICO.reloj} tam={13} grosor={2} />
-            Cambios sin guardar
+            {cambiosDeLaCorreccion.length === 0
+              ? 'Sin cambios'
+              : `${cambiosDeLaCorreccion.length} ${cambiosDeLaCorreccion.length === 1 ? 'campo' : 'campos'} sin guardar`}
           </span>
-          <p role="status" style={{ margin: 0, flex: 1, minWidth: 180, fontSize: 12, color: 'var(--warn-fg)', textWrap: 'pretty' }}>
-            {NO_SE_PUEDE_GUARDAR_EL_EXPEDIENTE}
-          </p>
+          {/* La observación es del acto y es obligatoria (regla 10, RNF-052):
+              va aquí, junto al botón que guarda, y no arriba entre los campos
+              del contribuyente —donde se leería como un dato suyo, que es lo que
+              era el campo «Observación» de la maqueta—. */}
+          <label style={{ flex: 1, minWidth: 220 }}>
+            <span style={{ display: 'block', fontSize: 11, fontWeight: 500, color: 'var(--ink-3)', marginBottom: 4 }}>
+              Observación · obligatoria
+            </span>
+            <input
+              value={observacionDeLaCorreccion}
+              onChange={(e) => setObservacionDeLaCorreccion(e.target.value)}
+              placeholder="Qué se corrige, y con qué documento"
+              style={{ width: '100%', border: '1px solid var(--line-2)', borderRadius: 6, padding: '8px 10px', background: 'var(--bg-card)', fontSize: 13 }}
+            />
+          </label>
           <button
             onClick={() => {
-              setVals({});
-              setSucio(false);
+              soltarElBorradorDelExpediente();
               toast('Cambios descartados.');
             }}
             className="hov-linea"
@@ -3583,16 +4107,17 @@ export default function Rentas({ dest, onDest }: PantallaProps) {
           >
             Deshacer
           </button>
-          {/* «Guardar cambios» decía «Contribuyente guardado» y no mandaba nada.
-              Conectarlo tal cual sería peor: `PUT /rentas/contribuyentes/{id}`
-              sólo admite `nombreRazonSocial`, `condicionEspecial` y `activo`, y
-              los campos del expediente no se leen del backend —son constantes de
-              la maqueta—, así que guardar sobrescribiría el nombre de una persona
-              real con el de la maqueta. Queda apagado con su motivo (#552). */}
+          {/* «Guardar cambios» decía «Contribuyente guardado» y no mandaba nada
+              (#552). Ahora manda `PUT /rentas/contribuyentes/{id}` con la
+              observación y **sólo los campos que esa petición admite**, y sólo
+              los que de verdad cambiaron: lo que no viene, no cambia. */}
           <button
-            disabled
-            aria-disabled="true"
-            title={NO_SE_PUEDE_GUARDAR_EL_EXPEDIENTE}
+            onClick={() => void guardarLaCorreccion()}
+            disabled={corrigiendo || impedimentoDeLaCorreccion() !== undefined}
+            aria-disabled={corrigiendo || impedimentoDeLaCorreccion() !== undefined}
+            aria-describedby="motivo-de-la-correccion"
+            title={impedimentoDeLaCorreccion()}
+            className="hov-acento-2"
             style={{
               border: 0,
               borderRadius: 6,
@@ -3601,12 +4126,24 @@ export default function Rentas({ dest, onDest }: PantallaProps) {
               color: '#fff',
               fontSize: 13.5,
               fontWeight: 500,
-              opacity: 0.55,
-              cursor: 'not-allowed',
+              opacity: corrigiendo || impedimentoDeLaCorreccion() !== undefined ? 0.55 : 1,
+              cursor: corrigiendo || impedimentoDeLaCorreccion() !== undefined ? 'not-allowed' : 'pointer',
+              flex: '0 0 auto',
             }}
           >
-            Guardar cambios
+            {corrigiendo ? 'Guardando…' : 'Guardar cambios'}
           </button>
+          {/* El motivo se LEE, no sólo se pasa por encima con el ratón: un
+              `title` en un botón apagado no lo alcanza ni el teclado ni el
+              lector de pantalla (RNF-082). */}
+          <p
+            id="motivo-de-la-correccion"
+            role="status"
+            style={{ margin: 0, flexBasis: '100%', fontSize: 12, lineHeight: 1.5, color: 'var(--warn-fg)', textWrap: 'pretty' }}
+          >
+            {impedimentoDeLaCorreccion() ??
+              `Se mandarán ${cambiosDeLaCorreccion.map((c) => `«${c[0]}»`).join(', ')} y la observación. Lo demás no viaja.`}
+          </p>
         </div>
       )}
     </Shell>
@@ -3694,13 +4231,6 @@ const NO_SE_PUEDE_EMITIR_LA_DJ =
   'no tiene conjunto de parámetros sellado (#540). Se imprimía con las cifras de la maqueta, bajo un «Declaro bajo juramento» (#563).';
 
 /**
- * Por qué el expediente no se puede guardar.
- *
- * Los cincuenta campos que dibuja no se leen del backend —`ContribuyenteResource`
- * publica ocho— y `PUT /rentas/contribuyentes/{id}` sólo admite tres. Mandarlos
- * escribiría el nombre de la maqueta sobre el de quien esté abierto.
- */
-/**
  * Lo que la franja dice cuando el alta abarca mas de una cuota (#538).
  *
  * **El desglose se repite en cada cuota, no se reparte entre ellas.** Medido
@@ -3717,11 +4247,6 @@ const NO_SE_PUEDE_EMITIR_LA_DJ =
 const PIE_DEL_RANGO = (cuantas: number, porCuota: string, total: string): string =>
   `Son ${cuantas} obligaciones, una por cuota: el desglose de arriba se repite en cada una y no se reparte entre ellas. ` +
   `${porCuota} × ${cuantas} = ${total}, que es lo que quedará en la cuenta corriente.`;
-
-const NO_SE_PUEDE_GUARDAR_EL_EXPEDIENTE =
-  'Aquí todavía no se guarda nada: los campos de este expediente no se leen del padrón —son los de la maqueta— y la operación que ' +
-  'corrige un contribuyente sólo admite el nombre o razón social, la condición especial y la baja. Guardar escribiría datos de otra ' +
-  'persona sobre esta ficha (#552).';
 
 /**
  * Por qué ninguna de las seis determinaciones puede escribir todavía.

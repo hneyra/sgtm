@@ -44,6 +44,206 @@ export function buscarContribuyentes(
 }
 
 
+/* ══════════ La ficha del contribuyente ══════════ */
+
+/**
+ * Los tres datos de la persona que la grilla del padron NO publica.
+ *
+ * Es `FichaDelContribuyenteResource.DatosPersonalesResource`, y viven aqui y no
+ * en `ContribuyenteResource` por lo que dice su javadoc: aquella es la fila de
+ * una grilla de busqueda —«lo que no se publica no se filtra»— y esta es la
+ * pantalla por la que se corrige el padron.
+ *
+ * `conyugeId` es **el identificador interno, no el nombre**: resolverlo costaria
+ * una consulta mas por ficha, y el backend lo dice explicitamente. Quien
+ * necesite saber quien es lo pide como pide a cualquier otro contribuyente.
+ */
+export type DatosPersonales = {
+  /** `AAAA-MM-DD`. Nula si no consta; una persona juridica no puede tenerla. */
+  fechaNacimiento: string | null;
+  /** Texto libre de hasta 20 caracteres: la columna no tiene vocabulario cerrado. */
+  estadoCivil: string | null;
+  conyugeId: number | null;
+};
+
+/**
+ * Un domicilio con su tramo de vigencia entero. Es `DomicilioResource`.
+ *
+ * `vigenciaHasta` nulo es el que rige. El historial trae tambien los cerrados:
+ * no se borra nada (regla 4), y `documentoOrigen` es lo que sostiene la
+ * notificacion si alguien la impugna.
+ */
+export type DomicilioDelContribuyente = {
+  id: number;
+  /** `FISCAL` | `PROCESAL`. */
+  tipo: string;
+  direccion: string;
+  referencia: string | null;
+  ubigeo: string | null;
+  vigenciaDesde: string;
+  vigenciaHasta: string | null;
+  documentoOrigen: string;
+};
+
+/** Un telefono, un correo o un gestor. Es `ContactoResource`. */
+export type ContactoDelContribuyente = {
+  id: number;
+  tipo: string;
+  valor: string;
+  nombre: string | null;
+  documento: string | null;
+  /** La nota DEL contacto —«llamar despues de las 6»—, no la del usuario que guardo. */
+  observacion: string | null;
+  vigente: boolean;
+};
+
+/** Quien responde con el contribuyente, y desde cuando. Es `ResponsableResource`. */
+export type ResponsableDelContribuyente = {
+  id: number;
+  /** Otro contribuyente del mismo padron: para notificarle hace falta su domicilio. */
+  responsableId: number;
+  vinculo: string;
+  /** Texto, no numero: es un `Porcentaje` y los objetos de valor viajan como cadena. */
+  porcentaje: string | null;
+  vigenciaDesde: string;
+  vigenciaHasta: string | null;
+  documentoOrigen: string;
+};
+
+/**
+ * La ficha entera a una fecha. Es `FichaDelContribuyenteResource`.
+ *
+ * **Lleva su fecha y no es decorativa** (regla 9): los dos domicilios son los
+ * vigentes a `aLaFecha`, no «los ultimos». Publicar la direccion sin decir a que
+ * fecha rige es lo que hace que una notificacion de marzo se defienda con la
+ * direccion de setiembre.
+ *
+ * Las cuatro consultas van en **una sola** transaccion (#486): cuatro por
+ * separado dejarian sitio entre medias a una mudanza, y la ficha saldria
+ * diciendo que el contribuyente vive en dos sitios y en ninguno.
+ */
+export type FichaDelContribuyente = {
+  contribuyente: Contribuyente;
+  datosPersonales: DatosPersonales;
+  aLaFecha: string;
+  /** Nulo de verdad: un contribuyente recien dado de alta todavia no tiene ninguno. */
+  domicilioFiscal: DomicilioDelContribuyente | null;
+  domicilioProcesal: DomicilioDelContribuyente | null;
+  historialDeDomicilios: DomicilioDelContribuyente[];
+  contactos: ContactoDelContribuyente[];
+  responsables: ResponsableDelContribuyente[];
+};
+
+/**
+ * La ficha de un contribuyente por su **identificador interno**, no por su codigo.
+ *
+ * Es la unica lectura del padron que se pide por `id`, y no hay eleccion: la
+ * ruta es `/rentas/contribuyentes/{id}/ficha`. El `id` sale de la fila que la
+ * busqueda ya devolvio.
+ *
+ * `fecha` ausente es hoy, con el reloj del servidor.
+ */
+export function fichaDelContribuyente(
+  id: number,
+  fecha?: string,
+  senal?: AbortSignal,
+): Promise<FichaDelContribuyente> {
+  return solicitar(`/rentas/contribuyentes/${id}/ficha`, { parametros: { fecha }, senal });
+}
+
+/**
+ * El cuerpo de `PUT /rentas/contribuyentes/{id}`. **Lista blanca**: lo que no
+ * esta aqui no viaja, aunque la pantalla lo dibuje.
+ *
+ * Son los cinco campos que el controlador admite, y ninguno mas. Lo que queda
+ * fuera no es un olvido, y conviene tenerlo escrito porque cada exclusion tiene
+ * su propio motivo:
+ *
+ * - `codigo` y el documento son **la identidad**. Cambiarlos no es corregir una
+ *   ficha sino decidir que dos filas eran la misma persona, y la cuenta del
+ *   ciudadano en el portal se **deriva** del documento (ADR-0020 §6).
+ * - `tipoPersona` tampoco entra: el controlador lo copia de la fila existente.
+ * - El domicilio, los contactos y los responsables tienen su propia escritura
+ *   desde #488, y con motivo: **una mudanza no es una edicion** —agrega un tramo
+ *   y cierra el anterior el dia antes—, asi que meterlos aqui como campos
+ *   sueltos perderia la historia con la que se explica por que se notifico donde
+ *   se notifico.
+ * - Los beneficios son de `rentas`, con su propia lectura y su vigencia.
+ * - `activo` lo admite el PUT y **no se declara aqui**: `activo = false` es la
+ *   baja, exige el privilegio `ELIMINACION` y no es una correccion de ficha.
+ *   Mandarla desde el mismo boton que guarda el nombre haria que un descuido
+ *   diera de baja a quien se estaba corrigiendo.
+ *
+ * **Lo que no viene, no cambia; la cadena vacia BORRA** —y `conyugeId: 0` con
+ * ella—: es una instruccion y no una omision, la misma regla que
+ * `PUT /catastro/vias/{codigo}`.
+ */
+export type CorreccionDeContribuyente = {
+  /** Regla 10, RNF-052: sin ella el backend responde 422 y no se guarda nada. */
+  observacion: string;
+  nombreRazonSocial?: string;
+  /** `PENSIONISTA` | `ADULTO_MAYOR` | `DISCAPACIDAD`, o `''` para quitarla. */
+  condicionEspecial?: string;
+  /** `AAAA-MM-DD`, o `''` para borrarla. */
+  fechaNacimiento?: string;
+  estadoCivil?: string;
+  /** `0` borra el enlace. Nadie es su propio conyuge: el backend lo rechaza. */
+  conyugeId?: number;
+};
+
+/** Corrige un contribuyente ya registrado. Devuelve la fila como quedo. */
+export function corregirContribuyente(
+  id: number,
+  peticion: CorreccionDeContribuyente,
+): Promise<Contribuyente> {
+  return solicitar(`/rentas/contribuyentes/${id}`, { metodo: 'PUT', cuerpo: peticion });
+}
+
+/* ══════════ Beneficios y exoneraciones ══════════ */
+
+/**
+ * Un beneficio del contribuyente. Es `BeneficioResource`.
+ *
+ * `porcentaje` y `monto` viajan como texto y **no llevan fecha**: son cifras
+ * fijas de un registro —lo que la resolucion concedio—, no una deuda que cambie
+ * con el tiempo, y el propio recurso lo deja escrito.
+ */
+export type BeneficioDelContribuyente = {
+  id: number;
+  contribuyenteId: number;
+  predioId: number | null;
+  vehiculoId: number | null;
+  tipo: string;
+  tributo: string;
+  clase: string;
+  porcentaje: string | null;
+  monto: string | null;
+  vigenciaDesde: string;
+  vigenciaHasta: string | null;
+  baseLegal: string;
+  documentoOrigen: string;
+};
+
+/**
+ * Los beneficios de un contribuyente.
+ *
+ * `contribuyente` es **el codigo unico del padron, no el identificador
+ * interno**: lo dice `CriterioDeBeneficio` campo por campo. Y la lectura exige
+ * su propio acceso —`beneficios`—, distinto del de la pantalla, asi que puede
+ * fallar sola sin tumbar el resto del expediente.
+ *
+ * **Solo lectura.** El alta y el cese viven en `RegistrarBeneficio` y no se
+ * publican: el contrato no declara ningun `POST` ni `PUT` en esta ruta.
+ */
+export function beneficiosDelContribuyente(
+  contribuyente: string,
+  paginacion: Paginacion,
+  senal?: AbortSignal,
+): Promise<RespuestaPaginada<BeneficioDelContribuyente>> {
+  return solicitar('/rentas/beneficios', { parametros: { contribuyente, ...paginacion }, senal });
+}
+
+
 /* ══════════ Los predios del contribuyente ══════════ */
 
 /**
