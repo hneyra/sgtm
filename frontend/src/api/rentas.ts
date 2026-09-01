@@ -516,7 +516,7 @@ export function transferirVehiculo(peticion: PeticionDeTransferenciaDeVehiculo):
  * solo `cuotaHasta`, el rango invertido, `cuotaDesde: 0`, uno fuera de 1..12, o
  * `cuota` **y** el rango a la vez—, y ese 422 es la red, no el camino.
  *
- * <h2>El desglose SE REPITE en cada cuota, no se reparte</h2>
+ * <h2>El desglose SE REPITE en cada cuota, no se reparte —salvo con `repartir`</h2>
  *
  * Medido: `cuotaDesde: 1`, `cuotaHasta: 4`, `insoluto: "100.00"` devuelve
  * **cuatro asientos y `total: 400.00`**, uno de 100,00 por cuota. Las dos
@@ -524,6 +524,10 @@ export function transferirVehiculo(peticion: PeticionDeTransferenciaDeVehiculo):
  * desde» y «Cuota hasta»— son plausibles y se diferencian en un factor `n`,
  * asi que la pantalla tiene que decir cual es: lo hace `PIE_DEL_RANGO` y el
  * total que se ensena antes de mandar.
+ *
+ * Esa es la forma del ALTA. La BAJA tiene desde #598 la contraria, y hay que
+ * pedirla: con `repartir: true` el desglose es el **total del acto** y el
+ * servidor lo parte entre las cuotas. Ver ese campo.
  */
 export type PeticionDeMovimientoDeDeuda = {
   observacion: string;
@@ -537,6 +541,24 @@ export type PeticionDeMovimientoDeDeuda = {
   cuotaDesde?: number;
   /** La ultima del rango, incluida. Va siempre con `cuotaDesde`. */
   cuotaHasta?: number;
+  /**
+   * Solo en la BAJA: el desglose declarado es el **total del acto** y lo
+   * reparte el servidor entre las cuotas de la obligacion (#598).
+   *
+   * Sin el, las cuatro cifras son las de **una** obligacion, la de la clave.
+   * Con el, se recorren las cuotas de la primera a la ultima y a cada una se le
+   * asigna, por cada parte del desglose, lo menor entre lo que queda por
+   * repartir y lo que esa cuota debe **a la fecha valor**; las que no deben nada
+   * no producen asiento, y si al terminar sobra algo el acto **no se hace**
+   * —422, «la baja de … es de X y a esa fecha solo se deben Y»—.
+   *
+   * Que cuotas abarca lo dice la propia peticion: sin `cuota` ni rango, la
+   * obligacion entera; con `cuotaDesde`/`cuotaHasta`, ese tramo.
+   *
+   * **Un alta no se reparte** y el backend la rechaza con 422: incorporar deuda
+   * que no estaba no tiene tope contra el que repartir.
+   */
+  repartir?: boolean;
   predioId?: number;
   vehiculoId?: number;
   insoluto?: string;
@@ -585,7 +607,13 @@ export function altaDeDeuda(peticion: PeticionDeMovimientoDeDeuda): Promise<Movi
   return solicitar('/rentas/deuda/altas', { metodo: 'POST', cuerpo: peticion });
 }
 
-export function bajaDeDeuda(peticion: PeticionDeMovimientoDeDeuda): Promise<unknown> {
+/**
+ * La baja. Devuelve lo mismo que el alta —`MovimientoDeDeudaResource`—, y desde
+ * #598 hay que **leerlo**: con `repartir` el reparto entre cuotas lo decide el
+ * servidor, asi que cuantas obligaciones se movieron y por cuanto no se puede
+ * saber desde el formulario. Solo lo dicen los asientos que volvieron.
+ */
+export function bajaDeDeuda(peticion: PeticionDeMovimientoDeDeuda): Promise<MovimientoRegistrado> {
   return solicitar('/rentas/deuda/bajas', { metodo: 'POST', cuerpo: peticion });
 }
 
