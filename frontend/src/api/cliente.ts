@@ -20,6 +20,12 @@ export type CodigoDeError =
   | 'ORDEN_NO_ADMITIDO'
   | 'NO_ENCONTRADO'
   | 'CONFLICTO'
+  /* El verbo no se admite en esa ruta (#556). Llega con la cabecera `Allow`.
+     Importa que NO sea `ERROR_INTERNO`: aquel es reintentable y este no puede
+     funcionar nunca, asi que ofrecer «Reintentar» manda a insistir sobre algo
+     que ya se sabe imposible. Y hasta el arreglo del backend salia 500 con
+     incidencia, o sea indistinguible de un fallo del servidor. */
+  | 'METODO_NO_ADMITIDO'
   | 'ERROR_INTERNO'
   /* No lo produce el servidor: es lo que se sabe cuando la petición no llegó a
      tener respuesta —red caída, servidor apagado, CORS—. Se distingue del
@@ -209,6 +215,7 @@ function porEstado(estado: number): CodigoDeError {
   if (estado === 403) return 'SIN_PRIVILEGIO';
   if (estado === 404) return 'NO_ENCONTRADO';
   if (estado === 409) return 'CONFLICTO';
+  if (estado === 405) return 'METODO_NO_ADMITIDO';
   if (estado === 422) return 'VALIDACION';
   return 'ERROR_INTERNO';
 }

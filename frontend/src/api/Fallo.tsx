@@ -76,6 +76,11 @@ export function tituloDelFallo(error: ErrorDeApi | null, que: string): string {
       return 'La sesión no dice de qué municipalidad es';
     case 'NO_ENCONTRADO':
       return `No se encontró ${que}`;
+    case 'METODO_NO_ADMITIDO':
+      /* Es un defecto de la propia interfaz: pidio con el verbo que no era.
+         Se dice asi para que no se confunda con un fallo del servidor, que es
+         lo que parecia cuando esto salia 500 con incidencia (#556). */
+      return 'La interfaz pidió esto de una forma que el servidor no admite';
     case 'VALIDACION':
     case 'ORDEN_NO_ADMITIDO':
       return 'El servidor no admite esa búsqueda';
@@ -102,6 +107,7 @@ export function explicacionDelFallo(error: ErrorDeApi | null, acceso?: string): 
     case 'SIN_MUNICIPALIDAD':
       return 'No hay valor por omisión: sin municipalidad en el token no hay nada que consultar.';
     case 'NO_ENCONTRADO':
+    case 'METODO_NO_ADMITIDO':
       return error.mensaje;
     case 'VALIDACION':
     case 'ORDEN_NO_ADMITIDO':
