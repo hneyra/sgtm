@@ -304,6 +304,29 @@ export const listarAuditoria = (f: FiltroDeAuditoria, p: Paginacion, s?: AbortSi
  * dejara a la municipalidad sin nadie capaz de administrar permisos se rechaza,
  * y de ahi no se sale por el sistema.
  */
+/**
+ * La municipalidad de la sesion, con su nombre (#555).
+ *
+ * Sin esta lectura la cabecera no podia decir de quien son las cifras que se
+ * estan mirando: el token trae el identificador y nada mas. Se decia
+ * «Municipalidad n.º 1» —feo a proposito, para que se leyera como el dato que
+ * faltaba— despues de haber dicho durante meses un nombre compilado que era el
+ * de otra: la municipalidad 1 es **Sullana**, y la constante decia «Catacaos».
+ *
+ * No lleva parametro: sale del token. Pedirla por identificador convertiria la
+ * operacion en un directorio de municipalidades.
+ */
+export type MunicipalidadDeLaSesion = {
+  id: number;
+  ubigeo: string;
+  nombre: string;
+  tipo: string;
+};
+
+export function municipalidadDeLaSesion(senal?: AbortSignal): Promise<MunicipalidadDeLaSesion> {
+  return solicitar('/seguridad/sesion/municipalidad', { senal });
+}
+
 export function fijarPermisosDelGrupo(
   grupoId: number,
   niveles: { acceso: string; privilegios: Privilegio[] }[],
