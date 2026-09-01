@@ -34,9 +34,6 @@ export type Modulo = {
   documento?: { label: string; k: string };
   /** La frase que cierra el panel cuando no hay documentos. */
   pie?: string;
-  /** Lo que se anuncia al cambiar de ejercicio. Cada módulo dice qué se
-   *  recargó, porque cambiar de ejercicio no significa lo mismo en todos. */
-  avisoDeEjercicio: string;
   sesion: Sesion;
 };
 
@@ -47,7 +44,6 @@ export const MODULOS: Modulo[] = [
     opciones: 2,
     destinos: [],
     pie: 'Inicio no es un módulo: es la respuesta a «a quién atiendes». Cambia según quién entra.',
-    avisoDeEjercicio: '.',
     sesion: { iniciales: 'JC', nombre: 'J. Cárdenas', rol: 'Rentas · ventanilla' },
   },
   {
@@ -63,7 +59,6 @@ export const MODULOS: Modulo[] = [
     ],
     accion: { label: 'Registrar predio', k: 'alta' },
     documento: { label: 'Ficha del contribuyente', k: 'reporte' },
-    avisoDeEjercicio: ': se recargaron aranceles y valores unitarios.',
     sesion: { iniciales: 'JC', nombre: 'J. Cárdenas', rol: 'Técnico catastral' },
   },
   {
@@ -79,7 +74,6 @@ export const MODULOS: Modulo[] = [
     ],
     accion: { label: 'Nuevo contribuyente', k: 'alta' },
     documento: { label: 'Declaración jurada — HR, PU, PR', k: 'reporte' },
-    avisoDeEjercicio: ': se recargaron UIT, escala y tablas.',
     sesion: { iniciales: 'JC', nombre: 'J. Cárdenas', rol: 'Rentas · ventanilla' },
   },
   {
@@ -95,7 +89,6 @@ export const MODULOS: Modulo[] = [
     ],
     accion: { label: 'Levantar acta', k: 'acta' },
     documento: { label: 'Resolución de determinación', k: 'reporte' },
-    avisoDeEjercicio: ': se recargaron programas y cruces.',
     sesion: { iniciales: 'RM', nombre: 'R. Mendoza Cruz', rol: 'Fiscalizador · IM-0412' },
   },
   {
@@ -112,7 +105,6 @@ export const MODULOS: Modulo[] = [
     ],
     accion: { label: 'Registrar papeleta', k: 'alta' },
     pie: 'Los catorce reportes del manual viven en un solo centro, no en catorce entradas de menú.',
-    avisoDeEjercicio: ': se recargó la UIT y los reportes.',
     sesion: { iniciales: 'AV', nombre: 'A. Vílchez Rojas', rol: 'Inspector · IM-0412' },
   },
   {
@@ -128,7 +120,6 @@ export const MODULOS: Modulo[] = [
     ],
     accion: { label: 'Nueva notificación', k: 'alta' },
     pie: 'El procedimiento tiene tres actos en orden. El expediente los enseña en ese orden y no deja saltárselos.',
-    avisoDeEjercicio: ': se recargó la UIT y el cuadro CUIS.',
     sesion: { iniciales: 'VR', nombre: 'V. Reto Santos', rol: 'Fiscalizador · IM-0244' },
   },
   {
@@ -145,7 +136,6 @@ export const MODULOS: Modulo[] = [
     ],
     accion: { label: 'Cobrar', k: 'cobrar' },
     pie: 'Todo lo que se hace aquí ocurre dentro de un turno abierto, y el turno termina en un arqueo que cuadra.',
-    avisoDeEjercicio: ': se recargó el avance de recaudación.',
     sesion: { iniciales: 'JC', nombre: 'J. Cárdenas Vega', rol: 'Cajero · Caja C-3' },
   },
   {
@@ -158,7 +148,6 @@ export const MODULOS: Modulo[] = [
       { k: 'constancia', label: 'Constancia de no adeudo', nota: 'El documento', icono: ICO.hojaVisto },
     ],
     pie: 'Once opciones de menú eran once formas de la misma pregunta. Aquí es una sola: quién es y qué le pasa.',
-    avisoDeEjercicio: ': se recalculó la deuda a esa fecha.',
     sesion: { iniciales: 'JC', nombre: 'J. Cárdenas', rol: 'Ventanilla · consulta' },
   },
   {
@@ -173,7 +162,6 @@ export const MODULOS: Modulo[] = [
     ],
     accion: { label: 'Emitir valores', k: 'emision' },
     pie: 'Un valor sin notificar no cobra y prescribe igual. El módulo se ordena por lo que le falta a cada uno.',
-    avisoDeEjercicio: ': se recalcularon los plazos de prescripción.',
     sesion: { iniciales: 'MR', nombre: 'M. Ríos Mendoza', rol: 'Valores · emisión' },
   },
   {
@@ -188,7 +176,6 @@ export const MODULOS: Modulo[] = [
     ],
     accion: { label: 'Importar valores', k: 'importacion' },
     pie: 'Cada acto del procedimiento añade costas al obligado. El expediente lo dice en cada paso, antes de dictarlo.',
-    avisoDeEjercicio: ': se actualizó la deuda de la cartera.',
     sesion: { iniciales: 'HC', nombre: 'H. Checa Fernández', rol: 'Ejecutor coactivo' },
   },
   {
@@ -203,7 +190,6 @@ export const MODULOS: Modulo[] = [
     ],
     accion: { label: 'Nueva solicitud', k: 'alta' },
     pie: 'Los tres trámites —funcionamiento, edificación y anuncio— tienen la misma forma: requisitos, plazo y una autorización con vigencia.',
-    avisoDeEjercicio: ': se recargaron el padrón y las tasas del TUPA.',
     sesion: { iniciales: 'LP', nombre: 'L. Peña Sandoval', rol: 'Comercialización' },
   },
   {
@@ -218,7 +204,6 @@ export const MODULOS: Modulo[] = [
     ],
     accion: { label: 'Nuevo usuario', k: 'alta' },
     pie: 'Seis opciones de menú eran las piezas de una sola pregunta: quién puede hacer qué, y de dónde le viene el permiso.',
-    avisoDeEjercicio: ': el cambio queda en la auditoría.',
     sesion: { iniciales: 'JQ', nombre: 'J. Quispe Peña', rol: 'Administrador' },
   },
 ];

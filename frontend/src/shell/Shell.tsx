@@ -494,7 +494,16 @@ export function Shell({
               value={pref.ejercicio}
               onChange={(e) => {
                 fijar({ ejercicio: e.target.value });
-                toast(`Ejercicio ${e.target.value}${m.avisoDeEjercicio}`);
+                /* Se dice lo que pasa y nada más.
+                   Cada módulo traía su frase —«se recargaron UIT, escala y
+                   tablas», «se recargaron programas y cruces», «el cambio queda
+                   en la auditoría»— y ninguna de las doce era cierta: el
+                   ejercicio es un `useState` de esta pantalla, no se escribe en
+                   ningún sitio y no recarga nada más que lo que las consultas
+                   vuelvan a pedir con ese año. El backend SÍ sabe registrarlo
+                   —`PUT /seguridad/sesion/ejercicio`, con su observación y su
+                   privilegio— y nadie lo llama todavía (#557). */
+                toast(`Ejercicio ${e.target.value}. Las consultas pasan a pedir ese año.`);
               }}
               aria-label="Ejercicio de trabajo"
               style={{
