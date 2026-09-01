@@ -1500,6 +1500,7 @@
   "GET /consultas/vehiculos": {
     "contenido": [
       {
+        "vehiculoId": "entero",
         "placa": "texto",
         "clase": "texto",
         "marca": "texto",
@@ -2532,6 +2533,7 @@
   "GET /rentas/vehiculos": {
     "contenido": [
       {
+        "vehiculoId": "entero",
         "placa": "texto",
         "clase": "texto",
         "marca": "texto",
