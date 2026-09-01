@@ -2,17 +2,20 @@ package pe.gob.sgtm.catastro.infraestructura;
 
 import java.sql.ResultSet;
 import java.sql.SQLException;
+import java.util.HashMap;
 import java.util.Map;
 import java.util.Objects;
 import java.util.Optional;
 import org.springframework.jdbc.core.simple.JdbcClient;
 import org.springframework.stereotype.Repository;
+import pe.gob.sgtm.catastro.dominio.CriterioDeVia;
 import pe.gob.sgtm.catastro.dominio.TipoVia;
 import pe.gob.sgtm.catastro.dominio.Via;
 import pe.gob.sgtm.catastro.dominio.ViaRepository;
 import pe.gob.sgtm.compartido.Pagina;
 import pe.gob.sgtm.compartido.Paginacion;
 import pe.gob.sgtm.persistencia.OrdenSeguro;
+import pe.gob.sgtm.persistencia.RangoDePrefijo;
 import pe.gob.sgtm.persistencia.RepositorioJdbc;
 
 /**
@@ -41,6 +44,28 @@ public class ViaRepositoryJdbc extends RepositorioJdbc implements ViaRepository 
     private static final OrdenSeguro ORDEN =
             OrdenSeguro.sobre("codigo", "nombre", "tipo_via", "id");
 
+    /**
+     * El ultimo punto de codigo de Unicode, con el que se cierra el rango de un prefijo.
+     *
+     * <p>En UTF-8 el orden de bytes coincide con el de puntos de codigo, asi que {@code prefijo ||
+     * chr(1114111)} es un limite superior exclusivo correcto para «empieza por el prefijo».
+     */
+    private static final int ULTIMO_PUNTO_DE_CODIGO = 1114111;
+
+    /**
+     * La condicion del prefijo de nombre, tal cual va al {@code WHERE}.
+     *
+     * <p>Es una constante y no texto en linea para que {@code BusquedaDelCatalogoVialTest} pueda
+     * pedirle el plan a <b>esta</b> condicion y no a una copia suya. Un plan medido sobre una
+     * consulta escrita a mano en la prueba seguiria verde si alguien devolviera esta a {@code
+     * LIKE}, que es exactamente el cambio que no se ve en el resultado.
+     */
+    static final String CONDICION_DEL_NOMBRE =
+            " AND nombre_busqueda ~>=~ nombre_normalizado(:nombre)"
+                    + " AND nombre_busqueda ~<~ (nombre_normalizado(:nombre) || chr("
+                    + ULTIMO_PUNTO_DE_CODIGO
+                    + "))";
+
     public ViaRepositoryJdbc(JdbcClient jdbc) {
         super(jdbc);
     }
@@ -61,12 +86,57 @@ public class ViaRepositoryJdbc extends RepositorioJdbc implements ViaRepository 
                 .optional();
     }
 
+    /**
+     * Las vias que pide el criterio (#565).
+     *
+     * <h2>Por que el prefijo va sobre una columna desnuda</h2>
+     *
+     * <p>DAT-01 §0 (tercer hallazgo) obliga a escribir un prefijo como rango —{@code ~>=~} / {@code
+     * ~<~}— y no con {@code LIKE}, porque {@code textlike} no es <i>leakproof</i> y bajo RLS no
+     * llega al indice. Lo que #565 midio es que eso <b>no basta</b>: {@code lower}, {@code
+     * unaccent} y {@code regexp_replace} tampoco son leakproof, asi que un rango sobre {@code
+     * nombre_normalizado(nombre)} se queda igualmente de {@code Filter} detras de la politica y el
+     * indice de expresion no se usa nunca —60 000 vias, 216 ms contra 5 ms, y el plan no lo dice
+     * porque las filas salen bien—.
+     *
+     * <p>Por eso el nombre normalizado se materializa en {@code via.nombre_busqueda} (V66) y la
+     * condicion compara esa columna desnuda. El <b>termino buscado</b> si se normaliza con la misma
+     * funcion dentro del SQL: asi no existe una segunda implementacion en Java que pueda apartarse
+     * de la de la base.
+     *
+     * <p>El limite superior es {@code prefijo || chr(1114111)}. Todo texto que empieza por el
+     * prefijo es menor que el, y ninguno que no empiece por el cae en medio: si difiere antes,
+     * difiere ya en ese byte. Con {@code chr} se calcula en la base, de modo que el rango se
+     * construye sobre el texto ya normalizado y no sobre el tecleado.
+     */
     @Override
-    public Pagina<Via> findAll(Paginacion paginacion) {
+    public Pagina<Via> buscar(CriterioDeVia criterio, Paginacion paginacion) {
+        StringBuilder donde = new StringBuilder(" WHERE true");
+        Map<String, Object> parametros = new HashMap<>();
+
+        if (criterio.codigo() != null) {
+            // Aqui el prefijo va sobre `codigo`, que ya es una columna desnuda: el
+            // codigo de via se teclea como esta guardado.
+            RangoDePrefijo.condicion(donde, parametros, "codigo", criterio.codigo(), "codigo");
+        }
+        if (criterio.nombre() != null) {
+            donde.append(CONDICION_DEL_NOMBRE);
+            parametros.put("nombre", criterio.nombre());
+        }
+        if (criterio.tipo() != null) {
+            donde.append(" AND tipo_via = :tipoVia");
+            parametros.put("tipoVia", criterio.tipo().name());
+        }
+        if (criterio.activa() != null) {
+            donde.append(" AND activa = :activa");
+            parametros.put("activa", criterio.activa());
+        }
+
+        String filtro = donde.toString();
         return paginar(
-                "SELECT " + COLUMNAS + " FROM via",
-                "SELECT count(*) FROM via",
-                Map.of(),
+                "SELECT " + COLUMNAS + " FROM via" + filtro,
+                "SELECT count(*) FROM via" + filtro,
+                Map.copyOf(parametros),
                 paginacion,
                 ORDEN,
                 ViaRepositoryJdbc::mapear);

@@ -256,6 +256,23 @@ const SUPRIMIDOS = {
  * la consulta de vehiculos, despues del estado.
  */
 const DEL_BACKEND = {
+  // El catalogo vial gana un filtro que el prototipo no dibuja: una via dada de
+  // baja no deberia poder elegirse para un predio nuevo (RNF-051: no se borra,
+  // se desactiva) y hasta #565 salia en la lista sin distinguirse.
+  calles: [
+    {
+      nombre: 'activa',
+      ejemplo: 'true',
+      tras: 'sector',
+      esquema: '{ type: string, enum: [true, false] }',
+      descripcion: bloque(`
+        Solo las vigentes («true»), solo las dadas de baja («false») o las dos (ausente).
+        Cualquier otra palabra es 422: un «si» tecleado que se leyera como «no filtres»
+        devolveria a la lista las vias que se dieron de baja, que es lo que este filtro existe
+        para impedir.
+      `),
+    },
+  ],
   auditoria: [
     {
       nombre: 'ejercicio',
@@ -715,6 +732,23 @@ const DESCRIPCIONES_DE_FILTRO = {
       'Filtro «Uso» de la pantalla. NO SE SIRVE, y por lo mismo que «zona»: el uso vive en' +
       ' ficha_catastral.uso, tambien texto libre —«Casa habitacion», «Tienda de artesania»—, y' +
       ' ninguno de los cinco usos en mayusculas del desplegable casa con el (#541).',
+  },
+  // Los cuatro filtros que el prototipo dibuja para el catalogo vial. Tres se
+  // sirven desde #565 y uno se rechaza: `via` (V1) no tiene columna de sector.
+  calles: {
+    codigoDeVia: 'Filtro «Código de vía» de la pantalla. Por PREFIJO del codigo (#565).',
+    nombreDeCalle:
+      'Filtro «Nombre de calle» de la pantalla. Por PREFIJO del nombre, sin distinguir' +
+      ' mayusculas ni tildes: el catalogo real guarda «Cayetano Heredia» y en ventanilla se' +
+      ' teclea «cayetano» (#565).',
+    tipoDeVia:
+      'Filtro «Tipo de vía» de la pantalla. Por igualdad contra el enumerado TipoVia; un tipo' +
+      ' que no existe es 422 nombrandolo, no una pagina vacia (#565).',
+    sector:
+      'Filtro «Sector» de la pantalla. NO SE SIRVE: se rechaza con 422 con cualquier valor. La' +
+      ' tabla `via` (V1) no guarda el sector y `ViaResource` no lo publica —Track 2 de #290—,' +
+      ' asi que no hay contra que comparar; ignorarlo devolveria el catalogo entero bajo un' +
+      ' filtro tecleado (#565).',
   },
   consulta_fichas: {
     conciliadaConRentas:
