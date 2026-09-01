@@ -157,13 +157,6 @@ export default function Seguridad({ dest, onDest }: PantallaProps) {
   const grupo = GRUPOS[sel.id] ?? { label: sel.id, miembros: [] as string[], permisos: {} as Permisos };
   const usuario = USUARIOS[sel.id];
 
-  const modulosUnicos = useMemo(() => {
-    const u: string[] = [];
-    ACCESOS.forEach((a) => {
-      if (u.indexOf(a.modulo) < 0) u.push(a.modulo);
-    });
-    return u;
-  }, []);
 
   /* ── La matriz, contra el backend ──────────────────────────────
      De un GRUPO sí se puede reconstruir: `GET /seguridad/accesos` da el
@@ -186,6 +179,18 @@ export default function Seguridad({ dest, onDest }: PantallaProps) {
     [grupoReal?.id],
     enAccesos && esGrupo && grupoReal !== undefined,
   );
+
+  /* Con el catálogo del backend, el módulo de cada acceso es un `moduloId` y su
+     nombre no viaja en esta lectura: el desplegable por módulo se queda sin
+     rótulos que ofrecer y se reduce a «Todos» y «Sensibles». */
+  const modulosUnicos = useMemo(() => {
+    if (accesosReales.datos) return [];
+    const u: string[] = [];
+    ACCESOS.forEach((a) => {
+      if (u.indexOf(a.modulo) < 0) u.push(a.modulo);
+    });
+    return u;
+  }, [accesosReales.datos]);
 
   /* El permiso efectivo. Dice, por nivel, de dónde viene, que es lo que decide
      dónde hay que ir a quitarlo. */
@@ -221,15 +226,34 @@ export default function Seguridad({ dest, onDest }: PantallaProps) {
     return { propios, heredados, editados: permisos[sel.tipo + ':' + sel.id] || {} };
   }, [esGrupo, sel, permisos, permisosReales.datos, grupo]);
 
-  const accesosVisibles = useMemo(
-    () =>
-      modFiltro === 'Todos'
-        ? ACCESOS
-        : modFiltro === 'Sensibles'
-          ? ACCESOS.filter((a) => a.sensible)
-          : ACCESOS.filter((a) => a.modulo === modFiltro),
-    [modFiltro],
-  );
+  /**
+   * Las filas de la matriz.
+   *
+   * **Salen del catálogo del backend cuando se pudo leer**, no del arreglo del
+   * prototipo. Cruzar los dos vocabularios era el defecto: los permisos llegan
+   * llaveados por el código del backend —`caja_tributaria`, `anulacion_recibo`,
+   * `baja_deuda`— y el prototipo los llama `caja`, `anulacion` y `baja`, así que
+   * seis de sus nueve filas no podían encenderse nunca. Y mentían en la
+   * dirección tranquilizadora: el grupo que administra la municipalidad entera
+   * salía «Sin permiso» justo en las tres filas que la pantalla tiñe como «mueve
+   * dinero», bajo un rótulo que decía «del backend».
+   */
+  const accesosVisibles = useMemo(() => {
+    const delBackend = accesosReales.datos?.contenido;
+    const lista: Acceso[] = delBackend
+      ? delBackend.map((a) => ({
+          id: a.codigo,
+          label: a.nombre,
+          /* El backend da el `moduloId`; el nombre del módulo no viaja en esta
+             lectura, así que la columna dice el código y no un módulo inventado. */
+          modulo: String(a.moduloId),
+          sensible: MUEVEN_DINERO.has(a.codigo),
+        }))
+      : ACCESOS;
+    if (modFiltro === 'Todos') return lista;
+    if (modFiltro === 'Sensibles') return lista.filter((a) => a.sensible);
+    return lista.filter((a) => a.modulo === modFiltro);
+  }, [modFiltro, accesosReales.datos]);
 
   const matriz = useMemo(() => {
     let nPropios = 0;
@@ -674,7 +698,16 @@ export default function Seguridad({ dest, onDest }: PantallaProps) {
                         ['Permisos propios', String(matriz.nPropios), 'var(--ink)'],
                         ['Heredados', String(matriz.nHeredados), 'var(--accent-ink)'],
                         ['Con privilegio Especial', String(matriz.nTotales), matriz.nTotales > 0 ? 'var(--bad-fg)' : 'var(--ink-3)'],
-                        ['Accesos mostrados', accesosVisibles.length + ' de ' + ACCESOS.length, 'var(--ink-3)'],
+                        [
+                          'Accesos mostrados',
+                          /* El total es el del catálogo que se esté usando: con
+                             el del backend son 134, y decir «de 9» al lado de
+                             once filas era contar contra el arreglo viejo. */
+                          accesosVisibles.length +
+                            ' de ' +
+                            (accesosReales.datos ? accesosReales.datos.totalElementos : ACCESOS.length),
+                          'var(--ink-3)',
+                        ],
                       ] as [string, string, string][]
                     ).map((r) => (
                       <div key={r[0]} style={{ background: 'var(--bg-card)', padding: '13px 16px', borderLeft: '1px solid var(--line)', borderTop: '1px solid var(--line)', margin: '-1px 0 0 -1px' }}>
@@ -1277,3 +1310,25 @@ function CampoDelSistema({
  * deuda.
  */
 const COLUMNAS_DE_LA_BITACORA = ['Fecha y hora', 'Usuario', 'Tabla', 'Clave', 'Operacion', 'Observacion', 'IP'];
+
+/**
+ * Los accesos que mueven dinero, por su codigo del backend.
+ *
+ * Es lo que tiñe la fila de la matriz, y son los que hay que mirar primero
+ * cuando alguien audita quien puede que. La lista es corta a proposito: si lo
+ * fuera todo, no destacaria nada.
+ */
+const MUEVEN_DINERO = new Set([
+  'caja_tributaria',
+  'caja_tasas',
+  'anulacion_recibo',
+  'baja_deuda',
+  'alta_deuda',
+  'prescripcion',
+  'fraccionamiento',
+  'anulacion_convenio',
+  'aranceles',
+  'permisos',
+  'accesos',
+  'condonacion',
+]);
