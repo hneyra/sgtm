@@ -2,7 +2,7 @@ import { useMemo, useState } from 'react';
 import { Icono } from '../../ds/Icono';
 import { ICONOS, ICO } from '../../ds/iconos';
 import { Aviso, Esqueleto, Insignia, tonoDe, type Tono } from '../../ds/componentes';
-import { MODULOS, moduloDe } from '../../shell/modulos';
+import { MODULOS } from '../../shell/modulos';
 import { personaDeLaSesion } from '../../shell/persona';
 import { hayPuerta, salir } from '../../api/sesion';
 import { EJERCICIOS, soles, usarPreferencias } from '../../shell/preferencias';
@@ -337,7 +337,7 @@ export default function Inicio() {
                 value={pref.ejercicio}
                 onChange={(e) => {
                   fijar({ ejercicio: e.target.value });
-                  toast(`Ejercicio ${e.target.value}${moduloDe('inicio').avisoDeEjercicio}`);
+                  toast(`Ejercicio ${e.target.value}. Las consultas pasan a pedir ese año.`);
                 }}
                 aria-label="Ejercicio de trabajo"
                 style={{
