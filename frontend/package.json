@@ -8,7 +8,8 @@
     "build": "tsc -b && vite build",
     "preview": "vite preview",
     "verificar": "tsc -b --noEmit",
-    "mirar": "node verificaciones/mirar.mjs"
+    "mirar": "node verificaciones/mirar.mjs",
+    "flujos": "node verificaciones/flujos.mjs"
   },
   "dependencies": {
     "react": "^19.1.0",
