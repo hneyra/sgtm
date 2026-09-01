@@ -1,137 +1,148 @@
-/* Datos de muestra de Valores, copiados literalmente del artboard
-   `Valores.dc.html`. Nada de esto viaja a ningún backend: es la maqueta.
-   El acrónimo de los documentos es `MDC` —Municipalidad Distrital de
-   Catacaos—, no el `MPS` que el artboard escribía. */
+/**
+ * Lo que el módulo de Valores necesita saber y no sale del backend: los rótulos
+ * de sus columnas, las seis opciones del manual que resume y la prosa.
+ *
+ * **Ya no hay datos de muestra, y tampoco el reloj de prescripción escrito a
+ * mano.** El artboard calculaba «cuatro años desde el 1 de enero siguiente» en
+ * el navegador; ese plazo es una cifra normativa (regla 5) que vive en el
+ * conjunto de parámetros sellado, y la interfaz no lo tiene ni puede leerlo
+ * —`GET /seguridad/parametros` publica los conjuntos, no sus valores—. Quien lo
+ * calcula es `POST /coactiva/prescripcion`, que devuelve el plazo aplicado y,
+ * ejercicio por ejercicio, el inicio del cómputo y la fecha de prescripción.
+ */
 
-export type Valor = {
-  numero: string;
-  tipo: string;
-  contribuyente: string;
-  anioDeuda: number;
-  emitido: string;
-  notificado: string;
-  monto: number;
-  enCoactiva?: boolean;
-  firme?: boolean;
-};
+/** Una columna de tabla: rótulo y si es numérica (alineada a la derecha). */
+export type ColDef = [string, 0 | 1];
 
-/** Los valores emitidos. `anioDeuda` es lo que decide la prescripción: el
- *  conteo empieza el 1 de enero siguiente a ese ejercicio, no a la emisión. */
-export const VALORES: Valor[] = [
-  { numero: '0000000728', tipo: 'ORDEN DE PAGO — PREDIAL', contribuyente: 'GONZALES ÁVILA, PASCUAL', anioDeuda: 2025, emitido: '09/10/2025', notificado: '', monto: 195.98 },
-  { numero: '0000000726', tipo: 'ORDEN DE PAGO — PREDIAL', contribuyente: 'ÁLAMO VDA. DE ASTUDILLO, JUANA', anioDeuda: 2025, emitido: '07/10/2025', notificado: '14/10/2025', monto: 44.61 },
-  { numero: '0000001403', tipo: 'RES. EJECUCIÓN COACTIVA', contribuyente: 'AGROINDUSTRIAL S.R.L.', anioDeuda: 2022, emitido: '13/08/2025', notificado: '20/08/2025', enCoactiva: true, monto: 940.64 },
-  /* Deuda de 2022 con el valor emitido en 2026: el caso que el pie de la tabla
-     describe —un valor nuevo sobre deuda vieja nace con poco tiempo—. Conteo
-     desde el 01/01/2023, prescribe el 01/01/2027. */
-  { numero: '0000000418', tipo: 'RES. DE DETERMINACIÓN — FISCALIZACIÓN', contribuyente: 'INVERSIONES DEL NORTE SAC', anioDeuda: 2022, emitido: '13/08/2026', notificado: '', monto: 1842.6 },
-  { numero: '0000000006', tipo: 'RES. DE MULTA — LICENCIA', contribuyente: 'MOLINO CATACAOS', anioDeuda: 2020, emitido: '31/03/2024', notificado: '19/05/2024', firme: true, monto: 412.0 },
-  { numero: '0000003985', tipo: 'ORDEN DE PAGO — ARBITRIOS', contribuyente: 'ENCALADA VERA, LIDIO ALBERTO', anioDeuda: 2019, emitido: '19/01/2024', notificado: '', monto: 992.64 },
+/** Lo que se escribe donde no hay dato. Una raya, nunca un cero ni un blanco. */
+export const SIN_DATO = '—';
+
+/* ══════════ La lista ══════════ */
+
+export const COLS_LISTA: ColDef[] = [
+  ['Nº valor', 0],
+  ['Tipo', 0],
+  ['Contribuyente', 0],
+  ['Tributo', 0],
+  ['Periodo', 0],
+  ['Emitido', 0],
+  ['Notificado', 0],
+  ['Exigible desde', 0],
+  ['Importe S/', 1],
+  ['Situación', 0],
 ];
 
-/** Los recaudos que componen un valor: la tabla de la pestaña «El valor». */
-export const RECAUDOS: string[][] = [
-  ['0000000006', '2021', '000418', 'PREDIAL — FISCALIZACIÓN', '2,062.00', '618.60', '2,680.60'],
-  ['0000000007', '2022', '000418', 'PREDIAL — FISCALIZACIÓN', '2,230.00', '556.00', '2,786.00'],
-  ['0000000008', '2023', '000418', 'PREDIAL — FISCALIZACIÓN', '2,378.00', '441.00', '2,819.00'],
+/**
+ * Cómo se lee cada situación, y qué le falta.
+ *
+ * Las siete son las de `SituacionDelValor`, letra por letra. El prototipo
+ * agrupaba en cinco etapas y una de ellas —«RECLAMADO»— no existe en el
+ * dominio: pedirla devuelve 422, y por eso no está.
+ */
+export const SITUACIONES_EXPLICADAS: {
+  k: 'EMITIDO' | 'NOTIFICADO' | 'EXIGIBLE' | 'COACTIVA' | 'PAGADO' | 'ANULADO' | 'PRESCRITO';
+  label: string;
+  tono: 'ok' | 'warn' | 'bad' | 'neutro';
+  que: string;
+}[] = [
+  {
+    k: 'EMITIDO',
+    label: 'Emitido sin notificar',
+    tono: 'bad',
+    que: 'Existe y no cobra: hasta que se notifique no corre ningún plazo, y el cómputo de la prescripción sigue igual.',
+  },
+  {
+    k: 'NOTIFICADO',
+    label: 'Notificado, en plazo',
+    tono: 'warn',
+    que: 'El contribuyente puede pagar o reclamar. Nada que hacer todavía.',
+  },
+  {
+    k: 'EXIGIBLE',
+    label: 'Exigible (firme)',
+    tono: 'warn',
+    que: 'El plazo venció. Se puede cobrar coactivamente, y mientras no se pase, no se cobra. Es lo que el prototipo llama «firme».',
+  },
+  {
+    k: 'COACTIVA',
+    label: 'En cobranza coactiva',
+    tono: 'neutro',
+    que: 'Remitido al ejecutor. El seguimiento es del módulo de Coactiva.',
+  },
+  { k: 'PAGADO', label: 'Pagado', tono: 'ok', que: 'La deuda que formalizaba se cobró.' },
+  { k: 'ANULADO', label: 'Anulado', tono: 'neutro', que: 'Un valor no se corrige: se anula y se emite otro (regla 4).' },
+  {
+    k: 'PRESCRITO',
+    label: 'Prescrito',
+    tono: 'bad',
+    que: 'Declarado prescrito. La acción de cobro se extinguió.',
+  },
 ];
 
-export type Prescripcion = {
-  pct: number;
-  vencido: boolean;
-  meses: number;
-  texto: string;
-  fin: string;
-};
+/* ══════════ El expediente del valor ══════════ */
 
-/** El reloj: cuatro años desde el 1 de enero siguiente al ejercicio de la
- *  deuda. La notificación interrumpe y reinicia; sin ella, el conteo corre.
- *  El «hoy» del artboard es el 13 de agosto de 2026. */
-export function prescripcionDe(v: { anioDeuda: number; notificado: string }): Prescripcion {
-  const HOY = new Date(2026, 7, 13);
-  const inicio = new Date(v.anioDeuda + 1, 0, 1);
-  const base = v.notificado
-    ? new Date(Number('20' + v.notificado.slice(8, 10)), Number(v.notificado.slice(3, 5)) - 1, Number(v.notificado.slice(0, 2)))
-    : inicio;
-  const fin = new Date(base.getFullYear() + 4, base.getMonth(), base.getDate());
-  const totalMs = fin.getTime() - base.getTime();
-  const transcurridoMs = HOY.getTime() - base.getTime();
-  const pct = Math.max(Math.min((transcurridoMs / totalMs) * 100, 100), 0);
-  const mesesRestantes = Math.round((fin.getTime() - HOY.getTime()) / (1000 * 60 * 60 * 24 * 30.44));
-  return {
-    pct,
-    vencido: mesesRestantes <= 0,
-    meses: mesesRestantes,
-    texto:
-      mesesRestantes <= 0
-        ? 'Prescrito'
-        : mesesRestantes < 12
-          ? 'Prescribe en ' + mesesRestantes + (mesesRestantes === 1 ? ' mes' : ' meses')
-          : 'Prescribe en ' + Math.floor(mesesRestantes / 12) + (Math.floor(mesesRestantes / 12) === 1 ? ' año' : ' años'),
-    fin: String(fin.getDate()).padStart(2, '0') + '/' + String(fin.getMonth() + 1).padStart(2, '0') + '/' + fin.getFullYear(),
-  };
-}
+export type Pestania = 'valor' | 'notificacion' | 'movimientos';
 
-/** Los valores contados por etapa. La bandeja del panel: cada fila lleva a la
- *  lista con su filtro puesto.
- *  [etapa, tono, título, detalle, valores, importe, filtro] */
-export const BANDEJA: [string, 'ok' | 'warn' | 'bad', string, string, number, number, string][] = [
-  ['Emitido sin notificar', 'bad', 'Emitidos y sin notificar', 'Existen pero no cobran, y el reloj de prescripción les corre igual.', 412, 184412.0, 'Emitido sin notificar'],
-  ['Notificado en plazo', 'ok', 'Notificados, dentro del plazo', 'El contribuyente puede pagar o reclamar. Nada que hacer todavía.', 1844, 788976.0, 'Notificado en plazo'],
-  ['Firme sin pase', 'warn', 'Firmes y sin pase a coactiva', 'Vencidos y sin impugnar. Se pueden cobrar coactivamente y no se han remitido.', 388, 162844.0, 'Firme sin pase'],
-  ['En coactiva', 'ok', 'En cobranza coactiva', 'Remitidos al ejecutor. El seguimiento es del módulo de Coactiva.', 1450, 604118.0, 'En coactiva'],
-  ['Prescrito', 'bad', 'Con prescripción cumplida', 'Pasaron cuatro años sin acto que interrumpa. Se declaran y se extinguen.', 88, 41284.0, 'Prescrito'],
+export const PESTANIAS: { k: Pestania; label: string }[] = [
+  { k: 'valor', label: 'El valor' },
+  { k: 'notificacion', label: 'Notificación' },
+  { k: 'movimientos', label: 'Movimientos' },
 ];
 
-/** Los cuatro ejercicios del reloj, con cuántos valores y cuánto importe
- *  tiene cada uno. La barra y el plazo se calculan; esto es el censo. */
-export const EJERCICIOS_DEL_RELOJ = [2019, 2020, 2021, 2022];
-export const CONTEOS: Record<number, number> = { 2019: 88, 2020: 142, 2021: 214, 2022: 388 };
-export const MONTOS: Record<number, number> = { 2019: 41284.0, 2020: 68412.0, 2021: 102844.0, 2022: 184412.0 };
+/* ══════════ Emisión ══════════ */
 
-export const KPIS: { valor: string; etiqueta: string; nota: string }[] = [
-  { valor: '4,182', etiqueta: 'Valores emitidos', nota: 'Sobre 62,418 cuentas del padrón.' },
-  { valor: '9.9 %', etiqueta: 'Emitidos sin notificar', nota: '412 valores que existen y no cobran.' },
-  { valor: 'S/ 41 K', etiqueta: 'Prescritos sin declarar', nota: '88 valores. Siguen figurando como deuda cobrable y no lo son.' },
-  { valor: '20 días', etiqueta: 'Plazo para reclamar', nota: 'Hábiles, desde la notificación. Antes de eso el valor no es firme.' },
+export const COLS_DEUDA_A_FORMALIZAR: ColDef[] = [
+  ['', 0],
+  ['Año', 0],
+  ['Tributo', 0],
+  ['Unidad', 0],
+  ['Cuotas', 0],
+  ['Fase', 0],
+  ['Insoluto', 1],
+  ['Reajuste', 1],
+  ['Interés', 1],
+  ['Gastos', 1],
+  ['Total', 1],
 ];
 
-/** La deuda que entra en el valor individual. */
-export const DEUDA_DEL_VALOR: string[][] = [
-  ['2021', 'PREDIAL — FISCALIZACIÓN', '02-014-D-14-01', '2,062.00', '618.60', '2,680.60'],
-  ['2022', 'PREDIAL — FISCALIZACIÓN', '02-014-D-14-01', '2,230.00', '556.00', '2,786.00'],
-  ['2023', 'PREDIAL — FISCALIZACIÓN', '02-014-D-14-01', '2,378.00', '441.00', '2,819.00'],
+/* ══════════ Prescripción ══════════ */
+
+export const COLS_COMPUTO: ColDef[] = [
+  ['Ejercicio', 0],
+  ['Inicio del cómputo', 0],
+  ['Inicio tras interrupciones', 0],
+  ['Prescribe el', 0],
+  ['Estado', 0],
 ];
 
-/** La simulación del lote: cada fila es una exclusión que el criterio decidió. */
-export const SIMULACION_DEL_LOTE: string[][] = [
-  ['Deuda vencida del ejercicio', '18,412', '3,842,116.00', '—', '—'],
-  ['Con deuda mínima o más', '14,884', '3,788,412.00', '3,528', 'Deuda menor a S/ 50.00'],
-  ['Sin convenio vigente', '13,042', '3,412,844.00', '1,842', 'Deuda acogida a fraccionamiento'],
-  ['Sin valor previo del mismo tipo', '12,884', '3,384,116.00', '158', 'Ya tienen orden de pago emitida'],
-  ['Valores a emitir', '12,884', '3,384,116.00', '5,528', 'Total excluidas'],
+/**
+ * Las causales que el art. 45 y el 46 nombran, tal como las escribe la norma.
+ *
+ * El backend **no las valida contra una lista**: `HechoDelComputo.causal` es
+ * texto libre porque es la cita que la resolución tiene que llevar. Estas son
+ * sugerencias del desplegable, no un enumerado, y por eso el campo también
+ * admite escribir otra.
+ */
+export const CAUSALES_SUGERIDAS: { clase: 'INTERRUPCION' | 'SUSPENSION'; causal: string }[] = [
+  { clase: 'INTERRUPCION', causal: 'Notificación de la orden de pago o resolución de determinación' },
+  { clase: 'INTERRUPCION', causal: 'Reconocimiento expreso de la obligación tributaria' },
+  { clase: 'INTERRUPCION', causal: 'Pago parcial de la deuda' },
+  { clase: 'INTERRUPCION', causal: 'Solicitud de fraccionamiento u otras facilidades de pago' },
+  { clase: 'INTERRUPCION', causal: 'Notificación de la resolución de ejecución coactiva' },
+  { clase: 'SUSPENSION', causal: 'Tramitación del procedimiento contencioso tributario' },
+  { clase: 'SUSPENSION', causal: 'Tramitación de la demanda contencioso-administrativa' },
+  { clase: 'SUSPENSION', causal: 'Procedimiento de fiscalización en curso' },
+  { clase: 'SUSPENSION', causal: 'Suspensión del procedimiento de cobranza coactiva' },
 ];
 
-/** El historial de movimientos del valor. */
-export const MOVIMIENTOS: string[][] = [
-  ['1', 'Generado', '13/08/2026', 'Emisión del valor por el criterio 00000007891', 'MRIOS'],
-];
+/* ══════════ Paleta de comandos ══════════ */
 
-/** La deuda con prescripción cumplida que se declara y se extingue.
- *  [contribuyente, nombre, ejercicio, concepto, valor, conteo desde, importe] */
-export const PRESCRITAS: [string, string, string, string, string, string, number][] = [
-  ['00000003542', 'SANTIAGO MOSCOL, GASPAR', '2019', 'PREDIAL 1-4', '0000003985', '01/01/2024', 992.64],
-  ['00000019535', 'CALDERÓN ESLAVA, JUAN ALBERTO', '2018', 'ARBITRIOS 1-12', '0000003844', '01/01/2023', 743.44],
-  ['00000041313', 'RUGEL MEDINA, CÉSAR', '2020', 'PREDIAL 1-4', '0000004118', '01/01/2025', 482.4],
-];
-
-/** Las seis opciones del manual que el módulo resume, para la paleta.
- *  El segundo campo es el destino; `valor` vuelve a la lista. */
+/** Las seis opciones del manual que el módulo resume, con su destino. */
 export const OPCIONES: [string, string][] = [
   ['Valor individual', 'emision'],
   ['Valores masivos', 'emision'],
   ['Mantenimiento de valores', 'lista'],
-  ['Notificación de valores', 'valor'],
+  ['Notificación de valores', 'lista'],
   ['Prescripción', 'prescripcion'],
-  ['Pase de valores a coactiva', 'valor'],
+  ['Pase de valores a coactiva', 'lista'],
 ];

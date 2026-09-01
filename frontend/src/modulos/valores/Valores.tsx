@@ -1,40 +1,58 @@
-import { useEffect, useMemo, useState, type CSSProperties } from 'react';
+import { useEffect, useState, type CSSProperties, type ReactNode } from 'react';
 import { Shell } from '../../shell/Shell';
 import type { PantallaProps } from '../../App';
 import { Icono } from '../../ds/Icono';
 import { ICO } from '../../ds/iconos';
-import { Insignia, type Tono } from '../../ds/componentes';
-import { soles, usarPreferencias } from '../../shell/preferencias';
+import { Aviso, Dato, Entradilla, Insignia, Nota, Seccion, type Tono } from '../../ds/componentes';
+import { usarPreferencias } from '../../shell/preferencias';
+import { ErrorDeApi, fijarToken } from '../../api/cliente';
+import { cuentaActual, hayPuerta } from '../../api/sesion';
+import { useRebote, useRecurso } from '../../api/useRecurso';
 import {
-  BANDEJA,
-  CONTEOS,
-  DEUDA_DEL_VALOR,
-  EJERCICIOS_DEL_RELOJ,
-  KPIS,
-  MONTOS,
-  MOVIMIENTOS,
-  OPCIONES,
-  PRESCRITAS,
-  RECAUDOS,
-  SIMULACION_DEL_LOTE,
-  VALORES,
-  prescripcionDe,
+  consultarValores,
+  deudaDelContribuyente,
+  SITUACIONES,
+  TIPOS_DE_VALOR,
+  type ObligacionConDeuda,
+  type Situacion,
+  type TipoDeValor,
+  type ValorConsultado,
+} from '../../api/consultas';
+import {
+  CAUSALES,
+  MODALIDADES,
+  RESULTADOS,
+  declararPrescripcion,
+  emitirValor,
+  generarValoresMasivos,
+  listarValores,
+  notificarValor,
+  pasarACoactiva,
+  type Causal,
+  type ClaseDeHecho,
+  type CorridaMasiva,
+  type HechoDelComputo,
+  type Modalidad,
+  type MovimientoDelValor,
+  type Notificacion,
   type Prescripcion,
+  type ResultadoDeDiligencia,
   type Valor,
+} from '../../api/valores';
+import {
+  CAUSALES_SUGERIDAS,
+  COLS_COMPUTO,
+  COLS_DEUDA_A_FORMALIZAR,
+  COLS_LISTA,
+  OPCIONES,
+  PESTANIAS,
+  SIN_DATO,
+  SITUACIONES_EXPLICADAS,
+  type ColDef,
+  type Pestania,
 } from '../../datos/valores';
 
-/* Los estilos que el artboard declara una vez arriba y repite en cada tabla y
-   en cada campo. Van literales: son los que hacen que la pantalla se vea
-   igual que `Valores.dc.html`. */
-const IN: CSSProperties = {
-  width: '100%',
-  boxSizing: 'border-box',
-  border: '1px solid var(--line-2)',
-  borderRadius: 6,
-  padding: '9px 10px',
-  background: 'var(--bg-elev)',
-  fontSize: 13.5,
-};
+/* ══════════ Estilos del artboard ══════════ */
 const TH: CSSProperties = {
   padding: '10px 14px',
   textAlign: 'left',
@@ -65,677 +83,595 @@ const TD1: CSSProperties = {
   color: 'var(--ink)',
   whiteSpace: 'nowrap',
 };
-
-const TARJETA: CSSProperties = {
+const CONTROL: CSSProperties = {
+  width: '100%',
+  boxSizing: 'border-box',
+  border: '1px solid var(--line-2)',
+  borderRadius: 6,
+  padding: '8px 10px',
   background: 'var(--bg-card)',
-  border: '1px solid var(--line)',
-  borderRadius: 10,
-  boxShadow: 'var(--shadow-1)',
-  overflow: 'hidden',
-};
-const CABECERA: CSSProperties = {
-  display: 'flex',
-  alignItems: 'center',
-  gap: 12,
-  flexWrap: 'wrap',
-  padding: '13px 16px',
-  borderBottom: '1px solid var(--line)',
-};
-const H2: CSSProperties = { margin: 0, flex: 1, fontFamily: 'var(--font-serif)', fontSize: 16, fontWeight: 600 };
-const META: CSSProperties = { fontFamily: 'var(--font-mono)', fontSize: 11, color: 'var(--ink-3)' };
-const PIE: CSSProperties = {
-  margin: 0,
-  padding: '11px 16px',
-  borderTop: '1px solid var(--line)',
-  background: 'var(--bg-elev)',
-  fontSize: 12,
-  lineHeight: 1.5,
-  color: 'var(--ink-3)',
-  textWrap: 'pretty',
-};
-const ENTRADILLA: CSSProperties = {
-  margin: 0,
-  fontFamily: 'var(--font-serif)',
-  fontSize: 17,
-  lineHeight: 1.6,
-  color: 'var(--ink-2)',
-  maxWidth: '70ch',
+  fontSize: 13,
 };
 const BOTON_SEC: CSSProperties = {
   border: '1px solid var(--line-2)',
   borderRadius: 6,
-  padding: '10px 18px',
-  background: 'var(--bg-card)',
+  padding: '9px 16px',
+  background: 'var(--bg-elev)',
   fontSize: 13,
-  cursor: 'pointer',
-};
-const BOTON_PRI: CSSProperties = {
-  border: 0,
-  borderRadius: 6,
-  padding: '11px 22px',
-  background: 'var(--accent)',
-  color: '#fff',
-  fontSize: 13.5,
-  fontWeight: 500,
+  color: 'var(--ink-2)',
   cursor: 'pointer',
 };
 
-/** El tono que el artboard de Valores le da a una etapa. Prescrito manda sobre
- *  todo lo demás: un valor prescrito ya no se notifica, se declara. */
-function tono(txt: string): Tono {
-  const t = String(txt).toLowerCase();
-  if (/sin notificar|prescrito|en coactiva|vencid/.test(t)) return 'bad';
-  if (/firme sin pase|por notificar|en plazo/.test(t)) return 'warn';
-  return 'ok';
+/** «1 valor» y «2 valores»: la cifra manda sobre el rótulo. */
+function plural(n: number, uno: string, varios: string): string {
+  return `${n.toLocaleString('es-PE')} ${n === 1 ? uno : varios}`;
 }
 
-type ColDef = [string, 0 | 1];
+/** El tono con que se lee cada situación. Sale de la tabla, no de un `if`. */
+function tonoDeSituacion(situacion: string): Tono {
+  return SITUACIONES_EXPLICADAS.find((s) => s.k === situacion)?.tono ?? 'neutro';
+}
 
-function Cabeceras({ defs, hueco }: { defs: ColDef[]; hueco?: boolean }) {
+/** Cómo se lee cada situación, con su explicación. */
+function rotuloDeSituacion(situacion: string): string {
+  return SITUACIONES_EXPLICADAS.find((s) => s.k === situacion)?.label ?? situacion;
+}
+
+/* ══════════ Piezas comunes ══════════ */
+
+type Lect<T> = { datos: T | null; cargando: boolean; error: ErrorDeApi | null; reintentar: () => void };
+
+function Cargando({ n = 4 }: { n?: number }) {
   return (
-    <tr>
-      {hueco && <th style={{ padding: '10px 14px', width: 38, background: 'var(--bg-elev)' }} />}
-      {defs.map((c) => (
-        <th key={c[0]} style={c[1] ? THN : TH}>
-          {c[0]}
-        </th>
-      ))}
-    </tr>
-  );
-}
-
-/** La celda: la primera columna en mono fuerte, las numéricas a la derecha y
- *  la de etapa como insignia. Es `celda()` del artboard. */
-function celdas(vals: string[], defs: ColDef[], insigniaEn = -1, onClick?: () => void) {
-  return vals.map((v, j) => (
-    <td
-      key={j}
-      onClick={onClick}
-      style={j === insigniaEn ? { padding: '11px 14px' } : j === 0 ? TD1 : defs[j] && defs[j][1] ? TDN : TD}
-    >
-      {j === insigniaEn ? <Insignia tono={tono(v)}>{v}</Insignia> : v}
-    </td>
-  ));
-}
-
-type Total = [string, string, 0 | 1];
-
-function Totales({ filas }: { filas: Total[] }) {
-  return (
-    <div
-      style={{
-        display: 'grid',
-        gridTemplateColumns: 'repeat(auto-fit,minmax(158px,1fr))',
-        gap: 0,
-        background: 'var(--bg-card)',
-        borderTop: '1px solid var(--line)',
-      }}
-    >
-      {filas.map((t) => (
-        <div
-          key={t[0]}
-          style={{
-            background: t[2] ? 'var(--accent-soft)' : 'var(--bg-card)',
-            padding: '14px 16px',
-            borderLeft: '1px solid var(--line)',
-            borderTop: '1px solid var(--line)',
-            margin: '-1px 0 0 -1px',
-          }}
-        >
-          <p style={{ margin: '0 0 4px', fontSize: 10.5, textTransform: 'uppercase', letterSpacing: '.1em', color: 'var(--ink-3)' }}>
-            {t[0]}
-          </p>
-          <p style={{ margin: 0, fontFamily: 'var(--font-mono)', fontSize: 19, color: 'var(--ink)' }}>{t[1]}</p>
+    <div>
+      {Array.from({ length: n }, (_, i) => (
+        <div key={i} style={{ display: 'flex', gap: 16, padding: '14px 16px', borderBottom: '1px solid var(--line)' }}>
+          <div data-esq="1" style={{ width: 118, height: 13 }} />
+          <div data-esq="1" style={{ flex: 1, height: 13 }} />
+          <div data-esq="1" style={{ width: 74, height: 13 }} />
         </div>
       ))}
     </div>
   );
 }
 
-type CampoDef = {
-  k: string;
-  l: string;
-  t?: 'text' | 'sel' | 'date' | 'area' | 'chk' | 'ro';
-  v?: string | boolean;
-  o?: string[];
-  ph?: string;
-  ayuda?: string;
-  ancho?: boolean;
-};
+/**
+ * Lo que el backend contestó, dicho en castellano.
+ *
+ * El titular sale del **código** y no del texto: los códigos son estables por
+ * contrato, y las causas no se parecen —un permiso que falta no se arregla
+ * reintentando y una red caída sí—.
+ */
+function Fallo({ error, ruta, acceso, onReintentar }: { error: ErrorDeApi; ruta: string; acceso: string; onReintentar: () => void }) {
+  const { toast } = usarPreferencias();
+  const [tokenPegado, setTokenPegado] = useState('');
+  const cuenta = cuentaActual();
+  const titulo =
+    error.codigo === 'NO_AUTENTICADO'
+      ? 'La sesión no vale'
+      : error.codigo === 'SIN_PRIVILEGIO'
+        ? cuenta === null
+          ? 'Esta sesión no puede hacer esto'
+          : `La cuenta «${cuenta}» no puede hacer esto`
+        : error.codigo === 'SIN_MUNICIPALIDAD'
+          ? 'La sesión no dice de qué municipalidad es'
+          : error.codigo === 'NO_ENCONTRADO'
+            ? 'Eso no está en esta municipalidad'
+            : error.codigo === 'VALIDACION'
+              ? 'El servidor no admite eso'
+              : error.codigo === 'CONFLICTO'
+                ? 'Eso ya estaba hecho'
+                : error.codigo === 'SIN_RESPUESTA'
+                  ? error.estado === 0
+                    ? 'No se pudo contactar con el servidor'
+                    : 'El servidor contestó otra cosa'
+                  : 'Falló en el servidor';
+  const explicacion =
+    error.codigo === 'SIN_PRIVILEGIO'
+      ? `Hace falta el acceso «${acceso}». Que la cuenta entre no basta: tiene que estar dada de alta en esta municipalidad, y el permiso lo concede Seguridad.`
+      : error.codigo === 'NO_AUTENTICADO'
+        ? 'Vuelve a entrar: el token caducó o no es de este emisor.'
+        : error.mensaje;
 
-function Formulario({
-  defs,
-  val,
-  set,
-}: {
-  defs: CampoDef[];
-  val: (k: string, d: string | boolean | undefined) => string | boolean | undefined;
-  set: (k: string, v: string | boolean) => void;
-}) {
   return (
-    <div
+    <section
       style={{
-        display: 'grid',
-        gridTemplateColumns: 'repeat(auto-fit,minmax(192px,1fr))',
-        gap: '15px 16px',
-        padding: '15px 16px 17px',
+        display: 'flex',
+        flexDirection: 'column',
+        alignItems: 'center',
+        gap: 8,
+        padding: '30px 24px',
+        border: '1px solid var(--line)',
+        borderRadius: 10,
+        background: 'var(--bg-card)',
       }}
     >
-      {defs.map((f) => {
-        const bruto = val(f.k, f.v);
-        const valor = bruto === undefined ? '' : bruto;
-        const t = f.t ?? 'text';
-        return (
-          <label
-            key={f.k}
-            data-ancho={f.ancho ? '1' : '0'}
-            style={{ display: 'flex', flexDirection: 'column', gap: 5, minWidth: 0 }}
+      <svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.6} strokeLinecap="round" style={{ color: 'var(--error-texto)' }}>
+        <circle cx="12" cy="12" r="9" />
+        <path d="M12 7.5v5M12 16.2h.02" />
+      </svg>
+      <p style={{ margin: 0, fontFamily: 'var(--font-serif)', fontSize: 16, fontWeight: 600, color: 'var(--error-texto)' }}>{titulo}</p>
+      <p style={{ margin: 0, maxWidth: '58ch', fontSize: 12.5, lineHeight: 1.55, color: 'var(--ink-3)', textAlign: 'center', textWrap: 'pretty' }}>{explicacion}</p>
+      {error.detalles && error.detalles.length > 0 && (
+        <ul style={{ margin: '2px 0 0', paddingLeft: 18, maxWidth: '58ch', fontSize: 12, color: 'var(--ink-3)' }}>
+          {error.detalles.slice(0, 8).map((d, i) => (
+            <li key={i}>{d}</li>
+          ))}
+        </ul>
+      )}
+      <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginTop: 3, fontFamily: 'var(--font-mono)', fontSize: 10.5, color: 'var(--ink-3)' }}>
+        <span>
+          {ruta} · {error.estado || 'sin respuesta'}
+        </span>
+        {error.incidencia && (
+          <>
+            <span style={{ color: 'var(--line-2)' }}>|</span>
+            <span>ref {error.incidencia}</span>
+          </>
+        )}
+      </div>
+      {error.codigo === 'NO_AUTENTICADO' && !hayPuerta() && (
+        <div style={{ display: 'flex', gap: 8, marginTop: 10, width: 'min(560px, 100%)' }}>
+          <input
+            value={tokenPegado}
+            onChange={(e) => setTokenPegado(e.target.value)}
+            placeholder="Pega aquí un token del emisor: eyJhbGciOi…"
+            spellCheck={false}
+            style={{ ...CONTROL, flex: 1, minWidth: 0, fontFamily: 'var(--font-mono)', fontSize: 12 }}
+          />
+          <button
+            onClick={() => {
+              fijarToken(tokenPegado.trim() || null);
+              setTokenPegado('');
+              onReintentar();
+            }}
+            disabled={tokenPegado.trim() === ''}
+            style={{
+              border: 0,
+              borderRadius: 6,
+              padding: '8px 17px',
+              background: 'var(--accent)',
+              color: 'var(--accent-contraste)',
+              fontSize: 12.5,
+              fontWeight: 500,
+              cursor: tokenPegado.trim() === '' ? 'not-allowed' : 'pointer',
+              opacity: tokenPegado.trim() === '' ? 0.55 : 1,
+              whiteSpace: 'nowrap',
+            }}
           >
-            <span style={{ fontSize: 11.5, fontWeight: 500, color: 'var(--ink-3)' }}>{f.l}</span>
-            {(t === 'text' || t === 'date') && (
-              <input
-                type={t === 'date' ? 'date' : undefined}
-                value={String(valor)}
-                onChange={(e) => set(f.k, e.target.value)}
-                placeholder={f.ph ?? ''}
-                style={IN}
-              />
-            )}
-            {t === 'sel' && (
-              <select value={String(valor)} onChange={(e) => set(f.k, e.target.value)} style={IN}>
-                {(f.o ?? []).map((o) => (
-                  <option key={o} value={o}>
-                    {o}
-                  </option>
-                ))}
-              </select>
-            )}
-            {t === 'area' && (
-              <textarea
-                value={String(valor)}
-                onChange={(e) => set(f.k, e.target.value)}
-                rows={3}
-                placeholder={f.ph ?? ''}
-                style={{
-                  width: '100%',
-                  border: '1px solid var(--line-2)',
-                  borderRadius: 6,
-                  padding: '9px 10px',
-                  background: 'var(--bg-elev)',
-                  fontFamily: 'var(--font-sans)',
-                  fontSize: 13.5,
-                  resize: 'vertical',
-                }}
-              />
-            )}
-            {t === 'chk' && (
-              <span
-                style={{
-                  display: 'flex',
-                  alignItems: 'center',
-                  gap: 9,
-                  padding: '9px 10px',
-                  border: '1px solid var(--line-2)',
-                  borderRadius: 6,
-                  background: 'var(--bg-elev)',
-                }}
-              >
-                <input
-                  type="checkbox"
-                  checked={valor === true}
-                  onChange={(e) => set(f.k, e.target.checked)}
-                  style={{ accentColor: 'var(--accent)', width: 15, height: 15, flex: '0 0 auto' }}
-                />
-                <span style={{ fontSize: 13, color: 'var(--ink-2)' }}>{f.ph}</span>
-              </span>
-            )}
-            {t === 'ro' && (
-              <span
-                style={{
-                  display: 'block',
-                  minHeight: 38,
-                  lineHeight: '19px',
-                  padding: '9px 10px',
-                  border: '1px dashed var(--line-2)',
-                  borderRadius: 6,
-                  fontFamily: 'var(--font-mono)',
-                  fontSize: 13,
-                  color: 'var(--ink-2)',
-                }}
-              >
-                {String(valor)}
-              </span>
-            )}
-            {f.ayuda && (
-              <span style={{ fontSize: 11.5, lineHeight: 1.4, color: 'var(--ink-4)', textWrap: 'pretty' }}>{f.ayuda}</span>
-            )}
-          </label>
-        );
-      })}
+            Usar este token
+          </button>
+        </div>
+      )}
+      <div style={{ display: 'flex', gap: 8, marginTop: 5 }}>
+        {error.incidencia && (
+          <button
+            onClick={() => {
+              void navigator.clipboard?.writeText(error.incidencia!);
+              toast(`Referencia ${error.incidencia} copiada.`);
+            }}
+            className="hov-linea"
+            style={BOTON_SEC}
+          >
+            Copiar referencia
+          </button>
+        )}
+        {error.reintentable && (
+          <button onClick={onReintentar} className="hov-acento-2" style={{ ...BOTON_SEC, border: 0, background: 'var(--accent)', color: 'var(--accent-contraste)', fontWeight: 500 }}>
+            Reintentar
+          </button>
+        )}
+      </div>
+    </section>
+  );
+}
+
+function Lectura<T>({ lectura, ruta, acceso, children }: { lectura: Lect<T>; ruta: string; acceso: string; children: ReactNode }) {
+  if (lectura.cargando) return <Cargando />;
+  if (lectura.error) return <Fallo error={lectura.error} ruta={ruta} acceso={acceso} onReintentar={lectura.reintentar} />;
+  return <>{children}</>;
+}
+
+function TablaDeTextos({
+  cols,
+  filas,
+  min,
+  insigniaEn = -1,
+  vacio,
+  onFila,
+}: {
+  cols: ColDef[];
+  filas: ReactNode[][];
+  min?: string;
+  insigniaEn?: number;
+  vacio: ReactNode;
+  onFila?: (i: number) => void;
+}) {
+  return (
+    <div style={{ overflowX: 'auto' }}>
+      <table style={{ width: '100%', borderCollapse: 'collapse', minWidth: min }}>
+        <thead>
+          <tr>
+            {cols.map((c, i) => (
+              <th key={i} style={c[1] ? THN : TH}>
+                {c[0]}
+              </th>
+            ))}
+          </tr>
+        </thead>
+        <tbody>
+          {filas.length === 0 && (
+            <tr>
+              <td colSpan={cols.length} style={{ padding: '26px 16px', textAlign: 'center', fontSize: 13, color: 'var(--ink-3)' }}>
+                {vacio}
+              </td>
+            </tr>
+          )}
+          {filas.map((f, i) => (
+            <tr
+              key={i}
+              className={onFila ? 'hov-acento' : 'hov-elev'}
+              onClick={onFila ? () => onFila(i) : undefined}
+              style={{ borderTop: '1px solid var(--line)', cursor: onFila ? 'pointer' : undefined }}
+            >
+              {f.map((c, j) =>
+                j === insigniaEn ? (
+                  <td key={j} style={{ padding: '11px 14px' }}>
+                    <Insignia tono={tonoDeSituacion(String(c))}>{rotuloDeSituacion(String(c))}</Insignia>
+                  </td>
+                ) : (
+                  <td key={j} style={j === 0 ? TD1 : cols[j] && cols[j][1] ? TDN : TD}>
+                    {c}
+                  </td>
+                ),
+              )}
+            </tr>
+          ))}
+        </tbody>
+      </table>
     </div>
   );
 }
 
-/** El aviso con filete de color a la izquierda: la guía del valor. */
-function Guia({
-  color,
-  fondo,
-  texto,
-  accion,
-  onAccion,
-}: {
-  color: string;
-  fondo: string;
-  texto: string;
-  accion: string;
-  onAccion: () => void;
-}) {
+/** Un campo del formulario, con su rótulo y su ayuda. */
+function Campo({ etiqueta, ayuda, ancho, children }: { etiqueta: string; ayuda?: ReactNode; ancho?: boolean; children: ReactNode }) {
   return (
-    <div
+    <label style={{ display: 'block', minWidth: 0, gridColumn: ancho ? '1 / -1' : undefined }}>
+      <span style={{ display: 'block', fontSize: 10.5, fontWeight: 500, textTransform: 'uppercase', letterSpacing: '.1em', color: 'var(--ink-3)', marginBottom: 5 }}>
+        {etiqueta}
+      </span>
+      {children}
+      {ayuda && <span style={{ display: 'block', fontSize: 11, color: 'var(--ink-4)', marginTop: 4, textWrap: 'pretty' }}>{ayuda}</span>}
+    </label>
+  );
+}
+
+function Rejilla({ children }: { children: ReactNode }) {
+  return <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit,minmax(220px,1fr))', gap: 13, padding: '14px 16px' }}>{children}</div>;
+}
+
+/**
+ * La barra de la acción que escribe.
+ *
+ * La primaria nace **apagada sin observación** (regla 10, RNF-052), y su
+ * `title` dice por qué: sin motivo no se guarda, y el backend lo comprueba
+ * también de su lado. Cuando falta algo más, lo nombra.
+ */
+function BarraDeAccion({
+  observacion,
+  onObservacion,
+  impedimento,
+  etiqueta,
+  aviso,
+  enviando,
+  onEnviar,
+}: {
+  observacion: string;
+  onObservacion: (v: string) => void;
+  impedimento: string | null;
+  etiqueta: string;
+  aviso: ReactNode;
+  enviando: boolean;
+  onEnviar: () => void;
+}) {
+  const apagada = impedimento !== null || enviando;
+  return (
+    <>
+      <Rejilla>
+        <Campo
+          etiqueta="Observación"
+          ancho
+          ayuda="Toda modificación de datos se guarda con el motivo de quien la hace. Sin ella el servidor rechaza la petición."
+        >
+          <textarea
+            value={observacion}
+            onChange={(e) => onObservacion(e.target.value)}
+            rows={2}
+            placeholder="Por qué se registra este acto"
+            style={{ ...CONTROL, resize: 'vertical', minHeight: 60 }}
+          />
+        </Campo>
+      </Rejilla>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap', padding: '12px 16px', borderTop: '1px solid var(--line)', background: 'var(--bg-elev)' }}>
+        <p style={{ margin: 0, flex: 1, minWidth: 200, fontSize: 12, color: 'var(--ink-3)', textWrap: 'pretty' }}>{aviso}</p>
+        <button
+          onClick={onEnviar}
+          disabled={apagada}
+          aria-disabled={apagada}
+          title={impedimento ?? undefined}
+          className={apagada ? undefined : 'hov-acento-2'}
+          style={{
+            border: 0,
+            borderRadius: 6,
+            padding: '9px 20px',
+            background: 'var(--accent)',
+            color: 'var(--accent-contraste)',
+            fontSize: 13,
+            fontWeight: 500,
+            cursor: apagada ? 'not-allowed' : 'pointer',
+            opacity: apagada ? 0.55 : 1,
+          }}
+        >
+          {enviando ? 'Enviando…' : etiqueta}
+        </button>
+      </div>
+      {impedimento !== null && (
+        <p style={{ margin: 0, padding: '0 16px 12px', fontSize: 12, color: 'var(--warn-fg)', textWrap: 'pretty' }}>{impedimento}</p>
+      )}
+    </>
+  );
+}
+
+/** Una fila de la bandeja del panel: cuenta cuántos valores hay en su situación. */
+function FilaDeBandeja({
+  situacion,
+  onAbrir,
+}: {
+  situacion: (typeof SITUACIONES_EXPLICADAS)[number];
+  onAbrir: (s: Situacion) => void;
+}) {
+  const censo = useRecurso((s) => consultarValores({ estado: situacion.k }, { tamano: 1 }, s), [situacion.k], true);
+  return (
+    <button
+      onClick={() => onAbrir(situacion.k)}
+      className="hov-acento"
       style={{
         display: 'flex',
-        alignItems: 'flex-start',
-        gap: 12,
+        alignItems: 'center',
+        gap: 14,
+        width: '100%',
+        textAlign: 'left',
+        border: 0,
+        borderBottom: '1px solid var(--line)',
+        background: 'transparent',
         padding: '13px 16px',
-        border: '1px solid var(--line-2)',
-        borderLeft: `3px solid ${color}`,
-        borderRadius: 8,
-        background: fondo,
+        cursor: 'pointer',
+        font: 'inherit',
+        color: 'inherit',
       }}
     >
-      <svg
-        width="17"
-        height="17"
-        viewBox="0 0 24 24"
-        fill="none"
-        stroke="currentColor"
-        strokeWidth="1.8"
-        strokeLinecap="round"
-        style={{ color, flex: '0 0 auto', marginTop: 1 }}
-        aria-hidden="true"
-      >
-        <circle cx="12" cy="12" r="8.5" />
-        <path d="M12 8.4v.02M12 11.4v4.2" />
-      </svg>
-      <p style={{ margin: 0, flex: 1, fontSize: 13, lineHeight: 1.55, color, textWrap: 'pretty' }}>{texto}</p>
-      <button
-        onClick={onAccion}
-        className="hov-elev"
-        style={{
-          border: `1px solid ${color}`,
-          borderRadius: 6,
-          padding: '6px 13px',
-          background: 'transparent',
-          color,
-          fontSize: 12.5,
-          fontWeight: 500,
-          cursor: 'pointer',
-          flex: '0 0 auto',
-        }}
-      >
-        {accion}
-      </button>
-    </div>
+      <Insignia tono={situacion.tono}>{situacion.label}</Insignia>
+      <span style={{ flex: 1, minWidth: 0 }}>
+        <span style={{ display: 'block', fontSize: 12, color: 'var(--ink-3)', textWrap: 'pretty' }}>{situacion.que}</span>
+      </span>
+      <span style={{ textAlign: 'right', flex: '0 0 auto' }}>
+        <span style={{ display: 'block', fontFamily: 'var(--font-mono)', fontSize: 15, color: 'var(--ink)' }}>
+          {censo.cargando ? '…' : censo.error ? SIN_DATO : (censo.datos?.totalElementos ?? 0).toLocaleString('es-PE')}
+        </span>
+        <span style={{ display: 'block', fontSize: 10.5, color: 'var(--ink-4)' , marginTop: 2 }}>
+          {censo.error?.codigo === 'SIN_PRIVILEGIO' ? 'sin permiso' : censo.datos?.totalElementos === 1 ? 'valor' : 'valores'}
+        </span>
+      </span>
+      <Icono d={ICO.flechaDer} tam={14} grosor={1.8} style={{ color: 'var(--ink-4)', flex: '0 0 auto' }} />
+    </button>
   );
 }
 
 /* ══════════ El módulo ══════════ */
-
-type ValorConReloj = Valor & { presc: Prescripcion; etapa: string };
-
-type Pestania = {
-  id: string;
-  label: string;
-  titulo: string;
-  nota: string;
-  campos: CampoDef[];
-  tabla: { titulo: string; conteo: string; min: string; cols: ColDef[]; filas: string[][]; totales?: Total[]; nota: string };
-  secundaria: string;
-  primaria: string;
-  aviso: string;
-};
-
 export default function Valores({ dest, onDest }: PantallaProps) {
   const { toast } = usarPreferencias();
-  const [valor, setValor] = useState<string | null>(null);
+
+  /* ── Lista y expediente ── */
   const [q, setQ] = useState('');
-  const [chip, setChip] = useState('Todas');
-  const [tab, setTab] = useState(0);
-  const [vals, setVals] = useState<Record<string, string | boolean>>({});
-  const [marcadas, setMarcadas] = useState<Record<string, boolean>>({});
-  const [hojaEmision, setHojaEmision] = useState<'individual' | 'masiva'>('individual');
-  const [presMarcadas, setPresMarcadas] = useState<Record<number, boolean>>({ 0: true, 1: true, 2: false });
+  const criterio = useRebote(q.trim());
+  const [fTipo, setFTipo] = useState<'' | TipoDeValor>('');
+  const [fSituacion, setFSituacion] = useState<'' | Situacion>('');
+  const [abierto, setAbierto] = useState<ValorConsultado | null>(null);
+  const [pestania, setPestania] = useState<Pestania>('valor');
 
-  /* Salir del módulo por el panel de destinos cierra el valor abierto: el
-     expediente del valor vive dentro de «Valores», no es un destino más. */
-  useEffect(() => setValor(null), [dest]);
+  /* ── Emisión ── */
+  const [hoja, setHoja] = useState<'individual' | 'masiva'>('individual');
+  const [eCod, setECod] = useState('');
+  const codDeEmision = useRebote(eCod.trim());
+  const [eTipo, setETipo] = useState<TipoDeValor>('OP');
+  const [eMarcadas, setEMarcadas] = useState<Record<string, boolean>>({});
+  const [eObs, setEObs] = useState('');
+  const [emitido, setEmitido] = useState<Valor | null>(null);
 
-  const val = (k: string, d: string | boolean | undefined) => (vals[k] === undefined ? d : vals[k]);
-  const set = (k: string, v: string | boolean) => setVals((x) => ({ ...x, [k]: v }));
+  const [mTipo, setMTipo] = useState<TipoDeValor>('OP');
+  const [mTributo, setMTributo] = useState('');
+  const [mDesde, setMDesde] = useState('');
+  const [mHasta, setMHasta] = useState('');
+  const [mFecha, setMFecha] = useState('');
+  const [mLista, setMLista] = useState('');
+  const [mCsv, setMCsv] = useState<{ nombre: string; base64: string } | null>(null);
+  const [mObs, setMObs] = useState('');
+  const [corrida, setCorrida] = useState<CorridaMasiva | null>(null);
 
-  /* La etapa se **deriva** del par (notificado, prescripción): escrita a mano
-     al lado de un reloj calculado, una misma fila declaraba «sin notificar» y
-     «prescrito» en columnas contiguas. */
-  const conReloj = useMemo<ValorConReloj[]>(
-    () =>
-      VALORES.map((v) => {
-        const presc = prescripcionDe(v);
-        const etapa = presc.vencido
-          ? 'Prescrito'
-          : v.notificado === ''
-            ? 'Emitido sin notificar'
-            : v.enCoactiva
-              ? 'En coactiva'
-              : v.firme
-                ? 'Firme sin pase'
-                : 'Notificado en plazo';
-        return { ...v, presc, etapa };
-      }),
-    [],
-  );
+  /* ── Notificación y pase ── */
+  const [nFecha, setNFecha] = useState('');
+  const [nModalidad, setNModalidad] = useState<Modalidad>('PERSONAL');
+  const [nResultado, setNResultado] = useState<ResultadoDeDiligencia>('NOTIFICADO');
+  const [nNotificador, setNNotificador] = useState('');
+  const [nDireccion, setNDireccion] = useState('');
+  const [nRecibe, setNRecibe] = useState('');
+  const [nDoc, setNDoc] = useState('');
+  const [nVinculo, setNVinculo] = useState('');
+  const [nAcuse, setNAcuse] = useState('');
+  const [nObs, setNObs] = useState('');
+  const [notificada, setNotificada] = useState<Notificacion | null>(null);
 
-  /* El reloj por ejercicio: la barra y el plazo salen del cómputo, no de una
-     cifra escrita. La tarjeta y la tabla leen los mismos agregados. */
-  const relojAnios = useMemo(
-    () =>
-      EJERCICIOS_DEL_RELOJ.map((anio) => {
-        const p = prescripcionDe({ anioDeuda: anio, notificado: '' });
-        return { anio, presc: p, n: CONTEOS[anio], importe: MONTOS[anio] };
-      }),
-    [],
-  );
-  const cerca = relojAnios.filter((r) => !r.presc.vencido && r.presc.meses <= 12);
-  const relojN = cerca.reduce((a, r) => a + r.n, 0);
-  const relojMonto = cerca.reduce((a, r) => a + r.importe, 0);
+  const [pcoFecha, setPcoFecha] = useState('');
+  const [pcoObs, setPcoObs] = useState('');
+  const [movido, setMovido] = useState<MovimientoDelValor | null>(null);
 
-  const filtrados = chip === 'Todas' ? conReloj : conReloj.filter((v) => v.etapa === chip);
-  const nMarcadas = filtrados.filter((v) => marcadas[v.numero]).length;
+  /* ── Prescripción ── */
+  const [prCod, setPrCod] = useState('');
+  const codDePrescripcion = useRebote(prCod.trim());
+  const [prTributo, setPrTributo] = useState('');
+  const [prDesde, setPrDesde] = useState('');
+  const [prHasta, setPrHasta] = useState('');
+  const [prPresentacion, setPrPresentacion] = useState('');
+  const [prCausal, setPrCausal] = useState<Causal>('DECLARACION_PRESENTADA');
+  const [prResolucion, setPrResolucion] = useState('');
+  const [prHechos, setPrHechos] = useState<HechoDelComputo[]>([]);
+  const [prObs, setPrObs] = useState('');
+  const [declarada, setDeclarada] = useState<Prescripcion | null>(null);
+  const [confirmando, setConfirmando] = useState(false);
 
-  const sel = conReloj.find((v) => v.numero === valor) ?? conReloj[3];
-  const selPres = sel.presc;
-  const esValor = dest === 'lista' && valor !== null;
+  /* ── El envío, común a los cinco actos ── */
+  const [enviando, setEnviando] = useState(false);
+  const [falloDeEscritura, setFalloDeEscritura] = useState<ErrorDeApi | null>(null);
 
-  /* ── Las pestañas del valor ───────────────────────────────── */
-  const TABS: Pestania[] = [
-    {
-      id: 'valor',
-      label: 'El valor',
-      titulo: 'Datos del valor',
-      nota: 'El criterio y el tipo de recaudo deciden qué documento es y de qué oficina sale.',
-      campos: [
-        { k: 'vNum', l: 'Nº de valor', t: 'ro', v: sel.numero },
-        { k: 'vCriterio', l: 'Código de criterio', t: 'ro', v: '00000007891' },
-        {
-          k: 'vTipo',
-          l: 'Tipo de recaudo',
-          t: 'sel',
-          ancho: true,
-          v: '005 — RD PREDIAL FISCALIZACIÓN',
-          o: [
-            '005 — RD PREDIAL FISCALIZACIÓN',
-            '001 — ORDEN DE PAGO PREDIAL',
-            '003 — RS PAPELETAS DE TRÁNSITO',
-            '035 — RM PAPELETAS ADMINISTRATIVAS',
-            '004 — RES. EJECUCIÓN COACTIVA',
-          ],
-        },
-        { k: 'vContrib', l: 'Contribuyente', t: 'ro', ancho: true, v: sel.contribuyente },
-        { k: 'vDesde', l: 'Año desde', t: 'text', v: '2021' },
-        { k: 'vHasta', l: 'Año hasta', t: 'text', v: '2026' },
-        { k: 'vFecha', l: 'Fecha de cálculo', t: 'date', v: '2026-08-13' },
-        {
-          k: 'vMotivo',
-          l: 'Motivo · base legal',
-          t: 'sel',
-          ancho: true,
-          v: 'ART. 76º — RESOLUCIÓN DE DETERMINACIÓN',
-          o: ['ART. 76º — RESOLUCIÓN DE DETERMINACIÓN', 'ART. 78º — ORDEN DE PAGO', 'ART. 180º — RESOLUCIÓN DE MULTA'],
-        },
-        {
-          k: 'vOficina',
-          l: 'Oficina emisora',
-          t: 'sel',
-          ancho: true,
-          v: '113300 — SUBGERENCIA DE FISCALIZACIÓN TRIBUTARIA',
-          o: ['113300 — SUBGERENCIA DE FISCALIZACIÓN TRIBUTARIA', '113100 — UNIDAD DE RENTAS', '113200 — TESORERÍA'],
-        },
-      ],
-      tabla: {
-        titulo: 'Recaudos que componen el valor',
-        conteo: RECAUDOS.length + ' recaudos',
-        min: '760px',
-        cols: [['Nº recaudo', 0], ['Ejercicio', 0], ['Criterio', 0], ['Concepto', 0], ['Insoluto S/', 1], ['Interés S/', 1], ['Total S/', 1]],
-        filas: RECAUDOS,
-        totales: [
-          ['Recaudos', String(RECAUDOS.length), 0],
-          ['Insoluto', 'S/ 6,670.00', 0],
-          ['Interés', 'S/ 1,615.60', 0],
-          ['Importe del valor', 'S/ 8,285.60', 1],
-        ],
-        nota: 'El valor no se edita recaudo a recaudo: se anula y se genera de nuevo con el criterio corregido.',
-      },
-      secundaria: 'Vista previa',
-      primaria: 'Guardar el valor',
-      aviso: 'Un valor guardado y no notificado se puede anular sin consecuencias. Notificado, ya no.',
-    },
-    {
-      id: 'notificacion',
-      label: 'Notificación',
-      titulo: 'Notificación del valor',
-      nota: 'Hasta que esto se registra, el valor no hace correr ningún plazo y no se puede cobrar. Es el acto que interrumpe la prescripción.',
-      campos: [
-        { k: 'nNum', l: 'Nº de notificación', t: 'text', v: '' },
-        { k: 'nVisita', l: 'Nº de visita', t: 'text', v: '1' },
-        { k: 'nFecha', l: 'Fecha de notificación', t: 'date', v: '2026-08-14' },
-        { k: 'nVence', l: 'Vence', t: 'ro', v: '13/09/2026', ayuda: 'Veinte días hábiles para reclamar' },
-        { k: 'nNotificador', l: 'Notificador', t: 'sel', v: 'M. RÍOS MENDOZA', o: ['M. RÍOS MENDOZA', 'V. RETO SANTOS', 'J. QUISPE PEÑA'] },
-        { k: 'nDomicilio', l: 'Domicilio', t: 'ro', ancho: true, v: 'AV. JOSÉ DE LAMA 1180 — CATACAOS' },
-        {
-          k: 'nRecibido',
-          l: 'Recibido por',
-          t: 'sel',
-          v: 'CONTRIBUYENTE',
-          o: ['CONTRIBUYENTE', 'FAMILIAR', 'DEPENDIENTE', 'NEGATIVA A RECIBIR', 'CEDULÓN', 'NO SE UBICÓ EL DOMICILIO'],
-        },
-        { k: 'nNombre', l: 'Nombre del receptor', t: 'text', v: '' },
-        { k: 'nDni', l: 'D.N.I. del receptor', t: 'text', v: '' },
-        {
-          k: 'nTipo',
-          l: 'Tipo de notificación',
-          t: 'sel',
-          v: 'NOTIFICACIÓN CON ÉXITO',
-          o: ['NOTIFICACIÓN CON ÉXITO', 'CEDULÓN EN DOMICILIO', 'NEGATIVA A RECIBIR', 'DOMICILIO NO UBICADO'],
-        },
-        { k: 'nFirma', l: 'Con firma', t: 'chk', v: false, ph: 'El receptor firmó el cargo' },
-        { k: 'nVivienda', l: 'Características de la vivienda', t: 'area', ancho: true, v: '', ph: 'Obligatorio cuando se deja cedulón' },
-      ],
-      tabla: {
-        titulo: 'Visitas registradas',
-        conteo: 'Sin visitas',
-        min: '620px',
-        cols: [['Visita', 0], ['Fecha', 0], ['Resultado', 0], ['Receptor', 0], ['Notificador', 0]],
-        filas: [],
-        nota: 'Dos visitas fallidas habilitan la notificación por cedulón. Sin las dos, el cedulón es impugnable.',
-      },
-      secundaria: 'Imprimir cargo',
-      primaria: 'Registrar notificación',
-      aviso: 'Al registrar la notificación empieza el plazo de veinte días hábiles y se reinicia el conteo de prescripción.',
-    },
-    {
-      id: 'movimientos',
-      label: 'Movimientos',
-      titulo: 'Movimientos del valor',
-      nota: 'El pase a coactiva es un movimiento, no un botón: se registra con su tipo y su fecha, y el ejecutor lo acepta o lo rechaza.',
-      campos: [
-        {
-          k: 'mTipo',
-          l: 'Tipo de movimiento',
-          t: 'sel',
-          ancho: true,
-          v: 'PCO — PASE A COACTIVAS',
-          o: ['PCO — PASE A COACTIVAS', 'ACO — ACEPTADO EN COACTIVAS', 'RCO — RECHAZADO EN COACTIVAS', 'ANU — ANULACIÓN DEL VALOR'],
-        },
-        { k: 'mFecha', l: 'Fecha del movimiento', t: 'date', v: '2026-08-14' },
-        { k: 'mExp', l: 'Expediente coactivo', t: 'text', v: '', ayuda: 'Lo asigna la ejecutoría al aceptar' },
-        { k: 'mObs', l: 'Observación', t: 'area', ancho: true, v: '', ph: 'Motivo del pase o del rechazo' },
-      ],
-      tabla: {
-        titulo: 'Historial de movimientos',
-        conteo: '1 movimiento',
-        min: '620px',
-        cols: [['Nº', 0], ['Tipo', 0], ['Fecha', 0], ['Observación', 0], ['Usuario', 0]],
-        filas: MOVIMIENTOS,
-        nota: 'Un valor rechazado en coactiva vuelve a la etapa «firme sin pase» y hay que corregir lo que el ejecutor observó.',
-      },
-      secundaria: 'Ver expediente',
-      primaria: 'Registrar movimiento',
-      aviso: 'Solo se puede pasar a coactiva un valor firme: notificado y con el plazo vencido sin reclamo.',
-    },
-  ];
-  const tabIdx = Math.min(tab, TABS.length - 1);
-  const tabDef = TABS[tabIdx];
-
-  const guia =
-    sel.notificado === ''
-      ? {
-          texto:
-            'Este valor no está notificado. Mientras no lo esté no se puede cobrar, no es firme y el conteo de prescripción sigue corriendo desde el 01/01/' +
-            (sel.anioDeuda + 1) +
-            '.',
-          color: 'var(--bad-fg)',
-          fondo: 'var(--bad-bg)',
-          accion: 'Notificar',
-          ir: 1,
-        }
-      : sel.etapa === 'Firme sin pase'
-        ? {
-            texto: 'Notificado, vencido y sin reclamo: es firme. Se puede remitir a cobranza coactiva y no se ha hecho.',
-            color: 'var(--warn-fg)',
-            fondo: 'var(--warn-bg)',
-            accion: 'Pasar a coactiva',
-            ir: 2,
-          }
-        : {
-            texto: 'Notificado el ' + sel.notificado + '. El plazo de veinte días hábiles ya corrió y el valor sigue su curso.',
-            color: 'var(--ok-fg)',
-            fondo: 'var(--ok-bg)',
-            accion: 'Ver movimientos',
-            ir: 2,
-          };
-
-  /* ── Emisión ──────────────────────────────────────────────── */
-  const esIndividual = hojaEmision === 'individual';
-  const emision = esIndividual
-    ? {
-        endpoint: 'POST /api/v1/valores/individual',
-        campos: [
-          { k: 'eContrib', l: 'Contribuyente', t: 'text', ancho: true, v: '00000003542 — SANTIAGO MOSCOL, GASPAR' },
-          { k: 'eCriterio', l: 'Código de criterio', t: 'ro', v: '00000007891' },
-          {
-            k: 'eTipo',
-            l: 'Tipo de recaudo',
-            t: 'sel',
-            ancho: true,
-            v: '005 — RD PREDIAL FISCALIZACIÓN',
-            o: ['005 — RD PREDIAL FISCALIZACIÓN', '001 — ORDEN DE PAGO PREDIAL', '004 — RES. EJECUCIÓN COACTIVA'],
-          },
-          { k: 'eDesde', l: 'Año desde', t: 'text', v: '2021' },
-          { k: 'eHasta', l: 'Año hasta', t: 'text', v: '2026' },
-          { k: 'eVence', l: 'Vencimiento', t: 'date', v: '2026-09-13' },
-          {
-            k: 'eOficina',
-            l: 'Oficina emisora',
-            t: 'sel',
-            ancho: true,
-            v: '113300 — SUBGERENCIA DE FISCALIZACIÓN TRIBUTARIA',
-            o: ['113300 — SUBGERENCIA DE FISCALIZACIÓN TRIBUTARIA', '113100 — UNIDAD DE RENTAS'],
-          },
-        ] as CampoDef[],
-        tabla: {
-          titulo: 'Deuda que entra en el valor',
-          conteo: '3 ejercicios',
-          min: '740px',
-          cols: [['Ejercicio', 0], ['Concepto', 0], ['Unidad', 0], ['Insoluto S/', 1], ['Interés S/', 1], ['Total S/', 1]] as ColDef[],
-          filas: DEUDA_DEL_VALOR,
-          nota: 'Un valor por contribuyente y por tipo de recaudo. Ejercicios distintos entran como recaudos del mismo valor.',
-        },
-        totales: [
-          ['Ejercicios', '3', 0],
-          ['Insoluto', 'S/ 6,670.00', 0],
-          ['Interés', 'S/ 1,615.60', 0],
-          ['Importe del valor', 'S/ 8,285.60', 1],
-        ] as Total[],
-        primaria: 'Generar el valor',
-        aviso: 'Genera un valor. El siguiente paso es notificarlo: sin eso no cobra ni interrumpe la prescripción.',
-      }
-    : {
-        endpoint: 'POST /api/v1/valores/masiva',
-        campos: [
-          { k: 'mCriterio', l: 'Descripción del criterio', t: 'text', ancho: true, v: 'ÓRDENES DE PAGO PREDIAL 2026 — CUOTA 2' },
-          {
-            k: 'mTipoRec',
-            l: 'Tipo de recaudo',
-            t: 'sel',
-            ancho: true,
-            v: '001 — ORDEN DE PAGO PREDIAL',
-            o: ['001 — ORDEN DE PAGO PREDIAL', '005 — RD PREDIAL FISCALIZACIÓN', '003 — RS PAPELETAS DE TRÁNSITO'],
-          },
-          { k: 'mAlcance', l: 'Alcance', t: 'sel', v: 'TODO EL PADRÓN', o: ['TODO EL PADRÓN', 'POR SECTOR', 'POR RANGO DE DEUDA', 'SOLO VENCIDOS'] },
-          { k: 'mAnio', l: 'Ejercicio de la deuda', t: 'sel', v: '2026', o: ['2026', '2025', '2024', '2023', '2022'] },
-          { k: 'mMinimo', l: 'Deuda mínima (S/)', t: 'text', v: '50.00', ayuda: 'Por debajo, el valor cuesta más que lo que cobra' },
-          { k: 'mVence', l: 'Vencimiento', t: 'date', v: '2026-09-30' },
-          {
-            k: 'mOficina',
-            l: 'Oficina emisora',
-            t: 'sel',
-            ancho: true,
-            v: '113100 — UNIDAD DE RENTAS',
-            o: ['113100 — UNIDAD DE RENTAS', '113300 — SUBGERENCIA DE FISCALIZACIÓN TRIBUTARIA'],
-          },
-        ] as CampoDef[],
-        tabla: {
-          titulo: 'Simulación del lote',
-          conteo: 'Sobre 62,418 cuentas',
-          min: '700px',
-          cols: [['Etapa', 0], ['Cuentas', 1], ['Importe S/', 1], ['Excluidas', 1], ['Motivo de exclusión', 0]] as ColDef[],
-          filas: SIMULACION_DEL_LOTE,
-          nota: 'Simular no emite nada. Las exclusiones son la parte que hay que leer: cada una es una decisión que el criterio tomó por ti.',
-        },
-        totales: [
-          ['Valores a emitir', '12,884', 0],
-          ['Importe', 'S/ 3.38 M', 0],
-          ['Excluidas', '5,528', 0],
-          ['Coste de emisión', 'S/ 57,978.00', 1],
-        ] as Total[],
-        primaria: 'Emitir el lote',
-        aviso: 'Emitir 12,884 valores es irreversible: cada uno queda con su número correlativo y solo se anula uno a uno.',
-      };
-
-  /* ── Prescripción ─────────────────────────────────────────── */
-  let presSuma = 0;
-  let presN = 0;
-  PRESCRITAS.forEach((p, i) => {
-    if (presMarcadas[i]) {
-      presSuma += p[6];
-      presN++;
+  async function enviar<T>(accion: () => Promise<T>, tras: (r: T) => void, dicho: string) {
+    setEnviando(true);
+    setFalloDeEscritura(null);
+    try {
+      const r = await accion();
+      tras(r);
+      toast(dicho);
+    } catch (fallo) {
+      setFalloDeEscritura(fallo instanceof ErrorDeApi ? fallo : new ErrorDeApi('ERROR_INTERNO', 'No se pudo completar la operación', 0));
+    } finally {
+      setEnviando(false);
     }
-  });
+  }
 
+  /* Salir del módulo por el panel cierra el valor abierto: el expediente vive
+     dentro de «Valores», no es un destino más. */
+  useEffect(() => {
+    setAbierto(null);
+    setFalloDeEscritura(null);
+  }, [dest]);
+
+  const esValor = dest === 'lista' && abierto !== null;
+
+  /* ── Las lecturas ───────────────────────────────────────────── */
+  const lista = useRecurso(
+    (s) =>
+      consultarValores(
+        { nroDeValor: criterio || undefined, tipo: fTipo || undefined, estado: fSituacion || undefined },
+        { tamano: 50 },
+        s,
+      ),
+    [criterio, fTipo, fSituacion],
+    dest === 'lista' && abierto === null,
+  );
+  const censoTotal = useRecurso((s) => consultarValores({}, { tamano: 1 }, s), [], dest === 'panel');
+
+  /* La cabecera completa del valor abierto: la base legal, la observación con
+     que se emitió y el ejercicio solo los publica `valores_busqueda`. */
+  const cabecera = useRecurso(
+    (s) => listarValores({ nroDeValor: abierto!.numero }, { tamano: 1 }, s),
+    [abierto?.numero],
+    esValor,
+  );
+
+  /* La deuda que puede formalizar el valor individual. Es la única fuente de
+     qué obligaciones existen y con qué desglose: el valor no crea deuda, la
+     formaliza. */
+  const deudaAEmitir = useRecurso(
+    (s) => deudaDelContribuyente({ codContribuyente: codDeEmision }, { tamano: 50 }, s),
+    [codDeEmision],
+    dest === 'emision' && hoja === 'individual' && codDeEmision !== '',
+  );
+  /* Lo que el contribuyente debe, para elegir el tributo y el rango sobre el
+     que se pide la prescripción. */
+  const deudaAPrescribir = useRecurso(
+    (s) => deudaDelContribuyente({ codContribuyente: codDePrescripcion }, { tamano: 50 }, s),
+    [codDePrescripcion],
+    dest === 'prescripcion' && codDePrescripcion !== '',
+  );
+  const yaPrescritos = useRecurso(
+    (s) => consultarValores({ codContribuyente: codDePrescripcion, estado: 'PRESCRITO' }, { tamano: 20 }, s),
+    [codDePrescripcion],
+    dest === 'prescripcion' && codDePrescripcion !== '',
+  );
+
+  /* ── Emisión individual: qué se marcó ─────────────────────── */
+  const llaveDe = (o: ObligacionConDeuda) => `${o.tributo}|${o.ejercicio}|${o.predioId ?? ''}|${o.vehiculoId ?? ''}`;
+  const obligaciones = deudaAEmitir.datos?.contenido ?? [];
+  const marcadas = obligaciones.filter((o) => eMarcadas[llaveDe(o)] === true);
+
+  const impedimentoIndividual =
+    codDeEmision === ''
+      ? 'Falta el contribuyente: un valor se emite a nombre de alguien.'
+      : marcadas.length === 0
+        ? 'Marca al menos una obligación: un valor formaliza deuda que ya existe, no la crea.'
+        : eObs.trim() === ''
+          ? 'Falta la observación: toda emisión se guarda con el motivo de quien la hace.'
+          : null;
+
+  const contribuyentesDelLote = mLista
+    .split(/[\n,;]+/)
+    .map((x) => x.trim())
+    .filter((x) => x !== '');
+  const impedimentoMasivo =
+    mDesde.trim() === '' || mHasta.trim() === ''
+      ? 'Falta el rango de ejercicios: la corrida acota qué deuda entra.'
+      : contribuyentesDelLote.length === 0 && mCsv === null
+        ? 'Falta la lista de candidatos: o se pegan los códigos, o se importa el archivo.'
+        : contribuyentesDelLote.length > 0 && mCsv !== null
+          ? 'Sobra una de las dos listas: el servidor admite la selección o el archivo, y solo uno de los dos.'
+          : mObs.trim() === ''
+            ? 'Falta la observación: toda corrida se guarda con el motivo de quien la hace.'
+            : null;
+
+  const impedimentoNotificacion =
+    nFecha === ''
+      ? 'Falta la fecha de la diligencia.'
+      : nNotificador.trim() === ''
+        ? 'Falta el notificador: la diligencia la lleva alguien con nombre.'
+        : nObs.trim() === ''
+          ? 'Falta la observación: sin motivo no se guarda.'
+          : null;
+
+  const impedimentoPase = pcoObs.trim() === '' ? 'Falta la observación: sin motivo no se guarda.' : null;
+
+  /* Un hecho a medias no se manda. El servidor lo rechaza —«Falta el campo
+     'hechos[].fechaDesde'»— y ese 422 de ida y vuelta es evitable: lo que falta
+     se ve desde aquí. Una suspensión sin fin sí se manda: el servidor la
+     admite, y el intervalo abierto es un estado legítimo. */
+  const hechoIncompleto = prHechos.findIndex((h) => h.causal.trim() === '' || h.fechaDesde === '');
+  const impedimentoPrescripcion =
+    codDePrescripcion === ''
+      ? 'Falta el contribuyente que la solicita.'
+      : prTributo.trim() === ''
+        ? 'Falta el tributo sobre el que se pide.'
+        : prDesde.trim() === '' || prHasta.trim() === ''
+          ? 'Falta el rango de ejercicios: el cómputo se resuelve ejercicio por ejercicio.'
+          : hechoIncompleto >= 0
+            ? `Al hecho ${hechoIncompleto + 1} le falta su causal o su fecha: un hecho sin las dos no dice nada del cómputo, y el servidor lo rechaza.`
+            : prObs.trim() === ''
+              ? 'Falta la observación: sin motivo no se declara.'
+              : null;
+
+  /* ── Cabecera ──────────────────────────────────────────────── */
   const titulos: Record<string, string> = {
     panel: 'Panel del módulo',
     lista: 'Valores',
     emision: 'Emisión',
     prescripcion: 'Prescripción',
   };
-  const miga = esValor ? ['Valores', 'Valor ' + sel.numero, tabDef.label] : ['Valores', titulos[dest] ?? 'Valores'];
-  const titulo = esValor ? 'Valor ' + sel.numero : (titulos[dest] ?? 'Valores');
+  const miga = esValor ? ['Valores', 'Valor ' + abierto.numero, PESTANIAS.find((p) => p.k === pestania)!.label] : ['Valores', titulos[dest] ?? 'Valores'];
+  const titulo = esValor ? 'Valor ' + abierto.numero : (titulos[dest] ?? 'Valores');
 
   const paleta = OPCIONES.map((o) => ({
     label: o[0],
     nota: 'Valores',
     ir: () => {
-      setValor(null);
-      onDest(o[1] === 'valor' ? 'lista' : o[1]);
+      setAbierto(null);
+      onDest(o[1]);
     },
   }));
 
@@ -747,65 +683,32 @@ export default function Valores({ dest, onDest }: PantallaProps) {
       miga={miga}
       titulo={titulo}
       paleta={paleta}
+      notasDeDestino={{
+        lista: lista.datos ? plural(lista.datos.totalElementos, 'valor emitido', 'valores emitidos') : 'Emitidos',
+        panel: censoTotal.datos ? plural(censoTotal.datos.totalElementos, 'valor', 'valores') : 'Qué le falta a cada valor',
+      }}
       tarjeta={
-        <div style={{ border: '1px solid var(--bad-fg)', borderRadius: 8, padding: '11px 12px', background: 'var(--bad-bg)' }}>
-          <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 6 }}>
-            <svg
-              width="13"
-              height="13"
-              viewBox="0 0 24 24"
-              fill="none"
-              stroke="currentColor"
-              strokeWidth="2"
-              strokeLinecap="round"
-              style={{ color: 'var(--bad-fg)', flex: '0 0 auto' }}
-              aria-hidden="true"
-            >
-              <circle cx="12" cy="12" r="9" />
-              <path d="M12 7.5V12l3 2" />
-            </svg>
-            <span style={{ fontSize: 11, fontWeight: 500, textTransform: 'uppercase', letterSpacing: '.1em', color: 'var(--bad-fg)' }}>
-              Prescriben este año
-            </span>
-          </div>
-          <p style={{ margin: 0, fontFamily: 'var(--font-mono)', fontSize: 19, color: 'var(--bad-fg)' }}>{soles(relojMonto)}</p>
-          <p style={{ margin: '4px 0 0', fontSize: 11.5, color: 'var(--bad-fg)' }}>
-            {relojN === 0
-              ? 'Ningún ejercicio prescribe en los próximos 12 meses'
-              : relojN.toLocaleString('es-PE') +
-                ' valores del ejercicio ' +
-                cerca.map((r) => r.anio).join(', ') +
-                ' pierden el cobro en ' +
-                Math.min(...cerca.map((r) => r.presc.meses)) +
-                ' meses'}
+        <div style={{ border: '1px solid var(--line-2)', borderRadius: 8, padding: '11px 12px', background: 'var(--bg-elev)' }}>
+          <p style={{ margin: 0, fontSize: 11, fontWeight: 500, textTransform: 'uppercase', letterSpacing: '.1em', color: 'var(--ink-3)' }}>
+            El reloj de prescripción
+          </p>
+          <p style={{ margin: '6px 0 0', fontSize: 11.5, lineHeight: 1.5, color: 'var(--ink-3)', textWrap: 'pretty' }}>
+            No se dibuja aquí: el plazo es una cifra normativa del conjunto de parámetros sellado, y esta interfaz no lo tiene ni lo puede
+            leer. Lo calcula el servidor al declarar la prescripción, ejercicio por ejercicio.
           </p>
         </div>
       }
       contexto={
         esValor
           ? {
-              volver: { label: 'Valores', onClick: () => setValor(null) },
-              codigo: sel.numero,
-              titular: sel.contribuyente,
-              ubic: sel.tipo,
+              volver: { label: 'Valores', onClick: () => setAbierto(null) },
+              codigo: abierto.numero,
+              titular: abierto.contribuyente,
+              ubic: `${abierto.tipo} · ${abierto.tributo ?? SIN_DATO} ${abierto.periodo ?? ''}`,
               derecha: (
                 <>
-                  <Insignia tono={tono(sel.etapa)}>{sel.etapa}</Insignia>
-                  <span
-                    style={{
-                      display: 'flex',
-                      alignItems: 'center',
-                      gap: 6,
-                      fontSize: 12,
-                      borderRadius: 999,
-                      padding: '4px 11px',
-                      whiteSpace: 'nowrap',
-                      background: selPres.vencido ? 'var(--bad-bg)' : selPres.meses <= 12 ? 'var(--warn-bg)' : 'var(--bg-elev)',
-                      color: selPres.vencido ? 'var(--bad-fg)' : selPres.meses <= 12 ? 'var(--warn-fg)' : 'var(--ink-3)',
-                    }}
-                  >
-                    {selPres.texto + ' · ' + selPres.fin}
-                  </span>
+                  <Insignia tono={tonoDeSituacion(abierto.situacion)}>{rotuloDeSituacion(abierto.situacion)}</Insignia>
+                  <Insignia tono="neutro">situación al {abierto.situacionA}</Insignia>
                 </>
               ),
             }
@@ -816,169 +719,86 @@ export default function Valores({ dest, onDest }: PantallaProps) {
         {/* ══════════ PANEL ══════════ */}
         {dest === 'panel' && (
           <div style={{ display: 'flex', flexDirection: 'column', gap: 18 }}>
-            <p style={{ ...ENTRADILLA, textWrap: 'pretty' }}>
-              Un valor es el documento con el que la municipalidad puede exigir el pago. Emitirlo no basta: hasta que se
-              notifica no corre ningún plazo, y si el plazo de cuatro años pasa, la deuda prescribe aunque el valor exista.
-            </p>
+            <Entradilla>
+              Un valor es el documento con el que la municipalidad puede exigir el pago. Emitirlo no basta: hasta que se notifica no corre
+              ningún plazo, y si el plazo pasa, la deuda prescribe aunque el valor exista.
+            </Entradilla>
 
-            <section style={TARJETA}>
-              <div style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '13px 16px', borderBottom: '1px solid var(--line)' }}>
-                <h2 style={H2}>Qué le falta a cada valor</h2>
-                <span style={META}>4,182 valores emitidos</span>
-              </div>
-              {BANDEJA.map((b) => (
-                <button
-                  key={b[0]}
-                  onClick={() => {
-                    setChip(b[6]);
+            <Seccion
+              titulo="En qué punto de la cobranza está cada valor"
+              meta={
+                censoTotal.cargando
+                  ? '…'
+                  : censoTotal.error
+                    ? SIN_DATO
+                    : plural(censoTotal.datos?.totalElementos ?? 0, 'valor emitido', 'valores emitidos')
+              }
+              pie="Cada fila cuenta los valores que están en esa situación a día de hoy. La situación no es la columna que la cabecera guarda: es una función de ella y de la fecha, así que un valor notificado pasa a exigible sin que ninguna fila cambie."
+            >
+              {SITUACIONES_EXPLICADAS.map((s) => (
+                <FilaDeBandeja
+                  key={s.k}
+                  situacion={s}
+                  onAbrir={(k) => {
+                    setFSituacion(k);
+                    setQ('');
+                    setFTipo('');
                     onDest('lista');
                   }}
-                  className="hov-acento"
-                  style={{
-                    display: 'flex',
-                    alignItems: 'center',
-                    gap: 14,
-                    width: '100%',
-                    textAlign: 'left',
-                    border: 0,
-                    borderBottom: '1px solid var(--line)',
-                    background: 'transparent',
-                    padding: '13px 16px',
-                    cursor: 'pointer',
-                  }}
-                >
-                  <Insignia tono={b[1]}>{b[0]}</Insignia>
-                  <span style={{ flex: 1, minWidth: 0 }}>
-                    <span style={{ display: 'block', fontSize: 13.5, fontWeight: 500 }}>{b[2]}</span>
-                    <span style={{ display: 'block', fontSize: 12, color: 'var(--ink-3)', marginTop: 2, textWrap: 'pretty' }}>{b[3]}</span>
-                  </span>
-                  <span style={{ textAlign: 'right', flex: '0 0 auto' }}>
-                    <span style={{ display: 'block', fontFamily: 'var(--font-mono)', fontSize: 14, color: 'var(--ink)' }}>
-                      {b[4].toLocaleString('es-PE')}
-                    </span>
-                    <span style={{ display: 'block', fontFamily: 'var(--font-mono)', fontSize: 11, color: 'var(--ink-4)', marginTop: 2 }}>
-                      {soles(b[5])}
-                    </span>
-                  </span>
-                  <Icono d={ICO.flechaDer} tam={14} grosor={1.8} style={{ color: 'var(--ink-4)', flex: '0 0 auto' }} />
-                </button>
+                />
               ))}
-              <p style={{ margin: 0, padding: '11px 16px', background: 'var(--bg-elev)', fontSize: 12, lineHeight: 1.5, color: 'var(--ink-3)', textWrap: 'pretty' }}>
-                Los 412 emitidos sin notificar son la fila más cara del módulo: existen, no cobran y el reloj de
-                prescripción les corre igual.
-              </p>
-            </section>
+            </Seccion>
 
-            {/* El reloj de prescripción: la barra se calcula del ejercicio de
-                la deuda, no se copia. */}
-            <section style={TARJETA}>
-              <div style={CABECERA}>
-                <h2 style={H2}>Reloj de prescripción</h2>
-                <span style={META}>4 años desde el 1 de enero siguiente</span>
-              </div>
-              {relojAnios.map((r) => {
-                const color = r.presc.vencido ? 'var(--bad-fg)' : r.presc.meses <= 12 ? 'var(--warn-fg)' : 'var(--ink-3)';
-                const relleno = r.presc.vencido ? 'var(--bad-fg)' : r.presc.meses <= 12 ? 'var(--warn-fg)' : 'var(--accent)';
-                return (
-                  <div key={r.anio} style={{ display: 'flex', alignItems: 'center', gap: 14, padding: '12px 16px', borderBottom: '1px solid var(--line)' }}>
-                    <span style={{ flex: '0 0 86px', fontFamily: 'var(--font-mono)', fontSize: 13, color: 'var(--ink)' }}>{r.anio}</span>
-                    <span
-                      style={{
-                        flex: 1,
-                        minWidth: 60,
-                        height: 10,
-                        borderRadius: 999,
-                        background: 'var(--accent-soft)',
-                        overflow: 'hidden',
-                        position: 'relative',
-                      }}
-                    >
-                      <span style={{ position: 'absolute', inset: '0 auto 0 0', width: r.presc.pct.toFixed(1) + '%', borderRadius: 999, background: relleno }} />
-                    </span>
-                    <span style={{ flex: '0 0 108px', textAlign: 'right', fontSize: 12, color }}>{r.presc.texto}</span>
-                    <span data-sm-hide="1" style={{ flex: '0 0 60px', textAlign: 'right', fontFamily: 'var(--font-mono)', fontSize: 12, color: 'var(--ink-3)' }}>
-                      {r.n}
-                    </span>
-                    <span style={{ flex: '0 0 116px', textAlign: 'right', fontFamily: 'var(--font-mono)', fontSize: 12.5, color }}>{soles(r.importe)}</span>
-                  </div>
-                );
-              })}
-              <p style={{ margin: 0, padding: '11px 16px', background: 'var(--bg-elev)', fontSize: 12, lineHeight: 1.5, color: 'var(--ink-3)', textWrap: 'pretty' }}>
-                La notificación interrumpe la prescripción y reinicia el conteo. Es la única acción que mueve estas barras
-                hacia la izquierda.
-              </p>
-            </section>
-
-            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit,minmax(196px,1fr))', gap: 13 }}>
-              {KPIS.map((k) => (
-                <div key={k.etiqueta} style={{ ...TARJETA, overflow: 'visible', padding: '16px 17px' }}>
-                  <p style={{ margin: 0, fontFamily: 'var(--font-mono)', fontSize: 25, fontWeight: 500, letterSpacing: '-.01em', color: 'var(--accent-ink)' }}>
-                    {k.valor}
-                  </p>
-                  <p style={{ margin: '5px 0 0', fontSize: 11.5, color: 'var(--ink-3)' }}>{k.etiqueta}</p>
-                  <p style={{ margin: '7px 0 0', fontSize: 11.5, color: 'var(--ink-4)', textWrap: 'pretty' }}>{k.nota}</p>
-                </div>
-              ))}
-            </div>
+            <Aviso tono="neutro" titulo="Lo que este panel no dice, y por qué">
+              <strong>El importe de cada situación no sale.</strong> Ninguna lectura publica el total por situación, y sumarlo aquí sobre la
+              página que se descargó daría una cifra que cambia al pasar de página: una cifra de dinero no se compone en la pantalla
+              (RNF-083). <br />
+              <strong>El reloj de prescripción tampoco.</strong> El artboard dibujaba una barra por ejercicio con «cuatro años desde el 1 de
+              enero siguiente»; ese plazo es una cifra normativa que vive en el conjunto de parámetros sellado, y{' '}
+              <code style={{ fontFamily: 'var(--font-mono)', fontSize: 11.5 }}>GET /seguridad/parametros</code> publica los conjuntos, no sus
+              valores. Compilarlo aquí sería escribirlo a mano. Quien lo calcula es el servidor, al declarar la prescripción.
+            </Aviso>
           </div>
         )}
 
-        {/* ══════════ LISTA DE VALORES ══════════ */}
+        {/* ══════════ LISTA ══════════ */}
         {dest === 'lista' && !esValor && (
           <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
-            <p style={ENTRADILLA}>
-              Los valores emitidos, con lo que le falta a cada uno. El filtro de etapa es el que se usa: nadie busca «un
-              valor», se busca «los que hay que notificar».
-            </p>
+            <Entradilla>
+              Los valores emitidos, con lo que le falta a cada uno. El filtro que se usa es el de la situación: nadie busca «un valor», se
+              busca «los que hay que notificar».
+            </Entradilla>
 
-            <section style={TARJETA}>
+            <section style={{ background: 'var(--bg-card)', border: '1px solid var(--line)', borderRadius: 10, boxShadow: 'var(--shadow-1)', overflow: 'hidden' }}>
               <div style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '14px 16px' }}>
                 <Icono d={ICO.lupa} tam={18} style={{ color: 'var(--ink-3)', flex: '0 0 auto' }} />
                 <input
                   value={q}
                   onChange={(e) => setQ(e.target.value)}
-                  placeholder="Nº de valor, contribuyente o criterio"
+                  aria-label="Número de valor"
+                  placeholder="Número del valor, entero"
                   style={{ flex: 1, border: 0, background: 'transparent', fontSize: 15, padding: '3px 0', outline: 'none' }}
                 />
-                <button
-                  onClick={() => toast(filtrados.length + ' valores coinciden.')}
-                  className="hov-acento-2"
-                  style={{
-                    border: 0,
-                    borderRadius: 6,
-                    padding: '9px 20px',
-                    background: 'var(--accent)',
-                    color: '#fff',
-                    fontSize: 13.5,
-                    fontWeight: 500,
-                    cursor: 'pointer',
-                    flex: '0 0 auto',
-                  }}
-                >
-                  Buscar
-                </button>
               </div>
-              <div
-                style={{
-                  display: 'flex',
-                  alignItems: 'center',
-                  gap: 8,
-                  flexWrap: 'wrap',
-                  padding: '9px 16px',
-                  borderTop: '1px solid var(--line)',
-                  background: 'var(--bg-elev)',
-                }}
-              >
-                <span style={{ fontSize: 11.5, color: 'var(--ink-3)' }}>Etapa</span>
-                {['Todas', 'Emitido sin notificar', 'Notificado en plazo', 'Firme sin pase', 'En coactiva', 'Prescrito'].map((c) => {
-                  const on = chip === c;
+              <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap', padding: '10px 16px', borderTop: '1px solid var(--line)', background: 'var(--bg-elev)' }}>
+                <label style={{ display: 'flex', alignItems: 'center', gap: 7, fontSize: 12, color: 'var(--ink-3)' }}>
+                  Tipo
+                  <select value={fTipo} onChange={(e) => setFTipo(e.target.value as '' | TipoDeValor)} style={{ ...CONTROL, width: 'auto', padding: '6px 9px', fontSize: 12.5 }}>
+                    <option value="">Todos</option>
+                    {TIPOS_DE_VALOR.map((t) => (
+                      <option key={t.codigo} value={t.codigo}>
+                        {t.label}
+                      </option>
+                    ))}
+                  </select>
+                </label>
+                <span style={{ fontSize: 11.5, color: 'var(--ink-3)', marginLeft: 6 }}>Situación</span>
+                {(['', ...SITUACIONES] as ('' | Situacion)[]).map((s) => {
+                  const on = fSituacion === s;
                   return (
                     <button
-                      key={c}
-                      onClick={() => {
-                        setChip(c);
-                        setMarcadas({});
-                      }}
+                      key={s || 'todas'}
+                      onClick={() => setFSituacion(s)}
                       aria-pressed={on}
                       style={{
                         border: `1px solid ${on ? 'var(--accent)' : 'var(--line-2)'}`,
@@ -990,161 +810,114 @@ export default function Valores({ dest, onDest }: PantallaProps) {
                         color: on ? 'var(--accent-ink)' : 'var(--ink-3)',
                       }}
                     >
-                      {c}
+                      {s === '' ? 'Todas' : rotuloDeSituacion(s)}
                     </button>
                   );
                 })}
               </div>
+              <p style={{ margin: 0, padding: '9px 16px', borderTop: '1px solid var(--line)', fontSize: 11.5, color: 'var(--ink-4)', textWrap: 'pretty' }}>
+                Las siete situaciones son las que el dominio declara. «RECLAMADO», que el prototipo ofrecía como octava, no está: no hay
+                reclamación de valores todavía, y pedirla devuelve un rechazo con el motivo en vez del listado sin filtrar.
+              </p>
             </section>
 
-            {filtrados.length === 0 && (
-              <section
-                style={{
-                  display: 'flex',
-                  flexDirection: 'column',
-                  alignItems: 'center',
-                  gap: 8,
-                  padding: '44px 24px',
-                  border: '1px solid var(--line)',
-                  borderRadius: 10,
-                  background: 'var(--bg-card)',
-                }}
-              >
-                <Icono d={ICO.lupa} tam={26} grosor={1.5} style={{ color: 'var(--ink-4)' }} />
-                <p style={{ margin: 0, fontFamily: 'var(--font-serif)', fontSize: 16, fontWeight: 600 }}>Ningún valor en esa etapa</p>
-                <p style={{ margin: 0, maxWidth: '52ch', fontSize: 13, lineHeight: 1.55, color: 'var(--ink-3)', textAlign: 'center', textWrap: 'pretty' }}>
-                  Buena noticia si la etapa era «emitido sin notificar». Prueba con otra o quita el filtro.
-                </p>
-                <button onClick={() => setChip('Todas')} className="hov-linea" style={{ ...BOTON_SEC, marginTop: 6, padding: '9px 16px' }}>
-                  Quitar el filtro
-                </button>
-              </section>
-            )}
-
-            {filtrados.length > 0 && (
-              <section style={TARJETA}>
-                <div style={CABECERA}>
-                  <h2 style={H2}>Valores emitidos</h2>
-                  <span style={META}>{filtrados.length + ' de 4,182'}</span>
-                  <button
-                    onClick={() => toast(nMarcadas === 0 ? 'Marca al menos un valor.' : nMarcadas + ' valores enviados a notificación.')}
-                    aria-disabled={nMarcadas === 0}
-                    className="hov-acento-2"
-                    style={{
-                      border: 0,
-                      borderRadius: 6,
-                      padding: '8px 16px',
-                      background: 'var(--accent)',
-                      color: '#fff',
-                      fontSize: 12.5,
-                      fontWeight: 500,
-                      cursor: 'pointer',
-                      opacity: nMarcadas === 0 ? 0.55 : 1,
-                    }}
-                  >
-                    {nMarcadas === 0 ? 'Notificar seleccionados' : 'Notificar ' + nMarcadas + ' seleccionados'}
-                  </button>
-                </div>
-                <div style={{ overflowX: 'auto' }}>
-                  <table style={{ width: '100%', borderCollapse: 'collapse', minWidth: 960 }}>
-                    <thead>
-                      <Cabeceras defs={COLS_LISTA} hueco />
-                    </thead>
-                    <tbody>
-                      {filtrados.map((v) => {
-                        const on = marcadas[v.numero] === true;
-                        return (
-                          <tr
-                            key={v.numero}
-                            className="hov-elev"
-                            style={{ borderTop: '1px solid var(--line)', cursor: 'pointer', background: on ? 'var(--accent-soft)' : 'transparent' }}
-                          >
-                            <td style={{ padding: '11px 14px' }}>
-                              <input
-                                type="checkbox"
-                                checked={on}
-                                onChange={() => setMarcadas((x) => ({ ...x, [v.numero]: !on }))}
-                                aria-label={'Seleccionar el valor ' + v.numero}
-                                style={{ accentColor: 'var(--accent)', width: 16, height: 16 }}
-                              />
-                            </td>
-                            {celdas(
-                              [
-                                v.numero,
-                                v.tipo,
-                                v.contribuyente,
-                                String(v.anioDeuda),
-                                v.emitido,
-                                v.notificado === '' ? '—' : v.notificado,
-                                v.monto.toFixed(2),
-                                v.presc.texto,
-                                v.etapa,
-                              ],
-                              COLS_LISTA,
-                              8,
-                              () => {
-                                setValor(v.numero);
-                                setTab(v.notificado === '' ? 1 : 0);
-                              },
-                            )}
-                          </tr>
-                        );
-                      })}
-                    </tbody>
-                  </table>
-                </div>
-                <p style={PIE}>
-                  La columna «Prescribe» cuenta desde el 1 de enero siguiente al de la deuda, no desde la emisión del
-                  valor. Un valor nuevo sobre deuda vieja nace con poco tiempo.
-                </p>
-              </section>
-            )}
+            <Seccion
+              titulo="Valores emitidos"
+              meta={lista.datos ? `${lista.datos.contenido.length} de ${lista.datos.totalElementos}` : ''}
+              pie="El importe está congelado al día de la emisión, no al de hoy: reimprimir el valor dos años después devuelve el mismo desglose. La situación sí se mira a hoy, y la fecha desde la que se miró sale en cada fila."
+            >
+              <Lectura lectura={lista} ruta="GET /api/v1/consultas/valores" acceso="consulta_valores">
+                <TablaDeTextos
+                  cols={COLS_LISTA}
+                  min="1060px"
+                  insigniaEn={9}
+                  vacio="Ningún valor con esos filtros. Si acabas de instalar, aún no se ha emitido ninguno: se emiten en «Emisión»."
+                  onFila={(i) => {
+                    const v = lista.datos?.contenido[i];
+                    if (!v) return;
+                    setAbierto(v);
+                    setPestania(v.notificadoEl === null ? 'notificacion' : 'valor');
+                    setNotificada(null);
+                    setMovido(null);
+                    setFalloDeEscritura(null);
+                  }}
+                  filas={(lista.datos?.contenido ?? []).map((v) => [
+                    v.numero,
+                    v.tipo,
+                    v.contribuyente,
+                    v.tributo ?? SIN_DATO,
+                    v.periodo ?? SIN_DATO,
+                    v.fechaEmision,
+                    v.notificadoEl ?? SIN_DATO,
+                    v.exigibleDesde ?? SIN_DATO,
+                    v.monto.importe,
+                    v.situacion,
+                  ])}
+                />
+                {lista.datos && lista.datos.contenido.length > 0 && (
+                  <p style={{ margin: 0, padding: '10px 16px', borderTop: '1px solid var(--line)', fontSize: 11.5, color: 'var(--ink-4)' }}>
+                    Importes proyectados al {lista.datos.contenido[0].monto.actualizadoA}; situación mirada al {lista.datos.contenido[0].situacionA}.
+                  </p>
+                )}
+              </Lectura>
+            </Seccion>
           </div>
         )}
 
-        {/* ══════════ EL VALOR ══════════ */}
+        {/* ══════════ EL EXPEDIENTE DEL VALOR ══════════ */}
         {esValor && (
           <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
-            <section style={TARJETA}>
-              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit,minmax(150px,1fr))', gap: 0, background: 'var(--bg-card)' }}>
+            <Seccion>
+              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit,minmax(158px,1fr))', gap: 0 }}>
                 {(
                   [
-                    ['Nº de valor', sel.numero, 'var(--ink)'],
-                    ['Ejercicio de la deuda', String(sel.anioDeuda), 'var(--ink)'],
-                    ['Emitido', sel.emitido, 'var(--ink)'],
-                    ['Notificado', sel.notificado === '' ? '—' : sel.notificado, sel.notificado === '' ? 'var(--bad-fg)' : 'var(--ink)'],
-                    ['Importe', soles(sel.monto), 'var(--ink)'],
-                    ['Prescribe', selPres.fin, selPres.vencido ? 'var(--bad-fg)' : selPres.meses <= 12 ? 'var(--warn-fg)' : 'var(--ink)'],
-                  ] as [string, string, string][]
+                    ['Nº de valor', abierto.numero, 'var(--ink)', ''],
+                    ['Tipo', abierto.tipo, 'var(--ink)', ''],
+                    ['Emitido', abierto.fechaEmision, 'var(--ink)', ''],
+                    [
+                      'Notificado',
+                      abierto.notificadoEl ?? SIN_DATO,
+                      abierto.notificadoEl === null ? 'var(--bad-fg)' : 'var(--ink)',
+                      abierto.notificadoEl === null ? 'sin notificar no cobra' : '',
+                    ],
+                    ['Exigible desde', abierto.exigibleDesde ?? SIN_DATO, 'var(--ink)', 'lo deriva el servidor del plazo'],
+                    ['Importe', 'S/ ' + abierto.monto.importe, 'var(--ink)', 'proyectado al ' + abierto.monto.actualizadoA],
+                  ] as [string, string, string, string][]
                 ).map((r) => (
-                  <div
-                    key={r[0]}
-                    style={{
-                      background: 'var(--bg-card)',
-                      padding: '14px 16px',
-                      borderLeft: '1px solid var(--line)',
-                      borderTop: '1px solid var(--line)',
-                      margin: '-1px 0 0 -1px',
-                    }}
-                  >
-                    <p style={{ margin: '0 0 5px', fontSize: 10, fontWeight: 500, textTransform: 'uppercase', letterSpacing: '.11em', color: 'var(--ink-3)' }}>
-                      {r[0]}
-                    </p>
+                  <div key={r[0]} style={{ background: 'var(--bg-card)', padding: '14px 16px', borderLeft: '1px solid var(--line)', borderTop: '1px solid var(--line)', margin: '-1px 0 0 -1px' }}>
+                    <p style={{ margin: '0 0 5px', fontSize: 10, fontWeight: 500, textTransform: 'uppercase', letterSpacing: '.11em', color: 'var(--ink-3)' }}>{r[0]}</p>
                     <p style={{ margin: 0, fontFamily: 'var(--font-mono)', fontSize: 15, color: r[2], textWrap: 'pretty' }}>{r[1]}</p>
+                    {r[3] && <p style={{ margin: '4px 0 0', fontSize: 10.5, color: 'var(--ink-4)' }}>{r[3]}</p>}
                   </div>
                 ))}
               </div>
-            </section>
+            </Seccion>
 
-            <Guia color={guia.color} fondo={guia.fondo} texto={guia.texto} accion={guia.accion} onAccion={() => setTab(guia.ir)} />
+            {/* La guía: qué le toca a este valor ahora, deducido de su situación */}
+            <Aviso
+              tono={abierto.situacion === 'EMITIDO' ? 'bad' : abierto.situacion === 'EXIGIBLE' ? 'warn' : 'ok'}
+              titulo={
+                abierto.situacion === 'EMITIDO'
+                  ? 'Este valor no está notificado'
+                  : abierto.situacion === 'EXIGIBLE'
+                    ? 'Exigible y sin pase a coactiva'
+                    : `Situación al ${abierto.situacionA}: ${rotuloDeSituacion(abierto.situacion)}`
+              }
+            >
+              {abierto.situacion === 'EMITIDO'
+                ? 'Mientras no se notifique no se puede cobrar, no es firme y el cómputo de la prescripción sigue corriendo. Se registra en la pestaña «Notificación».'
+                : abierto.situacion === 'EXIGIBLE'
+                  ? 'El plazo venció y no consta reclamo: se puede remitir a la ejecutoría coactiva desde la pestaña «Movimientos».'
+                  : 'La situación se calcula de lo que la cabecera guarda y de la fecha desde la que se mira; la fecha va escrita al lado para que la hoja impresa diga a qué día corresponde.'}
+            </Aviso>
 
             <div style={{ display: 'flex', alignItems: 'center', gap: 14, flexWrap: 'wrap', borderBottom: '1px solid var(--line)' }}>
-              {TABS.map((t, i) => {
-                const on = tabIdx === i;
+              {PESTANIAS.map((p) => {
+                const on = pestania === p.k;
                 return (
                   <button
-                    key={t.id}
-                    onClick={() => setTab(i)}
+                    key={p.k}
+                    onClick={() => setPestania(p.k)}
                     aria-pressed={on}
                     style={{
                       border: 0,
@@ -1158,80 +931,256 @@ export default function Valores({ dest, onDest }: PantallaProps) {
                       fontWeight: on ? 600 : 400,
                     }}
                   >
-                    {t.label}
+                    {p.label}
                   </button>
                 );
               })}
             </div>
 
-            {tabDef.campos.length > 0 && (
-              <section style={TARJETA}>
-                <div style={{ padding: '14px 16px', borderBottom: '1px solid var(--line)' }}>
-                  <p style={{ margin: 0, fontFamily: 'var(--font-serif)', fontSize: 16, fontWeight: 600 }}>{tabDef.titulo}</p>
-                  <p style={{ margin: '3px 0 0', fontSize: 12.5, lineHeight: 1.5, color: 'var(--ink-3)', maxWidth: '76ch', textWrap: 'pretty' }}>
-                    {tabDef.nota}
-                  </p>
-                </div>
-                <Formulario defs={tabDef.campos} val={val} set={set} />
-              </section>
+            {falloDeEscritura && (
+              <Fallo error={falloDeEscritura} ruta="POST /api/v1/valores/…" acceso="notificacion_valores / pase_coactiva" onReintentar={() => setFalloDeEscritura(null)} />
             )}
 
-            <section style={TARJETA}>
-              <div style={CABECERA}>
-                <h2 style={H2}>{tabDef.tabla.titulo}</h2>
-                <span style={META}>
-                  {tabDef.tabla.filas.length === 0 ? tabDef.tabla.conteo : tabDef.tabla.filas.length + ' registros'}
-                </span>
-              </div>
-              <div style={{ overflowX: 'auto' }}>
-                <table style={{ width: '100%', borderCollapse: 'collapse', minWidth: tabDef.tabla.min }}>
-                  <thead>
-                    <Cabeceras defs={tabDef.tabla.cols} />
-                  </thead>
-                  <tbody>
-                    {tabDef.tabla.filas.map((f, i) => (
-                      <tr key={i} className="hov-elev" style={{ borderTop: '1px solid var(--line)' }}>
-                        {celdas(f, tabDef.tabla.cols)}
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
-              {tabDef.tabla.totales && <Totales filas={tabDef.tabla.totales} />}
-              <p style={PIE}>{tabDef.tabla.nota}</p>
-            </section>
+            {/* ── El valor ── */}
+            {pestania === 'valor' && (
+              <>
+                <Seccion titulo="Datos del valor" meta={'GET /api/v1/valores?nroDeValor=' + abierto.numero}>
+                  <Lectura lectura={cabecera} ruta="GET /api/v1/valores" acceso="valores_busqueda">
+                    <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit,minmax(230px,1fr))', gap: '14px 20px', padding: '16px' }}>
+                      <Dato rotulo="Contribuyente">{abierto.contribuyente}</Dato>
+                      <Dato rotulo="Código" mono>
+                        {abierto.codContribuyente}
+                      </Dato>
+                      <Dato rotulo="Ejercicio" mono>
+                        {cabecera.datos?.contenido[0]?.ejercicio ?? SIN_DATO}
+                      </Dato>
+                      <Dato rotulo="Estado guardado" mono>
+                        {abierto.estado}
+                      </Dato>
+                      <Dato rotulo="Base legal">{cabecera.datos?.contenido[0]?.baseLegal ?? SIN_DATO}</Dato>
+                      <Dato rotulo="Observación con que se emitió">{cabecera.datos?.contenido[0]?.observacion ?? SIN_DATO}</Dato>
+                    </div>
+                  </Lectura>
+                </Seccion>
 
-            <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>
-              <p style={{ margin: 0, flex: 1, minWidth: 180, fontSize: 12, color: 'var(--ink-3)', textWrap: 'pretty' }}>{tabDef.aviso}</p>
-              <button className="hov-linea" style={BOTON_SEC}>
-                {tabDef.secundaria}
-              </button>
-              <button
-                onClick={() => toast(tabDef.primaria + ': registrado en el valor ' + sel.numero + '.')}
-                className="hov-acento-2"
-                style={BOTON_PRI}
-              >
-                {tabDef.primaria}
-              </button>
-            </div>
+                <Aviso tono="warn" titulo="El detalle congelado del valor no se puede leer">
+                  El valor guarda su desglose recaudo a recaudo —qué obligación formaliza, con qué insoluto, reajuste, interés y gasto al día
+                  de la emisión— y <strong>ninguna operación del contrato lo publica</strong>: ni{' '}
+                  <code style={{ fontFamily: 'var(--font-mono)', fontSize: 11.5 }}>GET /valores</code> ni{' '}
+                  <code style={{ fontFamily: 'var(--font-mono)', fontSize: 11.5 }}>GET /consultas/valores</code> devuelven las líneas. Lo que
+                  sí sale es el total y el tributo y periodo que resume. La tabla de recaudos del prototipo se queda sin dibujar en vez de
+                  rellenarse con la deuda de hoy, que es otra cifra.
+                </Aviso>
+
+                <Nota>
+                  Un valor no se corrige: se anula y se emite otro (regla 4). Por eso este expediente no tiene ningún campo editable —el
+                  contrato no publica ningún <code style={{ fontFamily: 'var(--font-mono)', fontSize: 11.5 }}>PUT</code> ni{' '}
+                  <code style={{ fontFamily: 'var(--font-mono)', fontSize: 11.5 }}>PATCH</code> sobre un valor—, y lo que le pasa después
+                  llega como actos que se agregan: una notificación, un movimiento.
+                </Nota>
+              </>
+            )}
+
+            {/* ── Notificación ── */}
+            {pestania === 'notificacion' && (
+              <>
+                <Seccion
+                  titulo="Registrar la notificación"
+                  meta={'POST /api/v1/valores/' + abierto.numero + '/notificacion'}
+                  pie="Hasta que esto se registra, el valor no hace correr ningún plazo y no se puede cobrar. Es también el acto que interrumpe la prescripción."
+                >
+                  <Rejilla>
+                    <Campo etiqueta="Fecha de la diligencia">
+                      <input type="date" value={nFecha} onChange={(e) => setNFecha(e.target.value)} style={CONTROL} />
+                    </Campo>
+                    <Campo etiqueta="Modalidad (art. 104)">
+                      <select value={nModalidad} onChange={(e) => setNModalidad(e.target.value as Modalidad)} style={CONTROL}>
+                        {MODALIDADES.map((o) => (
+                          <option key={o.k} value={o.k}>
+                            {o.label}
+                          </option>
+                        ))}
+                      </select>
+                    </Campo>
+                    <Campo etiqueta="Resultado" ayuda="NO_UBICADO no surte efecto: se reintenta y no empieza ningún plazo.">
+                      <select value={nResultado} onChange={(e) => setNResultado(e.target.value as ResultadoDeDiligencia)} style={CONTROL}>
+                        {RESULTADOS.map((o) => (
+                          <option key={o.k} value={o.k}>
+                            {o.label}
+                          </option>
+                        ))}
+                      </select>
+                    </Campo>
+                    <Campo etiqueta="Notificador">
+                      <input value={nNotificador} onChange={(e) => setNNotificador(e.target.value)} placeholder="Quién llevó la diligencia" style={CONTROL} />
+                    </Campo>
+                    <Campo etiqueta="Dirección" ayuda="Si se deja en blanco, el servidor usa el domicilio fiscal vigente a esa fecha.">
+                      <input value={nDireccion} onChange={(e) => setNDireccion(e.target.value)} style={CONTROL} />
+                    </Campo>
+                    <Campo etiqueta="Persona que recibe">
+                      <input value={nRecibe} onChange={(e) => setNRecibe(e.target.value)} style={CONTROL} />
+                    </Campo>
+                    <Campo etiqueta="Documento de quien recibe">
+                      <input value={nDoc} onChange={(e) => setNDoc(e.target.value)} style={CONTROL} />
+                    </Campo>
+                    <Campo etiqueta="Vínculo con el titular">
+                      <input value={nVinculo} onChange={(e) => setNVinculo(e.target.value)} style={CONTROL} />
+                    </Campo>
+                    <Campo etiqueta="Acuse" ancho ayuda="La constancia del cargo, tal como consta en la cédula.">
+                      <input value={nAcuse} onChange={(e) => setNAcuse(e.target.value)} style={CONTROL} />
+                    </Campo>
+                  </Rejilla>
+                  <BarraDeAccion
+                    observacion={nObs}
+                    onObservacion={setNObs}
+                    impedimento={impedimentoNotificacion}
+                    etiqueta="Registrar notificación"
+                    enviando={enviando}
+                    aviso="Al registrarla empieza a correr el plazo, y desde cuándo la deuda queda exigible lo deriva el servidor del plazo parametrizado: no viaja en el formulario, y no es un olvido."
+                    onEnviar={() =>
+                      void enviar(
+                        () =>
+                          notificarValor(abierto.numero, {
+                            fechaDeNotificacion: nFecha,
+                            tipoDeNotificacion: nModalidad,
+                            resultado: nResultado,
+                            notificador: nNotificador.trim(),
+                            direccion: nDireccion.trim() || undefined,
+                            personaQueRecibe: nRecibe.trim() || undefined,
+                            documentoDeQuienRecibe: nDoc.trim() || undefined,
+                            vinculo: nVinculo.trim() || undefined,
+                            acuse: nAcuse.trim() || undefined,
+                            observacion: nObs.trim(),
+                          }),
+                        (r) => {
+                          setNotificada(r);
+                          setNObs('');
+                        },
+                        'Diligencia registrada.',
+                      )
+                    }
+                  />
+                </Seccion>
+
+                {notificada && (
+                  <Seccion titulo="Diligencia registrada" meta={'intento ' + notificada.intento}>
+                    <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit,minmax(200px,1fr))', gap: '14px 20px', padding: '16px' }}>
+                      <Dato rotulo="Fecha" mono>
+                        {notificada.fechaDeNotificacion}
+                      </Dato>
+                      <Dato rotulo="Modalidad">{notificada.modalidad}</Dato>
+                      <Dato rotulo="Resultado">{notificada.resultado}</Dato>
+                      <Dato rotulo="¿Surtió efecto?">{notificada.surtioEfecto ? 'Sí' : 'No: se reintenta'}</Dato>
+                      <Dato rotulo="Exigible desde" mono>
+                        {notificada.exigibleDesde ?? SIN_DATO}
+                      </Dato>
+                      <Dato rotulo="Dirección">{notificada.direccion ?? SIN_DATO}</Dato>
+                    </div>
+                  </Seccion>
+                )}
+
+                <Aviso tono="neutro" titulo="Cinco campos del prototipo no se mandan">
+                  «Nº de notificación», «Nº de visita», «Vence», la casilla de firma y las características de la vivienda no están en el
+                  cuerpo que el servidor acepta: mandarlos los descartaría en silencio, y la pantalla parecería estar guardando algo que no
+                  guarda. El número de intento lo cuenta el servidor, y el vencimiento sale de{' '}
+                  <em>exigible desde</em>, que también lo deriva él. El historial de diligencias tampoco se dibuja:{' '}
+                  <strong>ninguna operación del contrato lo lee</strong>; lo que se ve es la que se acaba de registrar.
+                </Aviso>
+              </>
+            )}
+
+            {/* ── Movimientos ── */}
+            {pestania === 'movimientos' && (
+              <>
+                <Seccion
+                  titulo="Pasar a cobranza coactiva"
+                  meta={'POST /api/v1/valores/' + abierto.numero + '/movimientos'}
+                  pie="Solo se puede pasar un valor exigible: notificado y con el plazo vencido. Es idempotente —pedirlo dos veces devuelve el mismo movimiento, no dos—, y eso lo garantiza la base, no una comprobación previa."
+                >
+                  <Rejilla>
+                    <Campo etiqueta="Tipo de movimiento" ayuda="Es el único que esta ruta escribe; no es un desplegable porque no hay nada que elegir.">
+                      <input value="PCO — Pase a coactivas" readOnly style={{ ...CONTROL, background: 'var(--bg-elev)', color: 'var(--ink-3)' }} />
+                    </Campo>
+                    <Campo etiqueta="Fecha del pase" ayuda="En blanco, hoy.">
+                      <input type="date" value={pcoFecha} onChange={(e) => setPcoFecha(e.target.value)} style={CONTROL} />
+                    </Campo>
+                  </Rejilla>
+                  <BarraDeAccion
+                    observacion={pcoObs}
+                    onObservacion={setPcoObs}
+                    impedimento={impedimentoPase}
+                    etiqueta="Registrar el pase"
+                    enviando={enviando}
+                    aviso="El pase hace exigible el expediente en la ejecutoría. Un valor sin notificar o con el plazo corriendo lo rechaza el servidor con el motivo."
+                    onEnviar={() =>
+                      void enviar(
+                        () =>
+                          pasarACoactiva(abierto.numero, {
+                            tipoDeMovimiento: 'PCO',
+                            fechaDelMovimiento: pcoFecha || undefined,
+                            observacion: pcoObs.trim(),
+                          }),
+                        (r) => {
+                          setMovido(r);
+                          setPcoObs('');
+                        },
+                        'Pase a coactiva registrado.',
+                      )
+                    }
+                  />
+                </Seccion>
+
+                {movido && (
+                  <Seccion titulo="Movimiento registrado">
+                    <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit,minmax(200px,1fr))', gap: '14px 20px', padding: '16px' }}>
+                      <Dato rotulo="Tipo" mono>
+                        {movido.tipoDeMovimiento}
+                      </Dato>
+                      <Dato rotulo="Descripción">{movido.descripcion}</Dato>
+                      <Dato rotulo="Fecha" mono>
+                        {movido.fechaDelMovimiento}
+                      </Dato>
+                      <Dato rotulo="Exigible desde" mono>
+                        {movido.exigibleDesde ?? SIN_DATO}
+                      </Dato>
+                    </div>
+                  </Seccion>
+                )}
+
+                <Aviso tono="neutro" titulo="Tres de las cuatro opciones del prototipo no van aquí">
+                  El desplegable del artboard ofrecía PCO, ACO, RCO y ANU. <strong>ACO y RCO son la respuesta de la ejecutoría</strong> y los
+                  escribe el módulo de Coactiva: pedirlos por esta ruta devuelve un rechazo que lo dice. Y <strong>ANU no existe</strong> en
+                  el enumerado del dominio: anular un valor no es un movimiento del valor. Por eso el campo no es un desplegable con una sola
+                  opción, sino un dato fijo. El historial de movimientos tampoco se dibuja: ninguna operación del contrato lo lee.
+                </Aviso>
+              </>
+            )}
           </div>
         )}
 
         {/* ══════════ EMISIÓN ══════════ */}
         {dest === 'emision' && (
           <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
-            <p style={ENTRADILLA}>
-              Emitir valores es siempre lo mismo: un criterio que dice qué tipo de valor, de qué oficina y con qué
-              vencimiento, y una lista de deuda que entra. Cambia si la lista es de un contribuyente o de un lote.
-            </p>
+            <Entradilla>
+              Emitir un valor no crea deuda: la formaliza. El desglose que el valor congela es exactamente el que la consulta de deuda
+              devuelve, y por eso lo primero es elegir a quién y qué obligaciones suyas entran.
+            </Entradilla>
 
             <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
-              {([['individual', 'Individual'], ['masiva', 'Masiva por criterio']] as ['individual' | 'masiva', string][]).map((h) => {
-                const on = hojaEmision === h[0];
+              {(
+                [
+                  ['individual', 'Individual'],
+                  ['masiva', 'Masiva por criterio'],
+                ] as ['individual' | 'masiva', string][]
+              ).map((h) => {
+                const on = hoja === h[0];
                 return (
                   <button
                     key={h[0]}
-                    onClick={() => setHojaEmision(h[0])}
+                    onClick={() => {
+                      setHoja(h[0]);
+                      setFalloDeEscritura(null);
+                    }}
                     aria-pressed={on}
                     className="hov-linea"
                     style={{
@@ -1242,7 +1191,7 @@ export default function Valores({ dest, onDest }: PantallaProps) {
                       fontSize: 12.5,
                       fontWeight: on ? 600 : 400,
                       background: on ? 'var(--accent)' : 'var(--bg-card)',
-                      color: on ? '#fff' : 'var(--ink-2)',
+                      color: on ? 'var(--accent-contraste)' : 'var(--ink-2)',
                     }}
                   >
                     {h[1]}
@@ -1251,224 +1200,585 @@ export default function Valores({ dest, onDest }: PantallaProps) {
               })}
             </div>
 
-            <section style={TARJETA}>
-              <div style={CABECERA}>
-                <h2 style={H2}>Criterio de emisión</h2>
-                <code
-                  style={{
-                    fontFamily: 'var(--font-mono)',
-                    fontSize: 10.5,
-                    color: 'var(--ink-3)',
-                    background: 'var(--bg-elev)',
-                    borderRadius: 999,
-                    padding: '4px 10px',
-                  }}
+            {falloDeEscritura && (
+              <Fallo error={falloDeEscritura} ruta={hoja === 'individual' ? 'POST /api/v1/valores' : 'POST /api/v1/valores/masivo'} acceso={hoja === 'individual' ? 'valores_individual' : 'valores_masivo'} onReintentar={() => setFalloDeEscritura(null)} />
+            )}
+
+            {hoja === 'individual' && (
+              <>
+                <Seccion titulo="A quién se emite" meta="POST /api/v1/valores">
+                  <Rejilla>
+                    <Campo etiqueta="Código del contribuyente" ayuda="El código del padrón, exacto. Es lo que el servidor resuelve; un documento no le vale.">
+                      <input value={eCod} onChange={(e) => setECod(e.target.value)} placeholder="C-000001" style={CONTROL} />
+                    </Campo>
+                    <Campo etiqueta="Tipo de valor" ayuda="Los tres que el dominio declara. La base legal la pone el servidor, no el formulario.">
+                      <select value={eTipo} onChange={(e) => setETipo(e.target.value as TipoDeValor)} style={CONTROL}>
+                        {TIPOS_DE_VALOR.map((t) => (
+                          <option key={t.codigo} value={t.codigo}>
+                            {t.label}
+                          </option>
+                        ))}
+                      </select>
+                    </Campo>
+                  </Rejilla>
+                </Seccion>
+
+                <Seccion
+                  titulo="Deuda que puede entrar en el valor"
+                  meta={deudaAEmitir.datos ? `${marcadas.length} de ${deudaAEmitir.datos.totalElementos} marcadas` : ''}
+                  pie="Son las obligaciones con deuda del contribuyente a hoy, tal como las devuelve la consulta de deuda. Los importes no viajan en la petición: el servidor congela los suyos."
                 >
-                  {emision.endpoint}
-                </code>
-              </div>
-              <Formulario defs={emision.campos} val={val} set={set} />
-            </section>
+                  {codDeEmision === '' ? (
+                    <p style={{ margin: 0, padding: '26px 16px', textAlign: 'center', fontSize: 13, color: 'var(--ink-3)' }}>
+                      Escribe el código del contribuyente para ver qué deuda tiene.
+                    </p>
+                  ) : (
+                    <Lectura lectura={deudaAEmitir} ruta="GET /api/v1/consultas/deuda" acceso="consulta_deuda">
+                      <div style={{ overflowX: 'auto' }}>
+                        <table style={{ width: '100%', borderCollapse: 'collapse', minWidth: '1000px' }}>
+                          <thead>
+                            <tr>
+                              {COLS_DEUDA_A_FORMALIZAR.map((c, i) => (
+                                <th key={i} style={c[1] ? THN : TH}>
+                                  {c[0]}
+                                </th>
+                              ))}
+                            </tr>
+                          </thead>
+                          <tbody>
+                            {obligaciones.length === 0 && (
+                              <tr>
+                                <td colSpan={COLS_DEUDA_A_FORMALIZAR.length} style={{ padding: '26px 16px', textAlign: 'center', fontSize: 13, color: 'var(--ink-3)' }}>
+                                  Este contribuyente no tiene deuda pendiente: no hay nada que formalizar.
+                                </td>
+                              </tr>
+                            )}
+                            {obligaciones.map((o) => {
+                              const k = llaveDe(o);
+                              const on = eMarcadas[k] === true;
+                              return (
+                                <tr key={k} className="hov-elev" style={{ borderTop: '1px solid var(--line)', background: on ? 'var(--accent-soft)' : 'transparent' }}>
+                                  <td style={{ padding: '11px 14px' }}>
+                                    <input
+                                      type="checkbox"
+                                      checked={on}
+                                      onChange={() => setEMarcadas((x) => ({ ...x, [k]: !on }))}
+                                      aria-label={`Formalizar ${o.tributo} del ejercicio ${o.ejercicio}`}
+                                      style={{ accentColor: 'var(--accent)', width: 16, height: 16 }}
+                                    />
+                                  </td>
+                                  <td style={TD1}>{o.ejercicio}</td>
+                                  <td style={TD}>{o.tributo}</td>
+                                  <td style={TD}>{o.predioId !== null ? 'Predio ' + o.predioId : o.vehiculoId !== null ? 'Vehículo ' + o.vehiculoId : 'Sin unidad'}</td>
+                                  <td style={TD}>{o.periodoDesde === o.periodoHasta ? o.periodoDesde : `${o.periodoDesde} – ${o.periodoHasta}`}</td>
+                                  <td style={TD}>{o.fase}</td>
+                                  <td style={TDN}>{o.deuda.insoluto.importe}</td>
+                                  <td style={TDN}>{o.deuda.reajuste.importe}</td>
+                                  <td style={TDN}>{o.deuda.interes.importe}</td>
+                                  <td style={TDN}>{o.deuda.gasto.importe}</td>
+                                  <td style={TDN}>{o.deuda.total.importe}</td>
+                                </tr>
+                              );
+                            })}
+                          </tbody>
+                        </table>
+                      </div>
+                      {obligaciones.length > 0 && (
+                        <p style={{ margin: 0, padding: '10px 16px', borderTop: '1px solid var(--line)', fontSize: 11.5, color: 'var(--ink-4)' }}>
+                          Deuda calculada al {obligaciones[0].deuda.total.actualizadoA}. Aquí no se suma ninguna columna: el importe del valor
+                          lo compone el servidor con las obligaciones que se marquen.
+                        </p>
+                      )}
+                    </Lectura>
+                  )}
+                  <BarraDeAccion
+                    observacion={eObs}
+                    onObservacion={setEObs}
+                    impedimento={impedimentoIndividual}
+                    etiqueta="Emitir el valor"
+                    enviando={enviando}
+                    aviso="Emitir es irreversible: el valor queda con su número correlativo, y lo que cambie después se anula, no se corrige. Además mueve la deuda a fase VALOR en el libro."
+                    onEnviar={() =>
+                      void enviar(
+                        () =>
+                          emitirValor({
+                            tipo: eTipo,
+                            codContribuyente: codDeEmision,
+                            obligaciones: marcadas.map((o) => ({
+                              tributo: o.tributo,
+                              ejercicio: o.ejercicio,
+                              predioId: o.predioId,
+                              vehiculoId: o.vehiculoId,
+                            })),
+                            observacion: eObs.trim(),
+                          }),
+                        (r) => {
+                          setEmitido(r);
+                          setEObs('');
+                          setEMarcadas({});
+                          deudaAEmitir.reintentar();
+                        },
+                        'Valor emitido.',
+                      )
+                    }
+                  />
+                </Seccion>
 
-            <section style={TARJETA}>
-              <div style={CABECERA}>
-                <h2 style={H2}>{emision.tabla.titulo}</h2>
-                <span style={META}>{emision.tabla.conteo}</span>
-              </div>
-              <div style={{ overflowX: 'auto' }}>
-                <table style={{ width: '100%', borderCollapse: 'collapse', minWidth: emision.tabla.min }}>
-                  <thead>
-                    <Cabeceras defs={emision.tabla.cols} />
-                  </thead>
-                  <tbody>
-                    {emision.tabla.filas.map((f, i) => (
-                      <tr key={i} className="hov-elev" style={{ borderTop: '1px solid var(--line)' }}>
-                        {celdas(f, emision.tabla.cols)}
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
-              <Totales filas={emision.totales} />
-              <p style={PIE}>{emision.tabla.nota}</p>
-            </section>
+                {emitido && (
+                  <Seccion titulo="Valor emitido" meta={emitido.numero}>
+                    <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit,minmax(200px,1fr))', gap: '14px 20px', padding: '16px' }}>
+                      <Dato rotulo="Número" mono>
+                        {emitido.numero}
+                      </Dato>
+                      <Dato rotulo="Tipo">{emitido.tipo}</Dato>
+                      <Dato rotulo="Ejercicio" mono>
+                        {emitido.ejercicio}
+                      </Dato>
+                      <Dato rotulo="Estado" mono>
+                        {emitido.estado}
+                      </Dato>
+                      <Dato rotulo="Importe" mono>
+                        S/ {emitido.total}
+                      </Dato>
+                      <Dato rotulo="Proyectado al" mono>
+                        {emitido.proyectadoA}
+                      </Dato>
+                      <Dato rotulo="Base legal">{emitido.baseLegal}</Dato>
+                    </div>
+                    <div style={{ padding: '0 16px 16px' }}>
+                      <button
+                        onClick={() => {
+                          setQ(emitido.numero);
+                          setFSituacion('');
+                          setFTipo('');
+                          onDest('lista');
+                        }}
+                        className="hov-linea"
+                        style={BOTON_SEC}
+                      >
+                        Abrirlo en la lista para notificarlo
+                      </button>
+                    </div>
+                  </Seccion>
+                )}
 
-            <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>
-              <p style={{ margin: 0, flex: 1, minWidth: 180, fontSize: 12, color: 'var(--ink-3)', textWrap: 'pretty' }}>{emision.aviso}</p>
-              <button className="hov-linea" style={BOTON_SEC}>
-                Vista previa
-              </button>
-              <button
-                onClick={() =>
-                  toast(
-                    esIndividual
-                      ? 'Valor generado por S/ 8,285.60. Toca notificarlo.'
-                      : '12,884 valores emitidos. 5,528 cuentas quedaron excluidas.',
-                  )
-                }
-                className="hov-acento-2"
-                style={BOTON_PRI}
-              >
-                {emision.primaria}
-              </button>
-            </div>
+                <Aviso tono="neutro" titulo="Lo que el criterio del prototipo pedía y el servidor no acepta">
+                  «Código de criterio», «Oficina emisora», «Vencimiento» y el par «Año desde / Año hasta» no están en el cuerpo de la emisión
+                  individual: lo que el servidor recibe es el tipo, el contribuyente y la lista de obligaciones. El vencimiento se deriva del
+                  plazo parametrizado cuando el valor se notifica, y la oficina emisora no la guarda ninguna columna todavía. Se dejan fuera
+                  en vez de dibujarlos: un campo que se ve y no viaja es peor que uno que no existe.
+                </Aviso>
+              </>
+            )}
+
+            {hoja === 'masiva' && (
+              <>
+                <Seccion titulo="Criterio de la corrida" meta="POST /api/v1/valores/masivo">
+                  <Rejilla>
+                    <Campo etiqueta="Tipo de valor">
+                      <select value={mTipo} onChange={(e) => setMTipo(e.target.value as TipoDeValor)} style={CONTROL}>
+                        {TIPOS_DE_VALOR.map((t) => (
+                          <option key={t.codigo} value={t.codigo}>
+                            {t.label}
+                          </option>
+                        ))}
+                      </select>
+                    </Campo>
+                    <Campo etiqueta="Tributo" ayuda="Opcional. En blanco, entra toda la deuda del rango; el nombre es el que el libro asienta, p. ej. PREDIAL.">
+                      <input value={mTributo} onChange={(e) => setMTributo(e.target.value)} placeholder="PREDIAL" style={CONTROL} />
+                    </Campo>
+                    <Campo etiqueta="Ejercicio desde">
+                      <input value={mDesde} onChange={(e) => setMDesde(e.target.value)} inputMode="numeric" placeholder="2024" style={CONTROL} />
+                    </Campo>
+                    <Campo etiqueta="Ejercicio hasta">
+                      <input value={mHasta} onChange={(e) => setMHasta(e.target.value)} inputMode="numeric" placeholder="2026" style={CONTROL} />
+                    </Campo>
+                    <Campo
+                      etiqueta="Fecha de criterio"
+                      ayuda="A qué fecha se evalúa la deuda de cada candidato. Queda congelada en la corrida: reanudarla días después evalúa la misma deuda, no la de ese día."
+                    >
+                      <input type="date" value={mFecha} onChange={(e) => setMFecha(e.target.value)} style={CONTROL} />
+                    </Campo>
+                  </Rejilla>
+                </Seccion>
+
+                <Seccion
+                  titulo="Los candidatos"
+                  meta={mCsv ? mCsv.nombre : `${contribuyentesDelLote.length} códigos`}
+                  pie="El servidor admite la selección o el archivo, y solo uno de los dos. El archivo lleva una columna, «codContribuyente», un candidato por fila."
+                >
+                  <Rejilla>
+                    <Campo etiqueta="Selección" ancho ayuda="Un código del padrón por línea. También valen separados por comas.">
+                      <textarea
+                        value={mLista}
+                        onChange={(e) => setMLista(e.target.value)}
+                        rows={4}
+                        disabled={mCsv !== null}
+                        placeholder={'C-000001\nC-000002'}
+                        style={{ ...CONTROL, resize: 'vertical', minHeight: 90, fontFamily: 'var(--font-mono)', fontSize: 12.5, opacity: mCsv !== null ? 0.5 : 1 }}
+                      />
+                    </Campo>
+                    <Campo etiqueta="O un archivo CSV" ancho ayuda="Se manda en base64 dentro de la petición: este contrato no tiene adjuntos multiparte.">
+                      <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>
+                        <input
+                          type="file"
+                          accept=".csv,text/csv"
+                          disabled={contribuyentesDelLote.length > 0}
+                          onChange={(e) => {
+                            const f = e.target.files?.[0];
+                            if (!f) return;
+                            const lector = new FileReader();
+                            lector.onload = () => {
+                              const url = String(lector.result);
+                              setMCsv({ nombre: f.name, base64: url.slice(url.indexOf(',') + 1) });
+                            };
+                            lector.readAsDataURL(f);
+                          }}
+                          style={{ fontSize: 12.5 }}
+                        />
+                        {mCsv && (
+                          <button onClick={() => setMCsv(null)} className="hov-linea" style={BOTON_SEC}>
+                            Quitar «{mCsv.nombre}»
+                          </button>
+                        )}
+                      </div>
+                    </Campo>
+                  </Rejilla>
+                  <BarraDeAccion
+                    observacion={mObs}
+                    onObservacion={setMObs}
+                    impedimento={impedimentoMasivo}
+                    etiqueta="Registrar la corrida"
+                    enviando={enviando}
+                    aviso="Esto registra el criterio y valida los candidatos; no emite todavía ningún valor. La emisión corre aparte, en el proceso por lotes, para que una corrida de miles no compita con la caja."
+                    onEnviar={() =>
+                      void enviar(
+                        () =>
+                          generarValoresMasivos({
+                            tipo: mTipo,
+                            tributo: mTributo.trim() || undefined,
+                            ejercicioDesde: Number(mDesde.trim()),
+                            ejercicioHasta: Number(mHasta.trim()),
+                            fechaCriterio: mFecha || undefined,
+                            contribuyentes: mCsv === null ? contribuyentesDelLote : undefined,
+                            archivoCsv: mCsv?.base64,
+                            observacion: mObs.trim(),
+                          }),
+                        (r) => {
+                          setCorrida(r);
+                          setMObs('');
+                        },
+                        'Corrida registrada.',
+                      )
+                    }
+                  />
+                </Seccion>
+
+                {corrida && (
+                  <Seccion titulo="Corrida registrada" meta={'#' + corrida.id}>
+                    <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit,minmax(190px,1fr))', gap: '14px 20px', padding: '16px' }}>
+                      <Dato rotulo="Tipo">{corrida.tipo}</Dato>
+                      <Dato rotulo="Tributo">{corrida.tributo ?? 'Toda la deuda'}</Dato>
+                      <Dato rotulo="Ejercicios" mono>
+                        {corrida.ejercicioDesde} — {corrida.ejercicioHasta}
+                      </Dato>
+                      <Dato rotulo="Fecha de criterio" mono>
+                        {corrida.fechaCriterio ?? SIN_DATO}
+                      </Dato>
+                      <Dato rotulo="Origen">{corrida.origen}</Dato>
+                      <Dato rotulo="Candidatos" mono>
+                        {corrida.totalCandidatos}
+                      </Dato>
+                    </div>
+                  </Seccion>
+                )}
+
+                <Aviso tono="neutro" titulo="La simulación del lote del prototipo no se puede dibujar">
+                  El artboard enseñaba un embudo —«deuda vencida», «con deuda mínima o más», «sin convenio vigente», «sin valor previo»— con
+                  sus cuentas y sus exclusiones. El servidor no publica ninguna de esas etapas: lo que devuelve al registrar la corrida es
+                  cuántos candidatos aceptó, y los que rechaza los nombra uno a uno en el error. Y la «deuda mínima» del criterio sería una
+                  cifra tributaria escrita en la pantalla: no se pide.
+                </Aviso>
+              </>
+            )}
           </div>
         )}
 
         {/* ══════════ PRESCRIPCIÓN ══════════ */}
         {dest === 'prescripcion' && (
           <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
-            <p style={ENTRADILLA}>
-              La prescripción no se declara sola: la pide el contribuyente o la reconoce la municipalidad. Lo que decide
-              es la fecha del último acto que interrumpió el conteo, y esa fecha está en el expediente del valor.
-            </p>
+            <Entradilla>
+              La prescripción no se declara sola: la pide el contribuyente o la reconoce la municipalidad. Lo que decide es el plazo del art.
+              43 y la fecha del último acto que interrumpió el cómputo. Las dos las resuelve el servidor: aquí se declaran los hechos.
+            </Entradilla>
 
-            <section style={TARJETA}>
-              <div style={CABECERA}>
-                <h2 style={H2}>Deuda con prescripción cumplida</h2>
-                <span style={META}>{PRESCRITAS.length + ' de 88 · ' + presN + ' marcados'}</span>
-                <button
-                  onClick={() =>
-                    toast(presN === 0 ? 'Marca al menos una deuda.' : presN + ' deudas extinguidas por prescripción: ' + soles(presSuma) + '.')
-                  }
-                  aria-disabled={presN === 0}
-                  style={{
-                    border: 0,
-                    borderRadius: 6,
-                    padding: '8px 16px',
-                    background: 'var(--error-texto)',
-                    color: '#fff',
-                    fontSize: 12.5,
-                    fontWeight: 500,
-                    cursor: 'pointer',
-                    opacity: presN === 0 ? 0.55 : 1,
-                  }}
+            {falloDeEscritura && (
+              <Fallo error={falloDeEscritura} ruta="POST /api/v1/coactiva/prescripcion" acceso="prescripcion" onReintentar={() => setFalloDeEscritura(null)} />
+            )}
+
+            <Seccion titulo="La solicitud" meta="POST /api/v1/coactiva/prescripcion">
+              <Rejilla>
+                <Campo etiqueta="Código del contribuyente">
+                  <input value={prCod} onChange={(e) => setPrCod(e.target.value)} placeholder="C-000001" style={CONTROL} />
+                </Campo>
+                <Campo etiqueta="Tributo" ayuda="El nombre con que el libro lo asienta. Abajo salen los que este contribuyente debe.">
+                  <input value={prTributo} onChange={(e) => setPrTributo(e.target.value)} placeholder="PREDIAL" style={CONTROL} />
+                </Campo>
+                <Campo etiqueta="Ejercicio desde">
+                  <input value={prDesde} onChange={(e) => setPrDesde(e.target.value)} inputMode="numeric" placeholder="2015" style={CONTROL} />
+                </Campo>
+                <Campo etiqueta="Ejercicio hasta">
+                  <input value={prHasta} onChange={(e) => setPrHasta(e.target.value)} inputMode="numeric" placeholder="2020" style={CONTROL} />
+                </Campo>
+                <Campo etiqueta="Fecha de presentación" ayuda="En blanco, hoy.">
+                  <input type="date" value={prPresentacion} onChange={(e) => setPrPresentacion(e.target.value)} style={CONTROL} />
+                </Campo>
+                <Campo
+                  etiqueta="Causal del plazo (art. 43)"
+                  ayuda="De ella depende el plazo, y la resolución tiene que decir por qué aplicó el que aplicó. El número de años no se elige aquí: lo resuelve el conjunto de parámetros sellado."
                 >
-                  {presN === 0 ? 'Declarar prescripción' : 'Declarar prescripción (' + presN + ')'}
-                </button>
-              </div>
-              <div style={{ overflowX: 'auto' }}>
-                <table style={{ width: '100%', borderCollapse: 'collapse', minWidth: 880 }}>
-                  <thead>
-                    <Cabeceras defs={COLS_PRES} hueco />
-                  </thead>
-                  <tbody>
-                    {PRESCRITAS.map((p, i) => {
-                      const on = presMarcadas[i] === true;
-                      return (
-                        <tr
-                          key={p[0]}
-                          className="hov-elev"
-                          style={{ borderTop: '1px solid var(--line)', background: on ? 'var(--accent-soft)' : 'transparent' }}
-                        >
-                          <td style={{ padding: '11px 14px' }}>
-                            <input
-                              type="checkbox"
-                              checked={on}
-                              onChange={() => setPresMarcadas((x) => ({ ...x, [i]: !on }))}
-                              aria-label={'Declarar prescripción de ' + p[1] + ' ejercicio ' + p[2]}
-                              style={{ accentColor: 'var(--accent)', width: 16, height: 16 }}
-                            />
-                          </td>
-                          {celdas([p[0], p[1], p[2], p[3], p[4], p[5], p[6].toFixed(2)], COLS_PRES)}
-                        </tr>
-                      );
-                    })}
-                  </tbody>
-                </table>
-              </div>
-              <div
-                style={{
-                  display: 'flex',
-                  alignItems: 'center',
-                  gap: 12,
-                  flexWrap: 'wrap',
-                  padding: '12px 16px',
-                  borderTop: '1px solid var(--line)',
-                  background: 'var(--bg-elev)',
-                }}
-              >
-                <span style={{ flex: 1, minWidth: 150, fontSize: 12.5, color: 'var(--ink-3)', textWrap: 'pretty' }}>
-                  Declarar la prescripción extingue la deuda y la saca de la cuenta corriente. Es irreversible y queda en
-                  la bitácora con la resolución.
-                </span>
-                <span style={{ fontSize: 11, textTransform: 'uppercase', letterSpacing: '.1em', color: 'var(--ink-3)' }}>A extinguir</span>
-                <span style={{ fontFamily: 'var(--font-mono)', fontSize: 18, color: 'var(--ink)' }}>{soles(presSuma)}</span>
-              </div>
-            </section>
+                  <select value={prCausal} onChange={(e) => setPrCausal(e.target.value as Causal)} style={CONTROL}>
+                    {CAUSALES.map((c) => (
+                      <option key={c.k} value={c.k}>
+                        {c.label}
+                      </option>
+                    ))}
+                  </select>
+                </Campo>
+                <Campo etiqueta="Nº de resolución" ayuda="Si ya se emitió. Opcional.">
+                  <input value={prResolucion} onChange={(e) => setPrResolucion(e.target.value)} style={CONTROL} />
+                </Campo>
+              </Rejilla>
+            </Seccion>
 
-            <section style={TARJETA}>
-              <div style={{ padding: '14px 16px', borderBottom: '1px solid var(--line)' }}>
-                <p style={{ margin: 0, fontFamily: 'var(--font-serif)', fontSize: 16, fontWeight: 600 }}>Sustento de la declaración</p>
-                <p style={{ margin: '3px 0 0', fontSize: 12.5, lineHeight: 1.5, color: 'var(--ink-3)', maxWidth: '76ch', textWrap: 'pretty' }}>
-                  Artículo 43º del Código Tributario: cuatro años, o seis si no se presentó la declaración jurada. El
-                  conteo empieza el 1 de enero siguiente al ejercicio de la deuda.
+            {codDePrescripcion !== '' && (
+              <Seccion
+                titulo="Qué debe este contribuyente"
+                meta={deudaAPrescribir.datos ? `${deudaAPrescribir.datos.totalElementos} obligaciones` : ''}
+                pie="Pulsa una fila para copiar su tributo y su ejercicio a la solicitud. La deuda con saldo es la que la declaración extinguiría."
+              >
+                <Lectura lectura={deudaAPrescribir} ruta="GET /api/v1/consultas/deuda" acceso="consulta_deuda">
+                  <TablaDeTextos
+                    cols={[
+                      ['Año', 0],
+                      ['Tributo', 0],
+                      ['Unidad', 0],
+                      ['Fase', 0],
+                      ['Total S/', 1],
+                    ]}
+                    vacio="Este contribuyente no tiene deuda pendiente."
+                    onFila={(i) => {
+                      const o = deudaAPrescribir.datos?.contenido[i];
+                      if (!o) return;
+                      setPrTributo(o.tributo);
+                      if (prDesde.trim() === '') setPrDesde(String(o.ejercicio));
+                      setPrHasta(String(o.ejercicio));
+                    }}
+                    filas={(deudaAPrescribir.datos?.contenido ?? []).map((o) => [
+                      String(o.ejercicio),
+                      o.tributo,
+                      o.predioId !== null ? 'Predio ' + o.predioId : o.vehiculoId !== null ? 'Vehículo ' + o.vehiculoId : 'Sin unidad',
+                      o.fase,
+                      o.deuda.total.importe,
+                    ])}
+                  />
+                </Lectura>
+              </Seccion>
+            )}
+
+            <Seccion
+              titulo="Hechos que interrumpen o suspenden el cómputo"
+              meta={`${prHechos.length} declarados`}
+              acciones={
+                <button
+                  onClick={() => setPrHechos((h) => [...h, { clase: 'INTERRUPCION', causal: '', fechaDesde: '' }])}
+                  className="hov-linea"
+                  style={{ ...BOTON_SEC, padding: '6px 12px', fontSize: 12 }}
+                >
+                  Añadir un hecho
+                </button>
+              }
+              pie="Una interrupción reinicia el plazo desde cero (art. 45) y una suspensión solo lo detiene mientras dura (art. 46). No es un matiz: tratarlas igual adelanta o atrasa la prescripción en años."
+            >
+              {prHechos.length === 0 && (
+                <p style={{ margin: 0, padding: '20px 16px', fontSize: 13, color: 'var(--ink-3)' }}>
+                  Ninguno declarado. Sin hechos, el cómputo corre entero desde su inicio.
                 </p>
-              </div>
-              <Formulario
-                val={val}
-                set={set}
-                defs={[
-                  {
-                    k: 'pCausal',
-                    l: 'Base legal',
-                    t: 'sel',
-                    ancho: true,
-                    v: 'ART. 43º — CUATRO AÑOS',
-                    o: ['ART. 43º — CUATRO AÑOS', 'ART. 43º — SEIS AÑOS SIN DECLARACIÓN', 'ART. 43º — DIEZ AÑOS POR RETENCIÓN'],
-                  },
-                  {
-                    k: 'pOrigen',
-                    l: 'Origen de la declaración',
-                    t: 'sel',
-                    v: 'SOLICITUD DEL CONTRIBUYENTE',
-                    o: ['SOLICITUD DEL CONTRIBUYENTE', 'DE OFICIO', 'MANDATO JUDICIAL'],
-                  },
-                  { k: 'pExp', l: 'Nº de expediente', t: 'text', v: '2026-1188' },
-                  { k: 'pRes', l: 'Nº de resolución', t: 'text', v: 'RGAT-0244-2026-MDC' },
-                  { k: 'pFecha', l: 'Fecha de resolución', t: 'date', v: '2026-08-13' },
-                  {
-                    k: 'pUltimo',
-                    l: 'Último acto interruptivo',
-                    t: 'ro',
-                    v: 'Ninguno registrado',
-                    ayuda: 'Si hubiera notificación posterior, el conteo se reinicia y no procede',
-                  },
-                  {
-                    k: 'pMotivo',
-                    l: 'Motivo',
-                    t: 'area',
-                    ancho: true,
-                    v: 'Transcurridos más de cuatro años desde el 1 de enero siguiente al ejercicio de la deuda sin acto que interrumpa el cómputo.',
-                  },
-                ]}
+              )}
+              {prHechos.map((h, i) => (
+                <div key={i} style={{ borderTop: i === 0 ? undefined : '1px solid var(--line)' }}>
+                  <Rejilla>
+                    <Campo etiqueta="Clase">
+                      <select
+                        value={h.clase}
+                        onChange={(e) =>
+                          setPrHechos((xs) => xs.map((x, j) => (j === i ? { ...x, clase: e.target.value as ClaseDeHecho } : x)))
+                        }
+                        style={CONTROL}
+                      >
+                        <option value="INTERRUPCION">INTERRUPCION — reinicia el plazo</option>
+                        <option value="SUSPENSION">SUSPENSION — lo detiene mientras dura</option>
+                      </select>
+                    </Campo>
+                    <Campo
+                      etiqueta="Causal"
+                      ancho
+                      ayuda="Es la cita que la resolución lleva; el servidor no la valida contra una lista, así que se puede escribir otra."
+                    >
+                      <input
+                        value={h.causal}
+                        list={'causales-' + i}
+                        onChange={(e) => setPrHechos((xs) => xs.map((x, j) => (j === i ? { ...x, causal: e.target.value } : x)))}
+                        style={CONTROL}
+                      />
+                      <datalist id={'causales-' + i}>
+                        {CAUSALES_SUGERIDAS.filter((c) => c.clase === h.clase).map((c) => (
+                          <option key={c.causal} value={c.causal} />
+                        ))}
+                      </datalist>
+                    </Campo>
+                    <Campo etiqueta="Desde">
+                      <input
+                        type="date"
+                        value={h.fechaDesde}
+                        onChange={(e) => setPrHechos((xs) => xs.map((x, j) => (j === i ? { ...x, fechaDesde: e.target.value } : x)))}
+                        style={CONTROL}
+                      />
+                    </Campo>
+                    <Campo etiqueta="Hasta" ayuda={h.clase === 'INTERRUPCION' ? 'Una interrupción es un día, no un intervalo: no lleva fin.' : 'El último día del intervalo suspendido.'}>
+                      <input
+                        type="date"
+                        value={h.fechaHasta ?? ''}
+                        disabled={h.clase === 'INTERRUPCION'}
+                        onChange={(e) => setPrHechos((xs) => xs.map((x, j) => (j === i ? { ...x, fechaHasta: e.target.value } : x)))}
+                        style={{ ...CONTROL, opacity: h.clase === 'INTERRUPCION' ? 0.5 : 1 }}
+                      />
+                    </Campo>
+                  </Rejilla>
+                  <div style={{ padding: '0 16px 12px' }}>
+                    <button onClick={() => setPrHechos((xs) => xs.filter((_, j) => j !== i))} className="hov-linea" style={{ ...BOTON_SEC, padding: '6px 12px', fontSize: 12 }}>
+                      Quitar este hecho
+                    </button>
+                  </div>
+                </div>
+              ))}
+            </Seccion>
+
+            <Seccion titulo="Declarar">
+              <BarraDeAccion
+                observacion={prObs}
+                onObservacion={setPrObs}
+                impedimento={impedimentoPrescripcion}
+                etiqueta={confirmando ? 'Sí: declarar la prescripción' : 'Declarar la prescripción'}
+                enviando={enviando}
+                aviso={
+                  confirmando
+                    ? 'Se marcarán como prescritos los valores del rango y la acción de cobro se extingue. No hay vuelta atrás: vuelve a pulsar para confirmar.'
+                    : 'Declarar la prescripción extingue la acción de cobro y marca los valores del rango. Es irreversible y queda en la bitácora con su resolución.'
+                }
+                onEnviar={() => {
+                  if (!confirmando) {
+                    setConfirmando(true);
+                    return;
+                  }
+                  void enviar(
+                    () =>
+                      declararPrescripcion({
+                        codContribuyente: codDePrescripcion,
+                        tributo: prTributo.trim(),
+                        ejercicioDesde: Number(prDesde.trim()),
+                        ejercicioHasta: Number(prHasta.trim()),
+                        fechaDePresentacion: prPresentacion || undefined,
+                        plazoAplicable: prCausal,
+                        hechos: prHechos.length === 0 ? undefined : prHechos.map((h) => ({ ...h, fechaHasta: h.clase === 'INTERRUPCION' ? undefined : h.fechaHasta || undefined })),
+                        nDeResolucion: prResolucion.trim() || undefined,
+                        observacion: prObs.trim(),
+                      }),
+                    (r) => {
+                      setDeclarada(r);
+                      setPrObs('');
+                      setConfirmando(false);
+                      yaPrescritos.reintentar();
+                    },
+                    'Prescripción declarada.',
+                  );
+                }}
               />
-            </section>
+            </Seccion>
+
+            {/* El reloj: lo que el servidor calculó, ejercicio por ejercicio. */}
+            {declarada && (
+              <Seccion
+                titulo="El cómputo, tal como lo resolvió el servidor"
+                meta={declarada.resultado}
+                pie="El plazo, el inicio del cómputo y la fecha de prescripción no se escriben en esta pantalla: los deriva el servidor del conjunto de parámetros sellado y de los hechos declarados. La barra mide el tramo transcurrido entre esas dos fechas, que son suyas."
+              >
+                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit,minmax(190px,1fr))', gap: '14px 20px', padding: '16px', borderBottom: '1px solid var(--line)' }}>
+                  <Dato rotulo="Plazo aplicado" mono>
+                    {declarada.plazo}
+                  </Dato>
+                  <Dato rotulo="Causal">{declarada.plazoAplicable}</Dato>
+                  <Dato rotulo="Resultado">{declarada.resultado}</Dato>
+                  <Dato rotulo="Presentada el" mono>
+                    {declarada.fechaDePresentacion}
+                  </Dato>
+                  <Dato rotulo="Nº de resolución" mono>
+                    {declarada.nDeResolucion ?? SIN_DATO}
+                  </Dato>
+                </div>
+                <TablaDeTextos
+                  cols={COLS_COMPUTO}
+                  vacio="Sin ejercicios en el cómputo."
+                  filas={declarada.ejercicios.map((e) => [
+                    String(e.ejercicio),
+                    e.inicioDelComputo,
+                    e.nuevoInicioDelComputo === e.inicioDelComputo ? 'sin interrupciones' : e.nuevoInicioDelComputo,
+                    e.fechaDePrescripcion,
+                    e.prescrita ? 'Prescrita' : 'No prescrita',
+                  ])}
+                />
+              </Seccion>
+            )}
+
+            {codDePrescripcion !== '' && (
+              <Seccion
+                titulo="Valores ya declarados prescritos"
+                meta={yaPrescritos.datos ? `${yaPrescritos.datos.totalElementos}` : ''}
+                pie="Se leen del padrón de valores con la situación PRESCRITO, no de una lista aparte."
+              >
+                <Lectura lectura={yaPrescritos} ruta="GET /api/v1/consultas/valores" acceso="consulta_valores">
+                  <TablaDeTextos
+                    cols={[
+                      ['Nº valor', 0],
+                      ['Tipo', 0],
+                      ['Tributo', 0],
+                      ['Periodo', 0],
+                      ['Emitido', 0],
+                      ['Importe S/', 1],
+                    ]}
+                    vacio="Ninguno: a este contribuyente no se le ha declarado prescrito ningún valor."
+                    filas={(yaPrescritos.datos?.contenido ?? []).map((v) => [
+                      v.numero,
+                      v.tipo,
+                      v.tributo ?? SIN_DATO,
+                      v.periodo ?? SIN_DATO,
+                      v.fechaEmision,
+                      v.monto.importe,
+                    ])}
+                  />
+                </Lectura>
+              </Seccion>
+            )}
+
+            <Aviso tono="neutro" titulo="Lo que el prototipo daba por hecho y aquí no está">
+              La lista de «deuda con prescripción cumplida» que traía el artboard —tres contribuyentes con su conteo y su importe—{' '}
+              <strong>no la publica ninguna lectura</strong>: no hay un endpoint que diga «qué ha prescrito ya». Lo que hay es esta
+              declaración, que se pide por contribuyente y rango, y el cómputo que el servidor devuelve. Y «Origen de la declaración»,
+              «Nº de expediente» y «Fecha de resolución» no viajan: el cuerpo que el servidor acepta no los tiene.
+            </Aviso>
           </div>
         )}
       </div>
     </Shell>
   );
 }
-
-const COLS_LISTA: ColDef[] = [
-  ['Nº valor', 0],
-  ['Tipo', 0],
-  ['Contribuyente', 0],
-  ['Ejercicio', 0],
-  ['Emitido', 0],
-  ['Notificado', 0],
-  ['Importe S/', 1],
-  ['Prescribe', 0],
-  ['Etapa', 0],
-];
-
-const COLS_PRES: ColDef[] = [
-  ['Contribuyente', 0],
-  ['Nombre', 0],
-  ['Ejercicio', 0],
-  ['Concepto', 0],
-  ['Valor', 0],
-  ['Conteo desde', 0],
-  ['A extinguir S/', 1],
-];
