@@ -110,6 +110,24 @@ public class AdministrarSeguridad {
         return repositorio.gruposDeUsuario(usuarioId, paginacion);
     }
 
+    /**
+     * Quien esta en un grupo (#582).
+     *
+     * <p>La pregunta inversa de {@link #gruposDeUsuario}, y hasta ahora no se podia hacer:
+     * derivarla obligaba a recorrer el padron de cuentas preguntando por cada una.
+     *
+     * <p>Un grupo que no existe <b>en esta municipalidad</b> es <b>404</b>, no una pagina vacia. No
+     * tener miembros y no existir son dos respuestas distintas, y la segunda no se puede decir
+     * callando: cero filas se leeria como «este grupo no lo tiene nadie», que es lo contrario de lo
+     * que hay que contestarle a quien administra. Es la misma decision que {@code Optional.empty()}
+     * frente a la pagina vacia en el listado de manzanas (#537).
+     */
+    @Transactional(readOnly = true)
+    public Pagina<Usuario> usuariosDeGrupo(long grupoId, Paginacion paginacion) {
+        repositorio.grupo(grupoId).orElseThrow(() -> noEncontrado("grupo", grupoId));
+        return repositorio.usuariosDeGrupo(grupoId, paginacion);
+    }
+
     // ------------------------------------------------------------------ grupos
 
     @Transactional

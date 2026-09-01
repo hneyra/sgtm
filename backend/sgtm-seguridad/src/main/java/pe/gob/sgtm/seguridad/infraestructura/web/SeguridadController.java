@@ -92,6 +92,28 @@ public class SeguridadController {
     }
 
     /**
+     * Quien esta en un grupo (#582).
+     *
+     * <p><b>Su acceso es {@code grupos} y no {@code miembros}</b>, por simetria exacta con {@code
+     * gruposDeUsuario} de aqui arriba: aquella es una lectura sobre un usuario y pide {@code
+     * usuarios}; esta es una lectura sobre un grupo y pide {@code grupos}. Quien puede ver el
+     * padron de grupos puede ver quien esta en cada uno; afiliar y desafiliar sigue exigiendo
+     * {@code miembros} con {@code REGISTRO}, que es el otro endpoint de esta misma ruta.
+     *
+     * <p>La anotacion va <b>en el metodo</b>: la clase no declara ninguna, asi que una lectura sin
+     * la suya se quedaria sin guardia. Y cual sea no lo puede ver ArchUnit —cambiar {@code grupos}
+     * por {@code usuarios} deja el build en VERDE— asi que lo fija una prueba (#431, #543).
+     */
+    @GetMapping("/grupos/{grupo}/miembros")
+    @RequiereAcceso(acceso = "grupos", privilegio = Privilegio.LECTURA)
+    public RespuestaPaginada<Recursos.UsuarioResource> usuariosDeGrupo(
+            @PathVariable("grupo") long grupo, ParametrosDePaginacion paginacion) {
+        return RespuestaPaginada.de(
+                administrar.usuariosDeGrupo(grupo, paginacion.aPaginacion("cuenta")),
+                Recursos.UsuarioResource::de);
+    }
+
+    /**
      * Alta y baja de la pertenencia a un grupo.
      *
      * <p>Un solo endpoint para las dos, con {@code activo} en el cuerpo, porque la baja <b>no es un
