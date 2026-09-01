@@ -1,11 +1,12 @@
-/* Datos de muestra del módulo de infracciones administrativas, copiados
-   literalmente del artboard `Infracciones administrativas.dc.html`. Nada de
-   esto viaja a ningún backend: es la maqueta.
+/* Lo que queda del artboard `Infracciones administrativas.dc.html` una vez que
+   el módulo lee del backend: los rótulos, la prosa y los campos que el servidor
+   admite de verdad.
 
-   El acrónimo de los documentos es `MDC` —Municipalidad Distrital de
-   Catacaos—, no el `MPS`/`MPT` que escribía el artboard. */
-
-/* ══════════ Los tres actos del procedimiento ══════════ */
+   **Aquí ya no hay ni una cifra ni una fila inventada.** Las 812
+   notificaciones, las seis del cuadro CUIS con su multa en soles, las cuatro
+   multas marcables y las seis hojas con sus filas salían del prototipo. Lo que
+   el backend publica lo dibuja `Sanciones.tsx`; lo que no publica sale «—»
+   diciendo por qué. */
 
 export type TipoDeCampo = 'text' | 'sel' | 'date' | 'area' | 'chk' | 'ro';
 
@@ -32,15 +33,46 @@ export type Acto = {
   titulo: string;
   hint: string;
   bloques: BloqueDeActo[];
-  cuenta?: boolean;
-  secundaria: string;
   primaria: string;
   aviso: string;
+  /** Lo que impide registrar este acto desde aquí, cuando lo hay. */
+  sinPuerta?: string;
 };
 
-/** Los tres actos del procedimiento sancionador, en su orden legal. Cada uno
- *  declara los campos del manual; lo que decide si se puede abrir es el estado
- *  del acto anterior, no una validación al pulsar «Guardar». */
+/* ══════════ Los enumerados del dominio, letra por letra ══════════ */
+
+export const SENTIDOS_DEL_FALLO = ['', 'FUNDADO', 'FUNDADO_EN_PARTE', 'INFUNDADO', 'IMPROCEDENTE'];
+export const EFECTOS_SOBRE_LA_MULTA = ['', 'SE_MANTIENE', 'SE_DEJA_SIN_EFECTO', 'SE_REDUCE'];
+export const MODALIDADES_DE_NOTIFICACION = ['PERSONAL', 'CEDULON', 'PUBLICACION', 'CORREO', 'NEGATIVA'];
+export const RESULTADOS_DE_NOTIFICACION = ['NOTIFICADO', 'NO_UBICADO', 'RECHAZADO'];
+
+/**
+ * Las cinco fases de `FaseDelProcedimiento`, con el rótulo con que se leen.
+ *
+ * **La fase no es el estado de la deuda.** El manual mezcla los dos
+ * vocabularios en una sola columna «Estado»; el recurso publica los dos con
+ * nombres distintos y la pantalla los dibuja en dos columnas.
+ */
+export const FASES: [clave: string, rotulo: string, nota: string][] = [
+  ['PREVENTIVA', 'Preventiva', 'La notificación previa sigue abierta y su plazo no ha vencido'],
+  ['CONSTATADA', 'Constatada', 'Venció el plazo sin subsanar y todavía no hay resolución'],
+  ['SANCIONADA', 'Sancionada', 'Hay resolución de gerencia administrativa sobre el acta'],
+  ['PAGADA', 'Pagada', 'La multa se cobró'],
+  ['COACTIVA', 'En coactiva', 'Firme y sin pagar: pasó a ejecución'],
+];
+
+/* ══════════ Los tres actos del procedimiento ══════════ */
+
+/**
+ * Los tres actos, en su orden legal, **con los campos que el backend acepta**.
+ *
+ * El manual dibuja muchos más —CIIU del establecimiento, nombre comercial,
+ * inspector y supervisor, si el administrado se negó a firmar, la hora del
+ * acta—, y ninguno de ellos entra por el cuerpo que el servidor declara: los
+ * cuerpos son lista blanca y lo que no está en el `record` no viaja. Dibujar un
+ * campo que no viaja es el defecto que #331 documenta: se teclea, se guarda
+ * «bien» y el dato desaparece sin que nada lo diga.
+ */
 export const ACTOS: Acto[] = [
   {
     id: 'notificacion',
@@ -48,414 +80,216 @@ export const ACTOS: Acto[] = [
     hint: 'Se levanta en el establecimiento y abre el plazo para subsanar',
     bloques: [
       {
-        titulo: 'Datos de la notificación',
+        titulo: 'Identidad del acto',
+        nota:
+          'El manual teclea el número en tres campos —Serie, Año, Número— y el sistema lo guarda en UNO, único por municipalidad. ' +
+          'La serie y el número se componen con el guion que el propio manual imprime en su columna «Serie-Nº»; el año no entra ' +
+          'en él, porque «001-004183» de 2025 y de 2026 serían la misma notificación.',
         campos: [
-          { k: 'serie', l: 'Serie', t: 'text' },
-          { k: 'anioN', l: 'Año', t: 'sel', o: ['2026', '2025', '2024'] },
-          { k: 'numeroN', l: 'Número', t: 'text' },
+          { k: 'serie', l: 'Serie', t: 'text', ph: '001' },
+          { k: 'numeroN', l: 'Número', t: 'text', ph: '004183' },
           { k: 'fechaN', l: 'Fecha de notificación', t: 'date' },
-          { k: 'horaN', l: 'Hora', t: 'text' },
-          { k: 'plazoN', l: 'Plazo (días hábiles)', t: 'text', ayuda: 'El plazo lo fija la ordenanza según la materia' },
-          { k: 'venceN', l: 'Vence', t: 'ro' },
+          { k: 'plazoN', l: 'Plazo (días)', t: 'text', ph: '10', ayuda: 'Sin plazo la notificación no vence nunca, y eso es una decisión, no un olvido' },
         ],
       },
       {
-        titulo: 'Infractor y predio',
+        titulo: 'Dónde y por qué',
         campos: [
-          { k: 'codInfractor', l: 'Infractor — código', t: 'text' },
-          { k: 'nomInfractor', l: 'Infractor — nombre', t: 'ro', ancho: true },
-          { k: 'docInfractor', l: 'D.N.I. / R.U.C.', t: 'ro' },
-          { k: 'dirPredio', l: 'Dirección del predio', t: 'text', ancho: true },
-          { k: 'ciiu', l: 'Actividad del negocio', c: 'CIIU', t: 'text' },
-          { k: 'licencia', l: 'Licencia de funcionamiento', t: 'text' },
+          { k: 'dirN', l: 'Dirección del establecimiento', t: 'text', ancho: true, ph: 'AV. JOSÉ DE LAMA 1180' },
+          { k: 'motivoN', l: 'Motivo', t: 'area', ancho: true, ph: 'Lo que se constató y hay que subsanar' },
         ],
       },
       {
-        titulo: 'Infracción y entrega',
+        titulo: 'A quién, si se sabe',
+        nota:
+          'Los dos son opcionales a propósito: «un paso previo a la generación de la multa administrativa» no exige contribuyente ' +
+          'ni predio identificados. Son identificadores internos, no el código del padrón ni el código catastral.',
         campos: [
-          { k: 'codInfraccion', l: 'Código de infracción', c: 'CUIS', t: 'sel', o: ['A-021', 'A-014', 'A-032', 'C-101', 'C-108', 'S-018', 'L-007'] },
-          { k: 'descInfraccion', l: 'Descripción', t: 'ro', ancho: true },
-          { k: 'fiscalizador', l: 'Fiscalizador', t: 'sel', o: ['RETO SANTOS, VÍCTOR', 'RÍOS MENDOZA, MARÍA', 'QUISPE PEÑA, JORGE'] },
-          { k: 'recibido', l: 'Recibido por', t: 'sel', o: ['CONTRIBUYENTE', 'FAMILIAR', 'DEPENDIENTE', 'NEGATIVA A RECIBIR', 'CEDULÓN'] },
-          { k: 'receptor', l: 'Nombre del receptor', t: 'text' },
-          { k: 'docReceptor', l: 'D.N.I. del receptor', t: 'text' },
-          { k: 'obsN', l: 'Observaciones', t: 'area', ancho: true },
+          { k: 'contribN', l: 'Id de contribuyente', t: 'text', ph: 'en blanco si no se identificó' },
+          { k: 'predioN', l: 'Id de predio', t: 'text', ph: 'en blanco si no se identificó' },
         ],
       },
     ],
-    secundaria: 'Imprimir notificación',
-    primaria: 'Registrar notificación',
-    aviso: 'Al registrar empieza a correr el plazo. Antes de que venza no se puede sancionar.',
+    primaria: 'Registrar la notificación',
+    aviso: 'Registrarla es lo que hace correr el plazo. Sin notificación previa el procedimiento sancionador es nulo.',
   },
   {
     id: 'sancion',
-    titulo: 'Acta y resolución de sanción',
-    hint: 'Solo si el plazo venció sin subsanar',
-    bloques: [
-      {
-        titulo: 'Acta de constatación',
-        nota: 'Se levanta en una segunda visita, después de vencido el plazo. Es lo que acredita que la infracción sigue.',
-        campos: [
-          { k: 'nroActa', l: 'Nº de acta', t: 'ro' },
-          { k: 'fechaActa', l: 'Fecha', t: 'date' },
-          { k: 'horaActa', l: 'Hora', t: 'text' },
-          { k: 'nomComercial', l: 'Nombre comercial', t: 'text' },
-          { k: 'establecimiento', l: 'Establecimiento', t: 'text', ancho: true },
-          { k: 'inspector', l: 'Inspector', t: 'sel', o: ['L. PEÑA SANDOVAL', 'A. VÍLCHEZ ROJAS', 'V. RETO SANTOS'] },
-          { k: 'supervisor', l: 'Supervisor', t: 'sel', o: ['C. ANCAJIMA FLORES', 'R. MENDOZA CRUZ'] },
-          { k: 'atiende', l: 'Persona que atiende', t: 'text' },
-          { k: 'sinFirma', l: 'Se negó a firmar', t: 'chk', ph: 'Dejar constancia en el acta' },
-          { k: 'hechos', l: 'Descripción de los hechos', t: 'area', ancho: true },
-        ],
-      },
-      {
-        titulo: 'Resolución de infracción y sanción',
-        nota: 'El código del cuadro CUIS trae el porcentaje de UIT y la medida: no se teclean.',
-        campos: [
-          { k: 'cuis', l: 'Código', c: 'CUIS', t: 'sel', o: ['A-021', 'A-014', 'A-032', 'C-101', 'C-108', 'C-214', 'S-018', 'L-007'] },
-          { k: 'descCuis', l: 'Descripción de la infracción', t: 'ro', ancho: true },
-          { k: 'uit', l: 'Base UIT (S/)', t: 'ro' },
-          { k: 'pctUit', l: 'Porcentaje de UIT', t: 'ro' },
-          { k: 'valorMulta', l: 'Valor de la multa (S/)', t: 'ro' },
-          { k: 'medida', l: 'Medida complementaria', t: 'sel', o: ['NINGUNA', 'CLAUSURA TEMPORAL', 'CLAUSURA DEFINITIVA', 'DECOMISO', 'RETIRO', 'PARALIZACIÓN DE OBRA', 'DEMOLICIÓN'] },
-          { k: 'nroRis', l: 'Nº de resolución', c: 'RIS', t: 'text' },
-          { k: 'fechaNotifRis', l: 'Fecha de notificación', t: 'date' },
-          { k: 'prontoPago', l: 'Descuento pronto pago (50 %)', t: 'ro' },
-          { k: 'plazoDescargo', l: 'Plazo de descargo', t: 'ro' },
-        ],
-      },
-    ],
-    cuenta: true,
-    secundaria: 'Vista previa de la RIS',
-    primaria: 'Emitir la sanción',
-    aviso: 'Emitir la sanción crea la multa en la cuenta corriente y abre el plazo de descargo de cinco días hábiles.',
+    titulo: 'Acta de constatación y sanción',
+    hint: 'Segunda visita: se constata que no se subsanó y nace la multa',
+    bloques: [],
+    primaria: 'Levantar el acta',
+    aviso: 'Vencido el plazo, o se levanta el acta y se sanciona, o se archiva. No hacer nada equivale a archivar sin dejar constancia.',
+    sinPuerta:
+      'El acta administrativa es una papeleta de la familia ADMINISTRATIVA, y el registro de papeletas no está publicado: el ' +
+      'controlador de actas es de solo lectura y el contrato no declara ningún POST que las cree. El acto existe en el backend; ' +
+      'la puerta, no. Dibujar aquí el formulario del manual daría un botón que no manda nada.',
   },
   {
     id: 'resolucion',
     titulo: 'Resolución de gerencia',
-    hint: 'Resuelve el descargo y deja la sanción firme',
+    hint: 'Resuelve el descargo y deja la multa firme, reducida o sin efecto',
     bloques: [
       {
-        titulo: 'Resolución',
+        titulo: 'La resolución',
         campos: [
-          { k: 'nroRg', l: 'Nº de resolución', t: 'text' },
-          { k: 'fechaRg', l: 'Fecha de resolución', t: 'date' },
-          { k: 'expRg', l: 'Nº de expediente del descargo', t: 'text' },
-          { k: 'sentido', l: 'Sentido del fallo', t: 'sel', o: ['FUNDADO', 'INFUNDADO', 'IMPROCEDENTE', 'FUNDADO EN PARTE'] },
-          { k: 'efecto', l: 'Efecto sobre la multa', t: 'sel', o: ['SE MANTIENE', 'SE DEJA SIN EFECTO', 'SE REDUCE'] },
-          { k: 'gerencia', l: 'Gerencia que resuelve', t: 'sel', o: ['GERENCIA DE FISCALIZACIÓN Y CONTROL', 'GERENCIA MUNICIPAL', 'GERENCIA DE ADMINISTRACIÓN TRIBUTARIA'] },
-          { k: 'sustentoRg', l: 'Sustento de la resolución', t: 'area', ancho: true },
-        ],
-      },
-      {
-        titulo: 'Notificación de la resolución',
-        nota: 'La notificación de la resolución es la que deja la sanción firme y habilita el cobro.',
-        campos: [
-          { k: 'fechaNotifRg', l: 'Fecha de notificación', t: 'date' },
-          { k: 'recibidoRg', l: 'Recibido por', t: 'sel', o: ['CONTRIBUYENTE', 'FAMILIAR', 'DEPENDIENTE', 'NEGATIVA A RECIBIR', 'CEDULÓN'] },
-          { k: 'notificador', l: 'Notificador', t: 'sel', o: ['V. RETO SANTOS', 'M. RÍOS MENDOZA', 'J. QUISPE PEÑA'] },
-          { k: 'visita', l: 'Nº de visita', t: 'text' },
+          { k: 'papR', l: 'Nº de acta / papeleta', t: 'text', ph: 'El acta sobre la que se resuelve' },
+          { k: 'fechaR', l: 'Fecha de la resolución', t: 'date' },
+          { k: 'expR', l: 'Nº de expediente del descargo', t: 'text', ph: 'en blanco si no hubo recurso' },
+          { k: 'sentidoR', l: 'Sentido del fallo', t: 'sel', o: SENTIDOS_DEL_FALLO },
+          { k: 'efectoR', l: 'Efecto sobre la multa', t: 'sel', o: EFECTOS_SOBRE_LA_MULTA },
+          { k: 'accesoriaR', l: 'Sanción accesoria', t: 'text', ph: 'Clausura, retiro, paralización…' },
+          { k: 'proyR', l: 'Proyectar la deuda al', t: 'date', ayuda: 'La cifra que se imprime en el papel sale con esta fecha (regla 9)' },
+          { k: 'sustentoR', l: 'Sustento', t: 'area', ancho: true, ph: 'Los fundamentos de hecho y de derecho' },
         ],
       },
     ],
-    secundaria: 'Ver el documento',
-    primaria: 'Emitir resolución',
+    primaria: 'Dictar la resolución',
     aviso: 'Una vez firme, la multa pasa a generación de valores y de ahí a cobranza coactiva si no se paga.',
   },
 ];
 
-/** El borrador con que llega el expediente 001-004182.
+/** Los campos de la cédula con que se notifica la resolución ya dictada. */
+export const CAMPOS_DE_LA_CEDULA: CampoDeActo[] = [
+  { k: 'cedResolucion', l: 'Nº de la resolución', t: 'text', ph: 'RGA-…' },
+  { k: 'cedFecha', l: 'Fecha de la diligencia', t: 'date' },
+  { k: 'cedModalidad', l: 'Modalidad', t: 'sel', o: MODALIDADES_DE_NOTIFICACION },
+  { k: 'cedResultado', l: 'Resultado', t: 'sel', o: RESULTADOS_DE_NOTIFICACION },
+  { k: 'cedNotificador', l: 'Notificador', t: 'text', ph: 'Quien diligenció' },
+  { k: 'cedDireccion', l: 'Dirección donde se diligenció', t: 'text', ancho: true },
+  { k: 'cedRecibio', l: 'Recibió', t: 'text' },
+  { k: 'cedDocReceptor', l: 'Documento del receptor', t: 'text' },
+  { k: 'cedVinculo', l: 'Vínculo con el administrado', t: 'text' },
+  { k: 'cedAcuse', l: 'Acuse', t: 'text', ancho: true, ph: 'Lo que quedó anotado en el cargo' },
+];
+
+/** El motivo por el que un acto todavía no se puede abrir. */
+export const MOTIVOS: Record<'sancion' | 'resolucion', string> = {
+  sancion: 'Se habilita cuando la notificación esté registrada. Sin notificación previa el procedimiento sancionador es nulo.',
+  resolucion: 'Se habilita cuando haya acta con multa. No hay nada que resolver antes de eso.',
+};
+
+/* ══════════ El cuadro CUIS ══════════ */
+
+/**
+ * Las columnas del cuadro, en la forma que `CodigoInfraccionResource` la da.
  *
- *  El acta y la resolución de sanción van **vacías**: este expediente es el
- *  que el panel anuncia como «plazo vencido, toca levantar el acta», así que
- *  el acto 2 tiene que quedar pendiente y no cumplido. */
-export const DEFECTOS: Record<string, string | boolean> = {
-  serie: '001', anioN: '2026', numeroN: '004182', fechaN: '2026-08-02', horaN: '11:20',
-  plazoN: '10', venceN: '12/08/2026',
-  codInfractor: '00000006551', nomInfractor: 'NOBLECILLA ARISMENDIZ SAC',
-  docInfractor: 'RUC 20525118447', dirPredio: 'AV. JOSÉ DE LAMA 1180',
-  ciiu: '5610 — RESTAURANTES Y SERVICIO MÓVIL DE COMIDAS', licencia: '',
-  codInfraccion: 'A-014', descInfraccion: 'INSTALAR ANUNCIO SIN AUTORIZACIÓN MUNICIPAL',
-  fiscalizador: 'RETO SANTOS, VÍCTOR', recibido: 'CONTRIBUYENTE',
-  receptor: 'NOBLECILLA RUIZ, CARLOS', docReceptor: '03421886',
-  obsN: 'Anuncio luminoso de 8 × 2 m sobre la fachada, sin autorización registrada.',
-  nroActa: 'AC-2026-0912', fechaActa: '', horaActa: '',
-  nomComercial: 'DEPÓSITO NOBLECILLA', establecimiento: 'AV. JOSÉ DE LAMA 1180',
-  inspector: 'L. PEÑA SANDOVAL', supervisor: 'C. ANCAJIMA FLORES',
-  atiende: '', sinFirma: false, hechos: '',
-  cuis: 'A-014', descCuis: 'INSTALAR ANUNCIO SIN AUTORIZACIÓN MUNICIPAL',
-  medida: 'RETIRO', nroRis: '', fechaNotifRis: '',
-  plazoDescargo: '5 días hábiles',
-  nroRg: '', fechaRg: '', expRg: '', sentido: 'INFUNDADO', efecto: 'SE MANTIENE',
-  gerencia: 'GERENCIA DE FISCALIZACIÓN Y CONTROL', sustentoRg: '',
-  fechaNotifRg: '', recibidoRg: 'CONTRIBUYENTE', notificador: 'V. RETO SANTOS', visita: '1',
-  valDesc: 'MULTAS ADMINISTRATIVAS AGOSTO 2026', valIni: '2026-08-01', valFin: '2026-10-31',
-  valRec: '035 — RM PAPELETAS ADMINISTRATIVAS', valVence: '2026-10-06',
-  valOficina: '113300 — SUBGERENCIA DE FISCALIZACIÓN TRIBUTARIA',
-};
-
-/** El motivo por el que un acto todavía no se puede abrir, según lo que le
- *  falta al anterior. */
-export const MOTIVOS: Record<'sancion' | 'resolucion', [string, string]> = {
-  sancion: [
-    'Se habilita cuando la notificación esté registrada. Sin notificación previa el procedimiento sancionador es nulo.',
-    'Se habilita cuando venza el plazo de la notificación, el 12/08/2026. Sancionar antes deja la resolución sin sustento.',
-  ],
-  resolucion: [
-    'Se habilita cuando la sanción esté emitida y notificada. No hay nada que resolver antes de eso.',
-    'El administrado tiene hasta el 24/08/2026 para presentar descargo. Si no lo presenta, la sanción queda firme sin necesidad de resolución.',
-  ],
-};
-
-/** El acuse de la notificación ya entregada, que el acto cumplido enseña
- *  plegado en vez de su formulario. */
-export const RECIBO_DE_LA_NOTIFICACION: [string, string][] = [
-  ['Notificación', '001-004182'],
-  ['Entregada', '02/08/2026 · 11:20'],
-  ['Recibió', 'NOBLECILLA RUIZ, CARLOS'],
-  ['Plazo', '10 días hábiles — venció el 12/08/2026'],
-];
-
-/* ══════════ El cuadro CUIS, que es la fuente de la multa ══════════ */
-
-/** La UIT del ejercicio. El cuadro fija el porcentaje; el importe sale de
- *  aquí, así que cambiar la UIT recalcula las 284 multas. */
-export const UIT = 5350;
-
-/** Materia, descripción, porcentaje de UIT y medida complementaria de cada
- *  código tipificado. */
-export const TARIFAS: Record<string, [string, string, number, string]> = {
-  'C-101': ['Comercialización', 'FUNCIONAR SIN LICENCIA MUNICIPAL DE FUNCIONAMIENTO', 50, 'CLAUSURA TEMPORAL'],
-  'C-108': ['Comercialización', 'FUNCIONAR EN GIRO DISTINTO AL AUTORIZADO', 30, 'CLAUSURA TEMPORAL'],
-  'C-214': ['Obras', 'EJECUTAR OBRA SIN LICENCIA DE EDIFICACIÓN', 100, 'PARALIZACIÓN DE OBRA'],
-  'S-018': ['Salubridad', 'DEFICIENCIAS DE SALUBRIDAD EN EL ESTABLECIMIENTO', 20, 'RETIRO'],
-  'A-014': ['Anuncios', 'INSTALAR ANUNCIO SIN AUTORIZACIÓN MUNICIPAL', 10, 'RETIRO'],
-  'A-021': ['Comercialización', 'ABRIR ESTABLECIMIENTO SIN AUTORIZACIÓN MUNICIPAL', 20, 'CLAUSURA TEMPORAL'],
-  'A-032': ['Obras', 'OCUPAR LA VÍA PÚBLICA CON MATERIAL DE CONSTRUCCIÓN', 10, 'RETIRO'],
-  'A-042': ['Anuncios', 'INSTALAR ANUNCIO SIN AUTORIZACIÓN MUNICIPAL', 10, 'RETIRO'],
-  'L-007': ['Limpieza', 'ARROJAR RESIDUOS SÓLIDOS EN LA VÍA PÚBLICA', 10, 'NINGUNA'],
-};
-
-/** El cuadro tal como se lee en la pantalla: código, materia, descripción,
- *  porcentaje, multa y medida. */
-export const CUIS: [string, string, string, string, string, string][] = [
-  ['C-101', 'Comercialización', 'Funcionar sin licencia municipal de funcionamiento', '50 %', '2,675.00', 'Clausura temporal'],
-  ['C-108', 'Comercialización', 'Funcionar en giro distinto al autorizado', '30 %', '1,605.00', 'Clausura temporal'],
-  ['C-214', 'Obras', 'Ejecutar obra sin licencia de edificación', '100 %', '5,350.00', 'Paralización de obra'],
-  ['S-018', 'Salubridad', 'Deficiencias de salubridad en el establecimiento', '20 %', '1,070.00', 'Retiro de productos'],
-  ['A-042', 'Anuncios', 'Instalar anuncio sin autorización municipal', '10 %', '535.00', 'Retiro del anuncio'],
-  ['L-007', 'Limpieza', 'Arrojar residuos sólidos en la vía pública', '10 %', '535.00', 'Ninguna'],
-];
-
+ * **Sin «Materia» y sin «Multa S/»**: `codigo_infraccion` no tiene columna de
+ * materia —el filtro que el manual llama así el servidor lo aplica al texto de
+ * la infracción— y la multa es el porcentaje por la UIT del ejercicio, que sale
+ * del conjunto de parámetros sellado.
+ */
 export const COLS_CUIS: [string, 0 | 1][] = [
-  ['Código', 0], ['Materia', 0], ['Descripción', 0], ['% UIT', 1], ['Multa S/', 1], ['Medida complementaria', 0],
-];
-
-export const MATERIAS = ['Todas', 'Comercialización', 'Obras', 'Salubridad', 'Anuncios', 'Limpieza'];
-
-/* ══════════ El panel ══════════ */
-
-/** Las cinco etapas del embudo: etapa, detalle, cuántas y a dónde lleva.
- *
- *  184 y no 588: el embudo es la cohorte de las 812 notificaciones de este
- *  ejercicio, y lo cobrado tiene que ser un subconjunto de lo firme. Las 588
- *  multas pagadas del resumen de recaudación son de otro conjunto —incluyen
- *  sanciones de ejercicios anteriores— y viven en su hoja, no aquí. */
-export const EMBUDO: [string, string, number, string][] = [
-  ['Notificada', 'El fiscalizador entrega la notificación preventiva', 812, 'lista'],
-  ['Plazo vencido', 'Diez días hábiles sin subsanar', 598, 'reportes'],
-  ['Con acta y sanción', 'Segunda visita y resolución de multa', 388, 'expediente'],
-  ['Firme', 'Sin descargo o con descargo infundado', 302, 'valores'],
-  ['Cobrada', 'Cerrada con recibo', 184, 'reportes'],
-];
-
-/** La base del embudo: las notificaciones del ejercicio. */
-export const BASE_DEL_EMBUDO = 812;
-
-export const AHORA: [string, string, string][] = [
-  ['214', 'vencidas sin sancionar', 'reportes'],
-  ['96', 'en descargo', 'lista'],
-];
-
-export const KPIS: { valor: string; etiqueta: string; nota: string }[] = [
-  { valor: '812', etiqueta: 'Notificaciones del ejercicio', nota: 'Levantadas por 6 fiscalizadores en 8 meses.' },
-  { valor: '26.4 %', etiqueta: 'Subsanan en el plazo', nota: 'La notificación preventiva funciona en uno de cada cuatro casos.' },
-  { valor: '214', etiqueta: 'Vencidas sin sancionar', nota: 'S/ 412,844 de multa potencial parada.' },
-  { valor: '184', etiqueta: 'Cobradas de las 302 firmes', nota: 'El resto está en valores o en cobranza coactiva.' },
-];
-
-export const DECIDIR: { dias: string; tono: 'bad' | 'warn'; titulo: string; detalle: string; accion: string; dest: string }[] = [
-  { dias: 'Venció ayer', tono: 'bad', titulo: '001-004182 · NOBLECILLA ARISMENDIZ SAC', detalle: 'Plazo vencido sin subsanar. Toca levantar el acta de constatación o archivar.', accion: 'Levantar acta', dest: 'expediente' },
-  { dias: '5 días', tono: 'bad', titulo: '001-004160 · RESTAURANT SABOR Y SAZÓN', detalle: 'Acta levantada y sanción sin emitir. La multa aún no existe en la cuenta corriente.', accion: 'Emitir sanción', dest: 'expediente' },
-  { dias: '3 días', tono: 'warn', titulo: '001-003918 · descargo presentado', detalle: 'Vence el plazo de la municipalidad para resolver el descargo.', accion: 'Resolver', dest: 'expediente' },
-  { dias: '8 días', tono: 'warn', titulo: '302 multas firmes sin valor', detalle: 'No se pueden cobrar hasta que se emita el valor con su criterio.', accion: 'Generar valores', dest: 'valores' },
+  ['Código', 0], ['Descripción', 0], ['% UIT', 1], ['Medida complementaria', 0],
+  ['Base legal', 0], ['Vigente desde', 0],
 ];
 
 /* ══════════ La lista de expedientes ══════════ */
 
+/**
+ * Las columnas de la lista.
+ *
+ * «Fase» y «Estado de la deuda» son **dos columnas**, no una: son los dos
+ * vocabularios que #397 separó en el backend, y meterlos en una sola es lo que
+ * dejaba un filtro del procedimiento sobre una columna de cobranza.
+ */
 export const COLS_LISTA: [string, 0 | 1][] = [
-  ['Serie-Nº', 0], ['Administrado', 0], ['Dirección del predio', 0], ['CUIS', 0],
-  ['Acto', 0], ['Plazo', 0], ['Multa S/', 1], ['Estado', 0],
+  ['Nº de acta', 0], ['Administrado', 0], ['CUIS', 0], ['Infracción', 0],
+  ['% UIT', 1], ['Multa S/', 1], ['Fase', 0], ['Estado de la deuda', 0],
 ];
 
-export const EXPEDIENTES: string[][] = [
-  ['001-004182', 'NOBLECILLA ARISMENDIZ SAC', 'AV. JOSÉ DE LAMA 1180', 'A-014', 'Notificación', 'Venció ayer', '2,675.00', 'Vencida'],
-  ['001-004183', 'CASTILLO PASCUALA, MARÍA E.', 'CALLE LAMA 482', 'A-021', 'Notificación', '1 día', '535.00', 'Notificada'],
-  ['001-004184', 'DÍAZ MADRID, JULIO CÉSAR', 'C.P. BARRIO BUENOS AIRES', 'A-008', 'Notificación', '—', '—', 'Subsanada'],
-  ['001-004160', 'RESTAURANT SABOR Y SAZÓN', 'CALLE SAN MARTÍN 402', 'S-018', 'Acta y sanción', '3 días', '1,070.00', 'Constatada'],
-  ['001-003918', 'NOBLECILLA ARISMENDIZ SAC', 'AV. JOSÉ DE LAMA 1180', 'C-101', 'Resolución', 'En descargo', '2,675.00', 'Sancionada'],
-  ['001-003644', 'INVERSIONES DEL NORTE SAC', 'AV. CHAMPAGNAT 220', 'C-214', 'Resolución', 'Firme', '5,350.00', 'Coactiva'],
-];
-
-export const CHIPS = ['Todos', 'Notificación', 'Acta y sanción', 'Resolución'];
-
-/** El resumen del expediente abierto, en la franja de seis celdas. Las tres
- *  cifras que dependen del CUIS las pone la pantalla. */
-export const EXPEDIENTE_ABIERTO = {
-  codigo: '001-004182',
-  administrado: 'NOBLECILLA ARISMENDIZ SAC',
-  meta: 'RUC 20525118447 · AV. JOSÉ DE LAMA 1180 · CUIS A-014',
-  estado: 'Plazo vencido',
-  plazo: 'Venció 12/08/2026',
-};
-
-/* ══════════ Generación de valores ══════════ */
-
-export const CAMPOS_DE_VALORES: CampoDeActo[] = [
-  { k: 'valDesc', l: 'Descripción del criterio', t: 'text', ancho: true },
-  { k: 'valIni', l: 'Fecha de inicio', t: 'date' },
-  { k: 'valFin', l: 'Fecha de fin', t: 'date' },
-  { k: 'valRec', l: 'Tipo de recaudo', t: 'sel', o: ['035 — RM PAPELETAS ADMINISTRATIVAS', '003 — RS PAPELETAS DE TRÁNSITO', '081 — RM LICENCIA FUNCIONAMIENTO'] },
-  { k: 'valVence', l: 'Vencimiento', t: 'date', ayuda: 'Pasada esta fecha el valor puede ir a coactiva' },
-  { k: 'valOficina', l: 'Oficina', t: 'sel', ancho: true, o: ['113300 — SUBGERENCIA DE FISCALIZACIÓN TRIBUTARIA', '113100 — SUBGERENCIA DE RECAUDACIÓN', '999999 — OFICINA NO ESPECIFICADA'] },
-];
-
-export const COLS_VALORES: [string, 0 | 1][] = [
-  ['Papeleta', 0], ['Administrado', 0], ['CUIS', 0], ['Notificada', 0], ['Multa S/', 1], ['Estado', 0],
-];
-
-export type Multa = [string, string, string, string, number, string];
-
-export const MULTAS: Multa[] = [
-  ['AC-2026-0912', 'NOBLECILLA ARISMENDIZ SAC', 'C-101', '17/08/2026', 2675.0, 'Sancionada'],
-  ['AC-2026-0904', 'INVERSIONES DEL NORTE SAC', 'C-214', '20/04/2026', 5350.0, 'Sancionada'],
-  ['AC-2026-0921', 'DÍAZ MADRID, JULIO CÉSAR', 'A-042', '12/08/2026', 535.0, 'Sancionada'],
-  ['AC-2025-1188', 'RESTAURANT SABOR Y SAZÓN', 'S-018', '14/11/2025', 1070.0, 'Sancionada'],
-];
+/** Las pastillas de filtro de la lista: «todas» más las cinco fases. */
+export const CHIPS = ['Todas', 'PREVENTIVA', 'CONSTATADA', 'SANCIONADA', 'PAGADA', 'COACTIVA'];
 
 /* ══════════ El centro de reportes ══════════ */
 
 export type Criterio = { l: string; t: 'text' | 'sel' | 'date'; v: string; o?: string[] };
 
-/** Los trece criterios de los que cada hoja usa los suyos. */
+/**
+ * Los criterios que los reportes usan **de verdad**.
+ *
+ * Los que el contrato declara y ningún controlador lee —`agrupadoPor` del
+ * padrón y del reporte por contribuyente, `fechaDeCalculo` e `incluirGastos`
+ * del estado de cuenta, `estado` y `ordenadoPor` del reporte de códigos— no se
+ * dibujan: tecleados no harían nada.
+ */
 export const CRITERIOS: Record<string, Criterio> = {
-  serie: { l: 'Serie', t: 'text', v: '001' },
-  anio: { l: 'Año', t: 'sel', v: '2026', o: ['2026', '2025', '2024', '2023'] },
-  numero: { l: 'Número', t: 'text', v: '' },
-  estado: { l: 'Estado', t: 'sel', v: '(TODOS)', o: ['(TODOS)', 'NOTIFICADA', 'VENCIDA', 'SUBSANADA', 'CON PAPELETA', 'ANULADA'] },
-  deuda: { l: 'Estado de deuda', t: 'sel', v: '(TODOS)', o: ['(TODOS)', 'PENDIENTE', 'PAGADA', 'COACTIVA'] },
-  cuis: { l: 'Código CUIS', t: 'text', v: '' },
-  infractor: { l: 'Infractor', t: 'text', v: '' },
-  fiscalizador: { l: 'Fiscalizador', t: 'sel', v: 'Todos', o: ['Todos', 'RETO SANTOS, VÍCTOR', 'RÍOS MENDOZA, MARÍA', 'QUISPE PEÑA, JORGE'] },
-  direccion: { l: 'Dirección del predio', t: 'text', v: '' },
-  desde: { l: 'Fecha desde', t: 'date', v: '2026-07-01' },
-  hasta: { l: 'Fecha hasta', t: 'date', v: '2026-08-13' },
-  vence: { l: 'Vence hasta', t: 'date', v: '2026-08-31' },
-  agrupa: { l: 'Agrupado por', t: 'sel', v: 'MES', o: ['MES', 'MATERIA', 'FISCALIZADOR', 'ESTADO'] },
+  desde: { l: 'Fecha desde', t: 'date', v: '' },
+  hasta: { l: 'Fecha hasta', t: 'date', v: '' },
+  estadoNotificacion: { l: 'Estado', t: 'sel', v: '', o: ['', 'EMITIDA', 'SUBSANADA', 'VENCIDA', 'ANULADA'] },
+  vencidasAl: { l: 'Vencidas al', t: 'date', v: '' },
+  fiscalizador: { l: 'Fiscalizador', t: 'text', v: '' },
+  infraccion: { l: 'Infracción', t: 'text', v: '' },
+  conPapeleta: { l: '¿Ya tiene papeleta?', t: 'sel', v: '', o: ['', 'true', 'false'] },
+  codContribuyente: { l: 'Cod. contribuyente', t: 'text', v: '' },
+  ano: { l: 'Año', t: 'sel', v: '', o: ['', '2026', '2025', '2024', '2023'] },
+  soloPendientes: { l: 'Solo con deuda pendiente', t: 'sel', v: '', o: ['', 'true'] },
+  papeleta: { l: 'Nº de papeleta', t: 'text', v: '' },
+  codigo: { l: 'Código CUIS', t: 'text', v: '' },
+  descripcionContiene: { l: 'La descripción contiene', t: 'text', v: '' },
+  agrupadoPor: { l: 'Agrupado por', t: 'sel', v: '', o: ['', 'ESTADO', 'ANO', 'MES', 'CODIGO', 'PLACA'] },
 };
 
 export type Hoja = {
+  k: string;
   g: string;
   label: string;
-  codigo: string;
   sub: string;
   crit: string[];
-  meta: [string, string][];
-  cols: [string, 0 | 1][];
-  filas: string[][];
   cierre: string;
+  /** Lo que impide dibujar la hoja, cuando lo hay. */
+  sinLectura?: string;
 };
 
 export const HOJAS: Hoja[] = [
   {
-    g: 'Padrones', label: 'Padrón de notificaciones', codigo: 'PN-2026-00418', sub: 'Relación de notificaciones administrativas por periodo',
-    crit: ['serie', 'anio', 'estado', 'fiscalizador', 'desde', 'hasta', 'agrupa'],
-    meta: [['Periodo', '01/07/2026 — 13/08/2026'], ['Notificaciones', '812'], ['Con papeleta', '388'], ['Agrupado por', 'Mes']],
-    cols: [['Serie-Nº', 0], ['Fecha', 0], ['Infractor', 0], ['CUIS', 0], ['Vence', 0], ['Estado', 0]],
-    filas: [
-      ['001-004182', '02/08/2026', 'NOBLECILLA ARISMENDIZ SAC', 'A-014', '12/08/2026', 'Vencida'],
-      ['001-004183', '04/08/2026', 'CASTILLO PASCUALA, MARÍA E.', 'A-021', '14/08/2026', 'Notificada'],
-      ['001-004184', '07/08/2026', 'DÍAZ MADRID, JULIO CÉSAR', 'A-008', '17/08/2026', 'Subsanada'],
-    ],
-    cierre: 'El padrón es el descargo del fiscalizador: cada notificación entregada tiene que aparecer aquí con su número correlativo.',
+    k: 'padron_notificaciones', g: 'Padrones', label: 'Padrón de notificaciones',
+    sub: 'Relación de notificaciones administrativas por periodo',
+    crit: ['desde', 'hasta', 'estadoNotificacion'],
+    cierre: 'El padrón es el descargo del fiscalizador: cada notificación entregada tiene que aparecer aquí. Las tres columnas de la papeleta solo tienen valor cuando la papeleta existe.',
   },
   {
-    g: 'Padrones', label: 'Notificaciones vencidas', codigo: 'NV-2026-00418', sub: 'Notificaciones cuyo plazo venció sin subsanar',
-    crit: ['serie', 'anio', 'vence', 'fiscalizador', 'agrupa'],
-    meta: [['Vencidas al 13/08', '214'], ['Sin acta de constatación', '182'], ['Materia más frecuente', 'Comercialización'], ['Multa potencial', 'S/ 412,844.00']],
-    cols: [['Serie-Nº', 0], ['Infractor', 0], ['CUIS', 0], ['Venció', 0], ['Días', 1], ['Multa potencial S/', 1]],
-    filas: [
-      ['001-004182', 'NOBLECILLA ARISMENDIZ SAC', 'A-014', '12/08/2026', '1', '2,675.00'],
-      ['001-004160', 'RESTAURANT SABOR Y SAZÓN', 'S-018', '08/08/2026', '5', '1,070.00'],
-      ['001-004142', 'INVERSIONES DEL NORTE SAC', 'C-214', '01/08/2026', '12', '5,350.00'],
-    ],
-    cierre: 'Vencido el plazo, o se levanta el acta de constatación y se sanciona, o se archiva. No hacer nada equivale a archivar sin dejar constancia.',
+    k: 'vencidas', g: 'Padrones', label: 'Notificaciones vencidas',
+    sub: 'Notificaciones cuyo plazo venció sin acreditarse el cumplimiento',
+    crit: ['vencidasAl', 'fiscalizador', 'infraccion', 'conPapeleta'],
+    cierre: 'Vencido el plazo, o se levanta el acta de constatación y se sanciona, o se archiva. Una notificación sin plazo no vence nunca, y eso es una decisión del acto.',
   },
   {
-    g: 'Por administrado', label: 'Notificaciones por contribuyente', codigo: 'NC-2026-00418', sub: 'Historial de notificaciones de un administrado',
-    crit: ['infractor', 'anio', 'estado', 'desde', 'hasta'],
-    meta: [['Administrado', 'NOBLECILLA ARISMENDIZ SAC'], ['R.U.C.', '20525118447'], ['Notificaciones', '4'], ['Multas firmes', 'S/ 5,350.00']],
-    cols: [['Serie-Nº', 0], ['Fecha', 0], ['CUIS', 0], ['Materia', 0], ['Estado', 0], ['Multa S/', 1]],
-    filas: [
-      ['001-004182', '02/08/2026', 'A-014', 'Anuncios', 'Vencida', '2,675.00'],
-      ['001-003918', '14/05/2026', 'C-101', 'Comercialización', 'Con papeleta', '2,675.00'],
-      ['001-003644', '02/02/2026', 'S-018', 'Salubridad', 'Subsanada', '—'],
-    ],
-    cierre: 'La reincidencia agrava la sanción: el mismo código en el mismo establecimiento dentro del año duplica el porcentaje de UIT.',
+    k: 'por_contribuyente', g: 'Por administrado', label: 'Notificaciones por contribuyente',
+    sub: 'Papeletas administrativas de un administrado',
+    crit: ['codContribuyente', 'ano', 'soloPendientes'],
+    cierre: 'El «estado de deuda» del manual no es un valor sino una marca: el servidor solo mira si llega algo y con cualquier texto acota a las pendientes. Por eso aquí es una casilla y no un desplegable de estados.',
   },
   {
-    g: 'Por administrado', label: 'Estado de cuenta de papeleta', codigo: 'EC-2026-00418', sub: 'Deuda por multas administrativas a la fecha',
-    crit: ['infractor', 'deuda', 'anio'],
-    meta: [['Administrado', 'NOBLECILLA ARISMENDIZ SAC'], ['R.U.C.', '20525118447'], ['Fecha de cálculo', '13/08/2026'], ['Papeletas', '3']],
-    cols: [['Papeleta', 0], ['Fecha', 0], ['CUIS', 0], ['Multa S/', 1], ['Interés S/', 1], ['A pagar S/', 1]],
-    filas: [
-      ['AC-2026-0912', '05/08/2026', 'C-101', '2,675.00', '0.00', '1,337.50'],
-      ['AC-2026-0904', '18/04/2026', 'C-214', '5,350.00', '212.44', '5,562.44'],
-      ['AC-2025-1188', '12/11/2025', 'A-042', '535.00', '84.20', '619.20'],
-    ],
-    cierre: 'El importe a pagar de la más reciente lleva el descuento por pronto pago del 50 %, vigente cinco días hábiles desde la notificación.',
+    k: 'estado_cuenta', g: 'Por administrado', label: 'Estado de cuenta de papeleta',
+    sub: 'Deuda por multas administrativas',
+    crit: ['papeleta', 'codContribuyente'],
+    cierre: 'Esta lectura devuelve siempre las pendientes: el servidor lo fija y no lo publica como filtro. Los importes son los del acta; el interés del día lo lleva el libro.',
   },
   {
-    g: 'Catálogo', label: 'Reporte de códigos CUIS', codigo: 'RC-2026-00418', sub: 'Cuadro único de infracciones y sanciones vigente',
-    crit: ['cuis', 'agrupa'],
-    meta: [['Ordenanza', 'ORD. 022-2024-MDC'], ['Infracciones tipificadas', '284'], ['UIT 2026', 'S/ 5,350.00'], ['Agrupado por', 'Materia']],
-    cols: [['Código', 0], ['Materia', 0], ['Descripción', 0], ['% UIT', 1], ['Multa S/', 1]],
-    filas: [
-      ['C-101', 'Comercialización', 'Funcionar sin licencia municipal de funcionamiento', '50 %', '2,675.00'],
-      ['C-214', 'Obras', 'Ejecutar obra sin licencia de edificación', '100 %', '5,350.00'],
-      ['S-018', 'Salubridad', 'Deficiencias de salubridad en el establecimiento', '20 %', '1,070.00'],
-    ],
-    cierre: 'Cambiar la UIT del ejercicio recalcula las 284 multas sin tocar el cuadro: lo que la ordenanza fija es el porcentaje, no el importe.',
+    k: 'codigos', g: 'Catálogo', label: 'Reporte de códigos CUIS',
+    sub: 'Cuadro único de infracciones y sanciones vigente',
+    crit: ['codigo', 'descripcionContiene'],
+    cierre: 'Cambiar la UIT del ejercicio recalcula todas las multas sin tocar el cuadro: lo que la ordenanza fija es el porcentaje, no el importe. Por eso no hay columna de soles.',
   },
   {
-    g: 'Resúmenes', label: 'Resumen de recaudación', codigo: 'RR-2026-00418', sub: 'Recaudación por multas administrativas',
-    crit: ['desde', 'hasta', 'agrupa'],
-    meta: [['Periodo', '01/01/2026 — 13/08/2026'], ['Recaudado', 'S/ 412,844.00'], ['Multas pagadas', '588'], ['Agrupado por', 'Mes']],
-    cols: [['Mes', 0], ['Multas', 1], ['Impuesto S/', 1], ['Descuento S/', 1], ['Recaudado S/', 1]],
-    filas: [
-      ['Junio 2026', '112', '184,412.00', '62,844.00', '121,568.00'],
-      ['Julio 2026', '98', '162,116.00', '54,412.00', '107,704.00'],
-      ['Agosto 2026', '44', '72,844.00', '24,116.00', '48,728.00'],
-    ],
-    cierre: 'El descuento corresponde al pronto pago del 50 % y a las amnistías por ordenanza vigentes en el periodo.',
+    k: 'resumen_papeletas', g: 'Resúmenes', label: 'Resumen de multas administrativas',
+    sub: 'Cuántas multas hay y por cuánto, agrupadas',
+    crit: ['desde', 'hasta', 'agrupadoPor'],
+    cierre: 'Los importes son los de las actas, no lo cobrado. Esta es la única hoja del módulo que no tiene lectura propia: se pide al emisor de reportes, que por omisión agrupa por estado.',
+  },
+  {
+    k: 'resumen_recaudacion', g: 'Resúmenes', label: 'Resumen de recaudación',
+    sub: 'Lo recaudado por multas administrativas, según el libro',
+    crit: ['ano'],
+    cierre: 'La suma exacta de los abonos vivos. No se recompone sumando multas pagadas: esa cifra no cuenta los intereses cobrados, cuenta entero un pago parcial y sigue contando un recibo anulado.',
   },
 ];
 
-/** Las trece opciones del manual que el módulo resume, tal como las lista la
- *  paleta de comandos. */
+/** Las trece opciones del manual que el módulo resume. */
 export const OPCIONES: [string, string][] = [
-  ['Notificación administrativa', 'expediente'],
-  ['Infracción administrativa', 'expediente'],
+  ['Notificación administrativa', 'alta'],
+  ['Infracción administrativa', 'lista'],
   ['Resolución de gerencia', 'expediente'],
   ['Notificación de resolución', 'expediente'],
   ['Estado de cuenta de papeleta', 'reportes'],

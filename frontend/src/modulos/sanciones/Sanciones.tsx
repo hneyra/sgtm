@@ -1,39 +1,50 @@
-import { useEffect, useState, type CSSProperties } from 'react';
-import { Shell, type EntradaDePaleta } from '../../shell/Shell';
+import { useEffect, useMemo, useState, type CSSProperties, type ReactNode } from 'react';
+import { Shell, type Contexto, type EntradaDePaleta } from '../../shell/Shell';
 import type { PantallaProps } from '../../App';
 import { Icono } from '../../ds/Icono';
 import { ICO } from '../../ds/iconos';
 import { Insignia, type Tono } from '../../ds/componentes';
 import { moduloDe } from '../../shell/modulos';
-import { usarPreferencias } from '../../shell/preferencias';
+import { miles, usarPreferencias } from '../../shell/preferencias';
 import {
   ACTOS,
-  AHORA,
-  BASE_DEL_EMBUDO,
-  CAMPOS_DE_VALORES,
+  CAMPOS_DE_LA_CEDULA,
   CHIPS,
   COLS_CUIS,
   COLS_LISTA,
-  COLS_VALORES,
   CRITERIOS,
-  CUIS,
-  DECIDIR,
-  DEFECTOS,
-  EMBUDO,
-  EXPEDIENTES,
-  EXPEDIENTE_ABIERTO,
+  FASES,
   HOJAS,
-  KPIS,
-  MATERIAS,
   MOTIVOS,
-  MULTAS,
   OPCIONES,
-  RECIBO_DE_LA_NOTIFICACION,
-  TARIFAS,
-  UIT,
   type CampoDeActo,
   type IdDeActo,
 } from '../../datos/sanciones';
+import { useRebote, useRecurso, type Estado } from '../../api/useRecurso';
+import { ErrorDeApi, fijarToken } from '../../api/cliente';
+import { cuentaActual, hayPuerta } from '../../api/sesion';
+import {
+  dictarResolucionAdministrativa,
+  emitirReporteAdministrativo,
+  estadoDeCuentaAdministrativo,
+  generarValoresAdministrativos,
+  listarActas,
+  listarCuis,
+  listarCuisComoReporte,
+  notificacionesPorContribuyente,
+  notificacionesVencidas,
+  notificarResolucionAdministrativa,
+  padronDeNotificaciones,
+  recaudacionAdministrativa,
+  registrarNotificacion,
+  type EfectoSobreLaMulta,
+  type EstadoDeNotificacion,
+  type FaseDelProcedimiento,
+  type ModalidadDeNotificacion,
+  type ProcedimientoSancionador,
+  type ResultadoDeNotificacion,
+  type SentidoDelFallo,
+} from '../../api/sanciones';
 
 /* ══════════ Los estilos que el artboard declara una vez y repite ══════════ */
 
@@ -76,8 +87,6 @@ const TD1: CSSProperties = {
   color: 'var(--ink)',
   whiteSpace: 'nowrap',
 };
-/* La hoja impresa lleva su propia escala: más apretada y con el filete negro
-   de la cabecera institucional. */
 const RTH: CSSProperties = {
   padding: '8px 10px',
   textAlign: 'left',
@@ -100,30 +109,22 @@ const RTDN: CSSProperties = {
   fontVariantNumeric: 'tabular-nums',
 };
 
-const BOTON_SEC: CSSProperties = {
-  border: '1px solid var(--line-2)',
-  borderRadius: 6,
-  padding: '9px 16px',
-  background: 'var(--bg-card)',
-  fontSize: 13,
-  cursor: 'pointer',
-};
-const BOTON_PRI: CSSProperties = {
-  border: 0,
-  borderRadius: 6,
-  padding: '10px 20px',
-  background: 'var(--accent)',
-  color: '#fff',
-  fontSize: 13.5,
-  fontWeight: 500,
-  cursor: 'pointer',
-};
 const TARJETA: CSSProperties = {
   background: 'var(--bg-card)',
   border: '1px solid var(--line)',
   borderRadius: 10,
   boxShadow: 'var(--shadow-1)',
   overflow: 'hidden',
+};
+const H2: CSSProperties = { margin: 0, flex: 1, fontFamily: 'var(--font-serif)', fontSize: 16, fontWeight: 600 };
+const PIE: CSSProperties = {
+  margin: 0,
+  padding: '11px 16px',
+  background: 'var(--bg-elev)',
+  fontSize: 12,
+  lineHeight: 1.5,
+  color: 'var(--ink-3)',
+  textWrap: 'pretty',
 };
 const ENTRADILLA: CSSProperties = {
   margin: 0,
@@ -133,74 +134,38 @@ const ENTRADILLA: CSSProperties = {
   color: 'var(--ink-2)',
   maxWidth: '70ch',
 };
+const BOTON_LINEA: CSSProperties = {
+  border: '1px solid var(--line-2)',
+  borderRadius: 6,
+  padding: '6px 12px',
+  background: 'var(--bg-elev)',
+  fontSize: 12,
+  color: 'var(--ink-2)',
+  cursor: 'pointer',
+};
 
-/* Los trazos que el artboard dibuja como `circle` y `rect`, escritos como
-   trazos porque `Icono` solo lleva paths. */
-const T_LUPA = ['M18 11a7 7 0 1 1-14 0 7 7 0 0 1 14 0', 'M20 20l-4.3-4.3'];
-const T_INFO = ['M20.5 12a8.5 8.5 0 1 1-17 0 8.5 8.5 0 0 1 17 0', 'M12 8.4v.02', 'M12 11.4v4.2'];
-const T_CANDADO = ['M7 11h10a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2v-5a2 2 0 0 1 2-2z', 'M8.5 11V8a3.5 3.5 0 0 1 7 0v3'];
-const T_CARET = ['M6 9l6 6 6-6'];
-const T_RELOJ = ['M21 12a9 9 0 1 1-18 0 9 9 0 0 1 18 0', 'M12 7.5V12l3 2'];
+const SIN_DATO = '—';
+const T_INFO = ['M12 3a9 9 0 1 0 0 18 9 9 0 0 0 0-18', 'M12 8.2h.02', 'M11.2 11.4h1v5h-1z'];
 
-/** El tono de un estado en este módulo. No es el del sistema: aquí «Obras» y
- *  «Comercialización» son materias, y su color dice cuánto pesa la multa. */
 function tono(texto: string): Tono {
   const t = String(texto).toLowerCase();
-  if (/vencida|con papeleta|coactiva|sancionada|pendiente|infundado|obras/.test(t)) return 'bad';
-  if (/notificada|constatada|preventiva|en descargo|comercialización|activo/.test(t)) return 'warn';
-  return 'ok';
+  if (/coactiva|prescrita|vencida|constatada/.test(t)) return 'bad';
+  if (/preventiva|emitida|sancionada|notificada/.test(t)) return 'warn';
+  if (/pagada|subsanada|anulada/.test(t)) return 'ok';
+  return 'neutro';
 }
 
-const fmt = (n: number) => n.toLocaleString('es-PE', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
-const soles = (n: number) => 'S/ ' + fmt(n);
-
-/** El cuadro CUIS es la fuente de la multa: el porcentaje lo fija la
- *  ordenanza y el importe sale de la UIT del ejercicio. Escribir la multa a
- *  mano en la cabecera del expediente la desalineaba del código declarado. */
-function deCuis(codigo: string) {
-  const f = TARIFAS[codigo] ?? TARIFAS['A-014'];
-  const multa = (UIT * f[2]) / 100;
-  return {
-    materia: f[0],
-    descripcion: f[1],
-    pct: f[2] + ' %',
-    medida: f[3],
-    uit: fmt(UIT),
-    multa: fmt(multa),
-    mitad: fmt(multa / 2),
-  };
+/** El rótulo de una fase. La misma palabra, con su acento. */
+function rotuloDeFase(fase: string | null): string {
+  if (fase === null) return SIN_DATO;
+  const f = FASES.find((x) => x[0] === fase);
+  return f ? f[1] : fase;
 }
 
-type EstadoDeActo = 'hecho' | 'actual' | 'bloqueado' | 'espera';
-
-const ETIQUETA: Record<EstadoDeActo, string> = {
-  hecho: 'Cumplido',
-  actual: 'Te toca',
-  bloqueado: 'No disponible',
-  espera: 'En espera',
-};
-const TONO_DEL_ACTO: Record<EstadoDeActo, Tono> = {
-  hecho: 'ok',
-  actual: 'warn',
-  bloqueado: 'neutro',
-  espera: 'neutro',
-};
-
-/* ══════════ Piezas ══════════ */
-
-function Cabecera({ titulo, meta, acciones }: { titulo: string; meta?: string; acciones?: React.ReactNode }) {
+function Cabecera({ titulo, meta, acciones }: { titulo: string; meta?: ReactNode; acciones?: ReactNode }) {
   return (
-    <div
-      style={{
-        display: 'flex',
-        alignItems: 'center',
-        gap: 12,
-        flexWrap: 'wrap',
-        padding: '13px 16px',
-        borderBottom: '1px solid var(--line)',
-      }}
-    >
-      <h2 style={{ margin: 0, flex: 1, fontFamily: 'var(--font-serif)', fontSize: 16, fontWeight: 600 }}>{titulo}</h2>
+    <div style={{ display: 'flex', alignItems: 'center', gap: 12, flexWrap: 'wrap', padding: '13px 16px', borderBottom: '1px solid var(--line)' }}>
+      <h2 style={H2}>{titulo}</h2>
       {meta && <span style={{ fontFamily: 'var(--font-mono)', fontSize: 11, color: 'var(--ink-3)' }}>{meta}</span>}
       {acciones}
     </div>
@@ -219,26 +184,7 @@ function Th({ defs }: { defs: [string, 0 | 1][] }) {
   );
 }
 
-function Celdas({ fila, defs, insignia }: { fila: string[]; defs: [string, 0 | 1][]; insignia: number }) {
-  return (
-    <>
-      {fila.map((c, j) =>
-        j === insignia ? (
-          <td key={j} style={{ padding: '11px 14px' }}>
-            <Insignia tono={tono(c)}>{c}</Insignia>
-          </td>
-        ) : (
-          <td key={j} style={j === 0 ? TD1 : defs[j] && defs[j][1] ? TDN : TD}>
-            {c}
-          </td>
-        ),
-      )}
-    </>
-  );
-}
-
-/** Un campo del manual: el mismo control sirve a los tres actos, al criterio
- *  de generación de valores y a los criterios de un reporte. */
+/** Un campo del manual: el mismo control sirve a los actos y a los criterios. */
 function Campo({
   f,
   valor,
@@ -254,29 +200,16 @@ function Campo({
       <span style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 11.5, fontWeight: 500, color: 'var(--ink-3)' }}>
         <span>{f.l}</span>
         {f.c && (
-          <span
-            style={{
-              fontFamily: 'var(--font-mono)',
-              fontSize: 9.5,
-              color: 'var(--ink-4)',
-              border: '1px solid var(--line-2)',
-              borderRadius: 3,
-              padding: '1px 4px',
-            }}
-          >
-            {f.c}
-          </span>
+          <span style={{ fontFamily: 'var(--font-mono)', fontSize: 9.5, color: 'var(--ink-4)', border: '1px solid var(--line-2)', borderRadius: 3, padding: '1px 4px' }}>{f.c}</span>
         )}
       </span>
-      {t === 'text' && (
-        <input value={String(valor)} onChange={(e) => onCambio(e.target.value)} placeholder={f.ph ?? ''} style={IN} />
-      )}
+      {t === 'text' && <input value={String(valor)} onChange={(e) => onCambio(e.target.value)} placeholder={f.ph ?? ''} style={IN} />}
       {t === 'date' && <input type="date" value={String(valor)} onChange={(e) => onCambio(e.target.value)} style={IN} />}
       {t === 'sel' && (
         <select value={String(valor)} onChange={(e) => onCambio(e.target.value)} style={IN}>
           {(f.o ?? []).map((o) => (
             <option key={o} value={o}>
-              {o}
+              {o === '' ? '(sin declarar)' : o}
             </option>
           ))}
         </select>
@@ -287,53 +220,17 @@ function Campo({
           onChange={(e) => onCambio(e.target.value)}
           rows={3}
           placeholder={f.ph ?? ''}
-          style={{
-            width: '100%',
-            border: '1px solid var(--line-2)',
-            borderRadius: 6,
-            padding: '9px 10px',
-            background: 'var(--bg-elev)',
-            fontFamily: 'var(--font-sans)',
-            fontSize: 13.5,
-            resize: 'vertical',
-          }}
+          style={{ ...IN, fontFamily: 'var(--font-sans)', resize: 'vertical' }}
         />
       )}
       {t === 'chk' && (
-        <span
-          style={{
-            display: 'flex',
-            alignItems: 'center',
-            gap: 9,
-            padding: '9px 10px',
-            border: '1px solid var(--line-2)',
-            borderRadius: 6,
-            background: 'var(--bg-elev)',
-          }}
-        >
-          <input
-            type="checkbox"
-            checked={valor === true}
-            onChange={(e) => onCambio(e.target.checked)}
-            style={{ accentColor: 'var(--accent)', width: 15, height: 15, flex: '0 0 auto' }}
-          />
+        <span style={{ display: 'flex', alignItems: 'center', gap: 9, padding: '9px 10px', border: '1px solid var(--line-2)', borderRadius: 6, background: 'var(--bg-elev)' }}>
+          <input type="checkbox" checked={valor === true} onChange={(e) => onCambio(e.target.checked)} style={{ accentColor: 'var(--accent)', width: 15, height: 15, flex: '0 0 auto' }} />
           <span style={{ fontSize: 13, color: 'var(--ink-2)' }}>{f.ph}</span>
         </span>
       )}
       {t === 'ro' && (
-        <span
-          style={{
-            display: 'block',
-            minHeight: 38,
-            lineHeight: '19px',
-            padding: '9px 10px',
-            border: '1px dashed var(--line-2)',
-            borderRadius: 6,
-            fontFamily: 'var(--font-mono)',
-            fontSize: 13,
-            color: 'var(--ink-2)',
-          }}
-        >
+        <span style={{ display: 'block', minHeight: 38, lineHeight: '19px', padding: '9px 10px', border: '1px dashed var(--line-2)', borderRadius: 6, fontFamily: 'var(--font-mono)', fontSize: 13, color: 'var(--ink-2)' }}>
           {String(valor)}
         </span>
       )}
@@ -342,366 +239,585 @@ function Campo({
   );
 }
 
-/* ══════════ La pantalla ══════════ */
+/* ══════════ Lo que el backend contesta, dicho en castellano ══════════ */
 
+function tituloDelFallo(error: ErrorDeApi | null, que: string): string {
+  const cuenta = cuentaActual();
+  switch (error?.codigo) {
+    case 'NO_AUTENTICADO':
+      return 'La sesión no vale';
+    case 'SIN_PRIVILEGIO':
+      return cuenta === null ? `Esta sesión no puede ver ${que}` : `La cuenta «${cuenta}» no puede ver ${que}`;
+    case 'SIN_MUNICIPALIDAD':
+      return 'La sesión no dice de qué municipalidad es';
+    case 'NO_ENCONTRADO':
+      return 'No existe';
+    case 'CONFLICTO':
+      return 'El acto choca con algo que ya está registrado';
+    case 'VALIDACION':
+    case 'ORDEN_NO_ADMITIDO':
+      return 'El servidor no admite lo que se le mandó';
+    case 'SIN_RESPUESTA':
+      return error.estado === 0 ? 'No se pudo contactar con el servidor' : 'El servidor contestó otra cosa';
+    default:
+      return `No se pudo consultar ${que}`;
+  }
+}
+
+function explicacionDelFallo(error: ErrorDeApi | null, acceso: string): string {
+  switch (error?.codigo) {
+    case 'NO_AUTENTICADO':
+      return 'Vuelve a entrar: el token caducó o no es de este emisor.';
+    case 'SIN_PRIVILEGIO':
+      return (
+        `Hace falta el acceso «${acceso}». Que Keycloak la deje entrar no basta: la cuenta tiene que estar además dada de alta ` +
+        'en esta municipalidad, y el permiso lo concede Seguridad.'
+      );
+    case 'SIN_MUNICIPALIDAD':
+      return 'No hay valor por omisión: sin municipalidad en el token no hay padrón que consultar.';
+    case 'NO_ENCONTRADO':
+    case 'CONFLICTO':
+    case 'VALIDACION':
+    case 'ORDEN_NO_ADMITIDO':
+      return error?.mensaje ?? 'Revisa los criterios.';
+    case 'SIN_RESPUESTA':
+      return error.estado === 0 ? 'El servidor no contestó. Puede estar apagado o no alcanzable desde aquí.' : error.mensaje;
+    default:
+      return 'La consulta falló en el servidor.';
+  }
+}
+
+/** Los cuatro estados de una lectura, dibujados una sola vez. */
+function Lectura<T>({
+  estado,
+  que,
+  acceso,
+  ruta,
+  children,
+}: {
+  estado: Estado<T>;
+  que: string;
+  acceso: string;
+  ruta: string;
+  children: (datos: T) => ReactNode;
+}) {
+  const [tokenPegado, setTokenPegado] = useState('');
+  if (estado.cargando) {
+    return (
+      <section style={TARJETA}>
+        <div style={{ padding: '13px 16px', borderBottom: '1px solid var(--line)' }}>
+          <div data-esq="1" style={{ width: 180, height: 15 }} />
+        </div>
+        {[1, 2, 3, 4].map((s) => (
+          <div key={s} style={{ display: 'flex', gap: 16, padding: '14px 16px', borderBottom: '1px solid var(--line)' }}>
+            <div data-esq="1" style={{ width: 118, height: 13 }} />
+            <div data-esq="1" style={{ flex: 1, height: 13 }} />
+            <div data-esq="1" style={{ width: 74, height: 13 }} />
+          </div>
+        ))}
+      </section>
+    );
+  }
+  if (estado.error) {
+    const e = estado.error;
+    return (
+      <section style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 8, padding: '36px 24px', border: '1px solid var(--line)', borderRadius: 10, background: 'var(--bg-card)' }}>
+        <svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.6} strokeLinecap="round" style={{ color: 'var(--error-texto)' }}>
+          <circle cx="12" cy="12" r="9" />
+          <path d="M12 7.5v5M12 16.2h.02" />
+        </svg>
+        <p style={{ margin: 0, fontFamily: 'var(--font-serif)', fontSize: 16, fontWeight: 600, color: 'var(--error-texto)' }}>{tituloDelFallo(e, que)}</p>
+        <p style={{ margin: 0, maxWidth: '54ch', fontSize: 12.5, lineHeight: 1.55, color: 'var(--ink-3)', textAlign: 'center', textWrap: 'pretty' }}>
+          {explicacionDelFallo(e, acceso)}
+        </p>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginTop: 3, fontFamily: 'var(--font-mono)', fontSize: 10.5, color: 'var(--ink-3)' }}>
+          <span>
+            {ruta} · {e.estado || 'sin respuesta'}
+          </span>
+          {e.incidencia && (
+            <>
+              <span style={{ color: 'var(--line-2)' }}>|</span>
+              <span>ref {e.incidencia}</span>
+            </>
+          )}
+        </div>
+        {e.codigo === 'NO_AUTENTICADO' && !hayPuerta() && (
+          <div style={{ display: 'flex', gap: 8, marginTop: 10, width: 'min(560px, 100%)' }}>
+            <input
+              value={tokenPegado}
+              onChange={(ev) => setTokenPegado(ev.target.value)}
+              placeholder="eyJhbGciOi…"
+              spellCheck={false}
+              aria-label="Token del emisor"
+              style={{ flex: 1, minWidth: 0, border: '1px solid var(--line-2)', borderRadius: 6, padding: '8px 11px', background: 'var(--bg-card)', fontFamily: 'var(--font-mono)', fontSize: 12 }}
+            />
+            <button
+              onClick={() => {
+                fijarToken(tokenPegado.trim() || null);
+                setTokenPegado('');
+                estado.reintentar();
+              }}
+              disabled={tokenPegado.trim() === ''}
+              className={tokenPegado.trim() === '' ? undefined : 'hov-acento-2'}
+              style={{ border: 0, borderRadius: 6, padding: '8px 17px', background: 'var(--accent)', color: 'var(--accent-contraste)', fontSize: 12.5, fontWeight: 500, cursor: tokenPegado.trim() === '' ? 'not-allowed' : 'pointer', opacity: tokenPegado.trim() === '' ? 0.55 : 1, whiteSpace: 'nowrap' }}
+            >
+              Usar este token
+            </button>
+          </div>
+        )}
+        {e.reintentable !== false && (
+          <button onClick={estado.reintentar} className="hov-acento-2" style={{ marginTop: 5, border: 0, borderRadius: 6, padding: '8px 17px', background: 'var(--accent)', color: 'var(--accent-contraste)', fontSize: 12.5, fontWeight: 500, cursor: 'pointer' }}>
+            Reintentar
+          </button>
+        )}
+      </section>
+    );
+  }
+  if (estado.datos === null) return null;
+  return <>{children(estado.datos)}</>;
+}
+
+function Vacio({ titulo, children }: { titulo: string; children: ReactNode }) {
+  return (
+    <section style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 8, padding: '44px 24px', border: '1px solid var(--line)', borderRadius: 10, background: 'var(--bg-card)' }}>
+      <svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.7} strokeLinecap="round" style={{ color: 'var(--ink-4)' }}>
+        <circle cx="11" cy="11" r="7" />
+        <path d="M20 20l-4.3-4.3" />
+      </svg>
+      <p style={{ margin: 0, fontFamily: 'var(--font-serif)', fontSize: 16, fontWeight: 600 }}>{titulo}</p>
+      <p style={{ margin: 0, maxWidth: '56ch', fontSize: 13, lineHeight: 1.55, color: 'var(--ink-3)', textAlign: 'center', textWrap: 'pretty' }}>{children}</p>
+    </section>
+  );
+}
+
+function Paginas({ pagina, totalPaginas, hayMas, ir }: { pagina: number; totalPaginas: number; hayMas: boolean; ir: (n: number) => void }) {
+  if (totalPaginas <= 1) return null;
+  return (
+    <div style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '10px 16px', borderTop: '1px solid var(--line)' }}>
+      <button onClick={() => ir(Math.max(0, pagina - 1))} disabled={pagina === 0} className="hov-linea" style={{ ...BOTON_LINEA, opacity: pagina === 0 ? 0.45 : 1, cursor: pagina === 0 ? 'not-allowed' : 'pointer' }}>
+        Anterior
+      </button>
+      <span style={{ fontFamily: 'var(--font-mono)', fontSize: 12, color: 'var(--ink-3)' }}>
+        {pagina + 1} de {totalPaginas}
+      </span>
+      <button onClick={() => ir(pagina + 1)} disabled={!hayMas} className="hov-linea" style={{ ...BOTON_LINEA, opacity: hayMas ? 1 : 0.45, cursor: hayMas ? 'pointer' : 'not-allowed' }}>
+        Siguiente
+      </button>
+    </div>
+  );
+}
+
+function cifra(e: { datos: { totalElementos: number } | null; cargando: boolean; error: unknown }): string {
+  if (e.cargando) return '…';
+  if (e.error || !e.datos) return SIN_DATO;
+  return miles(e.datos.totalElementos);
+}
+
+const MESES = ['', 'enero', 'febrero', 'marzo', 'abril', 'mayo', 'junio', 'julio', 'agosto', 'setiembre', 'octubre', 'noviembre', 'diciembre'];
+
+/**
+ * Infracciones administrativas: un procedimiento de tres actos en orden legal.
+ *
+ * El orden no lo impone una validación al pulsar «Guardar»: lo impone la fase
+ * que el backend DERIVA de tres hechos ya escritos —el estado de la papeleta,
+ * si hay resolución de gerencia y si la notificación previa sigue abierta—.
+ * La pantalla la lee y no la recalcula.
+ */
 export default function Sanciones({ dest, onDest }: PantallaProps) {
   const { pref, toast } = usarPreferencias();
+  const anio = Number(pref.ejercicio);
+
   const [vals, setVals] = useState<Record<string, string | boolean>>({});
-  const [sucio, setSucio] = useState(false);
-  const [q, setQ] = useState('');
-  const [chip, setChip] = useState('Todos');
+  const [abierto, setAbierto] = useState<ProcedimientoSancionador | null>(null);
   const [abiertos, setAbiertos] = useState<Record<string, boolean>>({});
-  const [hoja, setHoja] = useState(0);
+  const [q, setQ] = useState('');
+  const [chip, setChip] = useState('Todas');
+  const [pagina, setPagina] = useState(0);
   const [cuisQ, setCuisQ] = useState('');
-  const [materia, setMateria] = useState('Todas');
-  const [marcadas, setMarcadas] = useState<Record<number, boolean>>({ 0: true, 1: true, 2: false, 3: false });
+  const [paginaCuis, setPaginaCuis] = useState(0);
+  const [hojaIdx, setHojaIdx] = useState(0);
+  const [enviando, setEnviando] = useState(false);
+  const [falloDelActo, setFalloDelActo] = useState<ErrorDeApi | null>(null);
+  const [hechoDelActo, setHechoDelActo] = useState('');
+  const [contado, setContado] = useState<Record<string, string>>({});
 
-  /* «Nueva notificación» no es una pantalla aparte: es el primer acto del
-     mismo expediente, con las tres tarjetas replegadas. */
-  const esExpediente = dest === 'expediente' || dest === 'alta';
-  useEffect(() => {
-    if (dest !== 'alta') return;
-    setAbiertos({});
-    toast('Notificación nueva: es el primer acto del procedimiento.');
-  }, [dest, toast]);
-
+  const val = (k: string, d: string | boolean = ''): string | boolean => (vals[k] !== undefined ? vals[k] : d);
+  const texto = (k: string, d = '') => String(val(k, d));
   const set = (k: string, v: string | boolean) => {
     setVals((s) => ({ ...s, [k]: v }));
-    setSucio(true);
+    setFalloDelActo(null);
+    setHechoDelActo('');
   };
 
-  const cuisExp = String(vals.cuis ?? DEFECTOS.cuis);
-  const tarifa = deCuis(cuisExp);
+  /* «Nueva notificación» no es una pantalla aparte: es el primer acto del mismo
+     procedimiento, y es el ÚNICO de los tres que hoy tiene puerta. */
+  const esExpediente = dest === 'expediente' || dest === 'alta' || (dest === 'lista' && abierto !== null);
+  const criterio = useRebote(q.trim());
+  useEffect(() => setPagina(0), [criterio, chip]);
+  const criterioCuis = useRebote(cuisQ.trim());
+  useEffect(() => setPaginaCuis(0), [criterioCuis]);
 
-  /* Lo que el cuadro CUIS decide, puesto donde los campos lo leen. */
-  const derivados: Record<string, string | boolean> = {
-    ...DEFECTOS,
-    descCuis: tarifa.descripcion,
-    uit: tarifa.uit,
-    pctUit: tarifa.pct,
-    valorMulta: tarifa.multa,
-    prontoPago: '− ' + tarifa.mitad,
-    medida: tarifa.medida,
+  const irDest = (k: string) => {
+    setAbierto(null);
+    onDest(k);
   };
-  const valor = (k: string): string | boolean => vals[k] ?? derivados[k] ?? '';
 
-  /* El estado de cada acto se deriva del anterior: es lo que decide si la
-     tarjeta se puede abrir, en vez de una validación al final. */
-  const notificado = String(valor('numeroN')) !== '';
-  const plazoVencido = true;
-  const actaHecha = String(valor('nroRis')) !== '';
-  const hayDescargo = String(valor('expRg')) !== '';
+  /* ── El panel ────────────────────────────────────────────────
+     Una cuenta por fase, con el filtro que el propio listado admite. Ninguna
+     cifra se compone aquí. */
+  const enPanel = dest === 'panel';
+  const preventivas = useRecurso((s) => listarActas({ estado: 'PREVENTIVA' }, { tamano: 1 }, s), [], enPanel);
+  const constatadas = useRecurso((s) => listarActas({ estado: 'CONSTATADA' }, { tamano: 1 }, s), [], enPanel);
+  /* Los tres censos que corrigen las notas del panel de destinos van SIEMPRE, no
+     solo en el panel: entrando por la URL a otro destino, la nota volvería a la
+     cifra del prototipo —«812 del ejercicio»— al lado de la tabla que dice que
+     no hay ninguna. Es una petición de una fila por censo. */
+  const sancionadas = useRecurso((s) => listarActas({ estado: 'SANCIONADA' }, { tamano: 1 }, s), [], true);
+  const pagadasFase = useRecurso((s) => listarActas({ estado: 'PAGADA' }, { tamano: 1 }, s), [], enPanel);
+  const coactivas = useRecurso((s) => listarActas({ estado: 'COACTIVA' }, { tamano: 1 }, s), [], enPanel);
+  const conteosPorFase = [preventivas, constatadas, sancionadas, pagadasFase, coactivas];
+  const todasLasActas = useRecurso((s) => listarActas({}, { tamano: 1 }, s), [], true);
+  const vencidas = useRecurso((s) => notificacionesVencidas({}, { tamano: 1 }, s), [], enPanel);
+  const cuisCenso = useRecurso((s) => listarCuis({}, { tamano: 1 }, s), [], true);
+  const recaudado = useRecurso((s) => recaudacionAdministrativa(anio, s), [anio], enPanel);
 
-  const estados: Record<IdDeActo, EstadoDeActo> = {
-    notificacion: notificado ? 'hecho' : 'actual',
-    sancion: !notificado ? 'bloqueado' : !plazoVencido ? 'bloqueado' : actaHecha ? 'hecho' : 'actual',
-    resolucion: !actaHecha ? 'bloqueado' : hayDescargo ? 'actual' : 'espera',
-  };
-  const motivos: Record<IdDeActo, string> = {
-    notificacion: '',
-    sancion: MOTIVOS.sancion[notificado ? 1 : 0],
-    resolucion: MOTIVOS.resolucion[actaHecha ? 1 : 0],
-  };
-  const recibos: Partial<Record<IdDeActo, [string, string][]>> = {
-    notificacion: RECIBO_DE_LA_NOTIFICACION,
-    sancion: [
-      ['Resolución', String(valor('nroRis'))],
-      ['Notificada', String(valor('fechaNotifRis'))],
-      ['Multa', 'S/ ' + tarifa.multa + ' · CUIS ' + cuisExp],
-      ['Medida complementaria', tarifa.medida],
-    ],
-  };
-  const hayActual = (Object.keys(estados) as IdDeActo[]).some((k) => estados[k] === 'actual');
+  /* ── La lista de procedimientos ──────────────────────────────
+     El buscador va contra «administrado», que es lo que se teclea en
+     ventanilla; el número de acta y el CUIS son otros dos filtros del mismo
+     endpoint y se ofrecen aparte. */
+  const filtro = useMemo(
+    () => ({
+      administrado: criterio || undefined,
+      estado: chip === 'Todas' ? undefined : (chip as FaseDelProcedimiento),
+    }),
+    [criterio, chip],
+  );
+  const lista = useRecurso(
+    (s) => listarActas(filtro, { pagina, tamano: 20 }, s),
+    [filtro, pagina],
+    dest === 'lista' && abierto === null,
+  );
+
+  /* ── El cuadro CUIS ─────────────────────────────────────────── */
+  const cuis = useRecurso(
+    (s) => listarCuis({ materia: criterioCuis || undefined }, { pagina: paginaCuis, tamano: 20 }, s),
+    [criterioCuis, paginaCuis],
+    dest === 'cuis',
+  );
+
+  /* ── Los candidatos de la generación de valores ──────────────
+     Las multas sancionadas son las que un valor puede alcanzar. La corrida se
+     registra por rango; la lista está aquí para saber sobre qué se va a
+     trabajar, no para marcarla —el cuerpo admite marcar, pero marcar y el
+     rango se excluyen y el rango es lo que el manual pide—. */
+  const candidatos = useRecurso(
+    (s) => listarActas({ estado: 'SANCIONADA' }, { tamano: 20 }, s),
+    [],
+    dest === 'valores',
+  );
+
+  /* ── El centro de reportes ───────────────────────────────────── */
+  const h = HOJAS[Math.min(hojaIdx, HOJAS.length - 1)];
+  const c = (k: string) => texto('rep_' + k, CRITERIOS[k]?.v ?? '');
+  const llavesDelReporte = [h.k, c('desde'), c('hasta'), c('estadoNotificacion'), c('vencidasAl'), c('fiscalizador'), c('infraccion'), c('conPapeleta'), c('codContribuyente'), c('ano'), c('soloPendientes'), c('papeleta'), c('codigo'), c('descripcionContiene'), c('agrupadoPor')];
+  const reporte = useRecurso((s) => pedirReporte(h.k, c, s), llavesDelReporte, dest === 'reportes');
+
+  /* ── El estado de los tres actos ─────────────────────────────
+     Sale de la FASE que el backend derivó, no de si hay algo tecleado. Un
+     procedimiento sin abrir —«Nueva notificación»— empieza en el primero. */
+  const fase = abierto?.fase ?? null;
+  const estados: Record<IdDeActo, 'hecho' | 'actual' | 'bloqueado' | 'espera'> =
+    abierto === null
+      ? { notificacion: 'actual', sancion: 'bloqueado', resolucion: 'bloqueado' }
+      : {
+          notificacion: fase === null || fase === 'PREVENTIVA' ? 'actual' : 'hecho',
+          sancion: fase === 'PREVENTIVA' ? 'espera' : fase === 'CONSTATADA' ? 'actual' : fase === null ? 'bloqueado' : 'hecho',
+          resolucion: fase === 'CONSTATADA' ? 'actual' : fase === 'SANCIONADA' || fase === 'PAGADA' || fase === 'COACTIVA' ? 'hecho' : 'bloqueado',
+        };
   const actoActual = ACTOS.map((a, i) => ({ a, i })).find((x) => estados[x.a.id] === 'actual');
 
-  const filtrados = chip === 'Todos' ? EXPEDIENTES : EXPEDIENTES.filter((e) => e[4] === chip);
+  /* ── Las dos escrituras que la pantalla puede componer ───────── */
+  const obs = texto('obs').trim();
+  const faltaObservacion = obs.length < 5;
+  /* El número que se guarda es UNO: la serie y el número compuestos con el
+     guion que el propio manual imprime en su columna «Serie-Nº». */
+  const numeroCompuesto = texto('serie').trim() === '' ? texto('numeroN').trim() : texto('serie').trim() + '-' + texto('numeroN').trim();
 
-  const cq = cuisQ.toLowerCase();
-  const cuisFiltrado = CUIS.filter((c) => {
-    const porTexto = cq === '' || c[0].toLowerCase().indexOf(cq) >= 0 || c[2].toLowerCase().indexOf(cq) >= 0;
-    const porMateria = materia === 'Todas' || c[1] === materia;
-    return porTexto && porMateria;
-  });
+  const faltanDeLaNotificacion = [
+    texto('serie').trim() === '' || texto('numeroN').trim() === '' ? 'el número' : '',
+    texto('fechaN') === '' ? 'la fecha' : '',
+    texto('dirN').trim() === '' ? 'la dirección' : '',
+    texto('motivoN').trim() === '' ? 'el motivo' : '',
+  ].filter((x) => x !== '');
+  const faltanDeLaResolucion = [
+    texto('papR').trim() === '' ? 'el acta' : '',
+    texto('fechaR') === '' ? 'la fecha' : '',
+    texto('sustentoR').trim() === '' ? 'el sustento' : '',
+  ].filter((x) => x !== '');
+  const faltanDeLaCedula = [
+    texto('cedResolucion').trim() === '' ? 'la resolución' : '',
+    texto('cedFecha') === '' ? 'la fecha' : '',
+    texto('cedNotificador').trim() === '' ? 'el notificador' : '',
+  ].filter((x) => x !== '');
 
-  let valSuma = 0;
-  let valN = 0;
-  MULTAS.forEach((m, i) => {
-    if (marcadas[i]) {
-      valSuma += m[4];
-      valN++;
+  const enteroOUndefined = (k: string): number | undefined => {
+    const t = texto(k).trim();
+    /* Un entero es entero entero: `parseInt` se queda con el prefijo y «12a»
+       viajaría como 12 sin que nadie lo dijera. */
+    if (t === '' || !/^\d+$/.test(t)) return undefined;
+    return Number(t);
+  };
+
+  const registrarLaNotificacion = async () => {
+    setEnviando(true);
+    setFalloDelActo(null);
+    setHechoDelActo('');
+    try {
+      const r = await registrarNotificacion({
+        observacion: obs,
+        numero: numeroCompuesto,
+        fecha: texto('fechaN'),
+        direccion: texto('dirN').trim(),
+        motivo: texto('motivoN').trim(),
+        contribuyenteId: enteroOUndefined('contribN'),
+        predioId: enteroOUndefined('predioN'),
+        plazoDias: enteroOUndefined('plazoN'),
+      });
+      setHechoDelActo(
+        `Notificación ${r.numero} registrada el ${r.fecha}, en estado ${r.estado}. ` +
+          (r.vencimiento ? `Vence el ${r.vencimiento}.` : 'Sin plazo declarado: no vence nunca, y eso es una decisión del acto.'),
+      );
+      toast('Notificación registrada.');
+    } catch (fallo) {
+      setFalloDelActo(fallo instanceof ErrorDeApi ? fallo : new ErrorDeApi('ERROR_INTERNO', 'No se pudo completar la operación', 0));
+    } finally {
+      setEnviando(false);
     }
-  });
+  };
 
-  const h = HOJAS[Math.min(hoja, HOJAS.length - 1)];
+  const dictarLaResolucion = async () => {
+    setEnviando(true);
+    setFalloDelActo(null);
+    setHechoDelActo('');
+    try {
+      const r = await dictarResolucionAdministrativa({
+        observacion: obs,
+        papeleta: texto('papR').trim(),
+        fecha: texto('fechaR'),
+        sustento: texto('sustentoR').trim(),
+        nDeExpediente: texto('expR').trim() || undefined,
+        sentidoDelFallo: (texto('sentidoR') || undefined) as SentidoDelFallo | undefined,
+        efectoSobreLaMulta: (texto('efectoR') || undefined) as EfectoSobreLaMulta | undefined,
+        sancionAccesoria: texto('accesoriaR').trim() || undefined,
+        proyectarDeudaAl: texto('proyR') || undefined,
+      });
+      setHechoDelActo(
+        `Resolución ${r.numero} dictada sobre ${r.papeleta}. ` +
+          (r.deuda ? `Deuda proyectada S/ ${r.deuda.importe} al ${r.deuda.actualizadoA}. ` : '') +
+          (r.asientosDeBaja > 0 ? `${r.asientosDeBaja} asientos de baja. ` : '') +
+          `Documento ${r.nombreDeArchivo} (${r.formato}), resumen ${r.resumen.slice(0, 12)}…`,
+      );
+      toast('Resolución dictada.');
+    } catch (fallo) {
+      setFalloDelActo(fallo instanceof ErrorDeApi ? fallo : new ErrorDeApi('ERROR_INTERNO', 'No se pudo completar la operación', 0));
+    } finally {
+      setEnviando(false);
+    }
+  };
 
-  const abrirExpediente = () => {
-    setAbiertos({});
-    onDest('expediente');
+  const notificarLaResolucion = async () => {
+    setEnviando(true);
+    setFalloDelActo(null);
+    setHechoDelActo('');
+    try {
+      const r = await notificarResolucionAdministrativa(texto('cedResolucion').trim(), {
+        observacion: obs,
+        fechaDeNotificacion: texto('cedFecha'),
+        modalidad: texto('cedModalidad', 'PERSONAL') as ModalidadDeNotificacion,
+        resultado: texto('cedResultado', 'NOTIFICADO') as ResultadoDeNotificacion,
+        notificador: texto('cedNotificador').trim(),
+        direccion: texto('cedDireccion').trim() || undefined,
+        recibidoPor: texto('cedRecibio').trim() || undefined,
+        documentoDelReceptor: texto('cedDocReceptor').trim() || undefined,
+        vinculo: texto('cedVinculo').trim() || undefined,
+        acuse: texto('cedAcuse').trim() || undefined,
+      });
+      setHechoDelActo(
+        `Diligencia ${r.intento} de ${r.resolucion} el ${r.fechaDeNotificacion}: ${r.resultado}. ` +
+          (r.exigibleDesde ? `La deuda es exigible desde el ${r.exigibleDesde}.` : 'No abre plazo: la diligencia no surtió efecto.'),
+      );
+      toast('Diligencia registrada.');
+    } catch (fallo) {
+      setFalloDelActo(fallo instanceof ErrorDeApi ? fallo : new ErrorDeApi('ERROR_INTERNO', 'No se pudo completar la operación', 0));
+    } finally {
+      setEnviando(false);
+    }
+  };
+
+  const registrarLaCorrida = async () => {
+    setEnviando(true);
+    setFalloDelActo(null);
+    setHechoDelActo('');
+    try {
+      const r = await generarValoresAdministrativos({
+        observacion: obs,
+        desde: texto('valDesde'),
+        hasta: texto('valHasta'),
+        fechaCriterio: texto('valCriterio') || undefined,
+      });
+      setHechoDelActo(
+        `Corrida ${r.id} registrada por ${r.origen.toLowerCase()}: ${r.totalCandidatos} candidatos entre ${r.desde} y ${r.hasta}. ` +
+          'Todavía no se ha emitido ningún valor.',
+      );
+      toast('Corrida registrada.');
+    } catch (fallo) {
+      setFalloDelActo(fallo instanceof ErrorDeApi ? fallo : new ErrorDeApi('ERROR_INTERNO', 'No se pudo completar la operación', 0));
+    } finally {
+      setEnviando(false);
+    }
+  };
+
+  /* ── Ruta y contexto ─────────────────────────────────────────── */
+  useEffect(() => {
+    /* La nota la fija el CENSO, no el listado filtrado: con un filtro puesto el
+       listado cuenta otra cosa, y la nota diría menos actas de las que hay. */
+    if (todasLasActas.datos) setContado((x) => ({ ...x, lista: miles(todasLasActas.datos!.totalElementos) + ' del ejercicio' }));
+  }, [todasLasActas.datos]);
+  useEffect(() => {
+    if (cuisCenso.datos) setContado((x) => ({ ...x, cuis: miles(cuisCenso.datos!.totalElementos) + ' tipificadas' }));
+  }, [cuisCenso.datos]);
+  useEffect(() => {
+    if (sancionadas.datos) setContado((x) => ({ ...x, valores: miles(sancionadas.datos!.totalElementos) + ' sancionadas por cobrar' }));
+  }, [sancionadas.datos]);
+  const notasDeDestino: Record<string, string> = {
+    ...contado,
+    reportes: HOJAS.length + ' reportes, todos con lectura',
   };
 
   const destinos = moduloDe('sanciones').destinos;
   const etiquetaDeDestino = destinos.find((x) => x.k === dest)?.label ?? 'Infracciones administrativas';
   const miga = esExpediente
-    ? ['Infracciones', 'Expedientes', EXPEDIENTE_ABIERTO.codigo]
+    ? ['Infracciones', 'Expedientes', abierto ? abierto.numeroActa : 'Nuevo']
     : ['Infracciones', etiquetaDeDestino];
-  const titulo = esExpediente ? `Expediente ${EXPEDIENTE_ABIERTO.codigo}` : etiquetaDeDestino;
+  const titulo = esExpediente ? (abierto ? `Expediente ${abierto.numeroActa}` : 'Notificación preventiva nueva') : etiquetaDeDestino;
 
-  const paleta: EntradaDePaleta[] = OPCIONES.map((o) => ({
-    label: o[0],
-    nota: 'Infracciones',
-    ir: () => (o[1] === 'expediente' ? abrirExpediente() : onDest(o[1])),
-  }));
+  const paleta: EntradaDePaleta[] = OPCIONES.map((o) => ({ label: o[0], nota: 'Infracciones', ir: () => irDest(o[1]) }));
+
+  const contexto: Contexto | undefined = esExpediente
+    ? {
+        volver: { label: 'Expedientes', onClick: () => irDest('lista') },
+        codigo: abierto ? abierto.numeroActa : 'Sin número',
+        titular: abierto ? (abierto.administrado ?? 'Sin administrado en el padrón') : 'Sin administrado todavía',
+        ubic: abierto ? `${abierto.codigoCuis} · ${abierto.descripcionInfraccion}` : 'El primer acto abre el procedimiento',
+        derecha: (
+          <>
+            {abierto && <Insignia tono={tono(abierto.fase ?? '')}>{rotuloDeFase(abierto.fase)}</Insignia>}
+            <span style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 12, color: 'var(--accent-ink)', background: 'var(--accent-soft)', borderRadius: 999, padding: '4px 11px', whiteSpace: 'nowrap' }}>
+              {actoActual ? `Te toca: ${actoActual.a.titulo.toLowerCase()}` : 'Sin acto pendiente'}
+            </span>
+          </>
+        ),
+      }
+    : undefined;
 
   return (
-    <Shell
-      modulo="sanciones"
-      dest={dest}
-      onDest={onDest}
-      miga={miga}
-      titulo={titulo}
-      paleta={paleta}
-      contexto={
-        esExpediente
-          ? {
-              volver: { label: 'Expedientes', onClick: () => onDest('lista') },
-              codigo: EXPEDIENTE_ABIERTO.codigo,
-              titular: EXPEDIENTE_ABIERTO.administrado,
-              ubic: EXPEDIENTE_ABIERTO.meta,
-              /* La barra lleva las dos cosas que el artboard pone a la derecha:
-                 en qué estado está el plazo y qué acto toca ahora. */
-              derecha: (
-                <>
-                  <Insignia tono="bad">{EXPEDIENTE_ABIERTO.estado}</Insignia>
-                  <span
-                    style={{
-                      display: 'flex',
-                      alignItems: 'center',
-                      gap: 6,
-                      fontSize: 12,
-                      color: 'var(--accent-ink)',
-                      background: 'var(--accent-soft)',
-                      borderRadius: 999,
-                      padding: '4px 11px',
-                      whiteSpace: 'nowrap',
-                    }}
-                  >
-                    {actoActual ? `Te toca: ${actoActual.a.titulo.toLowerCase()}` : 'Sin acto pendiente'}
-                  </span>
-                </>
-              ),
-            }
-          : undefined
-      }
-    >
+    <Shell modulo="sanciones" dest={dest} onDest={irDest} miga={miga} titulo={titulo} paleta={paleta} contexto={contexto} notasDeDestino={notasDeDestino}>
       <div style={{ maxWidth: 1240, margin: '0 auto', display: 'flex', flexDirection: 'column', gap: 18 }}>
+
         {/* ══════════ PANEL ══════════ */}
         {dest === 'panel' && (
           <div style={{ display: 'flex', flexDirection: 'column', gap: 18 }}>
             <p style={{ ...ENTRADILLA, textWrap: 'pretty' }}>
-              Un procedimiento sancionador son tres actos en orden: se notifica, se da plazo para subsanar, y solo si no se subsana
-              se sanciona. Trece opciones de menú escondían ese orden; aquí es la estructura.
+              El procedimiento tiene tres actos en orden. La fase de cada expediente no la decide esta pantalla: la deriva el servidor de
+              tres hechos ya escritos —el estado de la multa, si hay resolución de gerencia, y si la notificación previa sigue abierta a
+              la fecha de corte—.
             </p>
 
             <section style={TARJETA}>
-              <div style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '13px 16px', borderBottom: '1px solid var(--line)' }}>
-                <h2 style={{ margin: 0, flex: 1, fontFamily: 'var(--font-serif)', fontSize: 16, fontWeight: 600 }}>
-                  El procedimiento, de principio a fin
-                </h2>
-                <span style={{ fontFamily: 'var(--font-mono)', fontSize: 11, color: 'var(--ink-3)' }}>
-                  812 notificaciones {pref.ejercicio}
-                </span>
-              </div>
-              {EMBUDO.map((e, i) => {
-                const pct = Math.min((e[2] / BASE_DEL_EMBUDO) * 100, 100);
+              <Cabecera
+                titulo={`El procedimiento, fase por fase · ejercicio ${pref.ejercicio}`}
+                meta={todasLasActas.datos ? miles(todasLasActas.datos.totalElementos) + ' actas' : '…'}
+              />
+              {FASES.map((f, i) => {
+                const e = conteosPorFase[i];
+                const total = todasLasActas.datos?.totalElementos ?? 0;
+                const n = e.datos?.totalElementos ?? 0;
+                const pct = total === 0 ? 0 : (n / total) * 100;
                 return (
                   <button
-                    key={e[0]}
-                    onClick={() => (e[3] === 'expediente' ? abrirExpediente() : onDest(e[3]))}
-                    className="hov-acento"
-                    style={{
-                      display: 'flex',
-                      alignItems: 'center',
-                      gap: 14,
-                      width: '100%',
-                      textAlign: 'left',
-                      border: 0,
-                      borderBottom: '1px solid var(--line)',
-                      background: 'transparent',
-                      padding: '13px 16px',
-                      cursor: 'pointer',
+                    key={f[0]}
+                    onClick={() => {
+                      setChip(f[0]);
+                      irDest('lista');
                     }}
+                    className="hov-acento"
+                    style={{ display: 'flex', alignItems: 'center', gap: 14, width: '100%', textAlign: 'left', border: 0, borderBottom: '1px solid var(--line)', background: 'transparent', padding: '13px 16px', cursor: 'pointer' }}
                   >
-                    <span
-                      style={{
-                        display: 'grid',
-                        placeItems: 'center',
-                        width: 26,
-                        height: 26,
-                        borderRadius: '50%',
-                        flex: '0 0 auto',
-                        fontFamily: 'var(--font-mono)',
-                        fontSize: 11.5,
-                        background: 'var(--accent-soft)',
-                        color: 'var(--accent-ink)',
-                      }}
-                    >
+                    <span style={{ display: 'grid', placeItems: 'center', width: 26, height: 26, borderRadius: '50%', flex: '0 0 auto', fontFamily: 'var(--font-mono)', fontSize: 11.5, background: 'var(--accent-soft)', color: 'var(--accent-ink)' }}>
                       {i + 1}
                     </span>
-                    <span style={{ flex: '0 0 186px', minWidth: 0 }}>
-                      <span style={{ display: 'block', fontSize: 13.5, fontWeight: 500 }}>{e[0]}</span>
-                      <span style={{ display: 'block', fontSize: 11.5, color: 'var(--ink-3)', marginTop: 2, textWrap: 'pretty' }}>
-                        {e[1]}
-                      </span>
+                    <span style={{ flex: '0 0 190px', minWidth: 0 }}>
+                      <span style={{ display: 'block', fontSize: 13.5, fontWeight: 500 }}>{f[1]}</span>
+                      <span style={{ display: 'block', fontSize: 11.5, color: 'var(--ink-3)', marginTop: 2, textWrap: 'pretty' }}>{f[2]}</span>
                     </span>
-                    <span
-                      style={{
-                        flex: 1,
-                        minWidth: 50,
-                        height: 22,
-                        borderRadius: 5,
-                        background: 'var(--accent-soft)',
-                        overflow: 'hidden',
-                        position: 'relative',
-                      }}
-                    >
-                      <span
-                        style={{
-                          position: 'absolute',
-                          inset: '0 auto 0 0',
-                          width: `${pct.toFixed(1)}%`,
-                          background: 'var(--accent)',
-                          opacity: 0.42 + i * 0.12,
-                        }}
-                      />
+                    <span style={{ flex: 1, minWidth: 50, height: 22, borderRadius: 5, background: 'var(--accent-soft)', overflow: 'hidden', position: 'relative' }}>
+                      <span style={{ position: 'absolute', inset: '0 auto 0 0', width: `${pct.toFixed(1)}%`, background: 'var(--accent)', opacity: 0.45 + i * 0.1 }} />
                     </span>
-                    <span style={{ flex: '0 0 46px', textAlign: 'right', fontFamily: 'var(--font-mono)', fontSize: 11.5, color: 'var(--ink-3)' }}>
-                      {pct.toFixed(0)} %
-                    </span>
-                    <span style={{ flex: '0 0 58px', textAlign: 'right', fontFamily: 'var(--font-mono)', fontSize: 14, color: 'var(--ink)' }}>
-                      {e[2].toLocaleString('es-PE')}
-                    </span>
+                    <span style={{ flex: '0 0 66px', textAlign: 'right', fontFamily: 'var(--font-mono)', fontSize: 14, color: 'var(--ink)' }}>{cifra(e)}</span>
                     <Icono d={ICO.flechaDer} tam={14} grosor={1.8} style={{ color: 'var(--ink-4)', flex: '0 0 auto' }} />
                   </button>
                 );
               })}
-              <div
-                style={{
-                  display: 'flex',
-                  alignItems: 'center',
-                  gap: 10,
-                  flexWrap: 'wrap',
-                  padding: '12px 16px',
-                  borderBottom: '1px solid var(--line)',
-                  background: 'var(--bg-elev)',
-                }}
-              >
-                <span
-                  style={{
-                    fontSize: 10,
-                    fontWeight: 500,
-                    textTransform: 'uppercase',
-                    letterSpacing: '.13em',
-                    color: 'var(--ink-3)',
-                    flex: '0 0 auto',
-                  }}
-                >
-                  Ahora mismo
-                </span>
-                {AHORA.map((a) => (
-                  <button
-                    key={a[1]}
-                    onClick={() => onDest(a[2])}
-                    className="hov-linea"
-                    style={{
-                      display: 'flex',
-                      alignItems: 'baseline',
-                      gap: 7,
-                      border: '1px solid var(--line-2)',
-                      borderRadius: 999,
-                      padding: '5px 13px',
-                      background: 'var(--bg-card)',
-                      cursor: 'pointer',
-                    }}
-                  >
-                    <span style={{ fontFamily: 'var(--font-mono)', fontSize: 14, color: 'var(--ink)' }}>{a[0]}</span>
-                    <span style={{ fontSize: 12.5, color: 'var(--ink-2)' }}>{a[1]}</span>
-                  </button>
-                ))}
-                <span
-                  data-sm-hide="1"
-                  style={{ flex: 1, minWidth: 120, textAlign: 'right', fontSize: 11.5, color: 'var(--ink-4)', textWrap: 'pretty' }}
-                >
-                  Estados de hoy, no etapas del recorrido
-                </span>
-              </div>
-              <p
-                style={{
-                  margin: 0,
-                  padding: '11px 16px',
-                  background: 'var(--bg-elev)',
-                  fontSize: 12,
-                  lineHeight: 1.5,
-                  color: 'var(--ink-3)',
-                  textWrap: 'pretty',
-                }}
-              >
-                Que 214 notificaciones venzan sin que nadie las mire es el único punto donde el procedimiento se cae solo: pasado el
-                plazo, o se sanciona o se archiva, y no hacer nada equivale a archivar.
+              <p style={PIE}>
+                Un acta anulada o prescrita <strong>no tiene fase</strong>: el vocabulario del procedimiento no tiene palabra para eso y
+                el servidor devuelve nulo en vez de elegir la más parecida. Por eso las cinco cuentas no tienen por qué sumar el total.
               </p>
             </section>
 
-            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit,minmax(196px,1fr))', gap: 13 }}>
-              {KPIS.map((k) => (
-                <div key={k.etiqueta} style={{ ...TARJETA, padding: '16px 17px' }}>
-                  <p
-                    style={{
-                      margin: 0,
-                      fontFamily: 'var(--font-mono)',
-                      fontSize: 25,
-                      fontWeight: 500,
-                      letterSpacing: '-.01em',
-                      color: 'var(--accent-ink)',
-                    }}
-                  >
-                    {k.valor}
-                  </p>
-                  <p style={{ margin: '5px 0 0', fontSize: 11.5, color: 'var(--ink-3)' }}>{k.etiqueta}</p>
-                  <p style={{ margin: '7px 0 0', fontSize: 11.5, color: 'var(--ink-4)', textWrap: 'pretty' }}>{k.nota}</p>
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit,minmax(216px,1fr))', gap: 13 }}>
+              {[
+                { valor: cifra(todasLasActas), etiqueta: 'Actas del ejercicio', nota: 'Cada una es una multa administrativa con su código CUIS.' },
+                { valor: cifra(vencidas), etiqueta: 'Notificaciones vencidas', nota: 'Venció el plazo sin acreditarse el cumplimiento: habilitan la papeleta.' },
+                {
+                  valor: recaudado.datos ? 'S/ ' + recaudado.datos.total : recaudado.cargando ? '…' : SIN_DATO,
+                  etiqueta: 'Recaudado por multas',
+                  nota: recaudado.datos
+                    ? `${miles(recaudado.datos.abonos)} abonos vivos del libro entre ${recaudado.datos.desde} y ${recaudado.datos.hasta}.`
+                    : 'Sale del libro, no de sumar multas pagadas.',
+                },
+                {
+                  valor: SIN_DATO,
+                  etiqueta: 'Multa potencial parada',
+                  nota: 'Exigiría multiplicar el porcentaje de cada código por la UIT y sumar. La UIT sale del conjunto sellado, que este ejercicio no tiene, y componer dinero en la pantalla es lo que RNF-083 prohíbe.',
+                },
+              ].map((k) => (
+                <div key={k.etiqueta} style={{ ...TARJETA, padding: '17px 18px' }}>
+                  <p style={{ margin: 0, fontFamily: 'var(--font-mono)', fontSize: 25, fontWeight: 500, letterSpacing: '-.015em', color: 'var(--accent-ink)' }}>{k.valor}</p>
+                  <p style={{ margin: '6px 0 0', fontSize: 12, color: 'var(--ink-3)' }}>{k.etiqueta}</p>
+                  <p style={{ margin: '8px 0 0', fontSize: 11.5, color: 'var(--ink-4)', textWrap: 'pretty' }}>{k.nota}</p>
                 </div>
               ))}
             </div>
 
             <section style={TARJETA}>
-              <div style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '13px 16px', borderBottom: '1px solid var(--line)' }}>
-                <h2 style={{ margin: 0, flex: 1, fontFamily: 'var(--font-serif)', fontSize: 16, fontWeight: 600 }}>Te toca decidir</h2>
-                <span style={{ fontFamily: 'var(--font-mono)', fontSize: 11, color: 'var(--ink-3)' }}>4 expedientes</span>
-              </div>
-              {DECIDIR.map((p) => (
+              <Cabecera titulo="Lo que toca decidir" meta="contado, no estimado" />
+              {[
+                { conteo: cifra(vencidas), titulo: 'Notificaciones con el plazo vencido', detalle: 'O se levanta el acta de constatación y se sanciona, o se archiva. No hacer nada equivale a archivar sin dejar constancia.', dest: 'reportes' },
+                { conteo: cifra(constatadas), titulo: 'Actas constatadas sin resolver', detalle: 'La multa existe y todavía no hay resolución de gerencia que la deje firme.', dest: 'lista' },
+                { conteo: cifra(sancionadas), titulo: 'Multas firmes sin valor emitido', detalle: 'No se pueden cobrar hasta que se registre la corrida y se emitan los valores.', dest: 'valores' },
+                { conteo: cifra(cuisCenso), titulo: 'Códigos CUIS cargados', detalle: 'Sin cuadro no hay con qué tipificar una infracción ni con qué calcular su multa.', dest: 'cuis' },
+              ].map((t) => (
                 <button
-                  key={p.titulo}
-                  onClick={() => (p.dest === 'expediente' ? abrirExpediente() : onDest(p.dest))}
+                  key={t.titulo}
+                  onClick={() => irDest(t.dest)}
                   className="hov-acento"
-                  style={{
-                    display: 'flex',
-                    alignItems: 'center',
-                    gap: 14,
-                    width: '100%',
-                    textAlign: 'left',
-                    border: 0,
-                    borderBottom: '1px solid var(--line)',
-                    background: 'transparent',
-                    padding: '12px 16px',
-                    cursor: 'pointer',
-                  }}
+                  style={{ display: 'flex', alignItems: 'center', gap: 14, width: '100%', textAlign: 'left', border: 0, borderBottom: '1px solid var(--line)', background: 'transparent', padding: '13px 16px', cursor: 'pointer' }}
                 >
-                  <Insignia tono={p.tono}>{p.dias}</Insignia>
+                  <Insignia tono={t.conteo === '0' ? 'ok' : 'bad'}>{t.conteo}</Insignia>
                   <span style={{ flex: 1, minWidth: 0 }}>
-                    <span style={{ display: 'block', fontSize: 13, fontWeight: 500 }}>{p.titulo}</span>
-                    <span style={{ display: 'block', fontSize: 12, color: 'var(--ink-3)', marginTop: 2, textWrap: 'pretty' }}>
-                      {p.detalle}
-                    </span>
+                    <span style={{ display: 'block', fontSize: 13.5, fontWeight: 500 }}>{t.titulo}</span>
+                    <span style={{ display: 'block', fontSize: 12, color: 'var(--ink-3)', marginTop: 2, textWrap: 'pretty' }}>{t.detalle}</span>
                   </span>
-                  <span style={{ fontSize: 12, color: 'var(--ink-2)', flex: '0 0 auto' }}>{p.accion}</span>
                   <Icono d={ICO.flechaDer} tam={14} grosor={1.8} style={{ color: 'var(--ink-4)', flex: '0 0 auto' }} />
                 </button>
               ))}
@@ -710,511 +826,292 @@ export default function Sanciones({ dest, onDest }: PantallaProps) {
         )}
 
         {/* ══════════ LISTA DE EXPEDIENTES ══════════ */}
-        {dest === 'lista' && (
+        {dest === 'lista' && abierto === null && (
           <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
             <p style={ENTRADILLA}>
-              Un expediente por administrado y por infracción. La columna que importa no es el número: es en qué acto está y cuánto
-              plazo queda.
+              Un expediente es un acta con su código CUIS. La <strong>fase</strong> dice por dónde va el procedimiento y el{' '}
+              <strong>estado de la deuda</strong> dice si se cobró: son dos vocabularios distintos y aquí van en dos columnas.
             </p>
 
             <section style={TARJETA}>
-              <div style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '14px 16px' }}>
-                <Icono d={T_LUPA} tam={18} style={{ color: 'var(--ink-3)', flex: '0 0 auto' }} />
+              <div style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '14px 16px', flexWrap: 'wrap' }}>
+                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.7} strokeLinecap="round" style={{ color: 'var(--ink-3)', flex: '0 0 auto' }}>
+                  <circle cx="11" cy="11" r="7" />
+                  <path d="M20 20l-4.3-4.3" />
+                </svg>
                 <input
                   value={q}
                   onChange={(e) => setQ(e.target.value)}
-                  placeholder="Administrado, RUC, dirección o 001-004183"
-                  style={{ flex: 1, border: 0, background: 'transparent', fontSize: 15, padding: '3px 0', outline: 'none' }}
+                  placeholder="Administrado"
+                  aria-label="Administrado"
+                  style={{ flex: 1, minWidth: 180, border: 0, background: 'transparent', fontSize: 15, padding: '3px 0', outline: 'none' }}
                 />
-                <button
-                  onClick={() => toast(`Se encontraron ${filtrados.length} expedientes.`)}
-                  className="hov-acento-2"
-                  style={{
-                    border: 0,
-                    borderRadius: 6,
-                    padding: '9px 20px',
-                    background: 'var(--accent)',
-                    color: '#fff',
-                    fontSize: 13.5,
-                    fontWeight: 500,
-                    cursor: 'pointer',
-                    flex: '0 0 auto',
-                  }}
-                >
-                  Buscar
-                </button>
               </div>
-              <div
-                style={{
-                  display: 'flex',
-                  alignItems: 'center',
-                  gap: 8,
-                  flexWrap: 'wrap',
-                  padding: '9px 16px',
-                  borderTop: '1px solid var(--line)',
-                  background: 'var(--bg-elev)',
-                }}
-              >
-                <span style={{ fontSize: 11.5, color: 'var(--ink-3)' }}>En el acto</span>
-                {CHIPS.map((c) => {
-                  const on = chip === c;
+              <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', padding: '0 16px 14px' }}>
+                {CHIPS.map((x) => {
+                  const on = chip === x;
                   return (
                     <button
-                      key={c}
-                      onClick={() => setChip(c)}
+                      key={x}
+                      onClick={() => setChip(x)}
                       aria-pressed={on}
-                      style={{
-                        border: `1px solid ${on ? 'var(--accent)' : 'var(--line-2)'}`,
-                        borderRadius: 999,
-                        padding: '4px 12px',
-                        cursor: 'pointer',
-                        fontSize: 12,
-                        background: on ? 'var(--accent-soft)' : 'var(--bg-card)',
-                        color: on ? 'var(--accent-ink)' : 'var(--ink-3)',
-                      }}
+                      style={{ border: `1px solid ${on ? 'var(--accent)' : 'var(--line-2)'}`, borderRadius: 999, padding: '6px 13px', cursor: 'pointer', fontSize: 12, background: on ? 'var(--accent-soft)' : 'var(--bg-card)', color: on ? 'var(--accent-ink)' : 'var(--ink-3)' }}
                     >
-                      {c}
+                      {x === 'Todas' ? x : rotuloDeFase(x)}
                     </button>
                   );
                 })}
               </div>
+              <p style={PIE}>
+                Las pastillas filtran por <strong>fase</strong>, que es lo que este listado admite. El «estado» del manual —notificada,
+                vencida, subsanada, con papeleta— es el vocabulario de la notificación previa, y ese corte lo sirve el padrón de
+                notificaciones del centro de reportes.
+              </p>
             </section>
 
-            {filtrados.length === 0 && (
-              <section
-                style={{
-                  display: 'flex',
-                  flexDirection: 'column',
-                  alignItems: 'center',
-                  gap: 8,
-                  padding: '44px 24px',
-                  border: '1px solid var(--line)',
-                  borderRadius: 10,
-                  background: 'var(--bg-card)',
-                }}
-              >
-                <Icono d={T_LUPA} tam={26} grosor={1.5} style={{ color: 'var(--ink-4)' }} />
-                <p style={{ margin: 0, fontFamily: 'var(--font-serif)', fontSize: 16, fontWeight: 600 }}>
-                  Ningún expediente en ese acto
-                </p>
-                <p
-                  style={{
-                    margin: 0,
-                    maxWidth: '52ch',
-                    fontSize: 13,
-                    lineHeight: 1.55,
-                    color: 'var(--ink-3)',
-                    textAlign: 'center',
-                    textWrap: 'pretty',
-                  }}
-                >
-                  Prueba con otro acto del procedimiento, o quita el filtro para ver los 812 del ejercicio.
-                </p>
-                <button onClick={() => setChip('Todos')} className="hov-linea" style={{ ...BOTON_SEC, marginTop: 6 }}>
-                  Quitar el filtro
-                </button>
-              </section>
-            )}
-
-            {filtrados.length > 0 && (
-              <section style={TARJETA}>
-                <Cabecera
-                  titulo="Expedientes sancionadores"
-                  meta={`${filtrados.length} de 812`}
-                  acciones={
-                    <button
-                      className="hov-linea"
-                      style={{
-                        border: '1px solid var(--line-2)',
-                        borderRadius: 6,
-                        padding: '6px 12px',
-                        background: 'var(--bg-elev)',
-                        fontSize: 12,
-                        color: 'var(--ink-2)',
-                        cursor: 'pointer',
-                      }}
-                    >
-                      Excel
-                    </button>
-                  }
-                />
-                <div style={{ overflowX: 'auto' }}>
-                  <table style={{ width: '100%', borderCollapse: 'collapse', minWidth: 900 }}>
-                    <thead>
-                      <Th defs={COLS_LISTA} />
-                    </thead>
-                    <tbody>
-                      {filtrados.map((f) => (
-                        <tr
-                          key={f[0]}
-                          onClick={abrirExpediente}
-                          className="hov-acento"
-                          style={{ borderTop: '1px solid var(--line)', cursor: 'pointer' }}
-                        >
-                          <Celdas fila={f} defs={COLS_LISTA} insignia={7} />
-                        </tr>
-                      ))}
-                    </tbody>
-                  </table>
-                </div>
-                <p
-                  style={{
-                    margin: 0,
-                    padding: '11px 16px',
-                    borderTop: '1px solid var(--line)',
-                    background: 'var(--bg-elev)',
-                    fontSize: 12,
-                    lineHeight: 1.5,
-                    color: 'var(--ink-3)',
-                    textWrap: 'pretty',
-                  }}
-                >
-                  Una notificación vencida sin sanción y sin archivo queda en el limbo: el plazo del administrado corrió, pero el de
-                  la municipalidad para sancionar también corre.
-                </p>
-              </section>
-            )}
+            <Lectura estado={lista} que="los expedientes" acceso="infracciones_adm" ruta="GET /api/v1/infracciones/actas">
+              {(p) =>
+                p.contenido.length === 0 ? (
+                  <Vacio titulo="Ningún expediente con esos datos">
+                    {criterio === '' && chip === 'Todas'
+                      ? 'Esta municipalidad no tiene ninguna infracción administrativa registrada. La siembra de demostración no carga actas ni códigos CUIS, y el registro del acta todavía no se publica como operación.'
+                      : 'Prueba con otro nombre o quita el filtro de fase.'}
+                  </Vacio>
+                ) : (
+                  <section style={TARJETA}>
+                    <Cabecera titulo="Expedientes" meta={`${p.contenido.length} de ${miles(p.totalElementos)}`} />
+                    <div style={{ overflowX: 'auto' }}>
+                      <table style={{ width: '100%', borderCollapse: 'collapse', minWidth: 960 }}>
+                        <thead>
+                          <Th defs={COLS_LISTA} />
+                        </thead>
+                        <tbody>
+                          {p.contenido.map((r) => (
+                            <tr key={r.id} onClick={() => setAbierto(r)} className="hov-acento" style={{ borderTop: '1px solid var(--line)', cursor: 'pointer' }}>
+                              <td style={TD1}>{r.numeroActa}</td>
+                              <td style={TD}>{r.administrado ?? SIN_DATO}</td>
+                              <td style={TD}>{r.codigoCuis}</td>
+                              <td style={{ ...TD, whiteSpace: 'normal', maxWidth: 320 }}>{r.descripcionInfraccion}</td>
+                              <td style={TDN}>{r.porcentajeInfraccion}</td>
+                              <td style={TDN}>{r.importeAPagar}</td>
+                              <td style={{ padding: '11px 14px' }}>
+                                <Insignia tono={tono(r.fase ?? '')}>{rotuloDeFase(r.fase)}</Insignia>
+                              </td>
+                              <td style={{ padding: '11px 14px' }}>
+                                <Insignia tono={tono(r.estadoDeLaDeuda)}>{r.estadoDeLaDeuda}</Insignia>
+                              </td>
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    </div>
+                    <Paginas pagina={p.pagina} totalPaginas={p.totalPaginas} hayMas={p.hayMas} ir={setPagina} />
+                    <p style={{ ...PIE, borderTop: '1px solid var(--line)' }}>
+                      La multa es la del acta, al {p.contenido[0].actualizadoA}, y la fase se resolvió al {p.contenido[0].faseAlDia}. Las
+                      dos fechas viajan con su cifra y no se dan por «hoy».
+                    </p>
+                  </section>
+                )
+              }
+            </Lectura>
           </div>
         )}
 
-        {/* ══════════ EL EXPEDIENTE: TRES ACTOS ══════════ */}
+        {/* ══════════ EL EXPEDIENTE: TRES ACTOS EN ORDEN LEGAL ══════════ */}
         {esExpediente && (
           <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
-            <section style={TARJETA}>
-              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit,minmax(150px,1fr))', gap: 0, background: 'var(--bg-card)' }}>
-                {(
-                  [
-                    ['Expediente', EXPEDIENTE_ABIERTO.codigo, 'var(--ink)'],
-                    ['Administrado', EXPEDIENTE_ABIERTO.administrado, 'var(--ink)'],
-                    ['Código CUIS', `${cuisExp} · ${tarifa.pct} UIT`, 'var(--ink)'],
-                    ['Multa potencial', `S/ ${tarifa.multa}`, 'var(--ink)'],
-                    ['Plazo', EXPEDIENTE_ABIERTO.plazo, 'var(--bad-fg)'],
-                    ['Medida', tarifa.medida, 'var(--ink)'],
-                  ] as const
-                ).map((r) => (
-                  <div
-                    key={r[0]}
-                    style={{
-                      background: 'var(--bg-card)',
-                      padding: '14px 16px',
-                      borderLeft: '1px solid var(--line)',
-                      borderTop: '1px solid var(--line)',
-                      margin: '-1px 0 0 -1px',
-                    }}
-                  >
-                    <p
-                      style={{
-                        margin: '0 0 5px',
-                        fontSize: 10,
-                        fontWeight: 500,
-                        textTransform: 'uppercase',
-                        letterSpacing: '.11em',
-                        color: 'var(--ink-3)',
-                      }}
-                    >
-                      {r[0]}
-                    </p>
-                    <p style={{ margin: 0, fontFamily: 'var(--font-mono)', fontSize: 15, color: r[2], textWrap: 'pretty' }}>{r[1]}</p>
-                  </div>
-                ))}
-              </div>
-            </section>
+            {abierto && (
+              <section style={TARJETA}>
+                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit,minmax(150px,1fr))', gap: 0 }}>
+                  {(
+                    [
+                      ['Nº de acta', abierto.numeroActa, 'var(--ink)'],
+                      ['Administrado', abierto.administrado ?? SIN_DATO, 'var(--ink)'],
+                      ['Código CUIS', `${abierto.codigoCuis} · ${abierto.porcentajeInfraccion} % UIT`, 'var(--ink)'],
+                      ['Multa del acta', `S/ ${abierto.importeAPagar}`, 'var(--ink)'],
+                      ['Fase al día', `${rotuloDeFase(abierto.fase)} · ${abierto.faseAlDia}`, 'var(--bad-fg)'],
+                      ['Medida complementaria', abierto.medidaComplementaria ?? SIN_DATO, 'var(--ink)'],
+                    ] as const
+                  ).map((r) => (
+                    <div key={r[0]} style={{ background: 'var(--bg-card)', padding: '14px 16px', borderLeft: '1px solid var(--line)', borderTop: '1px solid var(--line)', margin: '-1px 0 0 -1px' }}>
+                      <p style={{ margin: '0 0 5px', fontSize: 10, fontWeight: 500, textTransform: 'uppercase', letterSpacing: '.11em', color: 'var(--ink-3)' }}>{r[0]}</p>
+                      <p style={{ margin: 0, fontFamily: 'var(--font-mono)', fontSize: 15, color: r[2], textWrap: 'pretty' }}>{r[1]}</p>
+                    </div>
+                  ))}
+                </div>
+              </section>
+            )}
 
-            <div
-              style={{
-                display: 'flex',
-                alignItems: 'flex-start',
-                gap: 12,
-                padding: '13px 16px',
-                border: '1px solid var(--line-2)',
-                borderLeft: `3px solid ${actoActual ? 'var(--accent-ink)' : 'var(--ok-fg)'}`,
-                borderRadius: 8,
-                background: actoActual ? 'var(--accent-soft)' : 'var(--ok-bg)',
-              }}
-            >
-              <Icono
-                d={T_INFO}
-                tam={17}
-                grosor={1.8}
-                style={{ color: actoActual ? 'var(--accent-ink)' : 'var(--ok-fg)', flex: '0 0 auto', marginTop: 1 }}
-              />
-              <p
-                style={{
-                  margin: 0,
-                  flex: 1,
-                  fontSize: 13,
-                  lineHeight: 1.55,
-                  color: actoActual ? 'var(--accent-ink)' : 'var(--ok-fg)',
-                  textWrap: 'pretty',
-                }}
-              >
-                {actoActual
-                  ? `Te toca el acto ${actoActual.i + 1}: ${actoActual.a.titulo.toLowerCase()}. Los actos anteriores quedan como constancia y los siguientes se abren cuando corresponda.`
-                  : 'No hay ningún acto pendiente en este expediente. Lo que sigue depende del administrado.'}
+            <div style={{ display: 'flex', alignItems: 'flex-start', gap: 12, padding: '13px 16px', border: '1px solid var(--line-2)', borderLeft: `3px solid ${actoActual ? 'var(--accent-ink)' : 'var(--ok-fg)'}`, borderRadius: 8, background: actoActual ? 'var(--accent-soft)' : 'var(--ok-bg)' }}>
+              <Icono d={T_INFO} tam={17} grosor={1.8} style={{ color: actoActual ? 'var(--accent-ink)' : 'var(--ok-fg)', flex: '0 0 auto', marginTop: 1 }} />
+              <p style={{ margin: 0, flex: 1, fontSize: 13, lineHeight: 1.55, color: actoActual ? 'var(--accent-ink)' : 'var(--ok-fg)', textWrap: 'pretty' }}>
+                {abierto === null
+                  ? 'Este es el primer acto del procedimiento: la notificación preventiva. Los otros dos se abren cuando corresponda, y el orden no lo decide esta pantalla.'
+                  : actoActual
+                    ? `Te toca el acto ${actoActual.i + 1}: ${actoActual.a.titulo.toLowerCase()}. El orden sale de la fase que el servidor derivó, no de lo que haya tecleado aquí.`
+                    : 'No hay ningún acto pendiente en este expediente. Lo que sigue depende del administrado.'}
               </p>
             </div>
 
             {ACTOS.map((a, i) => {
-              const estado = estados[a.id];
-              const bloqueado = estado === 'bloqueado' || estado === 'espera';
-              const hecho = estado === 'hecho';
-              const actual = estado === 'actual';
+              const est = estados[a.id];
+              const bloqueado = est === 'bloqueado' || est === 'espera';
+              const actual = est === 'actual';
+              const hecho = est === 'hecho';
               const clave = 'acto|' + a.id;
               const guardado = abiertos[clave];
-              /* Si ningún acto está «Te toca» —todos cumplidos y el siguiente
-                 en espera—, abre el primero cumplido para que el expediente
-                 nunca llegue con las tres tarjetas cerradas y sin un campo. */
-              const porDefecto = actual || (!hayActual && i === 0);
-              const abierto = bloqueado ? false : guardado === undefined ? porDefecto : guardado;
-              const filas = recibos[a.id] ?? [];
+              const abiertaLaTarjeta = bloqueado ? false : guardado === undefined ? actual : guardado;
               return (
                 <section
                   key={a.id}
-                  style={{
-                    background: 'var(--bg-card)',
-                    border: `1px solid ${actual ? 'var(--accent)' : 'var(--line)'}`,
-                    borderRadius: 10,
-                    overflow: 'hidden',
-                    boxShadow: actual ? 'var(--shadow-2)' : 'var(--shadow-1)',
-                  }}
+                  style={{ background: 'var(--bg-card)', border: `1px solid ${actual ? 'var(--accent)' : 'var(--line)'}`, borderRadius: 10, overflow: 'hidden', boxShadow: actual ? 'var(--shadow-2)' : 'var(--shadow-1)' }}
                 >
                   <button
                     onClick={() => {
                       if (bloqueado) {
-                        toast(motivos[a.id]);
+                        toast(a.id === 'notificacion' ? '' : MOTIVOS[a.id as 'sancion' | 'resolucion']);
                         return;
                       }
-                      setAbiertos((x) => ({ ...x, [clave]: !abierto }));
+                      setAbiertos((x) => ({ ...x, [clave]: !abiertaLaTarjeta }));
                     }}
-                    aria-expanded={abierto}
+                    aria-expanded={abiertaLaTarjeta}
                     aria-disabled={bloqueado}
-                    style={{
-                      display: 'flex',
-                      alignItems: 'center',
-                      gap: 12,
-                      width: '100%',
-                      border: 0,
-                      background: 'transparent',
-                      padding: '14px 16px',
-                      textAlign: 'left',
-                      cursor: bloqueado ? 'default' : 'pointer',
-                    }}
+                    style={{ display: 'flex', alignItems: 'center', gap: 12, width: '100%', border: 0, background: 'transparent', padding: '14px 16px', textAlign: 'left', cursor: bloqueado ? 'default' : 'pointer', opacity: bloqueado ? 0.62 : 1 }}
                   >
-                    <span
-                      style={{
-                        display: 'grid',
-                        placeItems: 'center',
-                        width: 28,
-                        height: 28,
-                        borderRadius: '50%',
-                        flex: '0 0 auto',
-                        fontFamily: 'var(--font-mono)',
-                        fontSize: 12,
-                        ...(hecho
-                          ? { background: 'var(--ok-bg)', color: 'var(--ok-fg)' }
-                          : actual
-                            ? { background: 'var(--accent)', color: '#fff' }
-                            : { background: 'var(--bg-elev)', color: 'var(--ink-4)', border: '1px solid var(--line-2)' }),
-                      }}
-                    >
+                    <span style={{ display: 'grid', placeItems: 'center', width: 26, height: 26, borderRadius: '50%', flex: '0 0 auto', fontFamily: 'var(--font-mono)', fontSize: 11.5, background: hecho ? 'var(--ok-bg)' : 'var(--accent-soft)', color: hecho ? 'var(--ok-fg)' : 'var(--accent-ink)' }}>
                       {i + 1}
                     </span>
                     <span style={{ flex: 1, minWidth: 0 }}>
-                      <span
-                        style={{
-                          display: 'block',
-                          fontFamily: 'var(--font-serif)',
-                          fontSize: 16,
-                          fontWeight: 600,
-                          color: bloqueado ? 'var(--ink-4)' : 'var(--ink)',
-                        }}
-                      >
-                        {a.titulo}
-                      </span>
+                      <span style={{ display: 'block', fontFamily: 'var(--font-serif)', fontSize: 15.5, fontWeight: 600 }}>{a.titulo}</span>
                       <span style={{ display: 'block', fontSize: 12, color: 'var(--ink-3)', marginTop: 2, textWrap: 'pretty' }}>
-                        {a.hint}
+                        {bloqueado ? MOTIVOS[a.id as 'sancion' | 'resolucion'] : a.hint}
                       </span>
                     </span>
-                    <Insignia tono={TONO_DEL_ACTO[estado]}>{ETIQUETA[estado]}</Insignia>
-                    {!bloqueado && (
-                      <span
-                        style={{
-                          display: 'grid',
-                          placeItems: 'center',
-                          width: 20,
-                          height: 20,
-                          color: 'var(--ink-4)',
-                          flex: '0 0 auto',
-                          transform: `rotate(${abierto ? '0' : '-90'}deg)`,
-                          transition: 'transform .15s ease',
-                        }}
-                      >
-                        <Icono d={T_CARET} tam={13} grosor={2} />
-                      </span>
-                    )}
-                    {bloqueado && (
-                      <span style={{ display: 'grid', placeItems: 'center', width: 20, height: 20, color: 'var(--ink-4)', flex: '0 0 auto' }}>
-                        <Icono d={T_CANDADO} tam={13} grosor={1.8} />
-                      </span>
-                    )}
+                    <Insignia tono={hecho ? 'ok' : actual ? 'warn' : 'neutro'}>
+                      {hecho ? 'Cumplido' : actual ? 'Te toca' : est === 'espera' ? 'En espera' : 'Bloqueado'}
+                    </Insignia>
                   </button>
 
-                  {bloqueado && (
-                    <p
-                      style={{
-                        margin: 0,
-                        padding: '0 16px 15px 58px',
-                        fontSize: 12.5,
-                        lineHeight: 1.55,
-                        color: 'var(--ink-3)',
-                        maxWidth: '80ch',
-                        textWrap: 'pretty',
-                      }}
-                    >
-                      {motivos[a.id]}
-                    </p>
-                  )}
-
-                  {hecho && !abierto && filas.length > 0 && (
-                    <div
-                      style={{
-                        borderTop: '1px solid var(--line)',
-                        background: 'var(--bg-elev)',
-                        display: 'grid',
-                        gridTemplateColumns: 'repeat(auto-fit,minmax(170px,1fr))',
-                        gap: '12px 18px',
-                        padding: '13px 16px 13px 58px',
-                      }}
-                    >
-                      {filas.map((rf) => (
-                        <div key={rf[0]}>
-                          <p style={{ margin: '0 0 2px', fontSize: 10, textTransform: 'uppercase', letterSpacing: '.1em', color: 'var(--ink-3)' }}>
-                            {rf[0]}
-                          </p>
-                          <p style={{ margin: 0, fontSize: 12.5, color: 'var(--ink)' }}>{rf[1]}</p>
-                        </div>
-                      ))}
+                  {abiertaLaTarjeta && a.sinPuerta && (
+                    <div role="note" style={{ margin: '0 16px 16px', display: 'flex', gap: 11, padding: '12px 14px', borderRadius: 8, background: 'var(--warn-bg)', color: 'var(--warn-fg)' }}>
+                      <span style={{ fontSize: 12.5, lineHeight: 1.55, textWrap: 'pretty' }}>
+                        <strong style={{ display: 'block', fontWeight: 600, marginBottom: 2 }}>Este acto no tiene puerta todavía</strong>
+                        {a.sinPuerta}
+                      </span>
                     </div>
                   )}
 
-                  {abierto && (
-                    <div style={{ borderTop: '1px solid var(--line)' }}>
-                      {a.bloques.map((bl) => (
-                        <div key={bl.titulo} style={{ borderBottom: '1px solid var(--line)' }}>
-                          {bl.titulo && (
-                            <p
-                              style={{
-                                margin: 0,
-                                padding: '12px 16px 0',
-                                fontSize: 10,
-                                fontWeight: 500,
-                                textTransform: 'uppercase',
-                                letterSpacing: '.13em',
-                                color: 'var(--ink-3)',
-                              }}
-                            >
-                              {bl.titulo}
-                            </p>
-                          )}
-                          {bl.nota && (
-                            <p
-                              style={{
-                                margin: 0,
-                                padding: '8px 16px 0',
-                                fontSize: 12.5,
-                                lineHeight: 1.5,
-                                color: 'var(--ink-3)',
-                                maxWidth: '76ch',
-                                textWrap: 'pretty',
-                              }}
-                            >
-                              {bl.nota}
-                            </p>
-                          )}
-                          <div
-                            style={{
-                              display: 'grid',
-                              gridTemplateColumns: 'repeat(auto-fit,minmax(192px,1fr))',
-                              gap: '15px 16px',
-                              padding: '15px 16px 17px',
-                            }}
-                          >
-                            {bl.campos.map((f) => (
-                              <Campo key={f.k} f={f} valor={valor(f.k)} onCambio={(v) => set(f.k, v)} />
-                            ))}
-                          </div>
-                        </div>
-                      ))}
-
-                      {a.cuenta === true && (
-                        <div
-                          style={{
-                            display: 'grid',
-                            gridTemplateColumns: 'repeat(auto-fit,minmax(158px,1fr))',
-                            gap: 0,
-                            background: 'var(--bg-card)',
-                            borderBottom: '1px solid var(--line)',
-                          }}
-                        >
-                          {(
-                            [
-                              ['Multa', `S/ ${tarifa.multa}`, 0],
-                              ['Pronto pago', `− S/ ${tarifa.mitad}`, 0],
-                              ['A pagar hoy', `S/ ${tarifa.mitad}`, 0],
-                              ['Vence', '22/08/2026', 1],
-                            ] as const
-                          ).map((t) => (
-                            <div
-                              key={t[0]}
-                              style={{
-                                background: t[2] ? 'var(--accent-soft)' : 'var(--bg-card)',
-                                padding: '13px 16px',
-                                borderLeft: '1px solid var(--line)',
-                                borderTop: '1px solid var(--line)',
-                                margin: '-1px 0 0 -1px',
-                              }}
-                            >
-                              <p style={{ margin: '0 0 4px', fontSize: 10.5, textTransform: 'uppercase', letterSpacing: '.1em', color: 'var(--ink-3)' }}>
-                                {t[0]}
-                              </p>
-                              <p style={{ margin: 0, fontFamily: 'var(--font-mono)', fontSize: 19, color: 'var(--ink)' }}>{t[1]}</p>
-                            </div>
+                  {abiertaLaTarjeta &&
+                    !a.sinPuerta &&
+                    a.bloques.map((b, bi) => (
+                      <div key={bi} style={{ borderTop: '1px solid var(--line)' }}>
+                        {b.titulo && (
+                          <p style={{ margin: 0, padding: '12px 16px 0', fontSize: 10, fontWeight: 500, textTransform: 'uppercase', letterSpacing: '.13em', color: 'var(--ink-3)' }}>{b.titulo}</p>
+                        )}
+                        {b.nota && (
+                          <p style={{ margin: 0, padding: '8px 16px 0', fontSize: 12, lineHeight: 1.5, color: 'var(--ink-4)', textWrap: 'pretty' }}>{b.nota}</p>
+                        )}
+                        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit,minmax(192px,1fr))', gap: '15px 16px', padding: '13px 16px 16px' }}>
+                          {b.campos.map((f) => (
+                            <Campo key={f.k} f={f} valor={val(f.k)} onCambio={(v) => set(f.k, v)} />
                           ))}
                         </div>
-                      )}
+                        {a.id === 'notificacion' && bi === 0 && (
+                          <p style={{ margin: 0, padding: '0 16px 14px', fontSize: 12, color: 'var(--accent-ink)', fontFamily: 'var(--font-mono)' }}>
+                            Se guardará como «{numeroCompuesto === '' || numeroCompuesto === '-' ? SIN_DATO : numeroCompuesto}»
+                          </p>
+                        )}
+                      </div>
+                    ))}
 
-                      <div
-                        style={{
-                          display: 'flex',
-                          alignItems: 'center',
-                          gap: 10,
-                          flexWrap: 'wrap',
-                          padding: '13px 16px',
-                          background: 'var(--bg-elev)',
-                        }}
-                      >
-                        <p style={{ margin: 0, flex: 1, minWidth: 170, fontSize: 12, color: 'var(--ink-3)', textWrap: 'pretty' }}>
-                          {a.aviso}
+                  {abiertaLaTarjeta && !a.sinPuerta && (
+                    <>
+                      <div style={{ borderTop: '1px solid var(--line)', padding: '13px 16px' }}>
+                        <Campo
+                          f={{ k: 'obs', l: 'Observación', t: 'area', ancho: true, ph: 'Por qué se registra', ayuda: 'Obligatoria: toda modificación se guarda con el motivo de quien la hace. De 5 a 500 caracteres.' }}
+                          valor={val('obs')}
+                          onCambio={(v) => set('obs', v)}
+                        />
+                      </div>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: 12, flexWrap: 'wrap', padding: '13px 16px', borderTop: '1px solid var(--line)', background: 'var(--bg-elev)' }}>
+                        <p style={{ margin: 0, flex: 1, minWidth: 180, fontSize: 12.5, color: 'var(--ink-3)', textWrap: 'pretty' }}>
+                          {motivoDelActo(a.id, faltaObservacion, faltanDeLaNotificacion, faltanDeLaResolucion) || a.aviso}
                         </p>
-                        <button className="hov-linea" style={BOTON_SEC}>
-                          {a.secundaria}
-                        </button>
                         <button
-                          onClick={() => {
-                            toast(`${a.primaria}: registrado en el expediente ${EXPEDIENTE_ABIERTO.codigo}.`);
-                            setSucio(false);
+                          onClick={a.id === 'notificacion' ? registrarLaNotificacion : dictarLaResolucion}
+                          disabled={puedeElActo(a.id, faltaObservacion, faltanDeLaNotificacion, faltanDeLaResolucion) === false || enviando}
+                          title={motivoDelActo(a.id, faltaObservacion, faltanDeLaNotificacion, faltanDeLaResolucion) || undefined}
+                          className={puedeElActo(a.id, faltaObservacion, faltanDeLaNotificacion, faltanDeLaResolucion) && !enviando ? 'hov-acento-2' : undefined}
+                          style={{
+                            border: 0,
+                            borderRadius: 6,
+                            padding: '11px 22px',
+                            background: 'var(--accent)',
+                            color: '#fff',
+                            fontSize: 13.5,
+                            fontWeight: 500,
+                            cursor: puedeElActo(a.id, faltaObservacion, faltanDeLaNotificacion, faltanDeLaResolucion) && !enviando ? 'pointer' : 'not-allowed',
+                            opacity: puedeElActo(a.id, faltaObservacion, faltanDeLaNotificacion, faltanDeLaResolucion) && !enviando ? 1 : 0.5,
                           }}
-                          className="hov-acento-2"
-                          style={BOTON_PRI}
                         >
-                          {a.primaria}
+                          {enviando ? 'Enviando…' : a.primaria}
                         </button>
                       </div>
-                    </div>
+                    </>
                   )}
                 </section>
               );
             })}
+
+            {/* La cédula con que se notifica la resolución ya dictada. */}
+            <section style={TARJETA}>
+              <Cabecera
+                titulo="Notificación de la resolución"
+                meta="POST /api/v1/infracciones/administrativas/resoluciones/{id}/notificacion"
+              />
+              <p style={{ margin: 0, padding: '13px 16px', fontSize: 13, lineHeight: 1.6, color: 'var(--ink-2)', maxWidth: '80ch', textWrap: 'pretty' }}>
+                Dictar la resolución no la notifica. De la diligencia sale la exigibilidad: el servidor devuelve desde qué día la deuda se
+                puede cobrar, y no lo devuelve cuando la diligencia no surtió efecto.
+              </p>
+              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit,minmax(192px,1fr))', gap: '15px 16px', padding: '13px 16px 16px', borderTop: '1px solid var(--line)' }}>
+                {CAMPOS_DE_LA_CEDULA.map((f) => (
+                  <Campo key={f.k} f={f} valor={val(f.k, f.o ? f.o[0] : '')} onCambio={(v) => set(f.k, v)} />
+                ))}
+              </div>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 12, flexWrap: 'wrap', padding: '13px 16px', borderTop: '1px solid var(--line)', background: 'var(--bg-elev)' }}>
+                <p style={{ margin: 0, flex: 1, minWidth: 180, fontSize: 12.5, color: 'var(--ink-3)', textWrap: 'pretty' }}>
+                  {faltaObservacion
+                    ? 'Falta la observación del acto, arriba: sin ella el servidor no guarda nada.'
+                    : faltanDeLaCedula.length > 0
+                      ? 'Falta ' + faltanDeLaCedula.join(', ') + '.'
+                      : 'La modalidad y el resultado son obligatorios: el servidor no los deduce.'}
+                </p>
+                <button
+                  onClick={notificarLaResolucion}
+                  disabled={faltaObservacion || faltanDeLaCedula.length > 0 || enviando}
+                  title={faltaObservacion ? 'Falta la observación' : faltanDeLaCedula.length > 0 ? 'Falta ' + faltanDeLaCedula.join(', ') : undefined}
+                  className={!faltaObservacion && faltanDeLaCedula.length === 0 && !enviando ? 'hov-acento-2' : undefined}
+                  style={{ border: 0, borderRadius: 6, padding: '11px 22px', background: 'var(--accent)', color: '#fff', fontSize: 13.5, fontWeight: 500, cursor: !faltaObservacion && faltanDeLaCedula.length === 0 && !enviando ? 'pointer' : 'not-allowed', opacity: !faltaObservacion && faltanDeLaCedula.length === 0 && !enviando ? 1 : 0.5 }}
+                >
+                  {enviando ? 'Enviando…' : 'Registrar la diligencia'}
+                </button>
+              </div>
+            </section>
+
+            {hechoDelActo !== '' && (
+              <div role="status" style={{ display: 'flex', gap: 11, padding: '12px 14px', borderRadius: 8, background: 'var(--ok-bg)', color: 'var(--ok-fg)' }}>
+                <span style={{ fontSize: 12.5, lineHeight: 1.55, textWrap: 'pretty' }}>{hechoDelActo}</span>
+              </div>
+            )}
+            {falloDelActo && (
+              <div role="alert" style={{ display: 'flex', flexDirection: 'column', gap: 4, padding: '12px 14px', borderRadius: 8, background: 'var(--bad-bg)', color: 'var(--bad-fg)' }}>
+                <strong style={{ fontSize: 12.5 }}>{tituloDelFallo(falloDelActo, 'el acto')}</strong>
+                <span style={{ fontSize: 12.5, lineHeight: 1.55, textWrap: 'pretty' }}>{falloDelActo.mensaje}</span>
+                {falloDelActo.detalles && falloDelActo.detalles.length > 0 && (
+                  <span style={{ fontFamily: 'var(--font-mono)', fontSize: 11.5 }}>{falloDelActo.detalles.join(' · ')}</span>
+                )}
+              </div>
+            )}
           </div>
         )}
 
@@ -1222,213 +1119,164 @@ export default function Sanciones({ dest, onDest }: PantallaProps) {
         {dest === 'cuis' && (
           <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
             <p style={ENTRADILLA}>
-              El cuadro único de infracciones y sanciones, aprobado por ordenanza. El código elegido en el acta arrastra el
-              porcentaje de UIT y la medida complementaria: ninguno de los dos se teclea.
+              El cuadro aprobado por ordenanza. Lo que fija es el <strong>porcentaje de la UIT</strong>, no el importe: cambiar la UIT del
+              ejercicio recalcula todas las multas sin tocar el cuadro.
             </p>
 
             <section style={TARJETA}>
-              <div
-                style={{
-                  display: 'flex',
-                  alignItems: 'center',
-                  gap: 10,
-                  flexWrap: 'wrap',
-                  padding: '13px 16px',
-                  borderBottom: '1px solid var(--line)',
-                }}
-              >
+              <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap', padding: '13px 16px', borderBottom: '1px solid var(--line)' }}>
                 <input
                   value={cuisQ}
                   onChange={(e) => setCuisQ(e.target.value)}
-                  placeholder="Código o texto de la infracción"
+                  placeholder="Texto de la infracción"
+                  aria-label="Texto de la infracción"
                   style={{ ...IN, flex: 1, minWidth: 180, width: undefined }}
                 />
-                {MATERIAS.map((m) => {
-                  const on = materia === m;
-                  return (
-                    <button
-                      key={m}
-                      onClick={() => setMateria(m)}
-                      aria-pressed={on}
-                      style={{
-                        border: `1px solid ${on ? 'var(--accent)' : 'var(--line-2)'}`,
-                        borderRadius: 999,
-                        padding: '6px 13px',
-                        cursor: 'pointer',
-                        fontSize: 12,
-                        background: on ? 'var(--accent-soft)' : 'var(--bg-card)',
-                        color: on ? 'var(--accent-ink)' : 'var(--ink-3)',
-                      }}
-                    >
-                      {m}
-                    </button>
-                  );
-                })}
-                <button
-                  onClick={() => window.print()}
-                  className="hov-linea"
-                  style={{
-                    border: '1px solid var(--line-2)',
-                    borderRadius: 6,
-                    padding: '8px 14px',
-                    background: 'var(--bg-card)',
-                    fontSize: 12.5,
-                    cursor: 'pointer',
-                  }}
-                >
-                  Imprimir cuadro
-                </button>
+                <span style={{ fontSize: 11.5, color: 'var(--ink-4)', textWrap: 'pretty', flex: '1 1 280px' }}>
+                  El filtro «Materia» del manual no acota por materia: el servidor lo aplica al texto de la infracción, porque el cuadro
+                  no guarda esa columna. Se dice y se busca por lo que sí hace.
+                </span>
               </div>
-              <div style={{ overflowX: 'auto' }}>
-                <table style={{ width: '100%', borderCollapse: 'collapse', minWidth: 820 }}>
-                  <thead>
-                    <Th defs={COLS_CUIS} />
-                  </thead>
-                  <tbody>
-                    {cuisFiltrado.map((f) => (
-                      <tr key={f[0]} className="hov-elev" style={{ borderTop: '1px solid var(--line)' }}>
-                        <Celdas fila={f} defs={COLS_CUIS} insignia={1} />
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
-              <p
-                style={{
-                  margin: 0,
-                  padding: '11px 16px',
-                  borderTop: '1px solid var(--line)',
-                  background: 'var(--bg-elev)',
-                  fontSize: 12,
-                  lineHeight: 1.5,
-                  color: 'var(--ink-3)',
-                  textWrap: 'pretty',
-                }}
-              >
-                {cuisFiltrado.length === CUIS.length
-                  ? 'La multa sale del porcentaje de UIT: cambiar la UIT del ejercicio recalcula las 284 sin tocar el cuadro. Lo que la ordenanza fija es el porcentaje.'
-                  : `${cuisFiltrado.length} de 284 infracciones coinciden con el filtro.`}
-              </p>
+              <Lectura estado={cuis} que="el cuadro CUIS" acceso="codigos_cuis" ruta="GET /api/v1/infracciones/cuis">
+                {(p) =>
+                  p.contenido.length === 0 ? (
+                    <p style={PIE}>
+                      El cuadro CUIS está vacío en esta municipalidad. Nada lo carga todavía: la siembra de demostración no trae códigos y
+                      no hay ninguna operación publicada que los dé de alta. Sin cuadro no se puede tipificar una infracción.
+                    </p>
+                  ) : (
+                    <>
+                      <div style={{ overflowX: 'auto' }}>
+                        <table style={{ width: '100%', borderCollapse: 'collapse', minWidth: 900 }}>
+                          <thead>
+                            <Th defs={COLS_CUIS} />
+                          </thead>
+                          <tbody>
+                            {p.contenido.map((x) => (
+                              <tr key={x.id} style={{ borderTop: '1px solid var(--line)' }} className="hov-elev">
+                                <td style={TD1}>{x.codigo}</td>
+                                <td style={{ ...TD, whiteSpace: 'normal', maxWidth: 380 }}>{x.descripcion}</td>
+                                <td style={TDN}>{x.porcentajeUit}</td>
+                                <td style={TD}>{x.medida ?? SIN_DATO}</td>
+                                <td style={TD}>{x.baseLegal}</td>
+                                <td style={TD}>{x.vigenciaHasta ? `${x.vigenciaDesde} — ${x.vigenciaHasta}` : x.vigenciaDesde}</td>
+                              </tr>
+                            ))}
+                          </tbody>
+                        </table>
+                      </div>
+                      <Paginas pagina={p.pagina} totalPaginas={p.totalPaginas} hayMas={p.hayMas} ir={setPaginaCuis} />
+                      <p style={{ ...PIE, borderTop: '1px solid var(--line)' }}>
+                        No hay columna de multa en soles: sería el porcentaje por la UIT del ejercicio, y la UIT sale del conjunto de
+                        parámetros sellado. Multiplicarla aquí con una UIT escrita a mano es lo que la regla 5 prohíbe.
+                      </p>
+                    </>
+                  )
+                }
+              </Lectura>
             </section>
           </div>
         )}
 
-        {/* ══════════ VALORES ══════════ */}
+        {/* ══════════ GENERACIÓN DE VALORES ══════════ */}
         {dest === 'valores' && (
           <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
             <p style={ENTRADILLA}>
-              Las multas firmes se cobran a través de un valor. El criterio agrupa las que van juntas y define su vencimiento;
-              pasada esa fecha, el valor puede ir a coactiva.
+              Una multa firme no se puede cobrar hasta que exista su valor. Aquí se registra el criterio con el que se emitirán: la
+              corrida se guarda y devuelve sus candidatos, pero <strong>no emite ningún valor</strong> —eso corre después, por lotes—.
             </p>
 
             <section style={TARJETA}>
-              <Cabecera
-                titulo="Criterio de generación"
-                acciones={
-                  <code
-                    style={{
-                      fontFamily: 'var(--font-mono)',
-                      fontSize: 10.5,
-                      color: 'var(--ink-3)',
-                      background: 'var(--bg-elev)',
-                      borderRadius: 999,
-                      padding: '4px 10px',
-                    }}
-                  >
-                    POST /api/v1/infracciones/administrativas/valores/generacion-masiva
-                  </code>
-                }
-              />
-              <div
-                style={{
-                  display: 'grid',
-                  gridTemplateColumns: 'repeat(auto-fit,minmax(192px,1fr))',
-                  gap: '15px 16px',
-                  padding: '15px 16px 17px',
-                }}
-              >
-                {CAMPOS_DE_VALORES.map((f) => (
-                  <Campo key={f.k} f={f} valor={vals[f.k] ?? DEFECTOS[f.k] ?? ''} onCambio={(v) => set(f.k, v)} />
-                ))}
+              <Cabecera titulo="Criterio de la corrida" meta="POST /api/v1/infracciones/administrativas/valores/generacion-masiva" />
+              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit,minmax(192px,1fr))', gap: '15px 16px', padding: '15px 16px' }}>
+                <Campo f={{ k: 'valDesde', l: 'Infracciones desde', t: 'date' }} valor={val('valDesde')} onCambio={(v) => set('valDesde', v)} />
+                <Campo f={{ k: 'valHasta', l: 'Infracciones hasta', t: 'date' }} valor={val('valHasta')} onCambio={(v) => set('valHasta', v)} />
+                <Campo f={{ k: 'valCriterio', l: 'Fecha de criterio', t: 'date', ayuda: 'A qué fecha se evalúan la deuda y el plazo. En blanco, hoy.' }} valor={val('valCriterio')} onCambio={(v) => set('valCriterio', v)} />
+                <Campo
+                  f={{ k: 'obs', l: 'Observación', t: 'area', ancho: true, ph: 'Por qué se registra', ayuda: 'Obligatoria: de 5 a 500 caracteres.' }}
+                  valor={val('obs')}
+                  onCambio={(v) => set('obs', v)}
+                />
               </div>
-              <div style={{ overflowX: 'auto', borderTop: '1px solid var(--line)' }}>
-                <table style={{ width: '100%', borderCollapse: 'collapse', minWidth: 700 }}>
-                  <thead>
-                    <tr>
-                      <th style={{ padding: '10px 14px', width: 38, background: 'var(--bg-elev)' }} />
-                      {COLS_VALORES.map((c) => (
-                        <th key={c[0]} style={c[1] ? THN : TH}>
-                          {c[0]}
-                        </th>
-                      ))}
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {MULTAS.map((m, i) => {
-                      const on = marcadas[i] === true;
-                      return (
-                        <tr
-                          key={m[0]}
-                          className="hov-elev"
-                          style={{ borderTop: '1px solid var(--line)', background: on ? 'var(--accent-soft)' : 'transparent' }}
-                        >
-                          <td style={{ padding: '11px 14px' }}>
-                            <input
-                              type="checkbox"
-                              checked={on}
-                              onChange={() => setMarcadas((x) => ({ ...x, [i]: !on }))}
-                              aria-label={`Incluir la multa ${m[0]} en el criterio`}
-                              style={{ accentColor: 'var(--accent)', width: 16, height: 16 }}
-                            />
-                          </td>
-                          <Celdas
-                            fila={[m[0], m[1], m[2], m[3], fmt(m[4]), m[5]]}
-                            defs={COLS_VALORES}
-                            insignia={5}
-                          />
-                        </tr>
-                      );
-                    })}
-                  </tbody>
-                </table>
-              </div>
-              <div
-                style={{
-                  display: 'flex',
-                  alignItems: 'center',
-                  gap: 12,
-                  flexWrap: 'wrap',
-                  padding: '12px 16px',
-                  borderTop: '1px solid var(--line)',
-                  background: 'var(--bg-elev)',
-                }}
-              >
-                <span style={{ flex: 1, minWidth: 150, fontSize: 12.5, color: 'var(--ink-3)', textWrap: 'pretty' }}>
-                  Solo entran las multas firmes. Una en descargo no se puede cobrar todavía y no aparece aquí.
-                </span>
-                <span style={{ fontSize: 11, textTransform: 'uppercase', letterSpacing: '.1em', color: 'var(--ink-3)' }}>A emitir</span>
-                <span style={{ fontFamily: 'var(--font-mono)', fontSize: 18, color: 'var(--ink)' }}>{soles(valSuma)}</span>
-              </div>
+              <p style={{ ...PIE, borderTop: '1px solid var(--line)' }}>
+                El tipo de recaudo, la oficina y el vencimiento que el manual dibuja no están en el cuerpo que el servidor acepta, y el
+                número de cada resolución de multa lo pone el correlativo del servidor: no hay campo para él, y su ausencia es
+                deliberada.
+              </p>
             </section>
 
             <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>
               <p style={{ margin: 0, flex: 1, minWidth: 180, fontSize: 12, color: 'var(--ink-3)', textWrap: 'pretty' }}>
-                {valN === 0
-                  ? 'Marca las multas que entran en el criterio. Sin selección no hay nada que emitir.'
-                  : `${valN}${valN === 1 ? ' multa seleccionada' : ' multas seleccionadas'}. Procesar emite un valor por cada una y ya no se pueden quitar del criterio: se anulan.`}
+                {faltaObservacion
+                  ? 'Falta la observación: sin ella el servidor no guarda nada.'
+                  : texto('valDesde') === '' || texto('valHasta') === ''
+                    ? 'Faltan las dos fechas del rango: el servidor exige exactamente uno de los dos caminos, y este es el del rango.'
+                    : 'Registrar la corrida no emite ningún valor todavía.'}
               </p>
-              <button className="hov-linea" style={{ ...BOTON_SEC, padding: '10px 18px' }}>
-                Guardar criterio
-              </button>
               <button
-                onClick={() => toast(valN === 0 ? 'Marca al menos una multa.' : `${valN} valores emitidos por ${soles(valSuma)}.`)}
-                aria-disabled={valN === 0}
-                className="hov-acento-2"
-                style={{ ...BOTON_PRI, padding: '11px 22px', opacity: valN === 0 ? 0.55 : 1 }}
+                onClick={registrarLaCorrida}
+                disabled={faltaObservacion || texto('valDesde') === '' || texto('valHasta') === '' || enviando}
+                className={!faltaObservacion && texto('valDesde') !== '' && texto('valHasta') !== '' && !enviando ? 'hov-acento-2' : undefined}
+                style={{ border: 0, borderRadius: 6, padding: '11px 22px', background: 'var(--accent)', color: '#fff', fontSize: 13.5, fontWeight: 500, cursor: !faltaObservacion && texto('valDesde') !== '' && texto('valHasta') !== '' && !enviando ? 'pointer' : 'not-allowed', opacity: !faltaObservacion && texto('valDesde') !== '' && texto('valHasta') !== '' && !enviando ? 1 : 0.5 }}
               >
-                {valN === 0 ? 'Procesar criterio' : `Procesar criterio (${valN})`}
+                {enviando ? 'Enviando…' : 'Registrar la corrida'}
               </button>
             </div>
+
+            {hechoDelActo !== '' && (
+              <div role="status" style={{ display: 'flex', gap: 11, padding: '12px 14px', borderRadius: 8, background: 'var(--ok-bg)', color: 'var(--ok-fg)' }}>
+                <span style={{ fontSize: 12.5, lineHeight: 1.55, textWrap: 'pretty' }}>{hechoDelActo}</span>
+              </div>
+            )}
+            {falloDelActo && (
+              <div role="alert" style={{ display: 'flex', flexDirection: 'column', gap: 4, padding: '12px 14px', borderRadius: 8, background: 'var(--bad-bg)', color: 'var(--bad-fg)' }}>
+                <strong style={{ fontSize: 12.5 }}>{tituloDelFallo(falloDelActo, 'la corrida')}</strong>
+                <span style={{ fontSize: 12.5, lineHeight: 1.55, textWrap: 'pretty' }}>{falloDelActo.mensaje}</span>
+                {falloDelActo.detalles && falloDelActo.detalles.length > 0 && (
+                  <span style={{ fontFamily: 'var(--font-mono)', fontSize: 11.5 }}>{falloDelActo.detalles.join(' · ')}</span>
+                )}
+              </div>
+            )}
+
+            <section style={TARJETA}>
+              <Cabecera titulo="Multas sancionadas, que son las que un valor puede alcanzar" meta={cifra(sancionadas)} />
+              <Lectura estado={candidatos} que="las multas sancionadas" acceso="infracciones_adm" ruta="GET /api/v1/infracciones/actas?estado=SANCIONADA">
+                {(p) =>
+                  p.contenido.length === 0 ? (
+                    <p style={PIE}>
+                      No hay ninguna multa en fase sancionada. Una multa llega a esa fase cuando su acta tiene resolución de gerencia
+                      administrativa; sin actas registradas no hay ninguna.
+                    </p>
+                  ) : (
+                    <div style={{ overflowX: 'auto' }}>
+                      <table style={{ width: '100%', borderCollapse: 'collapse', minWidth: 760 }}>
+                        <thead>
+                          <Th defs={[['Nº de acta', 0], ['Administrado', 0], ['CUIS', 0], ['Multa S/', 1], ['Al día', 0], ['Estado de la deuda', 0]]} />
+                        </thead>
+                        <tbody>
+                          {p.contenido.map((r) => (
+                            <tr key={r.id} style={{ borderTop: '1px solid var(--line)' }} className="hov-elev">
+                              <td style={TD1}>{r.numeroActa}</td>
+                              <td style={TD}>{r.administrado ?? SIN_DATO}</td>
+                              <td style={TD}>{r.codigoCuis}</td>
+                              <td style={TDN}>{r.importeAPagar}</td>
+                              <td style={TD}>{r.actualizadoA}</td>
+                              <td style={{ padding: '11px 14px' }}>
+                                <Insignia tono={tono(r.estadoDeLaDeuda)}>{r.estadoDeLaDeuda}</Insignia>
+                              </td>
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    </div>
+                  )
+                }
+              </Lectura>
+              <p style={{ ...PIE, borderTop: '1px solid var(--line)' }}>
+                Esta lista no se marca. El cuerpo admite marcar números <em>o</em> declarar un rango, y los dos a la vez se rechazan a
+                propósito: la pantalla usa el rango, que es lo que el manual pide, y la lista está para saber sobre qué se trabaja.
+              </p>
+            </section>
           </div>
         )}
 
@@ -1436,66 +1284,28 @@ export default function Sanciones({ dest, onDest }: PantallaProps) {
         {dest === 'reportes' && (
           <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
             <p data-noprint="1" style={{ ...ENTRADILLA, textWrap: 'pretty' }}>
-              Seis entradas de menú eran seis reportes con el mismo formulario. Aquí son un carril, y cada uno pide solo los
-              criterios que usa.
+              Siete hojas con el mismo formulario. Aquí son un carril: se elige la hoja y solo aparecen los criterios que esa hoja usa —y
+              de los que el servidor lee, que no son todos los que el manual dibuja—.
             </p>
 
-            <div style={{ display: 'grid', gridTemplateColumns: 'minmax(0,260px) minmax(0,1fr)', gap: 14, alignItems: 'start' }}>
+            <div style={{ display: 'grid', gridTemplateColumns: 'minmax(0,268px) minmax(0,1fr)', gap: 14, alignItems: 'start' }}>
               <section data-noprint="1" style={TARJETA}>
-                <p
-                  style={{
-                    margin: 0,
-                    padding: '12px 14px',
-                    borderBottom: '1px solid var(--line)',
-                    fontSize: 10,
-                    fontWeight: 500,
-                    textTransform: 'uppercase',
-                    letterSpacing: '.14em',
-                    color: 'var(--ink-3)',
-                  }}
-                >
+                <p style={{ margin: 0, padding: '12px 14px', borderBottom: '1px solid var(--line)', fontSize: 10, fontWeight: 500, textTransform: 'uppercase', letterSpacing: '.14em', color: 'var(--ink-3)' }}>
                   Reportes del módulo
                 </p>
                 {HOJAS.map((x, i) => {
-                  const on = hoja === i;
-                  const primero = i === 0 || HOJAS[i - 1].g !== x.g;
+                  const on = hojaIdx === i;
+                  const primeroDelGrupo = i === 0 || HOJAS[i - 1].g !== x.g;
                   return (
                     <button
-                      key={x.codigo}
-                      onClick={() => setHoja(i)}
+                      key={x.k}
+                      onClick={() => setHojaIdx(i)}
                       aria-current={on ? 'true' : undefined}
                       className="hov-acento"
-                      style={{
-                        display: 'flex',
-                        flexWrap: 'wrap',
-                        alignItems: 'center',
-                        gap: '0 9px',
-                        width: '100%',
-                        textAlign: 'left',
-                        border: 0,
-                        borderBottom: '1px solid var(--line)',
-                        padding: primero ? '12px 14px 11px' : '11px 14px',
-                        cursor: 'pointer',
-                        background: on ? 'var(--accent-soft)' : 'transparent',
-                        color: on ? 'var(--accent-ink)' : 'var(--ink-2)',
-                        fontWeight: on ? 600 : 400,
-                      }}
+                      style={{ display: 'flex', flexWrap: 'wrap', alignItems: 'center', gap: '0 9px', width: '100%', textAlign: 'left', border: 0, borderBottom: '1px solid var(--line)', padding: primeroDelGrupo ? '12px 14px 11px' : '11px 14px', cursor: 'pointer', background: on ? 'var(--accent-soft)' : 'transparent', color: on ? 'var(--accent-ink)' : 'var(--ink-2)', fontWeight: on ? 600 : 400 }}
                     >
-                      {primero && (
-                        <span
-                          style={{
-                            display: 'block',
-                            width: '100%',
-                            fontSize: 9.5,
-                            fontWeight: 500,
-                            textTransform: 'uppercase',
-                            letterSpacing: '.13em',
-                            color: 'var(--ink-4)',
-                            marginBottom: 5,
-                          }}
-                        >
-                          {x.g}
-                        </span>
+                      {primeroDelGrupo && (
+                        <span style={{ display: 'block', width: '100%', fontSize: 9.5, fontWeight: 500, textTransform: 'uppercase', letterSpacing: '.13em', color: 'var(--ink-4)', marginBottom: 5 }}>{x.g}</span>
                       )}
                       <span style={{ flex: 1, minWidth: 0, fontSize: 12.5, textWrap: 'pretty' }}>{x.label}</span>
                     </button>
@@ -1505,238 +1315,281 @@ export default function Sanciones({ dest, onDest }: PantallaProps) {
 
               <div style={{ display: 'flex', flexDirection: 'column', gap: 14, minWidth: 0 }}>
                 <section data-noprint="1" style={TARJETA}>
-                  <Cabecera titulo={h.label} meta={`${h.crit.length} de 13 criterios`} />
-                  <div
-                    style={{
-                      display: 'grid',
-                      gridTemplateColumns: 'repeat(auto-fit,minmax(180px,1fr))',
-                      gap: '14px 16px',
-                      padding: '15px 16px',
-                      alignItems: 'end',
-                    }}
-                  >
-                    {h.crit.map((k) => {
-                      const c = CRITERIOS[k];
-                      return (
-                        <Campo
-                          key={k}
-                          f={{ k: 'rep_' + k, l: c.l, t: c.t, o: c.o }}
-                          valor={vals['rep_' + k] ?? c.v}
-                          onCambio={(v) => set('rep_' + k, v)}
-                        />
-                      );
-                    })}
-                  </div>
-                  <div
-                    style={{
-                      display: 'flex',
-                      alignItems: 'center',
-                      gap: 10,
-                      flexWrap: 'wrap',
-                      padding: '12px 16px',
-                      borderTop: '1px solid var(--line)',
-                      background: 'var(--bg-elev)',
-                    }}
-                  >
-                    <p style={{ margin: 0, flex: 1, minWidth: 170, fontSize: 12, color: 'var(--ink-3)', textWrap: 'pretty' }}>
-                      Los criterios que este reporte no usa no se dibujan.
-                    </p>
-                    <button
-                      className="hov-linea"
-                      style={{
-                        border: '1px solid var(--line-2)',
-                        borderRadius: 6,
-                        padding: '8px 15px',
-                        background: 'var(--bg-card)',
-                        fontSize: 12.5,
-                        cursor: 'pointer',
-                      }}
-                    >
-                      Excel
-                    </button>
-                    <button
-                      onClick={() => window.print()}
-                      className="hov-linea"
-                      style={{
-                        border: '1px solid var(--line-2)',
-                        borderRadius: 6,
-                        padding: '8px 15px',
-                        background: 'var(--bg-card)',
-                        fontSize: 12.5,
-                        cursor: 'pointer',
-                      }}
-                    >
-                      Imprimir
-                    </button>
-                    <button
-                      onClick={() => toast(`${h.label} generado con ${h.crit.length} criterios.`)}
-                      className="hov-acento-2"
-                      style={{
-                        border: 0,
-                        borderRadius: 6,
-                        padding: '9px 18px',
-                        background: 'var(--accent)',
-                        color: '#fff',
-                        fontSize: 12.5,
-                        fontWeight: 500,
-                        cursor: 'pointer',
-                      }}
-                    >
-                      Generar
-                    </button>
-                  </div>
-                </section>
-
-                <section
-                  style={{
-                    background: '#fff',
-                    border: '1px solid var(--line)',
-                    borderRadius: 6,
-                    boxShadow: 'var(--shadow-2)',
-                    padding: '32px 34px',
-                  }}
-                >
-                  <div style={{ display: 'flex', alignItems: 'flex-start', gap: 20, paddingBottom: 11, borderBottom: '2px solid var(--ink)' }}>
-                    <div style={{ flex: 1 }}>
-                      <p style={{ margin: 0, fontFamily: 'var(--font-serif)', fontSize: 14, fontWeight: 600 }}>{pref.entidad}</p>
-                      <p style={{ margin: '3px 0 0', fontSize: 10.5, color: 'var(--ink-3)' }}>
-                        Sub Gerencia de Fiscalización y Control Municipal
-                      </p>
-                    </div>
-                    <div style={{ textAlign: 'right', fontFamily: 'var(--font-mono)', fontSize: 10.5, color: 'var(--ink-3)' }}>
-                      <p style={{ margin: 0 }}>{h.codigo}</p>
-                      <p style={{ margin: '3px 0 0' }}>13 de agosto de {pref.ejercicio}</p>
-                    </div>
-                  </div>
-                  <div style={{ borderTop: '1px solid var(--ink)', marginTop: 2, paddingTop: 22, textAlign: 'center' }}>
-                    <h2 style={{ margin: 0, fontFamily: 'var(--font-serif)', fontSize: 21, fontWeight: 600, letterSpacing: '-.01em' }}>
-                      {h.label}
-                    </h2>
-                    <p style={{ margin: '5px 0 0', fontSize: 11.5, color: 'var(--ink-3)' }}>{h.sub}</p>
-                  </div>
-                  <div
-                    style={{
-                      display: 'grid',
-                      gridTemplateColumns: 'repeat(auto-fit,minmax(170px,1fr))',
-                      gap: '12px 18px',
-                      margin: '20px 0',
-                      padding: '14px 0',
-                      borderTop: '1px solid var(--line)',
-                      borderBottom: '1px solid var(--line)',
-                    }}
-                  >
-                    {h.meta.map((m) => (
-                      <div key={m[0]}>
-                        <p style={{ margin: '0 0 3px', fontSize: 9.5, textTransform: 'uppercase', letterSpacing: '.1em', color: 'var(--ink-3)' }}>
-                          {m[0]}
-                        </p>
-                        <p style={{ margin: 0, fontSize: 12.5, color: 'var(--ink)' }}>{m[1]}</p>
-                      </div>
+                  <Cabecera titulo={h.label} meta={`${h.crit.length} criterios`} />
+                  <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit,minmax(180px,1fr))', gap: '14px 16px', padding: '15px 16px', alignItems: 'end' }}>
+                    {h.crit.map((k) => (
+                      <Campo
+                        key={k}
+                        f={{ k: 'rep_' + k, l: CRITERIOS[k].l, t: CRITERIOS[k].t, o: CRITERIOS[k].o }}
+                        valor={val('rep_' + k, CRITERIOS[k].v)}
+                        onCambio={(v) => set('rep_' + k, v)}
+                      />
                     ))}
                   </div>
-                  <div style={{ overflowX: 'auto' }}>
-                    <table style={{ width: '100%', borderCollapse: 'collapse' }}>
-                      <thead>
-                        <tr>
-                          {h.cols.map((c) => (
-                            <th key={c[0]} style={c[1] ? RTHN : RTH}>
-                              {c[0]}
-                            </th>
-                          ))}
-                        </tr>
-                      </thead>
-                      <tbody>
-                        {h.filas.map((f) => (
-                          <tr key={f[0]} style={{ borderTop: '1px solid var(--line)' }}>
-                            {f.map((c, j) => (
-                              <td key={j} style={h.cols[j] && h.cols[j][1] ? RTDN : RTD}>
-                                {c}
-                              </td>
-                            ))}
-                          </tr>
-                        ))}
-                      </tbody>
-                    </table>
-                  </div>
-                  <p style={{ margin: '18px 0 0', fontFamily: 'var(--font-serif)', fontSize: 13, lineHeight: 1.6, color: 'var(--ink-2)', textWrap: 'pretty' }}>
-                    {h.cierre}
+                  <p style={{ ...PIE, borderTop: '1px solid var(--line)' }}>
+                    Los criterios que esta hoja no usa no se dibujan; los que el contrato declara y ningún controlador lee —agrupación del
+                    padrón, fecha de cálculo del estado de cuenta, ordenación del reporte de códigos— tampoco.
                   </p>
-                  <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 36, marginTop: 44 }}>
-                    <div style={{ borderTop: '1px solid var(--ink)', paddingTop: 6, fontSize: 10.5, color: 'var(--ink-3)', textAlign: 'center' }}>
-                      Sub Gerente de Fiscalización
-                    </div>
-                    <div style={{ borderTop: '1px solid var(--ink)', paddingTop: 6, fontSize: 10.5, color: 'var(--ink-3)', textAlign: 'center' }}>
-                      Solicitante
-                    </div>
-                  </div>
                 </section>
+
+                <Lectura estado={reporte} que="el reporte" acceso={ACCESO_DEL_REPORTE[h.k] ?? 'adm_reportes'} ruta={RUTA_DEL_REPORTE[h.k] ?? ''}>
+                  {(r) => (
+                    <section style={{ background: '#fff', border: '1px solid var(--line)', borderRadius: 6, boxShadow: 'var(--shadow-2)', padding: '32px 34px' }}>
+                      <div style={{ display: 'flex', alignItems: 'flex-start', gap: 20, paddingBottom: 11, borderBottom: '2px solid var(--ink)' }}>
+                        <div style={{ flex: 1 }}>
+                          <p style={{ margin: 0, fontFamily: 'var(--font-serif)', fontSize: 14, fontWeight: 600 }}>{pref.entidad}</p>
+                          <p style={{ margin: '3px 0 0', fontSize: 10.5, color: 'var(--ink-3)' }}>Gerencia de Fiscalización y Control</p>
+                        </div>
+                        <div style={{ textAlign: 'right', fontFamily: 'var(--font-mono)', fontSize: 10.5, color: 'var(--ink-3)' }}>
+                          <p style={{ margin: 0 }}>{RUTA_DEL_REPORTE[h.k]}</p>
+                          <p style={{ margin: '3px 0 0' }}>{r.aLaFecha}</p>
+                        </div>
+                      </div>
+                      <div style={{ borderTop: '1px solid var(--ink)', marginTop: 2, paddingTop: 22, textAlign: 'center' }}>
+                        <h2 style={{ margin: 0, fontFamily: 'var(--font-serif)', fontSize: 21, fontWeight: 600, letterSpacing: '-.01em' }}>{h.label}</h2>
+                        <p style={{ margin: '5px 0 0', fontSize: 11.5, color: 'var(--ink-3)' }}>{h.sub}</p>
+                      </div>
+                      {r.meta.length > 0 && (
+                        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit,minmax(170px,1fr))', gap: '12px 18px', margin: '20px 0', padding: '14px 0', borderTop: '1px solid var(--line)', borderBottom: '1px solid var(--line)' }}>
+                          {r.meta.map((m) => (
+                            <div key={m[0]}>
+                              <p style={{ margin: '0 0 3px', fontSize: 9.5, textTransform: 'uppercase', letterSpacing: '.1em', color: 'var(--ink-3)' }}>{m[0]}</p>
+                              <p style={{ margin: 0, fontSize: 12.5, color: 'var(--ink)' }}>{m[1]}</p>
+                            </div>
+                          ))}
+                        </div>
+                      )}
+                      {r.filas.length === 0 ? (
+                        <p style={{ margin: '18px 0', fontSize: 13, color: 'var(--ink-3)', textAlign: 'center' }}>Sin filas en el periodo consultado.</p>
+                      ) : (
+                        <div style={{ overflowX: 'auto' }}>
+                          <table style={{ width: '100%', borderCollapse: 'collapse' }}>
+                            <thead>
+                              <tr>
+                                {r.cols.map((cc) => (
+                                  <th key={cc[0]} style={cc[1] ? RTHN : RTH}>
+                                    {cc[0]}
+                                  </th>
+                                ))}
+                              </tr>
+                            </thead>
+                            <tbody>
+                              {r.filas.map((f, i) => (
+                                <tr key={f[0] + '|' + i} style={{ borderTop: '1px solid var(--line)' }}>
+                                  {f.map((cell, j) => (
+                                    <td key={j} style={r.cols[j] && r.cols[j][1] ? RTDN : RTD}>
+                                      {cell}
+                                    </td>
+                                  ))}
+                                </tr>
+                              ))}
+                            </tbody>
+                          </table>
+                        </div>
+                      )}
+                      <p style={{ margin: '18px 0 0', fontFamily: 'var(--font-serif)', fontSize: 13, lineHeight: 1.6, color: 'var(--ink-2)', textWrap: 'pretty' }}>{h.cierre}</p>
+                      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 36, marginTop: 44 }}>
+                        <div style={{ borderTop: '1px solid var(--ink)', paddingTop: 6, fontSize: 10.5, color: 'var(--ink-3)', textAlign: 'center' }}>Gerente de Fiscalización</div>
+                        <div style={{ borderTop: '1px solid var(--ink)', paddingTop: 6, fontSize: 10.5, color: 'var(--ink-3)', textAlign: 'center' }}>Solicitante</div>
+                      </div>
+                    </section>
+                  )}
+                </Lectura>
               </div>
             </div>
           </div>
         )}
       </div>
-
-      {/* ══════════ EL BORRADOR SIN GUARDAR ══════════ */}
-      {sucio && (
-        <div
-          data-noprint="1"
-          style={{
-            position: 'sticky',
-            bottom: 0,
-            zIndex: 38,
-            display: 'flex',
-            alignItems: 'center',
-            gap: 12,
-            flexWrap: 'wrap',
-            padding: '12px 20px',
-            borderTop: '1px solid var(--line-2)',
-            background: 'var(--bg-card)',
-            boxShadow: '0 -6px 18px rgba(26,22,18,.06)',
-            margin: '18px -20px -96px',
-          }}
-        >
-          <span
-            style={{
-              display: 'flex',
-              alignItems: 'center',
-              gap: 8,
-              fontSize: 12.5,
-              color: 'var(--warn-fg)',
-              background: 'var(--warn-bg)',
-              borderRadius: 999,
-              padding: '5px 12px',
-            }}
-          >
-            <Icono d={T_RELOJ} tam={13} grosor={2} />
-            Cambios sin guardar
-          </span>
-          <p style={{ margin: 0, flex: 1, minWidth: 180, fontSize: 12, color: 'var(--ink-3)', textWrap: 'pretty' }}>
-            Un acto administrativo notificado no se edita: se deja sin efecto por resolución. Guardar aquí solo afecta al acto en
-            preparación.
-          </p>
-          <button
-            onClick={() => {
-              setVals({});
-              setSucio(false);
-              toast('Cambios descartados.');
-            }}
-            className="hov-linea"
-            style={BOTON_SEC}
-          >
-            Deshacer
-          </button>
-          <button
-            onClick={() => {
-              setSucio(false);
-              toast('Borrador guardado.');
-            }}
-            className="hov-acento-2"
-            style={{ ...BOTON_PRI, padding: '10px 22px' }}
-          >
-            Guardar borrador
-          </button>
-        </div>
-      )}
     </Shell>
   );
+}
+
+/* ══════════ Lo que apaga cada acto, dicho una sola vez ══════════ */
+
+function puedeElActo(id: IdDeActo, faltaObservacion: boolean, faltanN: string[], faltanR: string[]): boolean {
+  if (faltaObservacion) return false;
+  if (id === 'notificacion') return faltanN.length === 0;
+  if (id === 'resolucion') return faltanR.length === 0;
+  return false;
+}
+
+function motivoDelActo(id: IdDeActo, faltaObservacion: boolean, faltanN: string[], faltanR: string[]): string {
+  if (faltaObservacion) return 'Falta la observación: toda modificación se guarda con el motivo de quien la hace, y va de 5 a 500 caracteres.';
+  const faltan = id === 'notificacion' ? faltanN : id === 'resolucion' ? faltanR : [];
+  return faltan.length === 0 ? '' : 'Falta ' + faltan.join(', ') + '.';
+}
+
+/* ══════════ El centro de reportes, contra las rutas de verdad ══════════ */
+
+type HojaResuelta = { aLaFecha: string; meta: [string, string][]; cols: [string, 0 | 1][]; filas: string[][] };
+
+const RUTA_DEL_REPORTE: Record<string, string> = {
+  padron_notificaciones: 'GET /api/v1/infracciones/administrativas/reportes/padron-notificaciones',
+  vencidas: 'GET /api/v1/infracciones/administrativas/reportes/vencidas',
+  por_contribuyente: 'GET /api/v1/infracciones/administrativas/reportes/por-contribuyente',
+  estado_cuenta: 'GET /api/v1/infracciones/administrativas/estado-cuenta',
+  codigos: 'GET /api/v1/infracciones/administrativas/codigos/reporte',
+  resumen_papeletas: 'POST /api/v1/infracciones/administrativas/reportes',
+  resumen_recaudacion: 'GET /api/v1/infracciones/administrativas/reportes/resumen-recaudacion',
+};
+
+const ACCESO_DEL_REPORTE: Record<string, string> = {
+  padron_notificaciones: 'adm_padron_notificaciones',
+  vencidas: 'adm_notificaciones_vencidas',
+  por_contribuyente: 'adm_notificaciones_contribuyente',
+  estado_cuenta: 'adm_estado_cuenta',
+  codigos: 'adm_codigos_reporte',
+  resumen_papeletas: 'adm_reportes',
+  resumen_recaudacion: 'adm_resumen_recaudacion',
+};
+
+/**
+ * Pide la hoja elegida a la ruta que le toca y la devuelve ya en filas.
+ *
+ * Cada hoja tiene su propia forma de respuesta, y una de ellas —el resumen de
+ * multas— **no tiene lectura propia**: se le pide al emisor de reportes, que
+ * es un `POST` que no escribe nada (su cuerpo ni siquiera declara observación).
+ */
+async function pedirReporte(k: string, c: (llave: string) => string, senal: AbortSignal): Promise<HojaResuelta> {
+  const pag = { tamano: 50 };
+
+  if (k === 'padron_notificaciones') {
+    const p = await padronDeNotificaciones(
+      { desde: c('desde') || undefined, hasta: c('hasta') || undefined, estado: (c('estadoNotificacion') || undefined) as EstadoDeNotificacion | undefined },
+      pag,
+      senal,
+    );
+    return {
+      aLaFecha: p.contenido[0]?.actualizadoA ?? '',
+      meta: [['Notificaciones', miles(p.totalElementos)], ['En esta hoja', String(p.contenido.length)]],
+      cols: [['Número', 0], ['Fecha', 0], ['Dirección', 0], ['Motivo', 0], ['Plazo', 1], ['Estado', 0], ['Papeleta', 0], ['Importe S/', 1]],
+      filas: p.contenido.map((x) => [
+        x.numero,
+        x.fecha,
+        x.direccion,
+        x.motivo,
+        x.plazoDias === null ? SIN_DATO : String(x.plazoDias),
+        x.estado,
+        x.papeletaNumero ?? SIN_DATO,
+        /* Sin papeleta no hay importe: sale «—», no cero. Un cero ahí se lee
+           como «la multa fue de nada». */
+        x.importeDeLaPapeleta ?? SIN_DATO,
+      ]),
+    };
+  }
+
+  if (k === 'vencidas') {
+    const p = await notificacionesVencidas(
+      {
+        vencidasAl: c('vencidasAl') || undefined,
+        fiscalizador: c('fiscalizador') || undefined,
+        infraccion: c('infraccion') || undefined,
+        conPapeleta: c('conPapeleta') === '' ? undefined : c('conPapeleta') === 'true',
+      },
+      pag,
+      senal,
+    );
+    return {
+      aLaFecha: c('vencidasAl'),
+      meta: [['Vencidas', miles(p.totalElementos)]],
+      cols: [['Número', 0], ['Fecha', 0], ['Dirección', 0], ['Motivo', 0], ['Plazo', 1], ['Vence', 0], ['Estado', 0]],
+      filas: p.contenido.map((x) => [
+        x.numero,
+        x.fecha,
+        x.direccion,
+        x.motivo,
+        x.plazoDias === null ? SIN_DATO : String(x.plazoDias),
+        x.vencimiento ?? SIN_DATO,
+        x.estado,
+      ]),
+    };
+  }
+
+  if (k === 'por_contribuyente' || k === 'estado_cuenta') {
+    const p =
+      k === 'por_contribuyente'
+        ? await notificacionesPorContribuyente(
+            { codContribuyente: c('codContribuyente') || undefined, ano: c('ano') ? Number(c('ano')) : undefined, soloPendientes: c('soloPendientes') === 'true' },
+            pag,
+            senal,
+          )
+        : await estadoDeCuentaAdministrativo({ papeleta: c('papeleta') || undefined, codContribuyente: c('codContribuyente') || undefined }, pag, senal);
+    return {
+      aLaFecha: '',
+      meta: [['Papeletas', miles(p.totalElementos)]],
+      cols: [['Papeleta', 0], ['Fecha', 0], ['Lugar', 0], ['% infracción', 1], ['Multa S/', 1], ['A pagar S/', 1], ['Con beneficio S/', 1], ['Estado', 0]],
+      filas: p.contenido.map((x) => [
+        x.numero,
+        x.fechaInfraccion,
+        x.lugar,
+        x.porcentajeInfraccion,
+        x.importeInfraccion,
+        x.importeAPagar,
+        x.importeConBeneficio ?? SIN_DATO,
+        x.estado,
+      ]),
+    };
+  }
+
+  if (k === 'codigos') {
+    const p = await listarCuisComoReporte(
+      { codigo: c('codigo') || undefined, descripcionContiene: c('descripcionContiene') || undefined },
+      pag,
+      senal,
+    );
+    return {
+      aLaFecha: '',
+      meta: [['Códigos tipificados', miles(p.totalElementos)]],
+      cols: [['Código', 0], ['Descripción', 0], ['% UIT', 1], ['Medida', 0], ['Base legal', 0]],
+      filas: p.contenido.map((x) => [x.codigo, x.descripcion, x.porcentajeUit, x.medida ?? SIN_DATO, x.baseLegal]),
+    };
+  }
+
+  if (k === 'resumen_recaudacion') {
+    const r = await recaudacionAdministrativa(c('ano') ? Number(c('ano')) : undefined, senal);
+    return {
+      aLaFecha: r.actualizadoA,
+      meta: [['Periodo', `${r.desde} — ${r.hasta}`], ['Recaudado', 'S/ ' + r.total], ['Abonos', miles(r.abonos)]],
+      cols: [['Mes', 0], ['Fases', 0], ['Abonos', 1], ['Total del mes S/', 1]],
+      /* El total del mes lo suma el SERVIDOR y viene en `porMes`. Recomponerlo
+         aquí sumando las fases es lo que RNF-083 prohíbe. */
+      filas: r.porMes.map((m) => [MESES[m.mes] ?? String(m.mes), m.porFase.map((f) => `${f.fase} ${f.recaudado}`).join(' · '), miles(m.abonos), m.total]),
+    };
+  }
+
+  /* El resumen de multas es la única hoja del módulo sin lectura propia: se le
+     pide al emisor, que devuelve JSON cuando no se le manda `formato`. */
+  const e = await emitirReporteAdministrativo(
+    {
+      reporte: 'RESUMEN_PAPELETAS',
+      desde: c('desde') || undefined,
+      hasta: c('hasta') || undefined,
+      agrupadoPor: (c('agrupadoPor') || undefined) as 'ESTADO' | 'ANO' | 'MES' | 'CODIGO' | 'PLACA' | undefined,
+    },
+    senal,
+  );
+  const r = e.resumenDePapeletas;
+  if (r === null) {
+    return { aLaFecha: '', meta: [], cols: [['Reporte', 0]], filas: [[e.reporte]] };
+  }
+  return {
+    aLaFecha: r.actualizadoA,
+    meta: [
+      ['Periodo', `${r.desde} — ${r.hasta}`],
+      ['Agrupado por', r.agrupadoPor],
+      ['Multas', miles(r.papeletas)],
+      ['Importe de las actas', 'S/ ' + r.importeTotal],
+    ],
+    cols: [['Clave', 0], ['Descripción', 0], ['Año', 0], ['Multas', 1], ['Importe S/', 1], ['Pagadas', 1], ['Pendientes', 1], ['En coactiva', 1]],
+    filas: r.lineas.map((l) => [
+      l.clave,
+      l.descripcion ?? SIN_DATO,
+      l.ano === null ? SIN_DATO : String(l.ano),
+      miles(l.cantidad),
+      l.importe,
+      `${miles(l.pagadas)} · ${l.importeDeLasPagadas}`,
+      `${miles(l.pendientes)} · ${l.importeDeLasPendientes}`,
+      `${miles(l.enCoactiva)} · ${l.importeEnCoactiva}`,
+    ]),
+  };
 }
