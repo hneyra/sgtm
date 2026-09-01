@@ -75,6 +75,9 @@ export function Shell({
   const [navOpen, setNavOpen] = useState(false);
   const [pal, setPal] = useState(false);
   const [pq, setPq] = useState('');
+  /* Cuál entrada está enfocada. Con teclado no hay puntero: sin esto la paleta
+     se abre, se teclea, se filtra… y no hay forma de elegir. */
+  const [foco, setFoco] = useState(0);
 
   useEffect(() => {
     const t = (e: KeyboardEvent) => {
@@ -82,6 +85,7 @@ export function Shell({
         e.preventDefault();
         setPal((v) => !v);
         setPq('');
+        setFoco(0);
       }
       if (e.key === 'Escape') {
         setPal(false);
@@ -102,6 +106,46 @@ export function Shell({
     if (!q) return entradas;
     return entradas.filter((r) => (r.label + ' ' + r.nota).toLowerCase().includes(q));
   }, [entradas, pq]);
+
+  /* Al filtrar, la entrada que estaba enfocada ya no es la misma —o ya no está—,
+     así que el foco vuelve al principio. Sin esto, teclear una letra más deja el
+     foco apuntando a una fila que la lista ya no tiene y Enter abre otra cosa. */
+  useEffect(() => setFoco(0), [pq, pal]);
+
+  /**
+   * El teclado de la paleta.
+   *
+   * Va en el `input` y no en `document` a propósito: mientras la paleta está
+   * abierta el foco está ahí dentro, y colgarlo del documento haría que las
+   * flechas movieran también la lista de detrás.
+   *
+   * Enter abre **la entrada enfocada**, no `res[0]` ni el índice sin acotar: si
+   * abriera por índice, filtrar hasta una sola coincidencia y pulsar Enter
+   * llevaría a la primera de la lista anterior.
+   */
+  const teclaDeLaPaleta = (e: React.KeyboardEvent) => {
+    if (res.length === 0) return;
+    if (e.key === 'ArrowDown') {
+      e.preventDefault();
+      setFoco((i) => (i + 1) % res.length);
+    } else if (e.key === 'ArrowUp') {
+      e.preventDefault();
+      setFoco((i) => (i - 1 + res.length) % res.length);
+    } else if (e.key === 'Home') {
+      e.preventDefault();
+      setFoco(0);
+    } else if (e.key === 'End') {
+      e.preventDefault();
+      setFoco(res.length - 1);
+    } else if (e.key === 'Enter') {
+      e.preventDefault();
+      const elegida = res[Math.min(foco, res.length - 1)];
+      if (elegida) {
+        elegida.ir();
+        setPal(false);
+      }
+    }
+  };
 
   return (
     <div style={{ display: 'flex', minHeight: '100vh', background: 'var(--bg)' }}>
@@ -739,7 +783,13 @@ export function Shell({
               <input
                 value={pq}
                 onChange={(e) => setPq(e.target.value)}
+                onKeyDown={teclaDeLaPaleta}
                 autoFocus
+                role="combobox"
+                aria-expanded
+                aria-controls="paleta-resultados"
+                aria-activedescendant={res.length ? `paleta-opcion-${Math.min(foco, res.length - 1)}` : undefined}
+                aria-label="Buscar un destino"
                 placeholder="Un destino, un código, un titular…"
                 style={{ flex: 1, border: 0, background: 'transparent', padding: '2px 0', fontSize: 15, outline: 'none' }}
               />
@@ -756,10 +806,20 @@ export function Shell({
                 Esc
               </kbd>
             </div>
-            <div style={{ maxHeight: '52vh', overflow: 'auto' }}>
+            <div id="paleta-resultados" role="listbox" aria-label="Destinos" style={{ maxHeight: '52vh', overflow: 'auto' }}>
               {res.map((r, i) => (
                 <button
                   key={i}
+                  id={`paleta-opcion-${i}`}
+                  role="option"
+                  aria-selected={i === Math.min(foco, res.length - 1)}
+                  /* Que la fila enfocada se vea es la mitad del trabajo: sin
+                     esto, bajar más allá del alto visible mueve un foco que
+                     nadie puede seguir. */
+                  ref={(el) => {
+                    if (el && i === Math.min(foco, res.length - 1) && pal) el.scrollIntoView({ block: 'nearest' });
+                  }}
+                  onMouseEnter={() => setFoco(i)}
                   onClick={() => {
                     r.ir();
                     setPal(false);
@@ -773,7 +833,7 @@ export function Shell({
                     textAlign: 'left',
                     border: 0,
                     borderBottom: '1px solid var(--line)',
-                    background: 'transparent',
+                    background: i === Math.min(foco, res.length - 1) ? 'var(--accent-soft)' : 'transparent',
                     padding: '11px 16px',
                     cursor: 'pointer',
                   }}
@@ -808,7 +868,7 @@ export function Shell({
               <span>
                 {res.length} de {m.opciones} opciones de {m.label}
               </span>
-              <span>Ctrl K abre y cierra</span>
+              <span>↑↓ mueve · Intro abre · Esc cierra</span>
             </div>
           </div>
         </>

@@ -10,7 +10,8 @@
     "verificar": "tsc -b --noEmit",
     "mirar": "node verificaciones/mirar.mjs",
     "flujos": "node verificaciones/flujos.mjs",
-    "sin-red": "node verificaciones/sin-red.mjs"
+    "sin-red": "node verificaciones/sin-red.mjs",
+    "paleta": "node verificaciones/paleta.mjs"
   },
   "dependencies": {
     "react": "^19.1.0",
