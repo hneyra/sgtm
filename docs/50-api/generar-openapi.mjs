@@ -268,6 +268,43 @@ const SUPRIMIDOS = {
   // paginacion los pone el generador a toda lectura con tabla, y aqui no hay
   // ninguna que paginar. `fechaDeConsulta`, que si se lee y es el parametro de la
   // regla 9, se declara en DEL_BACKEND.
+  // `POST /rentas/predial/calculo-individual` declara tres filtros de la
+  // DECLARACION JURADA que motiva la determinacion —«DJ N°», «Tipo de
+  // declaracion», «Fecha de declaracion»— y `PredialController.calcular` no lee
+  // ninguno (#576). Medido: con `djN=ZZZ` contesta exactamente lo mismo.
+  //
+  // Y no se cierra haciendo que los lea, porque **acotar por declaracion jurada
+  // no es filtrar esta operacion: es calcular otra cosa**. La base del predial es
+  // POR CONTRIBUYENTE y no por predio (NEG-05 §1): los tramos progresivos se
+  // aplican al conjunto de sus predios, y calcularlo sobre los de una sola
+  // declaracion produce el mismo error sistematico a la baja que NEG-05 advierte
+  // —y la cifra que sale es plausible: nadie la distinguiria de la correcta—.
+  //
+  // La pantalla los dibuja porque el manual los dibuja: son los datos de la DJ
+  // que se esta atendiendo, no un criterio de calculo. Quien quiera acotar la
+  // determinacion a una declaracion no quiere un filtro, quiere otra operacion.
+  predial_individual: ['djN', 'tipoDeDeclaracion', 'fechaDeDeclaracion'],
+  // `POST /rentas/espectaculos` declara los cuatro filtros de una BUSQUEDA
+  // —«Nº de expediente», «Organizador», «Desde», «Hasta»— y
+  // `EspectaculoController.registrar` solo tiene `@RequestBody` (#576).
+  //
+  // No hay a que ruta sumarlos: **ninguna lectura del contrato lista los
+  // espectaculos declarados**, que es lo que #432 dejo medido al bloquear esos
+  // mismos cuatro en la pantalla. Un filtro de busqueda declarado sobre el POST
+  // que registra no acota nada ni podria: lo que ese POST recibe es un
+  // espectaculo, no una consulta.
+  //
+  // Vuelven el dia que exista la lectura, y entonces seran suyos y no de este
+  // acto — igual que los tres de `fisc_vehicular`.
+  espectaculos: ['nDeExpediente', 'organizador', 'desde', 'hasta'],
+  // Y `alcabala` SIGUE sin declarar ninguno, que es lo correcto y conviene
+  // dejarlo dicho (#576 AC 4): sus tres filtros del manual —«Nº de
+  // liquidacion», «Nº de expediente», «Fecha de la transferencia»— no tienen a
+  // que ruta sumarse, porque **ninguna lectura del contrato lista las
+  // transferencias**. #432 lo midio: rentas declara los dos POST que las
+  // registran y `/fiscalizacion/transferencias`, que es otra cosa. Publicar esa
+  // lectura es su propio issue; hasta entonces, no declarar nada es la unica
+  // respuesta honesta.
   fisc_estado_cuenta: [
     'tipoDePapeleta',
     'papeleta',

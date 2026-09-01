@@ -2164,21 +2164,6 @@ paths:
             gana el del cuerpo (FiltroDeLaConsulta) y despues este.
           schema: { type: string }
           example: "2026"
-        - name: djN
-          in: query
-          required: false
-          description: "Filtro «DJ N°» de la pantalla"
-          schema: { type: string }
-        - name: tipoDeDeclaracion
-          in: query
-          required: false
-          description: "Filtro «Tipo de declaración» de la pantalla"
-          schema: { type: string }
-        - name: fechaDeDeclaracion
-          in: query
-          required: false
-          description: "Filtro «Fecha de declaración» de la pantalla"
-          schema: { type: string }
       requestBody:
         required: true
         content:
@@ -2723,27 +2708,6 @@ paths:
       summary: "Espectáculos públicos no deportivos"
       description: "Grava el monto que se abona por presenciar el espectáculo. La tasa depende del tipo de evento y el organizador actúa como agente perceptor."
       tags: ["Rentas · Registro"]
-      parameters:
-        - name: nDeExpediente
-          in: query
-          required: false
-          description: "Filtro «Nº de expediente» de la pantalla"
-          schema: { type: string }
-        - name: organizador
-          in: query
-          required: false
-          description: "Filtro «Organizador» de la pantalla"
-          schema: { type: string }
-        - name: desde
-          in: query
-          required: false
-          description: "Filtro «Desde» de la pantalla"
-          schema: { type: string }
-        - name: hasta
-          in: query
-          required: false
-          description: "Filtro «Hasta» de la pantalla"
-          schema: { type: string }
       requestBody:
         required: true
         content:
