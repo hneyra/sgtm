@@ -1191,13 +1191,20 @@ class ProhibicionesEnElCodigoFuenteTest {
                 .as("el papel no tiene serializador y la unidad va en el rotulo de la fila")
                 .isEmpty();
         assertThat(RevisorDeCodigoFuente.COMPONEN_EL_AREA_A_MANO_CON_MOTIVO)
-                .as("las cinco de hoy: cuatro modelos de documento y la descripcion de auditoria")
+                .as(
+                        "las seis de hoy: cuatro modelos de documento y las DOS descripciones de"
+                                + " auditoria. La columna JSON de la bitacora SI sale por HTTP"
+                                + " —`GET /seguridad/auditoria` la publica verbatim—, asi que el"
+                                + " motivo de esas dos no es «no llega al cliente» sino que ahi el"
+                                + " area no es un campo tipado sino texto libre, y se escribe sin"
+                                + " la unidad para que diga lo mismo que el resto")
                 .containsExactlyInAnyOrder(
                         "ModeloDelFue",
                         "ModeloDeLaLicencia",
                         "ModeloDeLaResolucionDeDeterminacion",
                         "ModeloDeLaFichaDelContribuyente",
-                        "RegistrarAnuncio");
+                        "RegistrarAnuncio",
+                        "ActualizarFichaCatastral");
     }
 
     @Test

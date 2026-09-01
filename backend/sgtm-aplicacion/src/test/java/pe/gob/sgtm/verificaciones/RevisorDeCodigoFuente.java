@@ -611,8 +611,17 @@ public final class RevisorDeCodigoFuente {
                     "ModeloDeLaLicencia",
                     "ModeloDeLaResolucionDeDeterminacion",
                     "ModeloDeLaFichaDelContribuyente",
-                    // La descripcion que va a la columna JSON de la auditoria, no al HTTP.
-                    "RegistrarAnuncio");
+                    // Las dos descripciones que van a la columna JSON de la auditoria.
+                    //
+                    // OJO con el motivo, porque el que estaba escrito era falso: decia «no al
+                    // HTTP», y esa columna SI sale por HTTP —`GET /seguridad/auditoria` publica
+                    // `datosAnteriores`/`datosNuevos` verbatim (`AuditoriaResource`)—. El motivo
+                    // real es otro: ahi el area no es un campo tipado sino una instantanea de
+                    // texto libre, y por eso se escribe el numero SIN la unidad, que es
+                    // exactamente lo que #607 unifica. Componerla a mano es lo unico que se puede
+                    // hacer, y esta lista es lo que obliga a decirlo.
+                    "RegistrarAnuncio",
+                    "ActualizarFichaCatastral");
 
     private static final Pattern COMENTARIO_SQL_DE_LINEA = Pattern.compile("--[^\\n]*");
     private static final Pattern COMENTARIO_DE_BLOQUE = Pattern.compile("(?s)/\\*.*?\\*/");
