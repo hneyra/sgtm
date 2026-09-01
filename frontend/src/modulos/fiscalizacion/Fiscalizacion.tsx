@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState, type CSSProperties } from 'react';
+import { useEffect, useMemo, useState, type CSSProperties, type ReactNode } from 'react';
 import { Shell } from '../../shell/Shell';
 import type { PantallaProps } from '../../App';
 import { Icono } from '../../ds/Icono';
@@ -93,16 +93,6 @@ const ENTRADILLA: CSSProperties = {
 };
 const FLECHA: CSSProperties = { color: 'var(--ink-4)', flex: '0 0 auto' };
 
-/** El tono de un estado sale de su propio texto: son los cinco vocabularios
- *  del manual y no hay más. Así la celda de estado lleva insignia en las tres
- *  tablas, como en Catastro y Rentas. */
-function tono(txt: string): Tono {
-  const t = String(txt).toLowerCase();
-  if (/omiso|no declarado|baja indebida|reclamado|anulada|^alto$/.test(t)) return 'bad';
-  if (/subvalu|determinado|pendiente|programado|cerrado|por notificar|^medio$/.test(t)) return 'warn';
-  return 'ok';
-}
-
 const estiloDeCelda = (j: number, cols: ColDef[]): CSSProperties =>
   j === 0 ? TD1 : cols[j] && cols[j][1] ? TDN : TD;
 
@@ -118,34 +108,120 @@ function Cabeceras({ cols }: { cols: ColDef[] }) {
   );
 }
 
-function Celdas({
-  fila,
-  cols,
-  insignia,
-  tonoInsignia,
-}: {
-  fila: string[];
-  cols: ColDef[];
-  insignia?: number;
-  /* Cuando el tono lo decide el VALOR del enumerado y no el texto del rotulo.
-     `tono()` clasifica por expresion regular sobre lo que se lee, y hay
-     vocabularios —«Uso distinto», «No ubicado»— que no casan con ninguna y
-     acaban en verde, que es el color de «conforme». */
-  tonoInsignia?: Tono;
-}) {
+/**
+ * La celda «Titular»: el NOMBRE, y debajo el código con el que se entra a su ficha.
+ *
+ * <h2>Por que el codigo se dibuja y no se esconde (#545)</h2>
+ *
+ * Hasta #545 esta columna enseñaba `C-000001`, que es lo que el recurso traia
+ * en `titular`. Ahora `titular` trae el NOMBRE y el codigo viaja aparte, en
+ * `codigoDelTitular`. Se dibujan **los dos**: el nombre es lo que se lee, y el
+ * codigo es lo unico con lo que se vuelve a encontrar a esa persona —Rentas ·
+ * Contribuyentes busca por `codigo`—. Quitarlo dejaria una grilla en la que se
+ * ve a quien fiscalizar y no hay forma de abrir su expediente.
+ *
+ * <h2>Los dos casos en que no hay UN codigo, dichos por separado</h2>
+ *
+ * `codigoDelTitular` llega `null` en dos situaciones distintas, y la celda no
+ * las mezcla porque no significan lo mismo:
+ *
+ * <ul>
+ *   <li><b>Sin titular vigente</b> (`titulares` vacia). No es un borde raro:
+ *       medido, **1 480 de 3 000 filas de Catacaos**. Es el predio que nadie
+ *       reclama —el primero que hay que fiscalizar— y sale en la lista a
+ *       proposito, asi que la celda lo dice en vez de quedarse en blanco: un
+ *       blanco se lee como «no tiene» y aqui significa «no lo tiene NADIE».
+ *   <li><b>Varios titulares.</b> Los nombres llegan unidos y se dibujan asi, y
+ *       no hay codigo porque no hay UNO: el backend lo deja nulo a proposito, y
+ *       elegir el de uno de los dos seria decir que el predio es suyo. Medido en
+ *       la muni 1: 3 de 23 filas.
+ * </ul>
+ *
+ * Un titular con `codigo` y `nombre` nulos tambien existe —significa que ya no
+ * esta en el padron— y el backend solo une los nombres que si resolvio, asi que
+ * el recuento y la cadena pueden no cuadrar: por eso el pie de la copropiedad
+ * cuenta **titulares**, que es lo que se sabe, y no nombres.
+ */
+function CeldaDelTitular({ titular, codigo, cuantos }: { titular: string | null; codigo: string | null; cuantos: number }) {
+  if (titular === null) {
+    return (
+      <>
+        <span style={{ display: 'block', color: 'var(--ink-3)' }}>{SIN_DATO} sin titular vigente</span>
+        <span style={{ display: 'block', fontSize: 11.5, color: 'var(--ink-4)' }}>El predio está inscrito y nadie lo reclama a la fecha de corte.</span>
+      </>
+    );
+  }
   return (
     <>
-      {fila.map((c, j) =>
-        j === insignia ? (
-          <td key={j} style={{ padding: '11px 14px' }}>
-            <Insignia tono={tonoInsignia ?? tono(c)}>{c}</Insignia>
-          </td>
-        ) : (
-          <td key={j} style={estiloDeCelda(j, cols)}>
-            {c}
-          </td>
-        ),
-      )}
+      <span style={{ display: 'block' }}>{titular}</span>
+      <span style={{ display: 'block', fontFamily: 'var(--font-mono)', fontSize: 11.5, color: 'var(--ink-4)' }}>
+        {codigo ?? `${cuantos} titulares — sin un código único`}
+      </span>
+    </>
+  );
+}
+
+/**
+ * La celda «Condición»: el hallazgo del cruce y, aparte, si declaró fuera de plazo.
+ *
+ * <h2>Son dos hechos y no uno, y confundirlos cuesta caro (#570, AC 3 de #49)</h2>
+ *
+ * Presentar la declaracion vencido el plazo **no convierte a nadie en omiso**:
+ * quien declaro tarde es un declarante —CONFORME si lo declarado coincide,
+ * SUBVALUADOR si no— y lo que le toca es la multa del art. 176, no la
+ * determinacion de oficio. Por eso `declaroFueraDePlazo` viaja aparte de
+ * `condicion` en `OmisoResource`, que lo dice con esas palabras en su javadoc.
+ *
+ * Se dibuja como una **segunda insignia** y no como un tono de la primera:
+ * teñir la condicion seria exactamente la mezcla que el AC 3 existe para
+ * impedir, y una determinacion de oficio sobre quien SI presento su declaracion
+ * se anula en reclamacion. Y se ve **sin pasar el raton**: lo que vive en un
+ * `title` no lo lee nadie (RNF-082, precedente de #385).
+ *
+ * <h2>Hoy no se ve nunca, y eso tambien esta medido</h2>
+ *
+ * Llega `false` en las 23 filas de la muni 1 y en las 10 000 recorridas de
+ * Catacaos, y **no puede ser otra cosa todavia**: la subconsulta rotula OMISO
+ * cuando `dj.id IS NULL`, asi que una fila con `declaroFueraDePlazo: true`
+ * tiene declaracion y sale CONFORME o SUBVALUADOR — y no hay ninguna
+ * declaracion jurada sembrada en ninguna de las dos municipalidades (#546). Se
+ * dibuja igualmente porque **la ausencia era el defecto**: el dia que exista la
+ * primera declaracion tardia, la grilla la distingue en vez de callarla.
+ *
+ * **No hay filtro por plazo**, y no es un olvido: el contrato no declara ningun
+ * parametro para el, y un filtro que se teclea y no acota es peor que no
+ * tenerlo (#322, #398, #431 parte B).
+ */
+function CeldaDeLaCondicion({ condicion, fueraDePlazo }: { condicion: string; fueraDePlazo: boolean }) {
+  return (
+    <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6, flexWrap: 'wrap' }}>
+      <Insignia tono={tonoDeCondicion(condicion)}>{etiquetaDeCondicion(condicion)}</Insignia>
+      {fueraDePlazo && <Insignia tono="warn">Declaró fuera de plazo</Insignia>}
+    </span>
+  );
+}
+
+/**
+ * Las celdas de una fila.
+ *
+ * Toma `ReactNode` y no `string` porque dos de las de la deteccion son mas de un
+ * dato: el titular lleva su nombre y debajo el codigo con el que se entra a su
+ * ficha (#545), y la condicion lleva la insignia del hallazgo y —si lo hay— la
+ * de «declaro fuera de plazo», que es otro hecho (#570). Componerlas aqui
+ * obligaria a esta funcion a saber de omisos; las compone quien tiene los datos
+ * y aqui solo se colocan.
+ *
+ * `envuelve` levanta el `white-space: nowrap` de la celda: sin el, las dos
+ * lineas del titular se dibujan seguidas en la misma linea.
+ */
+function Celdas({ fila, cols, envuelve }: { fila: ReactNode[]; cols: ColDef[]; envuelve?: number[] }) {
+  return (
+    <>
+      {fila.map((c, j) => (
+        <td key={j} style={envuelve !== undefined && envuelve.includes(j) ? { ...estiloDeCelda(j, cols), whiteSpace: 'normal' } : estiloDeCelda(j, cols)}>
+          {c}
+        </td>
+      ))}
     </>
   );
 }
@@ -204,62 +280,48 @@ function Paginas({
 }
 
 /**
- * Lo que la tabla de deteccion dice de si misma: cuantas filas hay, de cuantas,
- * y —cuando no se puede decir— por que no.
+ * Lo que la tabla de deteccion dice de si misma: cuantas filas hay y de cuantas.
  *
- * <h2>El total NO es el numero de coincidencias, y hay que decirlo</h2>
+ * <h2>El total vuelve a contar coincidencias, asi que aqui no hay salvedad (#545)</h2>
  *
- * `DeteccionDeOmisos` aplica `condicion` **despues de paginar**, y su propio
- * comentario lo explica: el total del sobre es el del padron —filtrado por
- * sector, eso si— y no el de las filas que sobreviven al filtro de condicion.
- * Medido: `?condicion=SUBVALUADOR` devuelve `contenido: []` con
- * `totalElementos: 25` en la muni 1 y `9445` en Catacaos.
+ * `DeteccionDeOmisos` aplicaba `condicion` **despues de paginar**, asi que el
+ * total del sobre era el del padron y no el de las filas que sobrevivian al
+ * filtro: con la condicion puesta no se podia escribir «0 de 25» porque 25 no
+ * era «de», y esta franja tenia que decir cuantas traia ESTA pagina y avisar de
+ * que una pagina vacia no significaba nada. El filtro se movio al `WHERE` de la
+ * subconsulta y el recuento lo acompaña.
  *
- * Asi que con condicion puesta no se puede escribir «0 de 25»: 25 no es «de».
- * Se dice lo unico cierto —cuantas trae ESTA pagina, sobre cuantos predios se
- * examinaron— y se avisa de que una pagina vacia no significa que no haya
- * ninguno. Es el issue #545, dicho donde se lee.
+ * Medido contra el backend con el arreglo dentro, muni 1:
+ * `?condicion=SUBVALUADOR` → `contenido: []` con **`totalElementos: 0`**
+ * —antes, `[]` con `totalElementos: 25`—; `?condicion=OMISO` → 23 de 23;
+ * `?sector=01` → 11 de 11. El aviso sobra y el recuento vuelve a ser el normal.
  */
 function EstadoDeLaDeteccion({
   cargando,
   filas,
   pagina,
-  conCondicion,
 }: {
   cargando: boolean;
   filas: number;
   pagina: RespuestaPaginada<unknown> | null;
-  conCondicion: boolean;
 }) {
   if (cargando) {
     return <p style={{ ...PIE, borderTop: '1px solid var(--line)' }}>Consultando el padrón…</p>;
   }
   if (pagina === null) return null;
 
-  const examinados = pagina.totalElementos;
-  /* Con el padron vacio la salvedad sobra: no hay nada que el filtro pudiera
-     estar escondiendo en otra pagina, porque no hay otra pagina. Repetirla ahi
-     convertiria el aviso en ruido, y un aviso que sale siempre deja de leerse. */
-  const acotaLaPagina = conCondicion && examinados > 0;
-  const cuenta = acotaLaPagina
-    ? `${filas} ${filas === 1 ? 'predio' : 'predios'} en esta página · ${examinados} examinados en total`
-    : `${filas} de ${examinados} ${examinados === 1 ? 'predio' : 'predios'}`;
+  const total = pagina.totalElementos;
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 10, padding: '11px 16px', borderTop: '1px solid var(--line)' }}>
-      <span style={{ fontFamily: 'var(--font-mono)', fontSize: 11.5, color: 'var(--ink-3)' }}>{cuenta}</span>
-      {acotaLaPagina && (
-        <Aviso tono="warn" titulo="El total no cuenta las coincidencias">
-          El backend aplica «Condición» sobre los {pagina.tamano} predios de cada página, no sobre el padrón entero, y el total que devuelve
-          —{examinados}— es el de predios examinados. Una página sin filas <strong>no significa que no haya ninguno</strong>: hay que
-          recorrerlas. Issue #545.
-        </Aviso>
-      )}
-      {filas === 0 && !acotaLaPagina && (
+      <span style={{ fontFamily: 'var(--font-mono)', fontSize: 11.5, color: 'var(--ink-3)' }}>
+        {filas} de {total} {total === 1 ? 'predio' : 'predios'}
+      </span>
+      {filas === 0 && (
         <Aviso tono="neutro" titulo="Sin resultados">
-          {examinados === 0
-            ? 'El padrón no devolvió ningún predio con estos filtros.'
-            : 'Ningún predio de esta página entró en la detección.'}
+          {total === 0
+            ? 'Ningún predio del padrón entró en la detección con estos filtros.'
+            : 'Esta página no trae ninguno; el filtro sí encontró predios en otras.'}
         </Aviso>
       )}
     </div>
@@ -426,27 +488,48 @@ export default function Fiscalizacion({ dest, onDest }: PantallaProps) {
    * dibuja: el area catastral, la declarada y su diferencia. Son lo unico
    * cuantificado que hoy distingue a un subvaluador.
    *
-   * `llave` es la IDENTIDAD de la fila, no su posicion: el padron de omisos
-   * multiplica por copropietario —25 filas para 22 predios en la muni 1— asi
-   * que el codigo predial solo no basta, y el par (predio, titular) si es
-   * unico. Con el indice, marcar la fila 3 y cambiar de pagina dejaba marcada
-   * a OTRA persona.
+   * <h2>La llave vuelve a ser el codigo predial, y esta MEDIDO (#545)</h2>
+   *
+   * Hasta #545 el padron de omisos **multiplicaba por copropietario** —25 filas
+   * para 22 predios en la muni 1, 25 pares (predio, titular)— asi que el codigo
+   * solo no bastaba y la llave era ese par. El commit del arreglo se titula «la
+   * fila es el predio»: un predio con dos conyuges es ahora UNA fila con
+   * `titulares` de dos.
+   *
+   * Se volvio a medir antes de simplificar, que es lo unico que lo justifica:
+   *
+   * <ul>
+   *   <li>muni 1: 23 filas, **23 codigos distintos**, 0 repetidos — y 3 de esas
+   *       filas traen dos titulares, que antes habrian sido seis filas;
+   *   <li>Catacaos: 3 000 filas recorridas de 14 422, **3 000 codigos
+   *       distintos**, 0 repetidos.
+   * </ul>
+   *
+   * Y lo sostiene el esquema, no la suerte: la consulta es `FROM predio p` con
+   * `LEFT JOIN` y un `LATERAL … LIMIT 1` —ninguna union abanica— sobre
+   * `predio_codigo_uq UNIQUE (municipalidad_id, codigo_ref_catastral)`, columna
+   * `NOT NULL` (V1).
+   *
+   * Simplificarla no es cosmetica. `titular` es un texto **derivado** —los
+   * nombres unidos con « y »— y llega `null` en el predio que nadie reclama,
+   * asi que la llave anterior cambiaba sola si alguien corregia un nombre en el
+   * padron, y con ella la seleccion se soltaba sin decir nada. Equivocarse aqui
+   * es marcar el predio que no es, y programar una fiscalizacion abre un
+   * procedimiento sobre alguien concreto.
    */
-  /* `declaroFueraDePlazo` llega con valor y NO se dibuja: es el AC 3 de #49
-     —quien declaro tarde no es omiso, le toca la multa del art. 176 y no la
-     determinacion de oficio— y la pantalla todavia no distingue las dos cosas.
-     No se anade por cuenta propia porque cambia la forma de la tabla del
-     manual; queda en el issue #570 con lo que tendria que ensenar. */
   const filasDeOmisos: FilaDeDeteccion[] = (omisos.datos?.contenido ?? []).map((o) => ({
-    llave: o.codRefCatastral + '·' + o.titular,
+    llave: o.codRefCatastral,
     /* El rotulo se dibuja desde el enumerado, no desde su texto: asi renombrar
        la etiqueta no puede cambiar el color, y un valor que no conozcamos sale
        tal cual en vez de disfrazado del que mas se le parezca. */
     condicion: o.condicion,
+    titular: o.titular,
     celdas: [
       o.codRefCatastral,
-      o.titular,
-      etiquetaDeCondicion(o.condicion),
+      <CeldaDelTitular key="t" titular={o.titular} codigo={o.codigoDelTitular} cuantos={o.titulares.length} />,
+      /* Dos hechos, dos insignias: el hallazgo del cruce y —si lo hay— que la
+         declaracion llego vencido el plazo (#570). */
+      <CeldaDeLaCondicion key="c" condicion={o.condicion} fueraDePlazo={o.declaroFueraDePlazo} />,
       o.areaCatastral ?? SIN_DATO,
       o.areaDeclarada ?? SIN_DATO,
       o.diferenciaDeArea ?? SIN_DATO,
@@ -1046,32 +1129,32 @@ export default function Fiscalizacion({ dest, onDest }: PantallaProps) {
                     {filasVisibles.map((f) => {
                       const on = marcadas[f.llave] === true;
                       return (
-                        /* La clave es la IDENTIDAD de la fila. El codigo predial
-                           solo no vale: el padron de omisos multiplica por
-                           copropietario —25 filas para 22 predios en la muni 1—
-                           y el par (predio, titular) si es unico (comprobado:
-                           25 de 25). El indice tampoco valia, y ese era el
-                           defecto: marcar la fila 3 y pasar de pagina dejaba
-                           marcada a otra persona. */
+                        /* La clave es la IDENTIDAD de la fila, y desde #545 esa
+                           identidad es el predio: el codigo de referencia
+                           catastral basta y es unico (medido en `filasDeOmisos`;
+                           `predio_codigo_uq` lo garantiza). El indice no valia, y
+                           ese era el defecto original: marcar la fila 3 y pasar
+                           de pagina dejaba marcada a otra persona. */
                         <tr key={f.llave} className="hov-elev" style={{ borderTop: '1px solid var(--line)', background: on ? 'var(--accent-soft)' : 'transparent' }}>
                           <td style={{ padding: '11px 14px' }}>
                             <input
                               type="checkbox"
                               checked={on}
                               onChange={() => setMarcadas((x) => ({ ...x, [f.llave]: !on }))}
-                              /* Nombra las DOS partes: con solo el codigo, las
-                                 filas de un predio en copropiedad tenian dos
-                                 casillas con el mismo nombre accesible. */
-                              aria-label={'Seleccionar ' + f.celdas[0] + ' de ' + f.celdas[1]}
+                              /* El nombre accesible sale del codigo predial y
+                                 del titular, no de `celdas`: desde #545 esas dos
+                                 celdas son componentes y no cadenas, y
+                                 concatenarlas daria «[object Object]». Un predio
+                                 sin titular vigente lo dice, que es justo lo que
+                                 hay que oir antes de marcarlo. */
+                              aria-label={'Seleccionar el predio ' + f.llave + ' de ' + (f.titular ?? 'ningún titular vigente')}
                               style={{ accentColor: 'var(--accent)', width: 16, height: 16 }}
                             />
                           </td>
-                          <Celdas
-                            fila={f.celdas}
-                            cols={detTab === 0 ? COLUMNAS_DE_OMISOS : detAct.cols}
-                            insignia={detTab === 0 ? 2 : 5}
-                            tonoInsignia={detTab === 0 ? tonoDeCondicion(f.condicion) : undefined}
-                          />
+                          {/* La celda 1 —el titular con su codigo debajo— es la
+                              unica de dos lineas, asi que es la unica que
+                              necesita envolver. */}
+                          <Celdas fila={f.celdas} cols={COLUMNAS_DE_OMISOS} envuelve={[1]} />
                         </tr>
                       );
                     })}
@@ -1082,7 +1165,7 @@ export default function Fiscalizacion({ dest, onDest }: PantallaProps) {
               {/* Ni una tabla vacia en silencio ni un total que no es el que
                   parece. Los dos casos se dicen por separado. */}
               {detTab === 0 && omisos.error === null && (
-                <EstadoDeLaDeteccion cargando={omisos.cargando} filas={filasDeOmisos.length} pagina={paginaDeOmisos} conCondicion={condicionDet !== ''} />
+                <EstadoDeLaDeteccion cargando={omisos.cargando} filas={filasDeOmisos.length} pagina={paginaDeOmisos} />
               )}
               {detTab === 0 && paginaDeOmisos !== null && (
                 <Paginas pagina={paginaDeOmisos.pagina} totalPaginas={paginaDeOmisos.totalPaginas} hayMas={paginaDeOmisos.hayMas} ir={setPaginaDet} />
@@ -1103,8 +1186,9 @@ export default function Fiscalizacion({ dest, onDest }: PantallaProps) {
                 {detTab === 0 && (
                   <>
                     {' '}
-                    La consulta publica además si el contribuyente declaró fuera de plazo, y esta tabla todavía no lo dibuja: declarar tarde
-                    no convierte a nadie en omiso —es la multa del art. 176, no una determinación de oficio—. Issue #570.
+                    «Declaró fuera de plazo» sale como una segunda insignia al lado de la condición, y nunca como su color: declarar tarde no
+                    convierte a nadie en omiso —es la multa del art. 176, no una determinación de oficio—. Hoy no aparece en ninguna fila
+                    porque no hay ninguna declaración jurada presentada (#546), y sin declaración el cruce rotula «Omiso» por definición.
                   </>
                 )}
               </p>
@@ -2149,7 +2233,19 @@ const COLUMNAS_DE_OMISOS: ColDef[] = [
   ['Impuesto omitido S/', 1],
 ];
 
-/** Las seis columnas de la muestra, con lo que el recurso publica de cada una. */
+/**
+ * Las seis columnas de la muestra, con lo que el recurso publica de cada una.
+ *
+ * <h2>Aqui NO se puede decir si declaro fuera de plazo, y por eso no se dice (#570)</h2>
+ *
+ * La deteccion lo distingue desde #570 —dos insignias, ver `CeldaDeLaCondicion`—
+ * y esta grilla no puede: `MuestraResource` publica el predio, el contribuyente,
+ * su titular, las tres areas, la condicion y `visitado`, y **no publica**
+ * `declaroFueraDePlazo`. No se hereda de la deteccion: la muestra se sorteo en
+ * su dia y sus filas se leen de `programa_muestra`, no del cruce de hoy.
+ * Suponerlo seria escribir en la columna de una fila un hecho que nadie ha
+ * comprobado para ella.
+ */
 const COLUMNAS_DE_MUESTRA: ColDef[] = [
   ['Predio', 0],
   ['Contribuyente', 0],
@@ -2299,11 +2395,17 @@ const TAMANO_DE_PAGINA = 20;
 
 /** Una fila de la tabla de deteccion, con la identidad que la selecciona. */
 type FilaDeDeteccion = {
-  /** Identifica la fila. Para el predial, `codRefCatastral·titular`. */
+  /**
+   * Identifica la fila. Para el predial es el `codRefCatastral` **a secas**:
+   * desde #545 la fila ES el predio, y ese codigo es unico por municipalidad
+   * (`predio_codigo_uq`, V1). La medicion esta en `filasDeOmisos`.
+   */
   llave: string;
   /** El valor del enumerado tal como viaja, no su rotulo. */
   condicion: string;
-  celdas: string[];
+  /** El o los titulares, para nombrar la casilla. `null` si el predio no tiene ninguno. */
+  titular: string | null;
+  celdas: ReactNode[];
 };
 
 /**
@@ -2316,9 +2418,12 @@ type FilaDeDeteccion = {
  * «Subvaluador» y teñido de ambar. Los cinco los acepta la consulta
  * (comprobado: `?condicion=CONFORME` da 200; `?condicion=BASURA`, 422).
  *
- * El tono sale del VALOR y no del texto: `tono()` clasifica por expresion
- * regular sobre el rotulo, y ahi «Uso distinto» y «No ubicado» caian en verde
- * —el color de «conforme»— porque no casan con ningun patron.
+ * El tono sale del VALOR y no del texto. La version anterior clasificaba con
+ * una expresion regular sobre el ROTULO, y ahi «Uso distinto» y «No ubicado»
+ * caian en verde —el color de «conforme»— porque no casan con ningun patron.
+ * Esa funcion ya no existe: su ultimo consumidor era la insignia que componia
+ * `Celdas`, y desde #545 la condicion la dibuja `CeldaDeLaCondicion` con
+ * `tonoDeCondicion`.
  */
 const CONDICIONES: { valor: string; etiqueta: string; tono: Tono }[] = [
   { valor: 'CONFORME', etiqueta: 'Conforme', tono: 'ok' },

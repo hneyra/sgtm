@@ -12,10 +12,41 @@ import type { Paginacion } from './catastro';
  * y ninguno esta firmado. No es que falten en esta consulta: es que el sistema
  * no sabe valorizar todavia.
  */
+/**
+ * Un titular de la fila del omiso: su codigo y su nombre.
+ *
+ * Los dos pueden ser `null` a la vez, y significa que ese titular **ya no esta
+ * en el padron**. Sale asi y sale en la lista —igual que en
+ * `TitularesDelPredioResource`—: es el predio que catastro tiene que revisar, y
+ * ocultarlo esconderia el defecto en vez de enseñarlo.
+ */
+export type TitularDelOmiso = { codigo: string | null; nombre: string | null };
+
 export type FilaDeOmisos = {
   codRefCatastral: string;
-  /** El CODIGO del contribuyente, no su nombre. */
-  titular: string;
+  /**
+   * El NOMBRE del titular, no su codigo (#545). Cuando son varios llegan
+   * **unidos** —«A y B»—, porque la fila es el predio y no la persona.
+   *
+   * Es `null` cuando el predio no tiene ningun titular vigente a la fecha de
+   * corte, y no es un caso raro: medido, **1 480 de 3 000 filas de Catacaos**
+   * llegan sin ninguno. Ese predio sale en la lista a proposito —es el que
+   * nadie reclama, el primero que hay que fiscalizar— asi que la celda tiene
+   * que decir que no lo tiene, no quedarse en blanco.
+   */
+  titular: string | null;
+  /**
+   * El codigo del titular cuando hay **exactamente uno**. Es con lo que se
+   * entra a su ficha, buscandolo por codigo en el padron de Rentas.
+   *
+   * `null` con cero titulares y tambien con dos: con dos no hay UN codigo, y
+   * elegir el de uno de los dos seria decir que el predio es suyo. Medido en la
+   * muni 1: 3 de 23 filas tienen dos titulares y las tres llegan con
+   * `codigoDelTitular: null`.
+   */
+  codigoDelTitular: string | null;
+  /** Todos los titulares vigentes, de mayor a menor porcentaje. */
+  titulares: TitularDelOmiso[];
   sector: string | null;
   /** `OMISO` | `SUBVALUADOR`. */
   condicion: string;
@@ -98,7 +129,8 @@ export type FilaDeMuestra = {
   codRefCatastral: string;
   contribuyenteId: number;
   codContribuyente: string;
-  /** Aqui SI es el nombre, al reves que en `FilaDeOmisos` (#545). */
+  /** El nombre, como en `FilaDeOmisos` desde #545. Aqui nunca es nulo: la
+   *  muestra sortea predios con titular resuelto y trae ademas su codigo. */
   titular: string;
   sector: string | null;
   condicion: string;
