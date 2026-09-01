@@ -41,12 +41,29 @@ import org.springframework.web.bind.annotation.RestController;
  * javadoc de {@code rutaNoEncontrada} explica que no debe pasar. Por eso la ultima prueba de este
  * archivo no mira el estado sino el registro: es la parte del defecto que un {@code assertThat}
  * sobre el codigo HTTP no puede ver.
+ *
+ * <h2>La quinta forma, que era la peor de todas (#539)</h2>
+ *
+ * <p>Habia una manera mas de mandar una peticion que el borde no puede leer, y era la unica que no
+ * contestaba nada: <b>un parametro cuyo nombre la operacion no reconoce</b>. Spring lo ignora, la
+ * consulta sale sin acotar y la respuesta es {@code 200} con el listado entero — o sea el peor de
+ * los desenlaces, porque el cliente no recibe ningun error y si recibe datos que no pidio. Con
+ * {@link GuardiaDeParametros} cae del mismo lado que las otras cuatro: 422, nombrando el parametro,
+ * y sin dejar incidencia.
+ *
+ * <p>Y el contraste sigue puesto en la ultima prueba, que es lo que impide pasarse de listo: una
+ * guarda demasiado ancha —convertirlo todo en 422— seria peor que el defecto que arregla.
  */
 @DisplayName("RNF-033 — El borde contesta lo mismo ante una peticion que no puede leer (#486)")
 class ElBordeContestaLoMismoTest {
 
     private final MockMvc mvc =
             MockMvcBuilders.standaloneSetup(new Sonda())
+                    // La guarda de #539 va aqui dentro y no en un montaje aparte: lo que este
+                    // archivo mide es que el borde conteste LO MISMO, y una quinta forma de
+                    // peticion ilegible —un parametro que la operacion no sabe leer— tiene que
+                    // caer del mismo lado que las otras cuatro, sin dejar incidencia.
+                    .addInterceptors(new GuardiaDeParametros())
                     .setControllerAdvice(new ManejadorDeErrores())
                     .build();
 
@@ -108,7 +125,22 @@ class ElBordeContestaLoMismoTest {
     }
 
     @Test
-    @DisplayName("y ninguna de las cuatro escribe una incidencia en el registro de errores")
+    @DisplayName("un parametro que la operacion no sabe leer: 422, y dice cual (#539)")
+    void elParametroDesconocidoSeNombra() throws Exception {
+        MvcResult respuesta =
+                mvc.perform(get("/sonda/paginado").param("orden", "codigo")).andReturn();
+
+        assertThat(respuesta.getResponse().getStatus())
+                .as(
+                        "es la quinta forma de peticion ilegible, y hasta #539 era la unica que"
+                                + " contestaba 200 con el listado entero en vez de decir que no se"
+                                + " entiende")
+                .isEqualTo(422);
+        assertThat(respuesta.getResponse().getContentAsString()).contains("Parametro desconocido");
+    }
+
+    @Test
+    @DisplayName("y ninguna de las cinco escribe una incidencia en el registro de errores")
     void ningunaEnsuciaElRegistro() throws Exception {
         ch.qos.logback.classic.Logger registro =
                 (ch.qos.logback.classic.Logger)
@@ -124,6 +156,7 @@ class ElBordeContestaLoMismoTest {
                     post("/sonda/cuerpo")
                             .contentType(MediaType.APPLICATION_JSON)
                             .content("{no-json"));
+            mvc.perform(get("/sonda/paginado").param("orden", "codigo"));
         } finally {
             registro.detachAppender(anotados);
         }
@@ -132,7 +165,8 @@ class ElBordeContestaLoMismoTest {
                 .as(
                         "con el defecto, cuatro peticiones mal tecleadas dejaban cuatro incidencias"
                                 + " ERROR con su UUID; asi el registro deja de servir para encontrar"
-                                + " defectos de verdad")
+                                + " defectos de verdad. La quinta —el parametro desconocido de"
+                                + " #539— tampoco puede dejar rastro: la escribe el cliente")
                 .isEmpty();
     }
 
