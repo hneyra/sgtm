@@ -9,12 +9,13 @@ import {
   listarResultados,
   listarHistorico,
   leerEstadoDeCuenta,
+  ORDEN_DE_OMISOS,
   type ProgramaDeFiscalizacion,
   type FilaDeMuestra,
 } from '../../api/fiscalizacion';
 import { useRecurso, useRebote } from '../../api/useRecurso';
 import { FalloDeLectura } from '../../api/Fallo';
-import type { RespuestaPaginada } from '../../api/cliente';
+import type { ErrorDeApi, RespuestaPaginada } from '../../api/cliente';
 import { ICO } from '../../ds/iconos';
 import { Aviso, Insignia, type Tono } from '../../ds/componentes';
 import { moduloDe } from '../../shell/modulos';
@@ -96,14 +97,81 @@ const FLECHA: CSSProperties = { color: 'var(--ink-4)', flex: '0 0 auto' };
 const estiloDeCelda = (j: number, cols: ColDef[]): CSSProperties =>
   j === 0 ? TD1 : cols[j] && cols[j][1] ? TDN : TD;
 
-function Cabeceras({ cols }: { cols: ColDef[] }) {
+/**
+ * Cual es la columna que se puede ordenar, y en que sentido va ahora.
+ *
+ * `columna` es el ROTULO de la unica columna que el backend admite ordenar, no
+ * un indice: si alguien reordena las columnas, el boton sigue en la suya.
+ */
+type OrdenDeTabla = {
+  columna: string;
+  sentido: 'ASCENDENTE' | 'DESCENDENTE' | null;
+  alternar: () => void;
+};
+
+/**
+ * Las cabeceras, y —solo si se le pasa `orden`— **una** de ellas ordenable.
+ *
+ * Ordenable de una en una y por invitacion, no por omision: cinco tablas de
+ * este modulo usan este mismo componente y de todas sus columnas el backend
+ * admite ordenar exactamente por una (`ORDEN_DE_OMISOS`, medido). Una cabecera
+ * que se pulsa y contesta «orden no admitido» es peor que una que no se pulsa,
+ * asi que la que no esta invitada se dibuja como siempre, sin boton y sin
+ * `aria-sort`.
+ */
+function Cabeceras({ cols, orden }: { cols: ColDef[]; orden?: OrdenDeTabla }) {
   return (
     <>
-      {cols.map((c) => (
-        <th key={c[0]} style={c[1] ? THN : TH}>
-          {c[0]}
-        </th>
-      ))}
+      {cols.map((c) => {
+        const ordenable = orden !== undefined && orden.columna === c[0];
+        if (!ordenable) {
+          return (
+            <th key={c[0]} style={c[1] ? THN : TH}>
+              {c[0]}
+            </th>
+          );
+        }
+        const flecha = orden.sentido === null ? '↕' : orden.sentido === 'ASCENDENTE' ? '↑' : '↓';
+        return (
+          <th
+            key={c[0]}
+            style={c[1] ? THN : TH}
+            /* «none» no es «sin ordenar por nada»: es «esta columna no ordena
+               ahora», que es lo que pasa mientras nadie la ha pulsado. */
+            aria-sort={orden.sentido === null ? 'none' : orden.sentido === 'ASCENDENTE' ? 'ascending' : 'descending'}
+          >
+            <button
+              type="button"
+              onClick={orden.alternar}
+              title={
+                orden.sentido === null
+                  ? 'Ordenar por esta columna. Es la única que el backend admite ordenar.'
+                  : orden.sentido === 'ASCENDENTE'
+                    ? 'Ordenado de menor a mayor. Pulsa para invertirlo.'
+                    : 'Ordenado de mayor a menor. Pulsa para invertirlo.'
+              }
+              style={{
+                display: 'inline-flex',
+                alignItems: 'center',
+                gap: 5,
+                border: 0,
+                padding: 0,
+                background: 'none',
+                font: 'inherit',
+                letterSpacing: 'inherit',
+                textTransform: 'inherit',
+                color: orden.sentido === null ? 'inherit' : 'var(--accent-ink)',
+                cursor: 'pointer',
+              }}
+            >
+              {c[0]}
+              <span aria-hidden="true" style={{ fontSize: 11, opacity: orden.sentido === null ? 0.55 : 1 }}>
+                {flecha}
+              </span>
+            </button>
+          </th>
+        );
+      })}
     </>
   );
 }
@@ -224,6 +292,57 @@ function Celdas({ fila, cols, envuelve }: { fila: ReactNode[]; cols: ColDef[]; e
       ))}
     </>
   );
+}
+
+/**
+ * Lo que se dibuja cuando la muestra de un programa no se pudo leer.
+ *
+ * <h2>Un programa que no esta no es una lectura que falla (#546)</h2>
+ *
+ * Desde #546 `GET /fiscalizacion/programas/{id}/muestra` contesta **404** al
+ * programa inexistente en vez de 200 con la lista vacia. Eso separa dos cosas
+ * que la pantalla trataba igual y que no se parecen en nada:
+ *
+ * <ul>
+ *   <li>200 con cero filas: el programa existe y todavia no ha sorteado su
+ *       muestra. Se dice con su aviso, y ahora se puede AFIRMAR.
+ *   <li>404: ese programa ya no esta. La lista de la que salio es de hace un
+ *       momento, asi que lo que hay que hacer es volver a pedirla, no insistir
+ *       en el mismo id ni entender que el programa esta vacio.
+ * </ul>
+ *
+ * Y por eso no vale con dejar pasar el 404 al aviso generico: `FalloDeLectura`
+ * lo rotularia «No se encontró la muestra del programa», que se lee como que la
+ * muestra es lo que falta —que es justamente el otro caso—.
+ */
+function FalloDeLaMuestra({
+  error,
+  reintentarMuestra,
+  recargarProgramas,
+}: {
+  error: ErrorDeApi;
+  reintentarMuestra: () => void;
+  recargarProgramas: () => void;
+}) {
+  if (error.codigo === 'NO_ENCONTRADO') {
+    return (
+      /* Ni «Reintentar» ni tono de fallo: pedir dos veces el mismo id que no
+         existe da dos veces 404. Lo que hay que volver a pedir es la LISTA. */
+      <Aviso tono="warn" titulo="Ese programa ya no está">
+        {error.mensaje} La lista de programas es de hace un momento y ese ya no figura: vuelve a pedirla y elige otro. No es que no haya
+        sorteado su muestra — eso se contesta con una lista vacía, no con un 404.{' '}
+        <button
+          type="button"
+          onClick={recargarProgramas}
+          style={{ border: 0, padding: 0, background: 'none', font: 'inherit', color: 'var(--accent-ink)', textDecoration: 'underline', cursor: 'pointer' }}
+        >
+          Volver a pedir la lista de programas
+        </button>
+        .
+      </Aviso>
+    );
+  }
+  return <FalloDeLectura error={error} que="la muestra del programa" acceso="fisc_programa" alReintentar={reintentarMuestra} />;
 }
 
 /** Lo que se dibuja en un boton apagado: se ve, no se pulsa, y dice por que. */
@@ -453,12 +572,29 @@ export default function Fiscalizacion({ dest, onDest }: PantallaProps) {
   const [sectorDet, setSectorDet] = useState('');
   const [condicionDet, setCondicionDet] = useState('');
   const [paginaDet, setPaginaDet] = useState(0);
-  useEffect(() => setPaginaDet(0), [sectorDet, condicionDet, pref.ejercicio]);
+  /**
+   * Por que sentido va la unica columna que se puede ordenar (#546).
+   *
+   * Nace en `null` —«nadie ha pedido ningun orden»— y no vuelve nunca a el: el
+   * primer clic pide ASCENDENTE y a partir de ahi alterna. `null` no es lo
+   * mismo que ASCENDENTE aunque hoy el backend devuelva las dos igual: sin
+   * `ordenarPor` el orden es el que quiera la consulta, y afirmar en la
+   * cabecera que esta ordenada por codigo cuando nadie lo pidio es prometer un
+   * orden que nada garantiza.
+   */
+  const [ordenDet, setOrdenDet] = useState<'ASCENDENTE' | 'DESCENDENTE' | null>(null);
+  useEffect(() => setPaginaDet(0), [sectorDet, condicionDet, pref.ejercicio, ordenDet]);
 
   /* La seleccion pertenece a la consulta que la produjo. Cambiar de sector, de
      condicion, de ejercicio, de pagina o de pestaña la vacia: si sobreviviera,
      seguiria contando predios que ya no estan en pantalla, y quien atiende
-     leeria «3 seleccionados» sin ver una sola casilla marcada. */
+     leeria «3 seleccionados» sin ver una sola casilla marcada.
+
+     Reordenar NO esta en esa lista, y la diferencia importa: la llave es el
+     codigo del predio (#545), asi que la marca sigue al predio aunque cambie de
+     sitio en la tabla. Lo que se vacia es lo que se lleva filas de la pagina;
+     reordenar cambia cuales se ven, y de eso ya se encarga el reinicio de
+     pagina de la linea de arriba. */
   useEffect(() => setMarcadas({}), [sectorDet, condicionDet, pref.ejercicio, paginaDet, detTab]);
 
   const omisos = useRecurso(
@@ -469,10 +605,18 @@ export default function Fiscalizacion({ dest, onDest }: PantallaProps) {
           sector: sectorDet || undefined,
           condicion: condicionDet || undefined,
         },
-        { pagina: paginaDet, tamano: TAMANO_DE_PAGINA },
+        {
+          pagina: paginaDet,
+          tamano: TAMANO_DE_PAGINA,
+          /* Los dos van juntos o no va ninguno: `direccion` sin `ordenarPor` no
+             ordena nada, y `ordenarPor` con una `direccion` que el backend no
+             conoce es un 422 («no admite el valor 'PATATA'», medido). */
+          ordenarPor: ordenDet === null ? undefined : ORDEN_DE_OMISOS,
+          direccion: ordenDet ?? undefined,
+        },
         senal,
       ),
-    [pref.ejercicio, sectorDet, condicionDet, paginaDet],
+    [pref.ejercicio, sectorDet, condicionDet, paginaDet, ordenDet],
     dest === 'deteccion' && detTab === 0,
   );
 
@@ -530,9 +674,13 @@ export default function Fiscalizacion({ dest, onDest }: PantallaProps) {
       /* Dos hechos, dos insignias: el hallazgo del cruce y —si lo hay— que la
          declaracion llego vencido el plazo (#570). */
       <CeldaDeLaCondicion key="c" condicion={o.condicion} fueraDePlazo={o.declaroFueraDePlazo} />,
-      o.areaCatastral ?? SIN_DATO,
-      o.areaDeclarada ?? SIN_DATO,
-      o.diferenciaDeArea ?? SIN_DATO,
+      /* Las tres ya no traen « m2» dentro (#546): son cantidades, y la unidad
+         la dice la cabecera. `areaEnMetros` agrupa los miles sobre la cadena
+         —sin pasar por `Number`, que es como se pierde un decimal— y devuelve
+         «—» donde no hay area. */
+      areaEnMetros(o.areaCatastral),
+      areaEnMetros(o.areaDeclarada),
+      areaEnMetros(o.diferenciaDeArea),
       o.impuestoOmitidoS ?? SIN_DATO,
     ],
   }));
@@ -935,7 +1083,7 @@ export default function Fiscalizacion({ dest, onDest }: PantallaProps) {
 
               {muestra.error !== null && (
                 <div style={{ padding: '12px 16px' }}>
-                  <FalloDeLectura error={muestra.error} que="la muestra del programa" acceso="fisc_programa" alReintentar={muestra.reintentar} />
+                  <FalloDeLaMuestra error={muestra.error} reintentarMuestra={muestra.reintentar} recargarProgramas={programas.reintentar} />
                 </div>
               )}
 
@@ -1070,10 +1218,13 @@ export default function Fiscalizacion({ dest, onDest }: PantallaProps) {
                       </select>
                     </label>
                     {/* «Ordenar por» del artboard ofrece tres campos y los tres
-                        dan 422 ORDEN_NO_ADMITIDO. No se dibuja. */}
+                        siguen dando 422 ORDEN_NO_ADMITIDO. El desplegable no se
+                        dibuja; lo que si se puede ordenar —una columna, la del
+                        codigo predial— se pide desde su propia cabecera (#546). */}
                     <p style={{ margin: 0, gridColumn: '1 / -1', fontSize: 11.5, lineHeight: 1.5, color: 'var(--ink-4)', textWrap: 'pretty' }}>
-                      «Ordenar por» no se ofrece: los tres campos que el manual propone —impuesto omitido, diferencia de valor, sector— los
-                      rechaza el backend con «orden no admitido».
+                      «Ordenar por» no se ofrece como desplegable: de los tres campos que el manual propone —impuesto omitido, diferencia de
+                      valor, sector— el backend rechaza los tres con «orden no admitido». Lo único que admite ordenar es el código de
+                      referencia catastral, y se pide pulsando su cabecera.
                     </p>
                   </>
                 ) : (
@@ -1122,7 +1273,22 @@ export default function Fiscalizacion({ dest, onDest }: PantallaProps) {
                   <thead>
                     <tr>
                       <th style={{ padding: '10px 14px', width: 38, background: 'var(--bg-elev)' }} />
-                      <Cabeceras cols={detTab === 0 ? COLUMNAS_DE_OMISOS : detAct.cols} />
+                      {/* La cabecera de la deteccion predial invita a ordenar
+                          por su primera columna, que es la unica que el backend
+                          admite. La del cruce vehicular no invita a ninguna: no
+                          hay operacion que la sirva. */}
+                      <Cabeceras
+                        cols={detTab === 0 ? COLUMNAS_DE_OMISOS : detAct.cols}
+                        orden={
+                          detTab === 0
+                            ? {
+                                columna: COLUMNAS_DE_OMISOS[0]![0],
+                                sentido: ordenDet,
+                                alternar: () => setOrdenDet((s) => (s === 'ASCENDENTE' ? 'DESCENDENTE' : 'ASCENDENTE')),
+                              }
+                            : undefined
+                        }
+                      />
                     </tr>
                   </thead>
                   <tbody>
@@ -1391,7 +1557,7 @@ export default function Fiscalizacion({ dest, onDest }: PantallaProps) {
 
                   {muestra.error !== null && (
                     <div style={{ padding: '12px 16px' }}>
-                      <FalloDeLectura error={muestra.error} que="la muestra del programa" acceso="fisc_programa" alReintentar={muestra.reintentar} />
+                      <FalloDeLaMuestra error={muestra.error} reintentarMuestra={muestra.reintentar} recargarProgramas={programas.reintentar} />
                     </div>
                   )}
 
@@ -1412,7 +1578,9 @@ export default function Fiscalizacion({ dest, onDest }: PantallaProps) {
                                 concepto del backend: lo que hay es la CONDICION
                                 del cruce, que es otra pregunta. */}
                             <td style={TD}>{SIN_DATO}</td>
-                            <td style={TD}>{f.areaDeclarada ?? SIN_DATO}</td>
+                            {/* Numerica, como en la deteccion y por lo mismo:
+                                el area ya no trae su unidad dentro (#546). */}
+                            <td style={TDN}>{areaEnMetros(f.areaDeclarada)}</td>
                             <td style={{ padding: '11px 14px' }}>
                               <Insignia tono={tonoDeCondicion(f.condicion)}>{etiquetaDeCondicion(f.condicion)}</Insignia>
                             </td>
@@ -1431,10 +1599,15 @@ export default function Fiscalizacion({ dest, onDest }: PantallaProps) {
                     <p style={{ ...PIE, borderTop: '1px solid var(--line)' }}>Consultando la muestra…</p>
                   ) : muestra.error === null && (muestra.datos?.contenido.length ?? 0) === 0 ? (
                     <div style={{ padding: '11px 16px', borderTop: '1px solid var(--line)' }}>
+                      {/* Ahora esto se puede AFIRMAR. Hasta #546 una lista vacía
+                          era también lo que contestaba un programa inexistente,
+                          así que este mismo aviso se dibujaba en los dos casos y
+                          en uno de los dos era falso. Desde #546 el programa que
+                          no está contesta 404, y lo dice `FalloDeLaMuestra`. */}
                       <Aviso tono="neutro" titulo="Este programa no ha sorteado su muestra">
-                        La muestra se sortea con <code>POST /fiscalizacion/programas/{'{id}'}/muestra</code> a partir del sector, la
-                        condición y el ejercicio que el programa declara, y esta pantalla no dibuja esa acción ni su campo de observación.
-                        Issue #550.
+                        El programa existe —si no, la consulta contestaría que no—: lo que no tiene todavía es muestra. Se sortea con{' '}
+                        <code>POST /fiscalizacion/programas/{'{id}'}/muestra</code> a partir del sector, la condición y el ejercicio que el
+                        programa declara, y esta pantalla no dibuja esa acción ni su campo de observación. Issue #550.
                       </Aviso>
                     </div>
                   ) : null}
@@ -1980,7 +2153,16 @@ export default function Fiscalizacion({ dest, onDest }: PantallaProps) {
                       </span>
                       {/* Lo que cambio respecto de la anterior lo dice el
                           backend, concepto a concepto. El artboard lo escribia
-                          a mano —«Se corrigió el ECS de MALO a BUENO»—. */}
+                          a mano —«Se corrigió el ECS de MALO a BUENO»—.
+
+                          Y aqui el area SI llega con su « m2» dentro, que es la
+                          excepcion a lo que #546 hizo en las dos grillas: esta
+                          es una sola linea de texto donde caben «OMISO», «2020»,
+                          un importe y una superficie, asi que no hay cabecera
+                          que pueda poner la unidad y sin ella «120.00 → 164.50»
+                          no dice si cambio el area hallada o el insoluto. Sale
+                          verbatim: `areaEnMetros` no se le aplica —recortarle la
+                          unidad es lo que dejaria la celda muda—. */}
                       <span style={{ display: 'block', fontSize: 12, color: 'var(--ink-3)', marginTop: 2, textWrap: 'pretty' }}>
                         {v.cambios.length === 0
                           ? 'Sin cambios declarados respecto de la anterior.'
@@ -2215,21 +2397,36 @@ export default function Fiscalizacion({ dest, onDest }: PantallaProps) {
 /**
  * Las columnas de «Omisos y subvaluadores», con lo que cada una es de verdad.
  *
- * Las tres de area **no son numeros**: `AreaM2.toString()` del backend devuelve
- * `valor.toPlainString() + " m2"`, o sea «180.50 m2», la cifra con su unidad
- * dentro. Se dibujan tal cual —partirlas para volver a formatearlas es como se
- * pierde un decimal (RNF-055)— y por eso van declaradas como texto: en una
- * columna numerica la unidad quedaba pegada detras de un numero alineado a la
- * derecha, prometiendo una cifra que no lo es. La unidad la lleva el dato, no
- * la cabecera, porque el dia que llegue en hectareas la cabecera mentiria.
+ * <h2>Las tres de area SI son numeros, y la unidad va en la cabecera (#546)</h2>
+ *
+ * Hasta #546 llegaban con la unidad pegada —«180.50 m2», que es
+ * `AreaM2.toString()`— y aqui se dibujaban verbatim, como texto y a la
+ * izquierda; el razonamiento escrito era que «la unidad la lleva el dato, no la
+ * cabecera, porque el dia que llegue en hectareas la cabecera mentiria». El
+ * backend decidio lo contrario y lo hizo: los tres campos viajan tipados como
+ * `AreaM2` y el serializador de `ConfiguracionDeJson` escribe `"180.50"`,
+ * porque la unidad metida dentro obliga a cada consumidor a recortarla antes de
+ * poder comparar. El dia que una superficie llegue en hectareas sera **otro
+ * tipo**, no la misma columna con otro sufijo.
+ *
+ * Y el estado intermedio era el peor de los tres: con el arreglo dentro y esta
+ * decision sin invertir, la celda enseñaba «180.50» a secas bajo una cabecera
+ * que decia «Área catastral», sin decir en ninguna parte de que unidad habla.
+ * Medido en la muni 1 antes de tocar nada: «180.50», «142.00», «96.75».
+ *
+ * Asi que ahora son columna numerica (`1`): mono, alineadas a la derecha, con
+ * `tabular-nums` —dos areas se comparan de un vistazo cuando sus puntos
+ * decimales estan en la misma vertical— y con el separador de miles que pone
+ * `areaEnMetros`, que hace falta: en Catacaos hay areas de cuatro cifras
+ * (10 422.90 m², medido). La unidad la dice la cabecera una vez.
  */
 const COLUMNAS_DE_OMISOS: ColDef[] = [
   ['Cód. ref. catastral', 0],
   ['Titular', 0],
   ['Condición', 0],
-  ['Área catastral', 0],
-  ['Área declarada', 0],
-  ['Diferencia de área', 0],
+  ['Área catastral m²', 1],
+  ['Área declarada m²', 1],
+  ['Diferencia de área m²', 1],
   ['Impuesto omitido S/', 1],
 ];
 
@@ -2250,7 +2447,9 @@ const COLUMNAS_DE_MUESTRA: ColDef[] = [
   ['Predio', 0],
   ['Contribuyente', 0],
   ['Uso declarado', 0],
-  ['Área declarada', 0],
+  /* Numerica y con la unidad en la cabecera, por lo mismo que en omisos (#546):
+     `MuestraResource` la publica como `AreaM2` y ya no trae « m2» dentro. */
+  ['Área declarada m²', 1],
   ['Condición del cruce', 0],
   ['Estado', 0],
 ];
@@ -2389,6 +2588,42 @@ function pendientesDeVisita(filas: FilaDeMuestra[]): FilaDeMuestra[] {
 
 /** Lo que se dibuja donde el backend no publica cifra. */
 const SIN_DATO = '—';
+
+/**
+ * Una superficie, con separador de miles y SIN pasar por `Number`.
+ *
+ * Llega como texto decimal exacto de un `numeric(_,2)` —«180.50», «10422.90»—
+ * y sale como «180.50» y «10,422.90». Se agrupa sobre la CADENA: convertir a
+ * `Number` para volver a formatear es como se pierde un decimal (RNF-055), y
+ * `toLocaleString` sobre `10422.9` ya no sabe que el dato tenia dos.
+ *
+ * <h2>Esto se le pone a un area y a nada mas</h2>
+ *
+ * El separador de miles no es decoracion: le cambia el texto a lo que no es una
+ * cantidad. En este modulo el ejemplo esta en la columna de al lado —el codigo
+ * de referencia catastral, `20010401001001000000000`, 23 digitos que
+ * identifican un predio y con los que se le busca en ventanilla—, y por eso
+ * esta funcion se llama por su dato y no «formatear numero»: se aplica a las
+ * tres areas, y el codigo va en la columna 0, que es texto y no pasa por aqui.
+ *
+ * La guarda de dentro cubre lo otro: sale verbatim todo lo que no sea un
+ * decimal sin signo y **sin ceros a la izquierda** —que es exactamente lo que
+ * `BigDecimal.toPlainString()` produce de un area no negativa—. Asi «180.50 m2»
+ * sale con su unidad si el backend volviera a mandarla, y un `00001182` no se
+ * convierte en «00 001 182», que es lo que un agrupador sin esa guarda ya hizo
+ * una vez.
+ *
+ * El separador es la coma y el decimal el punto, que es lo que
+ * `toLocaleString('es-PE')` usa en el resto de la interfaz.
+ */
+function areaEnMetros(valor: string | null): string {
+  if (valor === null) return SIN_DATO;
+  if (!/^(0|[1-9]\d*)(\.\d+)?$/.test(valor)) return valor;
+  const punto = valor.indexOf('.');
+  const entero = punto === -1 ? valor : valor.slice(0, punto);
+  const decimales = punto === -1 ? '' : valor.slice(punto);
+  return entero.replace(/\B(?=(\d{3})+$)/g, ',') + decimales;
+}
 
 /** Cuantas filas se piden por pagina. */
 const TAMANO_DE_PAGINA = 20;

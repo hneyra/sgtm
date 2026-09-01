@@ -51,6 +51,30 @@ export type FilaDeOmisos = {
   /** `OMISO` | `SUBVALUADOR`. */
   condicion: string;
   declaroFueraDePlazo: boolean;
+  /**
+   * Las tres superficies, en METROS CUADRADOS y **sin la unidad dentro** (#546).
+   *
+   * Viajan tipadas como `AreaM2` y las escribe el serializador que
+   * `ConfiguracionDeJson` registra: `"180.50"`, no `"180.50 m2"`. Hasta #546
+   * eran `String` compuestos con `toString()` en la web, asi que salian con la
+   * unidad pegada aqui y en la muestra y sin ella en la liquidacion y en la
+   * resolucion —cuatro proyecciones del mismo modulo con dos formas del mismo
+   * dato—. Ahora la unidad la pone la CABECERA de la columna; metida dentro
+   * obliga a cada consumidor a recortarla antes de poder comparar.
+   *
+   * Siguen siendo texto y no `number`: son decimales exactos de `numeric(_,2)`
+   * y pasarlos por `Number` para volver a formatearlos es como se pierde un
+   * decimal (RNF-055). Se agrupan los miles sobre la cadena, sin convertirla.
+   *
+   * `diferenciaDeArea` nunca es negativa: `ComparacionHalladoDeclarado` devuelve
+   * `AreaM2.CERO` cuando lo hallado no supera lo declarado, y `AreaM2` rechaza
+   * en su constructor un valor negativo.
+   *
+   * **Esto vale para fiscalizacion y todavia no para el resto**: catastro y
+   * rentas siguen componiendo la suya con `toString()`, asi que el MISMO predio
+   * de Catacaos —`20010500000026010101001`— sale «360.00» aqui y «360.00 m2» en
+   * `GET /catastro/fichas`. Medido, y abierto en #607.
+   */
   areaCatastral: string | null;
   areaDeclarada: string | null;
   diferenciaDeArea: string | null;
@@ -69,6 +93,37 @@ export type FiltroDeOmisos = {
   /** La fecha a la que se resuelve, que es la de la regla 9. */
   fechaDeConsulta?: string;
 };
+
+/**
+ * El UNICO campo por el que la deteccion se deja ordenar, y esta medido.
+ *
+ * `ordenarPor` viaja en `Paginacion`, asi que el endpoint lo acepta desde
+ * siempre; lo que #546 arreglo es que el nombre publico —el que el recurso
+ * dibuja— y el nombre interno del repositorio eran distintos, de modo que
+ * pedir la columna que se ve en pantalla daba 422. Medido contra el backend de
+ * hoy, en las dos municipalidades:
+ *
+ * ```
+ * ordenarPor=codRefCatastral     → 200   (el que el recurso publica)
+ * ordenarPor=codigoRefCatastral  → 422   (el nombre interno, y hace bien)
+ * ordenarPor=sector | titular | condicion | areaCatastral | areaDeclarada
+ *            | diferenciaDeArea | impuestoOmitidoS | valorCatastralS
+ *            | codigoDelTitular | declaroFueraDePlazo | predio | codigo → 422
+ * ```
+ *
+ * Por eso la pantalla ofrece ordenar por UNA columna y no por siete: un
+ * encabezado que se pulsa y contesta «orden no admitido» es peor que uno que
+ * no se pulsa. Los tres campos que el manual propone en su «Ordenar por»
+ * —impuesto omitido, diferencia de valor, sector— siguen sin admitirse, y por
+ * eso ese desplegable sigue sin dibujarse.
+ *
+ * De los diez rechazados, dos no piden ningun dato nuevo —`sector`, que la
+ * consulta ya filtra, y `diferenciaDeArea`, que es lo unico cuantificado que
+ * hoy distingue a un subvaluador—: abierto en #608. Cuando lleguen, esto pasa a
+ * ser una lista y la pantalla ofrece una cabecera por cada uno, computada de
+ * aqui y no escrita a mano tres veces.
+ */
+export const ORDEN_DE_OMISOS = 'codRefCatastral';
 
 export function listarOmisos(
   filtro: FiltroDeOmisos,
@@ -120,8 +175,9 @@ export function listarProgramas(
 /**
  * `MuestraResource`: los predios sorteados de un programa.
  *
- * Las tres areas llegan con la unidad dentro —`AreaM2.toString()` es
- * `toPlainString() + " m2"`—, igual que en omisos. Se dibujan tal cual.
+ * Las tres areas llegan **sin** la unidad dentro, igual que en omisos y por lo
+ * mismo (#546): viajan como `AreaM2` y el serializador escribe `"180.50"`. La
+ * unidad la pone la cabecera de la columna.
  */
 export type FilaDeMuestra = {
   programaId: number;
@@ -142,6 +198,21 @@ export type FilaDeMuestra = {
   fechaSorteo: string;
 };
 
+/**
+ * La muestra de un programa. **Un programa que no existe contesta 404** (#546).
+ *
+ * Antes devolvia 200 con la lista vacia, que es exactamente lo mismo que
+ * contesta un programa recien registrado y todavia sin sortear: la pantalla no
+ * podia distinguir «este programa no ha sorteado su muestra» de «ese programa
+ * no existe», y decia la primera de las dos en los dos casos. Ahora la lista
+ * vacia solo significa una cosa, y por eso el aviso de la pantalla puede
+ * afirmarlo.
+ *
+ * ```
+ * GET /fiscalizacion/programas/999999/muestra → 404 NO_ENCONTRADO
+ *     «No existe el programa de fiscalizacion 999999»
+ * ```
+ */
 export function listarMuestra(
   programaId: number,
   paginacion: Paginacion,
@@ -164,6 +235,13 @@ export type LineaDeLiquidacion = {
   predioId: number | null;
   vehiculoId: number | null;
   condicion: string;
+  /**
+   * En metros cuadrados y sin la unidad dentro, como en omisos y en la muestra.
+   * Estas tres ya salian asi antes de #546 —eran `AreaM2` tipadas—: lo que #546
+   * arreglo es que las otras dos proyecciones dijeran lo mismo. La pantalla
+   * todavia no dibuja el detalle de una liquidacion; cuando lo haga, la unidad
+   * va en la cabecera.
+   */
   areaDeclarada: string | null;
   areaHallada: string | null;
   diferenciaDeArea: string | null;
@@ -203,7 +281,25 @@ export function listarResultados(
   return solicitar('/fiscalizacion/resultados', { parametros: { ...filtro, ...paginacion }, senal });
 }
 
-/** `VersionResource`: una version del proceso con lo que cambio respecto de la anterior. */
+/**
+ * `VersionResource`: una version del proceso con lo que cambio respecto de la anterior.
+ *
+ * <h2>Aqui la superficie SI llega con su unidad dentro, y es la excepcion (#546)</h2>
+ *
+ * `antes` y `despues` son **una sola columna de texto libre** para conceptos que
+ * no son de la misma especie: `DiferenciaEntreLiquidaciones` los compone con
+ * `Object.toString()`, asi que en esa celda caben `"OMISO"`, `"CASA HABITACION"`,
+ * `"2020"`, `"120.00"` —un importe— y `"180.50 m2"` —un area—. Ahi la unidad
+ * **distingue**: sin ella, «120.00 → 164.50» no dice si cambio el area hallada o
+ * el insoluto omitido, y la cabecera no puede ponerla porque no hay una cabecera
+ * por concepto, hay una linea por cambio con el concepto delante.
+ *
+ * Es lo contrario de las grillas de omisos y de la muestra, donde cada columna
+ * tiene una sola especie y la cabecera puede decirlo una vez. Las dos decisiones
+ * son la misma regla —la unidad se dice donde deja de haber ambiguedad— aplicada
+ * a dos formas distintas, no una incoherencia. No se recorta el « m2» de estas
+ * cadenas: recortarlo aqui es lo que dejaria la celda muda.
+ */
 export type VersionDeLiquidacion = {
   version: LiquidacionDeFiscalizacion;
   cambios: { concepto: string; antes: string | null; despues: string | null }[];
