@@ -95,7 +95,9 @@ public class FraccionamientoCoactivoTesoreria implements FraccionamientoCoactivo
             SolicitudDeConvenioCoactivo solicitud, Observacion observacion) {
         Convenio guardado;
         try {
-            guardado = preconvenios.registrar(peticionDe(solicitud), observacion);
+            // Sin clave de idempotencia: este puerto lo llama coactiva desde su propio caso
+            // de uso, no un cliente HTTP que pueda reenviar el mismo intento (#606).
+            guardado = preconvenios.registrar(peticionDe(solicitud), null, observacion);
         } catch (RegistrarPreconvenio.SinDeudaQueFraccionar sinDeuda) {
             throw new SinDeudaCoactivaQueFraccionar(mensajeDe(sinDeuda), sinDeuda);
         } catch (CondicionesParametrizadas.CondicionSinParametrizar

@@ -30,6 +30,7 @@ import org.springframework.jdbc.core.simple.JdbcClient;
 import org.springframework.jdbc.datasource.DriverManagerDataSource;
 import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.test.web.servlet.MvcResult;
+import org.springframework.test.web.servlet.request.MockHttpServletRequestBuilder;
 import org.springframework.test.web.servlet.setup.MockMvcBuilders;
 import org.springframework.transaction.annotation.AnnotationTransactionAttributeSource;
 import org.springframework.transaction.interceptor.TransactionInterceptor;
@@ -115,6 +116,13 @@ import tools.jackson.databind.json.JsonMapper;
  * LEVEL SECURITY}, asi que una prueba escrita sobre el no leeria las politicas que aqui deciden que
  * conjunto se ve.
  */
+/*
+ * #606 — Y el reenvio del mismo intento, tambien de HTTP a PostgreSQL.
+ *
+ * <p>Se prueba aqui y no con dobles porque lo que hay que demostrar es que la garantia esta en la
+ * BASE: `convenio_idempotencia_uq` (V69). Con un doble, la unicidad la reproduciria el propio doble
+ * y la prueba diria que el doble funciona.
+ */
 @DisplayName("#547 — Fraccionamientos: el 422 que nombra la llave, de HTTP a PostgreSQL")
 class ConveniosFronteraTest {
 
@@ -138,9 +146,13 @@ class ConveniosFronteraTest {
 
     private static final String CODIGO = "C-547-01";
 
+    /** El segundo sujeto: sirve para medir que una clave vieja no devuelva el convenio ajeno. */
+    private static final String OTRO_CODIGO = "C-606-02";
+
     private static BaseDeDatosDePrueba base;
     private static long municipalidad;
     private static long contribuyenteId;
+    private static long otroContribuyenteId;
     private static JdbcClient jdbc;
     private static TenantTransactionManager gestor;
     private static TransactionTemplate transaccion;
@@ -202,8 +214,10 @@ class ConveniosFronteraTest {
         ConsultaDeConvenios consulta =
                 envolver(new ConsultaDeConvenios(convenios, movimientos, RELOJ));
 
-        contribuyenteId = crearContribuyente(CODIGO);
+        contribuyenteId = crearContribuyente(CODIGO, "40547001");
         asentarCargo(contribuyenteId);
+        otroContribuyenteId = crearContribuyente(OTRO_CODIGO, "40606002");
+        asentarCargo(otroContribuyenteId);
         sembrarLosConjuntos();
 
         // El padron es de otro contexto y resolver el codigo a su identificador no es lo que esta
@@ -220,7 +234,13 @@ class ConveniosFronteraTest {
                                                                 contribuyenteId,
                                                                 CODIGO,
                                                                 "TITULAR, PRUEBA",
-                                                                "DNI 40547001")),
+                                                                "DNI 40547001"))
+                                                .con(
+                                                        new ResumenDeContribuyente(
+                                                                otroContribuyenteId,
+                                                                OTRO_CODIGO,
+                                                                "OTRO TITULAR, PRUEBA",
+                                                                "DNI 40606002")),
                                         RELOJ))
                         .addInterceptors(new GuardiaDeAcceso(new TodoAutorizado(), RELOJ))
                         .setControllerAdvice(new ManejadorDeErrores())
@@ -413,6 +433,108 @@ class ConveniosFronteraTest {
                 .isEmpty();
     }
 
+    // ---------------------------------------------------------------- #606: el reenvio
+
+    @Test
+    @DisplayName("#606 — el reenvio del mismo intento devuelve el convenio de la primera vez")
+    void elReenvioDevuelveElConvenioDeLaPrimeraVez() throws Exception {
+        String clave = "606-mismo-intento";
+
+        MvcResult primera = fraccionar(COMPLETO, false, clave, CODIGO);
+        MvcResult segunda = fraccionar(COMPLETO, false, clave, CODIGO);
+
+        assertThat(primera.getResponse().getStatus()).isEqualTo(201);
+        assertThat(segunda.getResponse().getStatus())
+                .as(
+                        "el reenvio es un exito, no un conflicto: quien atiende no sabe si el"
+                                + " primer envio escribio, y por eso repite")
+                .isEqualTo(201);
+        assertThat(numeroDe(segunda))
+                .as("y el numero es el MISMO: dos papeles distintos del mismo acuerdo, no")
+                .isEqualTo(numeroDe(primera));
+    }
+
+    @Test
+    @DisplayName("#606 — y no abre un segundo convenio sobre la misma deuda")
+    void elReenvioNoAbreUnSegundoConvenio() throws Exception {
+        String clave = "606-una-sola-fila";
+
+        fraccionar(COMPLETO, false, clave, CODIGO);
+        fraccionar(COMPLETO, false, clave, CODIGO);
+
+        assertThat(conveniosConLaClave(clave))
+                .as("`convenio_idempotencia_uq` (V69): una fila, no dos")
+                .isEqualTo(1);
+    }
+
+    @Test
+    @DisplayName("#606 — sin la cabecera, dos envios siguen siendo dos convenios (el contraste)")
+    void sinLaCabeceraSonDosConvenios() throws Exception {
+        long antes = conveniosDe(contribuyenteId);
+
+        MvcResult primera = fraccionar(COMPLETO, false);
+        MvcResult segunda = fraccionar(COMPLETO, false);
+
+        assertThat(numeroDe(segunda))
+                .as(
+                        "sin clave no hay reenvio que reconocer: es el defecto que #606 describe, y"
+                                + " lo unico que lo distingue del arreglo es la cabecera")
+                .isNotEqualTo(numeroDe(primera));
+        assertThat(conveniosDe(contribuyenteId) - antes).isEqualTo(2);
+    }
+
+    @Test
+    @DisplayName("#606 — dos claves distintas son dos intentos distintos, y dos convenios")
+    void dosClavesDistintasSonDosConvenios() throws Exception {
+        long antes = conveniosDe(contribuyenteId);
+
+        MvcResult primera = fraccionar(COMPLETO, false, "606-intento-a", CODIGO);
+        MvcResult segunda = fraccionar(COMPLETO, false, "606-intento-b", CODIGO);
+
+        assertThat(numeroDe(segunda)).isNotEqualTo(numeroDe(primera));
+        assertThat(conveniosDe(contribuyenteId) - antes)
+                .as("la idempotencia es por intento, no «un convenio por contribuyente»")
+                .isEqualTo(2);
+    }
+
+    @Test
+    @DisplayName(
+            "#606 — una clave vieja reusada para otro contribuyente es 409, no el convenio ajeno")
+    void laClaveDeOtroSujetoNoDevuelveSuConvenio() throws Exception {
+        String clave = "606-clave-reusada";
+        MvcResult primera = fraccionar(COMPLETO, false, clave, CODIGO);
+        assertThat(primera.getResponse().getStatus()).isEqualTo(201);
+
+        MvcResult ajena = fraccionar(COMPLETO, false, clave, OTRO_CODIGO);
+
+        assertThat(ajena.getResponse().getStatus())
+                .as(
+                        "devolver el de la primera vez imprimiria en ventanilla el acuerdo de otra"
+                                + " persona")
+                .isEqualTo(409);
+        assertThat(ajena.getResponse().getContentAsString()).contains("CONFLICTO");
+        assertThat(conveniosDe(otroContribuyenteId))
+                .as("y no se le abre ninguno: el intento se rechaza entero")
+                .isZero();
+    }
+
+    @Test
+    @DisplayName("#606 — la simulacion no consume la clave: no escribe nada que devolver")
+    void laSimulacionNoConsumeLaClave() throws Exception {
+        String clave = "606-simular-y-luego-registrar";
+
+        MvcResult simulada = fraccionar(COMPLETO, true, clave, CODIGO);
+        MvcResult registrada = fraccionar(COMPLETO, false, clave, CODIGO);
+
+        assertThat(simulada.getResponse().getStatus()).isEqualTo(200);
+        assertThat(registrada.getResponse().getStatus())
+                .as(
+                        "es lo que hace la pantalla: imprimir la simulacion y despues aceptar. Si"
+                                + " la simulacion gastara la clave, aceptar no registraria nada")
+                .isEqualTo(201);
+        assertThat(conveniosConLaClave(clave)).isEqualTo(1);
+    }
+
     // ---------------------------------------------------------------- el contraste
 
     @Test
@@ -434,21 +556,65 @@ class ConveniosFronteraTest {
 
     private static MvcResult fraccionar(int ejercicioDelConvenio, boolean simular)
             throws Exception {
-        return mvc.perform(
-                        post("/api/v1/tesoreria/fraccionamientos")
-                                .contentType(MediaType.APPLICATION_JSON)
-                                .content(
-                                        """
-                                        {"codContribuyente":"%s","fecha":"%d-03-16",
-                                         "nroDeCuotas":6,"cuotaInicial":"20","simular":%s,
-                                         "observacion":"Fraccionamiento pedido en ventanilla",
-                                         "obligaciones":[{"tributo":"PREDIAL","ejercicio":2026}]}
-                                        """
-                                                .formatted(
-                                                        CODIGO,
-                                                        ejercicioDelConvenio,
-                                                        Boolean.toString(simular))))
-                .andReturn();
+        return fraccionar(ejercicioDelConvenio, simular, null, CODIGO);
+    }
+
+    private static MvcResult fraccionar(
+            int ejercicioDelConvenio, boolean simular, @Nullable String clave, String codigo)
+            throws Exception {
+        MockHttpServletRequestBuilder peticion =
+                post("/api/v1/tesoreria/fraccionamientos")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(
+                                """
+                                {"codContribuyente":"%s","fecha":"%d-03-16",
+                                 "nroDeCuotas":6,"cuotaInicial":"20","simular":%s,
+                                 "observacion":"Fraccionamiento pedido en ventanilla",
+                                 "obligaciones":[{"tributo":"PREDIAL","ejercicio":2026}]}
+                                """
+                                        .formatted(
+                                                codigo,
+                                                ejercicioDelConvenio,
+                                                Boolean.toString(simular)));
+        if (clave != null) {
+            peticion = peticion.header("Idempotency-Key", clave);
+        }
+        return mvc.perform(peticion).andReturn();
+    }
+
+    /** El numero impreso que trae la respuesta, tal cual sale del JSON. */
+    private static String numeroDe(MvcResult respuesta) throws Exception {
+        String cuerpo = respuesta.getResponse().getContentAsString();
+        int desde = cuerpo.indexOf("\"numero\":\"") + 10;
+        return cuerpo.substring(desde, cuerpo.indexOf('"', desde));
+    }
+
+    /** Cuantas filas de `convenio` llevan esa clave. Se lee como `sgtm_app`, con su RLS. */
+    private static long conveniosConLaClave(String clave) {
+        return enTransaccion(
+                () ->
+                        jdbc.sql("SELECT count(*) FROM convenio WHERE clave_idempotencia = :clave")
+                                .param("clave", clave)
+                                .query(Long.class)
+                                .single());
+    }
+
+    private static long conveniosDe(long contribuyente) {
+        return enTransaccion(
+                () ->
+                        jdbc.sql("SELECT count(*) FROM convenio WHERE contribuyente_id = :c")
+                                .param("c", contribuyente)
+                                .query(Long.class)
+                                .single());
+    }
+
+    private static <T> T enTransaccion(java.util.function.Supplier<T> accion) {
+        TenantContext.fijar(new MunicipalidadId(municipalidad));
+        return transaccion.execute(
+                estado -> {
+                    TenantContext.fijar(new MunicipalidadId(municipalidad));
+                    return accion.get();
+                });
     }
 
     /**
@@ -571,7 +737,7 @@ class ConveniosFronteraTest {
         }
     }
 
-    private static long crearContribuyente(String codigo) throws SQLException {
+    private static long crearContribuyente(String codigo, String documento) throws SQLException {
         try (Connection owner = base.conexion(BaseDeDatosDePrueba.OWNER)) {
             ContextoDeTenant.fijar(owner, municipalidad);
             try (PreparedStatement sentencia =
@@ -579,10 +745,11 @@ class ConveniosFronteraTest {
                             "INSERT INTO contribuyente (municipalidad_id, codigo_contribuyente,"
                                     + " tipo_documento, numero_documento, tipo_persona,"
                                     + " nombre_razon_social, usuario_registro)"
-                                    + " VALUES (?, ?, 'DNI', '40547001', 'NATURAL', 'TITULAR, PRUEBA',"
+                                    + " VALUES (?, ?, 'DNI', ?, 'NATURAL', 'TITULAR, PRUEBA',"
                                     + " 'siembra') RETURNING id")) {
                 sentencia.setLong(1, municipalidad);
                 sentencia.setString(2, codigo);
+                sentencia.setString(3, documento);
                 try (ResultSet resultado = sentencia.executeQuery()) {
                     resultado.next();
                     long id = resultado.getLong(1);
@@ -646,11 +813,16 @@ class ConveniosFronteraTest {
         }
 
         @Override
-        public Convenio registrar(Convenio convenio) {
+        public Convenio registrar(Convenio convenio, @Nullable String claveDeIdempotencia) {
             if (revienta) {
                 throw new IllegalStateException("un defecto de verdad, con su rastro");
             }
-            return real.registrar(convenio);
+            return real.registrar(convenio, claveDeIdempotencia);
+        }
+
+        @Override
+        public Optional<Convenio> porClaveDeIdempotencia(String clave) {
+            return real.porClaveDeIdempotencia(clave);
         }
 
         @Override

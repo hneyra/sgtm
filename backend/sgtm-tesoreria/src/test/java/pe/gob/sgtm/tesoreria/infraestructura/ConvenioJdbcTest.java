@@ -621,6 +621,7 @@ class ConvenioJdbcTest {
                                     null,
                                     null,
                                     peticionDe(titular, 12, "0")),
+                            null,
                             Observacion.de("Se reformula el convenio a doce cuotas"));
 
             assertThat(estadoDe(original)).isEqualTo(EstadoDeConvenio.REFORMULADO);
@@ -822,6 +823,223 @@ class ConvenioJdbcTest {
     }
 
     @Nested
+    @DisplayName("#606 — Reenviar el mismo intento no abre un segundo convenio")
+    class DeLaIdempotencia {
+
+        @Test
+        @DisplayName("el alta reenviada con la misma clave devuelve el convenio de la primera vez")
+        void elAltaReenviadaDevuelveElMismo() {
+            long titular = contribuyenteConDeuda("IDEM-1");
+
+            Convenio primero = registrarPreconvenio(titular, 6, "20", "idem-alta-1");
+            Convenio segundo = registrarPreconvenio(titular, 6, "20", "idem-alta-1");
+
+            assertThat(segundo.numero())
+                    .as("dos preconvenios sobre la misma deuda son dos papeles que se contradicen")
+                    .isEqualTo(primero.numero());
+            assertThat(segundo.idGuardado()).isEqualTo(primero.idGuardado());
+            assertThat(conveniosDe(titular)).isEqualTo(1);
+        }
+
+        @Test
+        @DisplayName("sin clave, dos altas son dos convenios: es el defecto que #606 describe")
+        void sinClaveSonDos() {
+            long titular = contribuyenteConDeuda("IDEM-2");
+
+            Convenio primero = registrarPreconvenio(titular, 6, "20");
+            Convenio segundo = registrarPreconvenio(titular, 6, "20");
+
+            assertThat(segundo.numero()).isNotEqualTo(primero.numero());
+            assertThat(conveniosDe(titular)).isEqualTo(2);
+        }
+
+        @Test
+        @DisplayName("dos filas con la misma clave no caben: lo dice convenio_idempotencia_uq")
+        void dosFilasConLaMismaClaveNoCaben() {
+            long titular = contribuyenteConDeuda("IDEM-3");
+            registrarPreconvenio(titular, 6, "20", "idem-fila-unica");
+
+            assertThat(
+                            sqlStateAlIntentar(
+                                    () -> insertarConvenioDirecto(titular, "idem-fila-unica")))
+                    .as("la garantia es el indice, no el SELECT previo del caso de uso")
+                    .isEqualTo(VIOLACION_DE_UNICIDAD);
+            assertThat(conveniosDe(titular)).isEqualTo(1);
+        }
+
+        @Test
+        @DisplayName("con DIEZ hilos insertando la misma clave, solo una fila entra")
+        @SuppressWarnings("checkstyle:IllegalCatch")
+        void diezAltasSimultaneasConLaMismaClaveProducenUna() throws Exception {
+            long titular = contribuyenteConDeuda("IDEM-4");
+
+            // Se insertan filas que SOLO comparten la clave: el correlativo de
+            // `convenio_correlativo` es un UPSERT que serializa a los diez hilos, asi que
+            // medirlo con el caso de uso entero pasaria en verde con el indice degradado.
+            // Es la leccion de #44 (`siguienteCorrelativo`) y de #52 (`documento_numero_uq`).
+            int hilos = 10;
+            CountDownLatch salida = new CountDownLatch(1);
+            List<Callable<Boolean>> tareas = new ArrayList<>();
+            for (int i = 0; i < hilos; i++) {
+                int cual = i;
+                tareas.add(
+                        () -> {
+                            TenantContext.fijar(new MunicipalidadId(municipalidad));
+                            OrigenContext.fijar(new Origen("cajero." + cual, null, null));
+                            salida.await(10, TimeUnit.SECONDS);
+                            try {
+                                insertarConvenioDirectoEnSuTransaccion(
+                                        titular, "idem-carrera", "F-2026-90000" + cual);
+                                return true;
+                            } catch (RuntimeException rechazada) {
+                                return false;
+                            }
+                        });
+            }
+
+            ExecutorService ejecutor = Executors.newFixedThreadPool(hilos);
+            int entradas = 0;
+            try {
+                List<Future<Boolean>> futuros = new ArrayList<>();
+                for (Callable<Boolean> tarea : tareas) {
+                    futuros.add(ejecutor.submit(tarea));
+                }
+                salida.countDown();
+                for (Future<Boolean> futuro : futuros) {
+                    if (Boolean.TRUE.equals(futuro.get(60, TimeUnit.SECONDS))) {
+                        entradas++;
+                    }
+                }
+            } finally {
+                ejecutor.shutdownNow();
+            }
+
+            assertThat(entradas).as("convenio_idempotencia_uq: una sola gana").isEqualTo(1);
+            assertThat(conveniosDe(titular)).isEqualTo(1);
+        }
+
+        @Test
+        @DisplayName("una clave que registro el convenio de otro contribuyente se rechaza")
+        void laClaveDeOtroSujetoSeRechaza() {
+            long titular = contribuyenteConDeuda("IDEM-5");
+            long otro = contribuyenteConDeuda("IDEM-6");
+            registrarPreconvenio(titular, 6, "20", "idem-de-otro");
+
+            assertThatThrownBy(() -> registrarPreconvenio(otro, 6, "20", "idem-de-otro"))
+                    .isInstanceOf(RegistrarPreconvenio.ClaveDeOtraPeticion.class)
+                    .hasMessageContaining("es de otro contribuyente");
+            assertThat(conveniosDe(otro))
+                    .as("y no se le abre ninguno: devolver el ajeno seria peor que fallar")
+                    .isZero();
+        }
+
+        @Test
+        @DisplayName("el cierre reenviado devuelve el acta de la primera vez, no un 409")
+        void elCierreReenviadoDevuelveElActa() {
+            long titular = contribuyenteConDeuda("IDEM-7");
+            Convenio convenio = registrarPreconvenio(titular, 6, "20");
+            cobrarLaInicial(titular, convenio);
+
+            CerrarConvenio.Cerrado primero =
+                    cerrarCon(
+                            convenio,
+                            TipoDeMovimientoDeConvenio.QUIEBRE,
+                            "INCUMPLIMIENTO",
+                            "idem-cierre-1");
+            CerrarConvenio.Cerrado segundo =
+                    cerrarCon(
+                            convenio,
+                            TipoDeMovimientoDeConvenio.QUIEBRE,
+                            "INCUMPLIMIENTO",
+                            "idem-cierre-1");
+
+            assertThat(segundo.cierre().id())
+                    .as("el mismo acta: sin la clave, el reenvio se estrellaba con un 409")
+                    .isEqualTo(primero.cierre().id());
+            assertThat(cierresDe(convenio)).isEqualTo(1);
+            assertThat(deudaDe(titular, "PREDIAL"))
+                    .as("y sobre todo: la deuda NO vuelve dos veces a su fase de origen")
+                    .isEqualTo(PREDIAL);
+            assertThat(segundo.devuelto())
+                    .as(
+                            "lo devuelto esta congelado en el acta; recomponer las cuotas exigiria"
+                                    + " releer el libro a otra fecha (regla 9)")
+                    .isNull();
+        }
+
+        @Test
+        @DisplayName("una clave que cerro otro convenio se rechaza en vez de mentir")
+        void laClaveDeOtroCierreSeRechaza() {
+            long unTitular = contribuyenteConDeuda("IDEM-8");
+            Convenio uno = registrarPreconvenio(unTitular, 6, "20");
+            cobrarLaInicial(unTitular, uno);
+            cerrarCon(uno, TipoDeMovimientoDeConvenio.QUIEBRE, "INCUMPLIMIENTO", "idem-cierre-2");
+
+            long otroTitular = contribuyenteConDeuda("IDEM-9");
+            Convenio otro = registrarPreconvenio(otroTitular, 6, "20");
+            cobrarLaInicial(otroTitular, otro);
+
+            assertThatThrownBy(
+                            () ->
+                                    cerrarCon(
+                                            otro,
+                                            TipoDeMovimientoDeConvenio.QUIEBRE,
+                                            "INCUMPLIMIENTO",
+                                            "idem-cierre-2"))
+                    .isInstanceOf(CerrarConvenio.ClaveDeOtroActo.class);
+            assertThat(cierresDe(otro))
+                    .as("decir que se cerro un convenio que sigue vivo es peor que fallar")
+                    .isZero();
+        }
+
+        @Test
+        @DisplayName("dos actas con la misma clave no caben: convenio_movimiento_idempotencia_uq")
+        void dosActasConLaMismaClaveNoCaben() {
+            long unTitular = contribuyenteConDeuda("IDEM-10");
+            Convenio uno = registrarPreconvenio(unTitular, 6, "20");
+            cobrarLaInicial(unTitular, uno);
+            cerrarCon(uno, TipoDeMovimientoDeConvenio.QUIEBRE, "INCUMPLIMIENTO", "idem-acta-unica");
+
+            // Sobre OTRO convenio, para que lo unico que pueda chocar sea la clave:
+            // `convenio_movimiento_cierre_uq` es por convenio y aqui no aplica.
+            long otroTitular = contribuyenteConDeuda("IDEM-11");
+            Convenio otro = registrarPreconvenio(otroTitular, 6, "20");
+
+            assertThat(
+                            sqlStateAlIntentar(
+                                    () ->
+                                            insertarCierreDirecto(
+                                                    otro.idGuardado(), "idem-acta-unica")))
+                    .isEqualTo(VIOLACION_DE_UNICIDAD);
+        }
+
+        @Test
+        @DisplayName("la reformulacion reenviada no abre un segundo preconvenio")
+        void laReformulacionReenviadaNoAbreOtroPreconvenio() {
+            long titular = contribuyenteConDeuda("IDEM-12");
+            Convenio original = registrarPreconvenio(titular, 6, "20");
+            cobrarLaInicial(titular, original);
+
+            CerrarConvenio.Cerrado primera = reformular(titular, original, "idem-reformula");
+            CerrarConvenio.Cerrado segunda = reformular(titular, original, "idem-reformula");
+
+            assertThat(conveniosDe(titular))
+                    .as("el original y su reformulado, no tres: el reenvio no abre otro")
+                    .isEqualTo(2);
+            Convenio nuevo = segunda.reformulado();
+            assertThat(nuevo).isNotNull();
+            Convenio primeroNuevo = primera.reformulado();
+            assertThat(primeroNuevo).isNotNull();
+            assertThat(nuevo.numero())
+                    .as("y el reenvio devuelve el mismo preconvenio, no otro numero")
+                    .isEqualTo(primeroNuevo.numero());
+            assertThat(claveDelConvenio(nuevo.idGuardado()))
+                    .as("la clave la reclama el acta de cierre; el preconvenio nace sin ella")
+                    .isNull();
+        }
+    }
+
+    @Nested
     @DisplayName("La consulta")
     class DeLaConsulta {
 
@@ -929,8 +1147,14 @@ class ConvenioJdbcTest {
     private static final String VIOLACION_DE_UNICIDAD = "23505";
 
     private static Convenio registrarPreconvenio(long titular, int cuotas, String inicial) {
+        return registrarPreconvenio(titular, cuotas, inicial, null);
+    }
+
+    private static Convenio registrarPreconvenio(
+            long titular, int cuotas, String inicial, @Nullable String clave) {
         return preconvenios.registrar(
                 peticionDe(titular, cuotas, inicial),
+                clave,
                 Observacion.de("Acogimiento a fraccionamiento, prueba de #35"));
     }
 
@@ -977,6 +1201,14 @@ class ConvenioJdbcTest {
 
     private static CerrarConvenio.Cerrado cerrarCon(
             Convenio convenio, TipoDeMovimientoDeConvenio tipo, String motivo) {
+        return cerrarCon(convenio, tipo, motivo, null);
+    }
+
+    private static CerrarConvenio.Cerrado cerrarCon(
+            Convenio convenio,
+            TipoDeMovimientoDeConvenio tipo,
+            String motivo,
+            @Nullable String clave) {
         return cerrar.cerrar(
                 new CerrarConvenio.Cierre(
                         convenio.numero(),
@@ -986,6 +1218,7 @@ class ConvenioJdbcTest {
                         "RESPONSABLE DE TESORERIA",
                         "MEMO-2026-035",
                         null),
+                clave,
                 Observacion.de("Se cierra el convenio, prueba de #35"));
     }
 
@@ -1218,6 +1451,91 @@ class ConvenioJdbcTest {
                                 .param("d", documentoOrigen)
                                 .query(Long.class)
                                 .single());
+    }
+
+    private static CerrarConvenio.Cerrado reformular(
+            long titular, Convenio original, @Nullable String clave) {
+        return cerrar.cerrar(
+                new CerrarConvenio.Cierre(
+                        original.numero(),
+                        TipoDeMovimientoDeConvenio.REFORMULACION,
+                        HOY,
+                        "REFORMULADO A PEDIDO DEL CONTRIBUYENTE",
+                        null,
+                        null,
+                        peticionDe(titular, 12, "0")),
+                clave,
+                Observacion.de("Se reformula el convenio, prueba de #606"));
+    }
+
+    private static long conveniosDe(long contribuyenteId) {
+        return contar("convenio", "contribuyente_id", contribuyenteId, null);
+    }
+
+    private static @Nullable String claveDelConvenio(long convenioId) {
+        return enTransaccion(
+                () ->
+                        jdbc.sql("SELECT clave_idempotencia FROM convenio WHERE id = :id")
+                                .param("id", convenioId)
+                                .query(String.class)
+                                .optional()
+                                .orElse(null));
+    }
+
+    /**
+     * Una fila de `convenio` escrita por SQL directo, saltandose el caso de uso.
+     *
+     * <p>Es la unica forma de medir el indice unico de la clave: por el caso de uso, quien
+     * serializa a los hilos es el UPSERT del correlativo, no el indice (#44, #52).
+     */
+    private static void insertarConvenioDirecto(long titular, String clave) {
+        insertarConvenioDirecto(titular, clave, "F-2026-99999");
+    }
+
+    /** Como la anterior, pero abriendo la transaccion: es lo que hace cada hilo de la carrera. */
+    private static void insertarConvenioDirectoEnSuTransaccion(
+            long titular, String clave, String numero) {
+        enTransaccion(
+                () -> {
+                    insertarConvenioDirecto(titular, clave, numero);
+                    return null;
+                });
+    }
+
+    private static void insertarConvenioDirecto(long titular, String clave, String numero) {
+        jdbc.sql(
+                        "INSERT INTO convenio (municipalidad_id, numero,"
+                                + " contribuyente_id, tipo, fecha, fecha_corte,"
+                                + " conjunto_id, interes_mensual, porcentaje_inicial,"
+                                + " maximo_cuotas, monto_total, cuota_inicial,"
+                                + " numero_cuotas, usuario_registro, observacion,"
+                                + " fecha_registro, clave_idempotencia)"
+                                + " VALUES (:muni, :numero, :titular, 'ORDINARIO',"
+                                + " :fecha, :fecha, 1, 1, 20, 12, 100, 20, 6,"
+                                + " 'prueba', 'insercion directa de la prueba', now(),"
+                                + " :clave)")
+                .param("muni", municipalidad)
+                .param("numero", numero)
+                .param("titular", titular)
+                .param("fecha", HOY)
+                .param("clave", clave)
+                .update();
+    }
+
+    private static void insertarCierreDirecto(long convenioId, String clave) {
+        jdbc.sql(
+                        "INSERT INTO convenio_movimiento (municipalidad_id,"
+                                + " convenio_id, tipo, fecha, motivo, importe,"
+                                + " usuario_registro, fecha_registro, observacion,"
+                                + " clave_idempotencia)"
+                                + " VALUES (:muni, :c, 'QUIEBRE', :fecha, 'MOTIVO',"
+                                + " 1, 'prueba', now(),"
+                                + " 'insercion directa de la prueba', :clave)")
+                .param("muni", municipalidad)
+                .param("c", convenioId)
+                .param("fecha", HOY)
+                .param("clave", clave)
+                .update();
     }
 
     private static long cuotasDe(long convenioId) {

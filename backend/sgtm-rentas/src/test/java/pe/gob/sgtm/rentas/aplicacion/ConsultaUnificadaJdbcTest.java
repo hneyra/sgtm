@@ -710,7 +710,7 @@ class ConsultaUnificadaJdbcTest {
                                     RELOJ.instant(),
                                     null,
                                     Observacion.de("Se registra el preconvenio de la prueba"));
-                    return convenios.registrar(convenio);
+                    return convenios.registrar(convenio, null);
                 });
     }
 
