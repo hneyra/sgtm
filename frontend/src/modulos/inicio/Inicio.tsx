@@ -1,14 +1,15 @@
 import { useMemo, useState } from 'react';
 import { Icono } from '../../ds/Icono';
 import { ICONOS, ICO } from '../../ds/iconos';
-import { Insignia, tonoDe, type Tono } from '../../ds/componentes';
+import { Aviso, Esqueleto, Insignia, tonoDe, type Tono } from '../../ds/componentes';
 import { MODULOS, moduloDe } from '../../shell/modulos';
 import { personaDeLaSesion } from '../../shell/persona';
 import { hayPuerta, salir } from '../../api/sesion';
 import { EJERCICIOS, soles, usarPreferencias } from '../../shell/preferencias';
-import { AVANCE, DEUDA, PAGOS, PARADO, UNIDADES } from '../../datos/inicio';
+import { DEUDA, PAGOS, PARADO, UNIDADES } from '../../datos/inicio';
 import { indicadores } from '../../api/rentas';
 import { useRecurso } from '../../api/useRecurso';
+import { FalloDeLectura } from '../../api/Fallo';
 
 /**
  * Inicio no es un módulo: es la respuesta a «a quién atiendes». Trae su propio
@@ -46,24 +47,16 @@ export default function Inicio() {
     };
   }, []);
 
-  const rec = useMemo(() => {
-    let emitido = 0,
-      recaudado = 0;
-    AVANCE.forEach((a) => {
-      emitido += a[1];
-      recaudado += a[2];
-    });
-    return { emitido, recaudado, pct: (recaudado / emitido) * 100 };
-  }, []);
-
-  const paradoTotal = PARADO.reduce((a, p) => a + p[5], 0);
-
   /* ── El panel de recaudacion, contra `GET /indicadores/recaudacion` ──
      Es la unica lectura de indicadores del sistema (ARQ-01 §3.13). Sus cuatro
      KPI y sus dos paneles vienen ya compuestos, con su fecha: aqui no se suma
      nada (RNF-083). */
   const panel = useRecurso((s2) => indicadores(pref.ejercicio, s2), [pref.ejercicio], esMuni);
   const porTributo = panel.datos?.paneles.find((x) => /tributo/i.test(x.title));
+  /* La tarjeta del panel lateral dice lo mismo que el cuarto KPI. Se busca por
+     rotulo y no por posicion: el orden de `kpis` no es contrato, y tomar el
+     [3] pondria en «Recaudado hoy» la cifra de otra cosa el dia que cambie. */
+  const kpiDelDia = panel.datos?.kpis.find((k) => /hoy/i.test(k.label)) ?? null;
 
   /* La sesión de verdad es la del personal. La del contribuyente NO se sustituye:
      el ciudadano entra por otro realm —`sgtm-ciudadano`, con su propio emisor
@@ -177,8 +170,18 @@ export default function Inicio() {
                 <p style={{ margin: '0 0 6px', fontSize: 10, fontWeight: 500, textTransform: 'uppercase', letterSpacing: '.11em', color: 'var(--ink-3)' }}>
                   Recaudado hoy
                 </p>
-                <p style={{ margin: 0, fontFamily: 'var(--font-mono)', fontSize: 21, color: 'var(--ink)' }}>{soles(27693.3)}</p>
-                <p style={{ margin: '4px 0 0', fontSize: 11.5, color: 'var(--ink-3)' }}>148 recibos · caja C-3 abierta</p>
+                {/* Lo cobrado HOY, del panel de recaudacion. Antes decia
+                    «S/ 27,693.30 · 148 recibos · caja C-3 abierta», tres cifras
+                    de la maqueta, y el KPI real de la misma pantalla decia
+                    «S/ 0.00»: las dos a la vista y nada que las separara. */}
+                <p style={{ margin: 0, fontFamily: 'var(--font-mono)', fontSize: 21, color: 'var(--ink)' }}>
+                  {panel.cargando ? <Esqueleto alto={21} ancho={110} /> : (kpiDelDia?.value ?? '—')}
+                </p>
+                <p style={{ margin: '4px 0 0', fontSize: 11.5, color: 'var(--ink-3)' }}>
+                  {panel.cargando
+                    ? 'Leyendo la caja…'
+                    : (kpiDelDia?.note ?? 'No se pudo leer lo cobrado hoy.')}
+                </p>
               </div>
             </div>
             <div style={{ padding: '10px 8px', display: 'flex', flexDirection: 'column', gap: 1 }}>
@@ -486,28 +489,39 @@ export default function Inicio() {
                 trabajo parado. Nada que no lleve a una pantalla concreta.
               </p>
 
+              {/* El panel NO tiene respaldo de maqueta.
+                  Lo tuvo, y era lo peor de esta pantalla: sin sesion, con la red
+                  cortada y durante la carga salian «S/ 18.42 M», «77.7 %» y
+                  «62,418 contribuyentes» —cifras de la maqueta, tres ordenes de
+                  magnitud por encima de las reales— sin un solo aviso. Es la
+                  pantalla de aterrizaje: un gerente lee el avance y se lo cree. */}
+              {panel.error !== null && (
+                <FalloDeLectura
+                  error={panel.error}
+                  que="el panel de recaudación"
+                  acceso="panel_recaudacion"
+                  alReintentar={panel.reintentar}
+                />
+              )}
+
               <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit,minmax(200px,1fr))', gap: 13 }}>
                 {(panel.datos
                   ? panel.datos.kpis.map((k) => ({ valor: k.value, etiqueta: k.label, nota: k.note }))
-                  : [
-                  { valor: `S/ ${(rec.recaudado / 1000000).toFixed(2)} M`, etiqueta: 'Recaudado del ejercicio', nota: `De ${soles(rec.emitido)} emitidos.` },
-                  { valor: `${rec.pct.toFixed(1)} %`, etiqueta: 'Avance de la recaudación', nota: `Faltan ${soles(rec.emitido - rec.recaudado)} por cobrar.` },
-                  { valor: '62,418', etiqueta: 'Contribuyentes en el padrón', nota: '18,412 predios y 8,844 vehículos afectos.' },
-                  /* Forma compacta como en el primer indicador: el importe completo a
-                     27 px parte en dos líneas justo después de «S/». La cifra exacta
-                     va en la nota. */
-                  { valor: `S/ ${(paradoTotal / 1000000).toFixed(2)} M`, etiqueta: 'Parado por falta de un acto', nota: `${soles(paradoTotal)} en notificaciones, RECs y determinaciones sin emitir.` },
-                    ]
+                  : [0, 1, 2, 3].map((i) => ({ valor: null, etiqueta: `k${i}`, nota: null }))
                 ).map((k) => (
                   <div
                     key={k.etiqueta}
                     style={{ background: 'var(--bg-card)', border: '1px solid var(--line)', borderRadius: 10, boxShadow: 'var(--shadow-1)', padding: '17px 18px' }}
                   >
                     <p style={{ margin: 0, fontFamily: 'var(--font-mono)', fontSize: 27, fontWeight: 500, letterSpacing: '-.015em', color: 'var(--accent-ink)' }}>
-                      {k.valor}
+                      {k.valor ?? (panel.cargando ? <Esqueleto alto={27} ancho={132} /> : '—')}
                     </p>
-                    <p style={{ margin: '6px 0 0', fontSize: 12, color: 'var(--ink-3)' }}>{k.etiqueta}</p>
-                    <p style={{ margin: '8px 0 0', fontSize: 11.5, color: 'var(--ink-4)', textWrap: 'pretty' }}>{k.nota}</p>
+                    <p style={{ margin: '6px 0 0', fontSize: 12, color: 'var(--ink-3)' }}>
+                      {k.valor === null ? (panel.cargando ? <Esqueleto alto={12} ancho={104} /> : 'Sin leer') : k.etiqueta}
+                    </p>
+                    <p style={{ margin: '8px 0 0', fontSize: 11.5, color: 'var(--ink-4)', textWrap: 'pretty' }}>
+                      {k.nota ?? (panel.cargando ? <Esqueleto alto={11} ancho="80%" /> : '')}
+                    </p>
                   </div>
                 ))}
               </div>
@@ -521,22 +535,13 @@ export default function Inicio() {
                     {panel.datos ? `al ${panel.datos.fechaCalculo}` : 'al 13/08'}
                   </span>
                 </div>
-                {(porTributo
-                  ? porTributo.rows.map((r) => ({
-                      etiqueta: r.label,
-                      pct: r.pct,
-                      conocido: r.avanceConocido,
-                      valor: r.value,
-                      sub: r.sub,
-                    }))
-                  : AVANCE.map((a) => ({
-                      etiqueta: a[0],
-                      pct: (a[2] / a[1]) * 100,
-                      conocido: true,
-                      valor: soles(a[2]),
-                      sub: soles(a[1] - a[2]),
-                    }))
-                ).map((a) => {
+                {(porTributo?.rows ?? []).map((r) => ({
+                  etiqueta: r.label,
+                  pct: r.pct,
+                  conocido: r.avanceConocido,
+                  valor: r.value,
+                  sub: r.sub,
+                })).map((a) => {
                   const color = !a.conocido ? 'var(--ink-4)' : a.pct < 50 ? 'var(--bad-fg)' : a.pct < 80 ? 'var(--warn-fg)' : 'var(--ok-fg)';
                   const relleno = a.pct < 50 ? 'var(--bad-fg)' : a.pct < 80 ? 'var(--warn-fg)' : 'var(--accent)';
                   return (
@@ -559,40 +564,37 @@ export default function Inicio() {
                     </div>
                   );
                 })}
-                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit,minmax(196px,1fr))', gap: 0, background: 'var(--bg-card)', borderTop: '1px solid var(--line)' }}>
-                  {(
-                    [
-                      ['Emitido', soles(rec.emitido), false],
-                      ['Recaudado', soles(rec.recaudado), false],
-                      ['Saldo por cobrar', soles(rec.emitido - rec.recaudado), false],
-                      ['Avance', `${rec.pct.toFixed(1)} %`, true],
-                    ] as const
-                  ).map((t) => (
-                    <div
-                      key={t[0]}
-                      style={{
-                        background: t[2] ? 'var(--accent-soft)' : 'var(--bg-card)',
-                        padding: '14px 16px',
-                        borderLeft: '1px solid var(--line)',
-                        borderTop: '1px solid var(--line)',
-                        margin: '-1px 0 0 -1px',
-                      }}
-                    >
-                      <p style={{ margin: '0 0 4px', fontSize: 10.5, textTransform: 'uppercase', letterSpacing: '.1em', color: 'var(--ink-3)' }}>{t[0]}</p>
-                      <p style={{ margin: 0, fontFamily: 'var(--font-mono)', fontSize: 16, whiteSpace: 'nowrap', color: 'var(--ink)' }}>{t[1]}</p>
-                    </div>
-                  ))}
-                </div>
+                {porTributo === undefined && !panel.cargando && panel.error === null && (
+                  <p style={{ margin: 0, padding: '22px 16px', fontSize: 12.5, color: 'var(--ink-3)' }}>
+                    El panel no trae ninguna línea por tributo para {pref.ejercicio}.
+                  </p>
+                )}
+                {panel.cargando && (
+                  <div style={{ padding: '14px 16px', display: 'flex', flexDirection: 'column', gap: 10 }}>
+                    <Esqueleto alto={10} />
+                    <Esqueleto alto={10} />
+                    <Esqueleto alto={10} />
+                  </div>
+                )}
+                {/* Aqui habia una franja de totales —EMITIDO / RECAUDADO / SALDO /
+                    AVANCE— sumada sobre la maqueta: decia «S/ 23,725,394.80 ·
+                    S/ 18,424,251.20 · 77.7 %» encima de tres filas reales que
+                    suman S/ 13,783.75, y contradecirlas por tres ordenes de
+                    magnitud es peor que no decir nada. No se recompone aqui:
+                    una cifra de dinero no se compone en la pantalla (RNF-083), y
+                    del total del ejercicio el panel publica lo recaudado, la
+                    cartera y el avance —los tres KPI de arriba— pero NO lo
+                    emitido, que solo aparece dentro del texto de una nota. */}
                 <p style={{ margin: 0, padding: '11px 16px', borderTop: '1px solid var(--line)', background: 'var(--bg-elev)', fontSize: 12, lineHeight: 1.5, color: 'var(--ink-3)', textWrap: 'pretty' }}>
-                  Multas y papeletas al {((1588412 / 4118200) * 100).toFixed(1)} % no es un problema de caja: es lo que Tránsito no llegó a
-                  notificar.
+                  {porTributo?.note ??
+                    'Lo recaudado, la cartera pendiente y el avance del ejercicio están arriba, tal como los publica el panel.'}
                 </p>
               </section>
 
               <section style={{ background: 'var(--bg-card)', border: '1px solid var(--line)', borderRadius: 10, boxShadow: 'var(--shadow-1)', overflow: 'hidden' }}>
                 <div style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '13px 16px', borderBottom: '1px solid var(--line)' }}>
-                  <h2 style={{ margin: 0, flex: 1, fontFamily: 'var(--font-serif)', fontSize: 16, fontWeight: 600 }}>Trabajo parado, por módulo</h2>
-                  <span style={{ fontFamily: 'var(--font-mono)', fontSize: 11, color: 'var(--ink-3)' }}>{PARADO.length} frentes</span>
+                  <h2 style={{ margin: 0, flex: 1, fontFamily: 'var(--font-serif)', fontSize: 16, fontWeight: 600 }}>Dónde se para el trabajo</h2>
+                  <span style={{ fontFamily: 'var(--font-mono)', fontSize: 11, color: 'var(--ink-3)' }}>{PARADO.length} módulos</span>
                 </div>
                 {PARADO.map((p) => (
                   <button
@@ -612,24 +614,24 @@ export default function Inicio() {
                       cursor: 'pointer',
                     }}
                   >
-                    <Insignia tono={p[1]}>{p[0]}</Insignia>
+                    {/* La insignia va NEUTRA y sin cifra al lado. Con «1,842
+                        papeletas · S/ 788,976.00» en rojo, la fila afirmaba una
+                        medida —cuanto hay parado y cuanto cuesta— que nadie
+                        habia contado: las seis cifras y los seis tonos eran de
+                        la maqueta. Lo que sobrevive es lo unico cierto: que ahi
+                        es donde el trabajo se atasca, y por donde se entra. */}
+                    <Insignia tono="neutro">{p[0]}</Insignia>
                     <span style={{ flex: 1, minWidth: 0 }}>
-                      <span style={{ display: 'block', fontSize: 13.5, fontWeight: 500 }}>{p[2]}</span>
-                      <span style={{ display: 'block', fontSize: 12, color: 'var(--ink-3)', marginTop: 2, textWrap: 'pretty' }}>{p[3]}</span>
+                      <span style={{ display: 'block', fontSize: 13.5, fontWeight: 500 }}>{p[3]}</span>
                     </span>
-                    <span style={{ textAlign: 'right', flex: '0 0 auto' }}>
-                      <span style={{ display: 'block', fontFamily: 'var(--font-mono)', fontSize: 14, color: 'var(--ink)' }}>
-                        {p[4].toLocaleString('es-PE')}
-                      </span>
-                      <span style={{ display: 'block', fontFamily: 'var(--font-mono)', fontSize: 11, color: 'var(--ink-4)', marginTop: 2 }}>
-                        {p[5] > 0 ? soles(p[5]) : 'sin cifrar'}
-                      </span>
-                    </span>
+                    <span style={{ fontFamily: 'var(--font-mono)', fontSize: 11.5, color: 'var(--ink-4)', flex: '0 0 auto' }}>—</span>
                     <Icono d={ICO.flechaDer} tam={14} grosor={1.8} style={{ color: 'var(--ink-4)', flex: '0 0 auto' }} />
                   </button>
                 ))}
                 <p style={{ margin: 0, padding: '11px 16px', background: 'var(--bg-elev)', fontSize: 12, lineHeight: 1.5, color: 'var(--ink-3)', textWrap: 'pretty' }}>
-                  Cada fila es dinero que no entra por una razón que se puede arreglar hoy. Suman {soles(paradoTotal)}.
+                  Cada fila es un frente donde el trabajo se queda parado y el dinero no entra. <strong>Cuánto hay parado en
+                  cada uno, y cuánto vale, todavía no se puede decir</strong>: el panel de recaudación no publica ese recuento y
+                  componerlo aquí sería inventarlo (#549). Entra al módulo para verlo.
                 </p>
               </section>
             </div>
@@ -638,6 +640,16 @@ export default function Inicio() {
           {/* ══════════ PANEL DEL CONTRIBUYENTE ══════════ */}
           {!esMuni && (
             <div style={{ maxWidth: 880, margin: '0 auto', display: 'flex', flexDirection: 'column', gap: 16 }}>
+              {/* Esta cara es UNA MUESTRA, y hasta hoy nada lo decia.
+                  El ciudadano no entra por aqui: tiene realm propio
+                  —`sgtm-ciudadano`, otro emisor y su propia sesion (ADR-0020)—
+                  y su situacion sale de `GET /portal/situacion`, sin teclear
+                  ningun documento. Lo que se ve debajo son cifras de la maqueta,
+                  y sin este aviso se leen como la deuda de alguien. */}
+              <Aviso tono="warn" titulo="Esto es una muestra de la cara del contribuyente">
+                Las cifras de abajo son del prototipo, no de nadie. El contribuyente entra por el portal, con su propia
+                sesión y sin teclear su documento.
+              </Aviso>
               <section style={{ background: 'var(--accent)', borderRadius: 12, padding: '26px 26px 24px', color: '#fff' }}>
                 <p style={{ margin: '0 0 9px', fontSize: 10, fontWeight: 500, textTransform: 'uppercase', letterSpacing: '.14em', opacity: 0.72 }}>
                   Su cuenta al {fechaHoy}
