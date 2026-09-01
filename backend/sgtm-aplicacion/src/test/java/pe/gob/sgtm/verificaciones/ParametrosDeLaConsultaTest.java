@@ -232,7 +232,16 @@ class ParametrosDeLaConsultaTest {
                     // con controlador, y sus cuatro parametros son exactamente los cuatro que el
                     // contrato declara. Una operacion que estrena controlador es el unico momento
                     // en que esta promesa no cuesta nada.
-                    "GET /catastro/predios/plano");
+                    "GET /catastro/predios/plano",
+                    // #576 — las dos determinaciones de Rentas que declaraban filtros que
+                    // ningun controlador leia. `predial_individual` declaraba los tres de la
+                    // DECLARACION JURADA que motiva el calculo y `espectaculos` los cuatro de
+                    // una busqueda que no existe; los siete se retiran con SUPRIMIDOS y las dos
+                    // operaciones se comprometen aqui, que es lo que hace que devolver
+                    // cualquiera de ellos al contrato ponga la prueba en rojo NOMBRANDOLO. Sin
+                    // esto, la comprobacion no distingue «lo lee» de «no hay nada que leer».
+                    "POST /rentas/predial/calculo-individual",
+                    "POST /rentas/espectaculos");
 
     /**
      * Cuantas operaciones arrastran hoy cada mitad del desajuste. Medido, no estimado (#544).
@@ -252,6 +261,12 @@ class ParametrosDeLaConsultaTest {
      * se quedaba con una holgura de una operacion, y devolver al contrato los tres parametros del
      * cruce registral la dejaba en VERDE. La cifra sale de correr la prueba con el techo en 0 y
      * leer el «but was» que imprime.
+     *
+     * <p><b>#576 baja las tres</b>: {@code predial_individual} y {@code espectaculos} dejan de
+     * declarar filtros que nadie lee —los siete se retiran con {@code SUPRIMIDOS}— y las dos entran
+     * ademas en {@link #LOS_DOS_DICEN_LO_MISMO}, que es lo que impide que vuelvan. Las tres cifras
+     * se midieron poniendo el techo a 0 y leyendo el «but was», nunca restando a mano: entre medias
+     * se mezclaron otros issues y la resta habria dado otro numero.
      *
      * <p>#546 baja las dos. {@code POST /fiscalizacion/vehicular} declaraba los tres filtros del
      * cruce registral —{@code placa}, {@code ejercicio}, {@code origenDelCruce}— y ese cruce no
@@ -274,7 +289,7 @@ class ParametrosDeLaConsultaTest {
      * las malas —su techo se puso contando y quedo en 62 donde la medida era 61, y con esa holgura
      * de una sola operacion la mutacion que este criterio existe para cazar no mordia—.
      */
-    private static final int OPERACIONES_CON_FILTRO_QUE_NADIE_LEE = 60;
+    private static final int OPERACIONES_CON_FILTRO_QUE_NADIE_LEE = 57;
 
     private static final int OPERACIONES_QUE_LEEN_UN_FILTRO_SIN_PUBLICAR = 18;
 
@@ -289,7 +304,7 @@ class ParametrosDeLaConsultaTest {
      * malas, con un techo de 62 donde la medida era 61 y una holgura de una operacion en la que la
      * mutacion no mordia.
      */
-    private static final int PARAMETROS_CON_FILTRO_QUE_NADIE_LEE = 218;
+    private static final int PARAMETROS_CON_FILTRO_QUE_NADIE_LEE = 205;
 
     private static final int PARAMETROS_QUE_SE_LEEN_SIN_PUBLICAR = 38;
 
@@ -307,7 +322,7 @@ class ParametrosDeLaConsultaTest {
      * leerse— o retirandolo del contrato en {@code generar-openapi.mjs} (SUPRIMIDOS). Lo que no
      * puede es subir: un filtro nuevo que nadie lee nace roto.
      */
-    private static final int PARAMETROS_QUE_EL_BORDE_RECHAZA = 146;
+    private static final int PARAMETROS_QUE_EL_BORDE_RECHAZA = 133;
 
     /** Una ruta del contrato: {@code "/ruta":} con dos espacios de sangria. */
     private static final Pattern RUTA_DEL_CONTRATO = Pattern.compile("  \"(/[^\"]*)\":");
