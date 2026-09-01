@@ -2,11 +2,12 @@ import { useEffect, useMemo, useState, type CSSProperties, type ReactNode } from
 import { Shell, type EntradaDePaleta } from '../../shell/Shell';
 import type { PantallaProps } from '../../App';
 import { Icono } from '../../ds/Icono';
-import { Insignia, type Tono } from '../../ds/componentes';
+import { Aviso, Insignia, type Tono } from '../../ds/componentes';
 import { usarPreferencias } from '../../shell/preferencias';
 import { ErrorDeApi, fijarToken } from '../../api/cliente';
 import { cuentaActual, hayPuerta } from '../../api/sesion';
 import { useRebote, useRecurso } from '../../api/useRecurso';
+import { ejercicioParametrizado } from '../../api/seguridad';
 import { Descargas } from '../../api/descarga';
 import {
   descargarDuplicadoDeRecibo,
@@ -264,6 +265,45 @@ export default function Tesoreria({ dest, onDest }: PantallaProps) {
   const [cajero, setCajero] = useState(cuentaActual() ?? '');
   const hoy = useMemo(() => new Date().toISOString().slice(0, 10), []);
 
+  /* ── El ejercicio que decide con qué conjunto sellado se fracciona ──────
+     `CondicionesParametrizadas.aLaFechaDe` resuelve `Ejercicio.de(fechaDelConvenio)`,
+     y `fechaDelConvenio` es `peticion.fecha()`; cuando ese campo no viaja, el
+     servidor lo resuelve con `LocalDate.now(reloj)`. Esta pantalla NO manda
+     `fecha` —`cuerpoDelFraccionamiento` no la incluye—, así que el ejercicio lo
+     pone el reloj del SERVIDOR el día del envío.
+
+     Y se queda así a propósito (#605, AC 4). Mandar `fecha` haría que el aviso y
+     el acto no pudieran discrepar nunca, que es tentador, pero le entrega al
+     navegador tres cosas que hoy no decide: la fecha del acto —que es un hecho
+     legal y la estampa el servidor—, el conjunto sellado que pone el interés que
+     el contribuyente firma, y **la deuda misma**, porque `fechaDeCorte` cae por
+     omisión en `fecha` (medido: con `fecha: 2025-06-15` el 422 pasa a decir
+     «Ninguna de las obligaciones marcadas tenía deuda al 2025-06-15»). Un reloj
+     mal puesto convertiría un rótulo equivocado en un convenio equivocado, que es
+     el cambio malo. Y no es hipotético: en este ambiente el servidor selló la
+     deuda con `actualizadoA: 2026-09-01` el día en que aquí era 2026-09-02.
+
+     El precio de no mandarla es que este número es una CREENCIA de este
+     navegador, y el aviso de abajo lo dice con todas las letras en vez de
+     presentarlo como el del servidor. Si discrepan, lo que pasa es lo que pasaba
+     antes de #605 —el 422 del final, que nombra el ejercicio bueno—, nunca un
+     registro mal fechado. Quitar la creencia entera exigiría que el backend
+     publique su fecha; hoy no lo hace por ninguna ruta: `GET /seguridad/sesion`
+     publica `ejercicioDeTrabajo`, que es nulo hasta que alguien lo fija con su
+     propio acto (#559) y a propósito NO es el año del reloj.
+
+     Y NO es `fechaDeCorte`: ése es el día al que se relee la deuda que se acoge,
+     no el del acto. Colgar el aviso de él nombraría un ejercicio que no es el que
+     el servidor va a usar.
+
+     El año sale de `getFullYear()` y NO de `hoy`, que es la fecha en UTC: el
+     servidor resuelve con `LocalDate.now(reloj)`, o sea en SU zona, y en una
+     instalación peruana esa es la misma que la del navegador. Derivarlo de `hoy`
+     abriría cinco horas cada 31 de diciembre en las que los dos números
+     discreparían con seguridad, que es justo la ventana que este aviso existe
+     para no ensanchar. */
+  const ejercicioDelActo = useMemo(() => new Date().getFullYear(), []);
+
   /* El sujeto de la ventanilla: el código, y el nombre que se resuelve de él. */
   const [codContribuyente, setCodContribuyente] = useState('');
   const codigoReposado = useRebote(codContribuyente.trim().toUpperCase());
@@ -511,6 +551,27 @@ export default function Tesoreria({ dest, onDest }: PantallaProps) {
       ),
     [fRecContribuyente, fRecCaja, fRecCajero, fRecDesde, fRecHasta, fRecEstado, paginaRec],
     dest === 'recibos',
+  );
+
+  /**
+   * Si el ejercicio del acto tiene conjunto sellado, para poder decirlo ANTES
+   * de que se rellene el formulario (#605, AC 3).
+   *
+   * Hasta aquí, quien atiende tecleaba el contribuyente, marcaba las deudas,
+   * ponía cuotas, garantía y vencimiento —y para registrar, además la
+   * observación que la regla 10 obliga a redactar antes de habilitar el botón—
+   * para recibir al final un 422. Con D-02a abierta ese 422 es lo que contestan
+   * hoy todas las municipalidades, así que el formulario entero se rellenaba
+   * para nada.
+   *
+   * Se pide sólo en la hoja que calcula. «Convenios suscritos» no calcula nada:
+   * sus dos acciones son anular y quebrar, y ninguna lee el conjunto sellado
+   * —«Reformular», que sí lo leería, no se ofrece ahí—.
+   */
+  const conjuntoDelEjercicio = useRecurso(
+    (s) => ejercicioParametrizado(ejercicioDelActo, s),
+    [ejercicioDelActo],
+    dest === 'convenios' && hojaConv === 'fraccionar',
   );
 
   /** Cuántos convenios vigentes hay, para el panel. */
@@ -1587,6 +1648,77 @@ export default function Tesoreria({ dest, onDest }: PantallaProps) {
     ['Estado', 0],
   ];
 
+  /* La coletilla que los tres avisos comparten, y que es lo que los hace
+     honestos: el número que nombran es una creencia de ESTE navegador, no un
+     dato del servidor. Se dice una vez y se reutiliza para que no se pueda
+     reescribir en un sitio y quedarse vieja en los otros dos. */
+  const laCreencia = (
+    <span style={{ color: 'var(--ink-4)' }}>
+      El ejercicio sale del día en que se registre el convenio, y lo resuelve el servidor con su propio reloj: aquí se
+      ha preguntado por {ejercicioDelActo} porque es el año de este navegador. Si el acto acaba con otra fecha, manda
+      ésa.
+    </span>
+  );
+
+  /**
+   * Lo que se sabe del conjunto sellado antes de teclear nada (#605, AC 3 y AC 4).
+   *
+   * **Dice la primera mitad y no la segunda**, que es la instrucción entera de
+   * la lectura: contesta si HAY conjunto sellado, no si el cálculo va a salir.
+   * Medido contra este ambiente el mismo día: el ejercicio 2026 contesta
+   * `sellado: true` y la simulación de un fraccionamiento contesta igualmente
+   * 422 —«El conjunto sellado del ejercicio 2026 no tiene el parametro
+   * CUOTAS_MAXIMAS_FRACCIONAMIENTO:ORDINARIO»—. Un aviso que dijera «ya se puede
+   * fraccionar» sería falso hoy, en este ambiente, con este dato.
+   *
+   * **No apaga ningún botón.** El impedimento apaga lo que esta pantalla SABE
+   * —falta el contribuyente, no hay deuda marcada, las cuotas no son un entero—,
+   * y esto no lo sabe: el ejercicio que pregunta es el que este navegador cree
+   * que es hoy (ver `ejercicioDelActo`), y una creencia del cliente no puede
+   * vetar un acto que el servidor aceptaría. Si el aviso se equivoca, lo que
+   * pasa es lo de siempre —el 422 del final, que nombra el ejercicio bueno—; si
+   * apagara el botón, no pasaría nada y nadie sabría por qué.
+   *
+   * Que la comprobación falle tampoco se calla: callarlo se lee como que todo
+   * está en orden, que es justo lo que no se puede afirmar.
+   */
+  const avisoDelConjunto = () => {
+    const e = conjuntoDelEjercicio;
+    if (e.cargando) return null;
+    if (e.error !== null || e.datos === null)
+      return (
+        <Aviso tono="neutro" titulo={`No se pudo comprobar si el ejercicio ${ejercicioDelActo} está parametrizado`}>
+          {e.error ? tituloDelFallo(e.error, 'esa comprobación') + '. ' : ''}
+          Esta pantalla no dice ni que sí ni que no:{' '}
+          <code style={{ fontFamily: 'var(--font-mono)', fontSize: 11.5 }}>
+            GET /seguridad/parametros/ejercicios/{ejercicioDelActo}
+          </code>{' '}
+          no dejó saberlo —ni contestando, ni contestando otra cosa—. Se puede simular igual, y lo dirá el 422 del
+          final, como antes de #605.
+        </Aviso>
+      );
+    if (!e.datos.sellado)
+      return (
+        <Aviso tono="warn" titulo={`El ejercicio ${ejercicioDelActo} no tiene conjunto de parámetros sellado`}>
+          El interés de fraccionamiento, el máximo de cuotas y la política con la que se redondea cada cuota salen de
+          ese conjunto (regla 5), así que simular y registrar van a contestar 422 mientras siga sin sellarse. No se
+          sella desde aquí: se publica y se sella en Seguridad · Parámetros, y las cifras que faltan son de ordenanza
+          local (D-02a, D-02b). {laCreencia}
+        </Aviso>
+      );
+    return (
+      <Aviso tono="neutro" titulo={`El ejercicio ${ejercicioDelActo} tiene conjunto sellado nº ${e.datos.conjuntoId} v${e.datos.version}`}>
+        Es el juego de valores con el que se va a calcular este convenio, y el que quedará escrito en él.{' '}
+        <strong style={{ fontWeight: 600 }}>Eso es todo lo que dice.</strong> No dice que el cálculo vaya a salir: al
+        conjunto puede faltarle dentro alguna de las llaves que un convenio pide —
+        <code style={{ fontFamily: 'var(--font-mono)', fontSize: 11.5 }}>INTERES_FRACCIONAMIENTO:ORDINARIO</code>,{' '}
+        <code style={{ fontFamily: 'var(--font-mono)', fontSize: 11.5 }}>CUOTAS_MAXIMAS_FRACCIONAMIENTO:ORDINARIO</code>,{' '}
+        <code style={{ fontFamily: 'var(--font-mono)', fontSize: 11.5 }}>REDONDEO:CUOTA</code>— y eso sigue saliendo
+        como 422 al simular, nombrando la llave. {laCreencia}
+      </Aviso>
+    );
+  };
+
   const conveniosPantalla = () => (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
       <p style={ENTRADILLA}>
@@ -1610,6 +1742,10 @@ export default function Tesoreria({ dest, onDest }: PantallaProps) {
 
       {hojaConv === 'fraccionar' && (
         <>
+          {/* Delante del buscador, y no junto al botón: lo que #605 arregla es
+              que esto se sepa ANTES de teclear el contribuyente, marcar la deuda
+              y redactar la observación, no después de enviarlo todo. */}
+          {avisoDelConjunto()}
           {buscadorDeContribuyente('cuya deuda se va a fraccionar')}
           {tablaDeDeuda(marcadasFrac, setMarcadasFrac, 'Deuda que se puede acoger')}
 
@@ -3124,10 +3260,14 @@ function tituloDelFallo(error: ErrorDeApi | null, que: string): string {
  * —`INTERES_FRACCIONAMIENTO:ORDINARIO`— y el cuerpo del 422 no la publica.
  *
  * Desde #605 hay **una** ruta que sí lo dice —`GET
- * /seguridad/parametros/ejercicios/{ejercicio}`, sin permiso del catálogo—, así
- * que la pantalla ya puede avisar ANTES de que se rellene el formulario en vez
- * de clasificar el 422 del final. Esta pantalla todavía no la consume: eso es
- * el AC 3 de #605, y hasta entonces lo de abajo sigue siendo lo que hay.
+ * /seguridad/parametros/ejercicios/{ejercicio}`, sin permiso del catálogo— y la
+ * hoja «Fraccionar deuda» la consume: `avisoDelConjunto` lo avisa ANTES de que
+ * se rellene el formulario. Pero eso **no sustituye a lo de abajo**, y conviene
+ * tenerlo escrito: esa lectura adelanta sólo la primera mitad —si HAY conjunto
+ * sellado—, y el 422 por una llave que falta dentro del conjunto sellado sigue
+ * llegando igual, con el mismo `VALIDACION` de siempre. Medido: 2026 contesta
+ * `sellado: true` y la simulación contesta 422 nombrando
+ * `CUOTAS_MAXIMAS_FRACCIONAMIENTO:ORDINARIO`.
  *
  * Así que esta pantalla **no las adivina**. Adivinar sería leer el texto, y el
  * texto se reescribe en cuanto alguien lo lee en voz alta: una clasificación

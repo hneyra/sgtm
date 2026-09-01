@@ -520,3 +520,41 @@ export const listarConjuntosDeParametros = (p: Paginacion, s?: AbortSignal) =>
     parametros: { ...p },
     senal: s,
   });
+
+/**
+ * Si un ejercicio tiene conjunto de parametros SELLADO. Es
+ * `ParametrosController.EjercicioParametrizadoResource`.
+ *
+ * **Ninguna cifra, y ninguna promesa.** Lo que contesta es si HAY conjunto
+ * sellado, no si el calculo va a salir: sin conjunto seguro que no, pero con el
+ * puede faltar dentro alguna llave que la regla pida —`INTERES_FRACCIONAMIENTO:
+ * ORDINARIO`, `CUOTAS_MAXIMAS_FRACCIONAMIENTO:ORDINARIO`, `REDONDEO:CUOTA`— y
+ * eso sigue saliendo como 422 al calcular (#547, #562). Medido contra este
+ * ambiente: el ejercicio 2026 contesta `sellado: true` y la simulacion de un
+ * fraccionamiento contesta igualmente 422 nombrando
+ * `CUOTAS_MAXIMAS_FRACCIONAMIENTO:ORDINARIO`. Quien la use tiene que decir esa
+ * mitad y no la otra.
+ *
+ * `conjuntoId` y `version` son nulos cuando `sellado` es falso, y son la
+ * IDENTIDAD del juego de valores —lo mismo que `ConvenioResource
+ * .conjuntoDeParametros` publica cuando el convenio ya existe—, nunca sus
+ * cifras: esas siguen detras del permiso de `parametros` (REQ-03).
+ */
+export type EjercicioParametrizado = {
+  ejercicio: number;
+  sellado: boolean;
+  conjuntoId: number | null;
+  version: number | null;
+};
+
+/**
+ * Pregunta por UN ejercicio, con el numero en la ruta.
+ *
+ * No exige ninguna opcion del catalogo —el backend la sirve con el centinela
+ * `SESION_PROPIA` (#605)—, asi que la puede llamar quien fracciona sin tener
+ * que administrar los parametros del sistema. Fuera del rango 1990 a 2100 es un
+ * 422 nombrando el rango, que **no** es lo mismo que «ese ejercicio no esta
+ * sellado»: eso es un 200 diciendo que no.
+ */
+export const ejercicioParametrizado = (ejercicio: number, s?: AbortSignal) =>
+  solicitar<EjercicioParametrizado>(`/seguridad/parametros/ejercicios/${ejercicio}`, { senal: s });
