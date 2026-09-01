@@ -331,6 +331,19 @@ const sentidoDe = (tipo: string) => (tipo === 'CARGO' ? 'Alta' : tipo === 'ABONO
 
 type Sujeto = { codigo: string; nombre: string; documento: string };
 
+/**
+ * ¿Puede lo tecleado ser el número impreso de un recibo?
+ *
+ * La forma la fija el backend, no esta pantalla: `ReciboController.numeroDe`
+ * exige un guion que no sea el primer ni el último carácter y un correlativo
+ * que parsee como número, y su 422 lo dice con el ejemplo delante.
+ */
+function pareceNumeroDeRecibo(criterio: string): boolean {
+  const guion = criterio.lastIndexOf('-');
+  if (guion <= 0 || guion === criterio.length - 1) return false;
+  return /^\d+$/.test(criterio.slice(guion + 1));
+}
+
 /** Qué filtro del padrón le toca a lo que se tecleó. */
 function filtroDelCriterio(criterio: string): { clave: 'codigo' | 'dNI' | 'rUC' | 'nombreRazonSocial'; como: string } {
   if (/^\d{8}$/.test(criterio)) return { clave: 'dNI', como: 'DNI exacto' };
@@ -385,7 +398,14 @@ export default function Consultas({ dest, onDest }: PantallaProps) {
      obvio —tres letras y tres dígitos— deja fuera las que no lo son. */
   const vehiculos = useRecurso((s) => buscarVehiculos({ placa: criterio }, { tamano: 6 }, s), [criterio], buscando);
   const valores = useRecurso((s) => consultarValores({ nroDeValor: criterio }, { tamano: 6 }, s), [criterio], buscando);
-  const recibo = useRecurso((s) => verRecibo(criterio, s), [criterio], buscando);
+  /* El recibo SÍ se acota, y no es inventarse un patrón: es el que el propio
+     endpoint nombra al rechazar —«va como está impreso en el papel,
+     serie-correlativo: '001-0000123'»—, o sea un guion que no está al principio
+     ni al final y un correlativo que es un número. Sin esta guarda, teclear un
+     apellido pedía el recibo llamado «SULLON» y se llevaba un 422 por cada
+     pausa de tecleo. No hace daño —contesta 422, no 500, así que no escribe
+     incidencia— pero es una pregunta que ya se sabe mal hecha. */
+  const recibo = useRecurso((s) => verRecibo(criterio, s), [criterio], buscando && pareceNumeroDeRecibo(criterio));
 
   /* El titular no viene en la fila del predio, y es a propósito (ADR-0015
      §2.4): quien puede listar predios no puede cosechar predio→persona de toda
