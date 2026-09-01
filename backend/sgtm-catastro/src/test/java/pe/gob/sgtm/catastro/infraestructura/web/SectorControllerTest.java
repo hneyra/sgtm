@@ -38,6 +38,7 @@ import pe.gob.sgtm.catastro.dominio.CatastroRepository;
 import pe.gob.sgtm.catastro.dominio.FiltroDePredios;
 import pe.gob.sgtm.catastro.dominio.Inquilino;
 import pe.gob.sgtm.catastro.dominio.Manzana;
+import pe.gob.sgtm.catastro.dominio.ManzanaConConteos;
 import pe.gob.sgtm.catastro.dominio.Predio;
 import pe.gob.sgtm.catastro.dominio.PredioDelCatastro;
 import pe.gob.sgtm.catastro.dominio.Sector;
@@ -580,6 +581,70 @@ class SectorControllerTest {
         assertThat(asentado).isEmpty();
     }
 
+    // ── Listado de manzanas (#537) ─────────────────────────────────────
+
+    @Test
+    @DisplayName("las manzanas del sector salen paginadas, con sus conteos y su sector")
+    void elListadoDeManzanas() throws Exception {
+        MvcResult resultado =
+                mvc.perform(get("/api/v1/catastro/sectores/SC-1/manzanas")).andReturn();
+
+        assertThat(resultado.getResponse().getStatus()).isEqualTo(200);
+        String cuerpo = resultado.getResponse().getContentAsString();
+        assertThat(cuerpo)
+                .contains("\"codigo\":\"001\"")
+                .contains("\"sectorId\":1")
+                .contains("\"sectorCodigo\":\"SC-1\"")
+                .contains("\"predios\":11")
+                .contains("\"lotes\":9")
+                .contains("\"totalElementos\":3");
+        assertThat(cuerpo)
+                .as("una manzana no tiene estado: `manzana` no tiene columna que lo diga (V1)")
+                .doesNotContain("activa");
+        assertThat(cuerpo).as("ni una palabra del esquema").doesNotContain("municipalidad");
+    }
+
+    @Test
+    @DisplayName("el listado de manzanas pide su orden por omision y su pagina")
+    void elListadoDeManzanasPagina() throws Exception {
+        mvc.perform(get("/api/v1/catastro/sectores/SC-1/manzanas?pagina=1&tamano=2")).andReturn();
+
+        assertThat(repositorio.ultima).isNotNull();
+        assertThat(repositorio.ultima.ordenarPor())
+                .as("el codigo es el tramo del codigo catastral, y es unico dentro del sector")
+                .isEqualTo("codigo");
+        assertThat(repositorio.ultima.pagina()).isEqualTo(1);
+        assertThat(repositorio.ultima.tamano()).isEqualTo(2);
+    }
+
+    @Test
+    @DisplayName("un sector que existe y no tiene manzanas es 200 con cero filas")
+    void elSectorSinManzanasEs200() throws Exception {
+        MvcResult resultado =
+                mvc.perform(get("/api/v1/catastro/sectores/SC-2/manzanas")).andReturn();
+
+        assertThat(resultado.getResponse().getStatus()).isEqualTo(200);
+        assertThat(resultado.getResponse().getContentAsString())
+                .contains("\"totalElementos\":0")
+                .contains("\"contenido\":[]");
+    }
+
+    @Test
+    @DisplayName("las manzanas de un sector que no existe son 404, no una pagina vacia")
+    void lasManzanasDeUnSectorInexistenteSon404() throws Exception {
+        MvcResult resultado =
+                mvc.perform(get("/api/v1/catastro/sectores/SC-NADA/manzanas")).andReturn();
+
+        assertThat(resultado.getResponse().getStatus())
+                .as(
+                        "una pagina vacia diria «ese sector no tiene manzanas», que es lo contrario"
+                                + " de «ese codigo no esta en el catalogo»")
+                .isEqualTo(404);
+        assertThat(resultado.getResponse().getContentAsString())
+                .contains("\"codigo\":\"NO_ENCONTRADO\"")
+                .contains("SC-NADA");
+    }
+
     // ── Alta de manzana ────────────────────────────────────────────────
 
     @Test
@@ -742,11 +807,25 @@ class SectorControllerTest {
                                 new Sector(2L, "SC-2", "Sector Sur", "Zona B", true),
                                 new Sector(3L, "SC-BAJA", "Sector Cerrado", null, false)));
 
-        private final List<Manzana> manzanas = new ArrayList<>(List.of(new Manzana(1L, 1L, "001")));
+        /**
+         * Tres manzanas y las tres del sector 1, a proposito.
+         *
+         * <p>Los codigos son «001», «004» y «005» y no los tres primeros: el alta de «002» bajo
+         * SC-1 tiene que seguir entrando —es una prueba de mas abajo— y el alta de «001» bajo SC-2
+         * tambien, porque el codigo de manzana es unico <b>dentro de su sector</b>. El sector 2 se
+         * queda sin ninguna para poder pedir el listado de un sector que existe y no tiene
+         * manzanas, que es la respuesta que no puede confundirse con el 404.
+         */
+        private final List<Manzana> manzanas =
+                new ArrayList<>(
+                        List.of(
+                                new Manzana(1L, 1L, "001"),
+                                new Manzana(2L, 1L, "004"),
+                                new Manzana(3L, 1L, "005")));
 
         private Paginacion ultima;
         private long siguienteSector = 4L;
-        private long siguienteManzana = 2L;
+        private long siguienteManzana = 4L;
 
         /**
          * Lo que la base contaria para cada sector: manzanas, predios activos y lotes.
@@ -810,6 +889,41 @@ class SectorControllerTest {
         @Override
         public List<Manzana> manzanasDe(long sectorId) {
             return manzanas.stream().filter(m -> m.sectorId() == sectorId).toList();
+        }
+
+        /**
+         * Lo que la base contaria para cada manzana: predios activos y lotes.
+         *
+         * <p>Fijo, y por lo mismo que {@link #CONTEOS}: aqui se prueba el <b>transporte</b>. Que
+         * las cifras sean las correctas —y sobre todo que el predio dado de baja no entre— lo
+         * verifica {@code ManzanasDelSectorFronteraTest} contra PostgreSQL.
+         */
+        private static final Map<Long, long[]> CONTEOS_DE_MANZANA =
+                Map.of(1L, new long[] {11, 9}, 2L, new long[] {4, 4});
+
+        @Override
+        public Pagina<ManzanaConConteos> manzanas(Sector sector, Paginacion paginacion) {
+            this.ultima = paginacion;
+            OrdenSeguro.sobre("codigo", "id").clausula(paginacion);
+            List<ManzanaConConteos> todas =
+                    manzanas.stream()
+                            .filter(m -> sector.id() != null && m.sectorId() == sector.id())
+                            .sorted(java.util.Comparator.comparing(Manzana::codigo))
+                            .map(m -> contada(m, sector.codigo()))
+                            .toList();
+            List<ManzanaConConteos> pagina =
+                    todas.stream()
+                            .skip((long) paginacion.pagina() * paginacion.tamano())
+                            .limit(paginacion.tamano())
+                            .toList();
+            return Pagina.de(pagina, paginacion, todas.size());
+        }
+
+        private static ManzanaConConteos contada(Manzana manzana, String sectorCodigo) {
+            long[] conteos = manzana.id() == null ? null : CONTEOS_DE_MANZANA.get(manzana.id());
+            return conteos == null
+                    ? ManzanaConConteos.sinContar(manzana, sectorCodigo)
+                    : new ManzanaConConteos(manzana, sectorCodigo, conteos[0], conteos[1]);
         }
 
         @Override

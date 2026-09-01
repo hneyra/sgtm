@@ -18,6 +18,7 @@ import pe.gob.sgtm.catastro.dominio.EstadoPredio;
 import pe.gob.sgtm.catastro.dominio.FiltroDePredios;
 import pe.gob.sgtm.catastro.dominio.Inquilino;
 import pe.gob.sgtm.catastro.dominio.Manzana;
+import pe.gob.sgtm.catastro.dominio.ManzanaConConteos;
 import pe.gob.sgtm.catastro.dominio.Predio;
 import pe.gob.sgtm.catastro.dominio.PredioDelCatastro;
 import pe.gob.sgtm.catastro.dominio.Sector;
@@ -62,6 +63,18 @@ public class CatastroRepositoryJdbc extends RepositorioJdbc implements CatastroR
             OrdenSeguro.sobre("codigo", "nombre", "zona", "id");
 
     /**
+     * Por codigo o por identificador, y nada mas.
+     *
+     * <p>Los dos son <b>unicos dentro del sector</b> —{@code manzana_codigo_uq (municipalidad_id,
+     * sector_id, codigo)}—, asi que cualquiera de los dos ordena de forma total y dos paginas
+     * consecutivas no pueden repetir una fila ni saltarse otra. Los conteos no estan en la lista a
+     * proposito: {@code predios} y {@code lotes} no son columnas de {@code manzana} sino el
+     * resultado de contar <b>despues</b> del limite, asi que no hay por donde ordenar por ellos; y
+     * si los hubiera, ordenar por un numero que se repite dejaria el orden sin desempate.
+     */
+    private static final OrdenSeguro ORDEN_MANZANA = OrdenSeguro.sobre("codigo", "id");
+
+    /**
      * Los tres conteos de cada sector <b>de la pagina</b> (#290), en una sola consulta.
      *
      * <h2>Por que se cuenta aparte y no dentro del listado</h2>
@@ -104,6 +117,41 @@ public class CatastroRepositoryJdbc extends RepositorioJdbc implements CatastroR
                         WHERE p.sector_id = s.id
                           AND p.estado = :activo) pd ON true
              WHERE s.id IN (:sectores)
+            """;
+
+    /**
+     * Los dos conteos de cada manzana <b>de la pagina</b> (#537), en una sola consulta.
+     *
+     * <p>Se cuenta aparte y no dentro del listado por lo mismo que {@link #CONTEOS_DEL_SECTOR}: asi
+     * la agregacion entra <b>despues</b> del {@code LIMIT} y su trabajo lo acota el tamano de
+     * pagina y no el del padron.
+     *
+     * <p><b>El {@code sector_id} esta en el {@code WHERE} y no sobra.</b> Hace dos cosas: usa
+     * {@code predio_sector_ix (municipalidad_id, sector_id, manzana_id)} —sin el, {@code
+     * manzana_id} no tiene indice propio y esto seria un recorrido de {@code predio} por cada
+     * pagina—, y dice <b>que</b> se cuenta: los predios de este sector repartidos por manzana. Un
+     * predio que nombra la manzana y no nombra su sector no cuenta en ninguna, que es la misma
+     * regla que {@link SectorConConteos} ya aplica un escalon mas arriba.
+     *
+     * <p>Aqui es {@code GROUP BY} y no un {@code LATERAL} por sector: la entrada es una sola tabla
+     * acotada por dos columnas del mismo indice, y la manzana sin ningun predio simplemente no sale
+     * en el resultado —el mapeo de arriba la deja en cero, que en una manzana <b>de la pagina</b>
+     * es una cuenta hecha y no una cuenta que falta—.
+     *
+     * <p>{@code count(DISTINCT p.lote)} cuenta lotes y no pares: dentro de una manzana el lote ya
+     * identifica. El {@code FILTER} deja fuera al predio sin lote, que no es un lote vacio sino un
+     * predio del que todavia no se sabe en cual esta.
+     */
+    private static final String CONTEOS_DE_LA_MANZANA =
+            """
+            SELECT p.manzana_id,
+                   count(*) AS predios,
+                   count(DISTINCT p.lote) FILTER (WHERE p.lote IS NOT NULL) AS lotes
+              FROM predio p
+             WHERE p.sector_id = :sector
+               AND p.manzana_id IN (:manzanas)
+               AND p.estado = :activo
+             GROUP BY p.manzana_id
             """;
 
     /**
@@ -317,6 +365,63 @@ public class CatastroRepositoryJdbc extends RepositorioJdbc implements CatastroR
                 .param("sector", sectorId)
                 .query(CatastroRepositoryJdbc::mapearManzana)
                 .list();
+    }
+
+    @Override
+    public Pagina<ManzanaConConteos> manzanas(Sector sector, Paginacion paginacion) {
+        long sectorId =
+                Objects.requireNonNull(sector.id(), "Un sector existente tiene identificador");
+        Map<String, Object> parametros = Map.of("sector", sectorId);
+        Pagina<Manzana> pagina =
+                paginar(
+                        "SELECT " + COLUMNAS_MANZANA + " FROM manzana WHERE sector_id = :sector",
+                        "SELECT count(*) FROM manzana WHERE sector_id = :sector",
+                        parametros,
+                        paginacion,
+                        ORDEN_MANZANA,
+                        CatastroRepositoryJdbc::mapearManzana);
+
+        List<Long> ids =
+                pagina.contenido().stream().map(Manzana::id).filter(Objects::nonNull).toList();
+        if (ids.isEmpty()) {
+            return pagina.mapear(manzana -> ManzanaConConteos.sinContar(manzana, sector.codigo()));
+        }
+
+        Map<Long, ConteosDeManzana> conteos = conteosDeManzanas(sectorId, ids);
+        return pagina.mapear(
+                manzana -> {
+                    Long id = manzana.id();
+                    ConteosDeManzana suyos = id == null ? null : conteos.get(id);
+                    ConteosDeManzana ciertos = suyos == null ? ConteosDeManzana.NINGUNO : suyos;
+                    return new ManzanaConConteos(
+                            manzana, sector.codigo(), ciertos.predios(), ciertos.lotes());
+                });
+    }
+
+    /**
+     * Cuenta lo que cuelga de las manzanas <b>ya paginadas</b>. Ver {@link #CONTEOS_DE_LA_MANZANA}.
+     */
+    private Map<Long, ConteosDeManzana> conteosDeManzanas(long sectorId, List<Long> manzanaIds) {
+        return jdbc()
+                .sql(CONTEOS_DE_LA_MANZANA)
+                .param("sector", sectorId)
+                .param("manzanas", manzanaIds)
+                .param("activo", EstadoPredio.ACTIVO.name())
+                .query(
+                        (fila, numeroDeFila) ->
+                                Map.entry(
+                                        fila.getLong("manzana_id"),
+                                        new ConteosDeManzana(
+                                                fila.getLong("predios"), fila.getLong("lotes"))))
+                .stream()
+                .collect(java.util.stream.Collectors.toMap(Map.Entry::getKey, Map.Entry::getValue));
+    }
+
+    /** Lo contado para una manzana. Se queda aqui: fuera del repositorio viaja como proyeccion. */
+    private record ConteosDeManzana(long predios, long lotes) {
+
+        /** La manzana de la que no colgaba nada. */
+        static final ConteosDeManzana NINGUNO = new ConteosDeManzana(0, 0);
     }
 
     @Override

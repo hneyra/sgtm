@@ -633,6 +633,23 @@
     "totalPaginas": "entero",
     "hayMas": "booleano"
   },
+  "GET /catastro/sectores/{codigo}/manzanas": {
+    "contenido": [
+      {
+        "id": "entero",
+        "sectorId": "entero",
+        "sectorCodigo": "texto",
+        "codigo": "texto",
+        "predios": "entero",
+        "lotes": "entero"
+      }
+    ],
+    "pagina": "entero",
+    "tamano": "entero",
+    "totalElementos": "entero",
+    "totalPaginas": "entero",
+    "hayMas": "booleano"
+  },
   "GET /catastro/tablas/aranceles": [
     {
       "id": "entero",
@@ -4118,7 +4135,10 @@
   "POST /catastro/sectores/{codigo}/manzanas": {
     "id": "entero",
     "sectorId": "entero",
-    "codigo": "texto"
+    "sectorCodigo": "texto",
+    "codigo": "texto",
+    "predios": "entero",
+    "lotes": "entero"
   },
   "POST /catastro/vias": {
     "id": "entero",

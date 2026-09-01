@@ -62,6 +62,7 @@ import pe.gob.sgtm.catastro.dominio.FiltroDeFichas;
 import pe.gob.sgtm.catastro.dominio.FiltroDePredios;
 import pe.gob.sgtm.catastro.dominio.Inquilino;
 import pe.gob.sgtm.catastro.dominio.Manzana;
+import pe.gob.sgtm.catastro.dominio.ManzanaConConteos;
 import pe.gob.sgtm.catastro.dominio.MaterialEstructural;
 import pe.gob.sgtm.catastro.dominio.OrigenDeLaFicha;
 import pe.gob.sgtm.catastro.dominio.OtraInstalacion;
@@ -1936,6 +1937,12 @@ class EscrituraDeFichasControllerTest {
         @Override
         public List<Manzana> manzanasDe(long sectorId) {
             return manzanas.stream().filter(manzana -> manzana.sectorId() == sectorId).toList();
+        }
+
+        @Override
+        public Pagina<ManzanaConConteos> manzanas(Sector sector, Paginacion paginacion) {
+            throw new UnsupportedOperationException(
+                    "La escritura de fichas no lista las manzanas de un sector");
         }
 
         // ---------- Lo que estos controladores no tocan ----------

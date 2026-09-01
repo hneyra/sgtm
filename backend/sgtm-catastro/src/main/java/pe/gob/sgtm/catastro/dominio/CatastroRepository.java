@@ -38,6 +38,22 @@ public interface CatastroRepository {
 
     List<Manzana> manzanasDe(long sectorId);
 
+    /**
+     * Las manzanas de un sector, paginadas y con sus conteos (#537).
+     *
+     * <p>Convive con {@link #manzanasDe(long)} y no lo sustituye: aquel devuelve la lista entera
+     * porque lo llama la importacion, que necesita todas para resolver codigos; este es la lectura
+     * de una pantalla, y un sector de una municipalidad grande pasa de mil manzanas.
+     *
+     * <p>Recibe el {@link Sector} entero y no su identificador porque necesita las dos cosas que
+     * tiene: el {@code id} para acotar, y el {@code codigo} para que cada fila diga de que sector
+     * cuelga sin que nadie lo vuelva a leer.
+     *
+     * <p>Los conteos son de <b>la pagina</b>, no del sector: se cuentan las manzanas que la pagina
+     * devuelve y ninguna otra, igual que en {@link #sectores(Paginacion)}.
+     */
+    Pagina<ManzanaConConteos> manzanas(Sector sector, Paginacion paginacion);
+
     Manzana guardar(Manzana manzana);
 
     // ---------- Predios ----------
