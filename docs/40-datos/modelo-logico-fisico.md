@@ -8,10 +8,12 @@ Este documento las explica. **Si divergen, mandan las migraciones.**
 
 ## §0 — Lo primero que hay que saber
 
-**Tres hallazgos sobre Row Level Security**, verificados ejecutando contra PostgreSQL. Los dos
+**Cinco hallazgos sobre Row Level Security**, verificados ejecutando contra PostgreSQL. Los dos
 primeros vienen del proyecto SRTM, del que se hereda la estrategia: no se volvieron a descubrir
-aquí, se trasladaron con su mitigación y la prueba de aislamiento los vigila. El tercero salió aquí,
-midiendo planes de ejecución.
+aquí, se trasladaron con su mitigación y la prueba de aislamiento los vigila. Los otros tres
+salieron aquí, midiendo planes de ejecución y migraciones — y el tercero y el quinto son **el mismo
+hallazgo con dos operadores distintos**: una condición que no es *leakproof* no llega al índice, y
+el índice sigue ahí para que nadie lo note.
 
 ### Hallazgo 1 — Un superusuario omite RLS
 
@@ -112,6 +114,74 @@ desplegadas, o cuando se sabe que alguna fila no encaja y no se va a reescribir 
 tenant desde una migración muere con el mismo `unrecognized configuration parameter`. «Normalizar el
 vocabulario viejo en la migración» no es una salida disponible, ni siquiera cuando parece la cómoda.
 
+### Hallazgo 5 — Bajo RLS, el operador espacial tampoco llega al índice
+
+Es el hallazgo 3 otra vez, con otro operador, y por eso conviene leerlos como una **familia** y no
+como dos casos sueltos: `predio.geometria && ST_MakeEnvelope(…)::geography` **no puede ser condición
+de ningún índice** para el rol de aplicación, exista o no el índice GiST que `V61` creó.
+
+El motivo es el mismo: `geography_overlaps` **no es *leakproof*** — y tampoco lo son
+`st_intersects(geography,geography)`, `st_intersects(geometry,geometry)` ni `box_overlap` —, así
+que PostgreSQL no lo evalúa antes de la política.
+
+**Y aquí el síntoma engaña más que en el `LIKE`, porque el plan dice «Index».** Medido contra
+PostgreSQL 16 con PostGIS 3.5, 60 000 lotes repartidos en dos municipalidades, como `sgtm_app`:
+
+```
+Bitmap Heap Scan on predio  (cost=329.74..3399.28 rows=404)
+  Filter: (geometria && '…'::geography)
+  ->  Bitmap Index Scan on predio_sector_ix  (cost=0.00..329.64 rows=30046)
+        Index Cond: (municipalidad_id = current_setting('app.municipalidad_id')::bigint)
+```
+
+Usa un índice **por la condición de la política y por nada más**: lee los 30 046 predios del
+inquilino para devolver unos cuatrocientos. Es literalmente la frase de #313 —«un plan que use el
+índice sólo por `municipalidad_id` vuelve a leer la tabla entera y sigue diciendo *Index*»— con otro
+operador, y por eso lo que hay que exigir nunca es la palabra «Index»: es que la condición **del
+filtro** salga en el `Index Cond`.
+
+`ADR-0021` había creado ese índice GiST con su motivo escrito —«sin él, "qué predios caen en esta
+manzana" recorre la tabla entera»— y esa frase, medida, resulta falsa para el único rol que hace esa
+pregunta. El índice sí se usa **como superusuario**, que es quien omite RLS; o sea, se usa
+exactamente cuando lo prueba quien provisiona la base y nunca cuando lo usa la aplicación.
+
+**Mitigación.** La misma forma que el hallazgo 3: decir la condición con operadores que **sí** lo
+sean. `predio` gana en `V65` cuatro columnas **generadas** con el rectángulo envolvente del lote
+—`marco_oeste`, `marco_sur`, `marco_este`, `marco_norte`— en `double precision`, y el marco se
+escribe con `<=` y `>=` sobre ellas. Con el índice
+`(municipalidad_id, marco_oeste, marco_sur, marco_este, marco_norte)`, las cuatro comparaciones **y
+la condición de la política** salen juntas en el `Index Cond`:
+
+```
+Bitmap Heap Scan on predio  (cost=940.01..5097.41 rows=2905)
+  ->  Bitmap Index Scan on predio_marco_ix  (cost=0.00..939.28 rows=2905)
+        Index Cond: ((municipalidad_id = current_setting('app.municipalidad_id')::bigint)
+                     AND (marco_oeste <= …) AND (marco_sur <= …)
+                     AND (marco_este >= …) AND (marco_norte >= …))
+```
+
+**`double precision` y no `numeric`, y no es una preferencia**: `numeric_le` tampoco es *leakproof*.
+Con `numeric` las cuatro columnas no llegarían al índice y no servirían para nada — que es
+exactamente el modo de fallo que este hallazgo describe, reproducido por segunda vez en la misma
+tabla.
+
+**Lo que la mitigación no arregla, medido también.** PostgreSQL estima las cuatro desigualdades
+**como si fueran independientes**, y no lo son: son un rectángulo. Con una sola municipalidad dueña
+de toda la tabla —donde la condición de la política selecciona el 100 %— le salen 2 815 filas donde
+hay unas 440, y con esa cifra prefiere el recorrido secuencial aunque el índice sea alcanzable. El
+índice sigue estando ahí y la diferencia real es de unas 1 300 páginas a unas 40; a escala municipal
+son milisegundos, y en cuanto hay más de una municipalidad —que es la premisa de este sistema— el
+índice gana solo. Lo que sí se descartó, porque se midió: **añadir el `&&` como filtro para que
+PostGIS aporte su estimador** mejora la cifra (de 2 905 a 39) y no cambia el plan, y esa estimación
+tampoco es la correcta —el marco medido contiene unas 440 filas—, así que queda en una segunda copia
+del mismo predicado y se retiró.
+
+La otra salida —`ALTER FUNCTION geography_overlaps(geography,geography) LEAKPROOF`— se descartó: es
+un acto de superusuario que no cabe en una migración (`sgtm_owner` a propósito no lo es), y sobre
+todo es **afirmar** que ningún error de una función en C de un tercero puede revelar la fila de otra
+municipalidad. `float8le` es *leakproof* en el catálogo de PostgreSQL, que es una afirmación que ya
+está verificada.
+
 ## 1. Las migraciones
 
 | Migración | Contenido |
@@ -164,6 +234,7 @@ vocabulario viejo en la migración» no es una salida disponible, ni siquiera cu
 | `V55__tablas_de_valuacion_nacionales.sql` | Las tres tablas de valuación pasan a NACIONALES: `municipalidad_id` nulo, se cargan una vez para todas (D-13, ADR-0017, #188) |
 | `V56__determinacion_detalle_valuo_exonerado.sql` | El detalle por predio dice también qué parte del autovalúo **no** está afecta, para que la ponderación se reconstruya (#395) |
 | `V57__depreciacion_por_uso_de_la_edificacion.sql` | La tabla de depreciación son **cuatro** tablas, una por uso de la edificación: `uso` entra en la clave y «más de 50 años» entra sin tope (H-15, #188) |
+| `V65__marco_del_predio.sql` | El rectángulo envolvente del lote, en cuatro columnas generadas, y su índice: es lo único que llega al índice bajo RLS, porque el operador espacial no es *leakproof* (ver §0, hallazgo 5; #536) |
 
 La numeración salta —no hay `V36`, `V38`, `V40`, `V42`, `V44`, `V46`, `V48`, `V50` ni `V52`— y no
 es un error: hoy, con `V57`, hay **48** migraciones, y la lista viva es el propio directorio

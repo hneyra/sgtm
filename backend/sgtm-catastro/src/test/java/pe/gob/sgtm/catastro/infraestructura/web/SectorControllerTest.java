@@ -957,6 +957,22 @@ class SectorControllerTest {
         }
 
         @Override
+        public java.util.List<pe.gob.sgtm.catastro.dominio.LoteDelPlano> lotesDelPlano(
+                pe.gob.sgtm.catastro.dominio.FiltroDelPlano filtro, int tope) {
+            throw new UnsupportedOperationException("SectorController no dibuja planos");
+        }
+
+        @Override
+        public long lotesEnElMarco(pe.gob.sgtm.catastro.dominio.FiltroDelPlano filtro) {
+            throw new UnsupportedOperationException("SectorController no dibuja planos");
+        }
+
+        @Override
+        public long prediosSinGeometria(pe.gob.sgtm.catastro.dominio.FiltroDelPlano filtro) {
+            throw new UnsupportedOperationException("SectorController no dibuja planos");
+        }
+
+        @Override
         public Optional<String> geometriaDe(long predioId) {
             return Optional.empty();
         }
