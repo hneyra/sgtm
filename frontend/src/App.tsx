@@ -34,7 +34,13 @@ function leerRuta(): { modulo: string; dest: string } {
 
 export function App() {
   const [ruta, setRuta] = useState(leerRuta);
-  const [toast, setToast] = useState('');
+  /* El aviso lleva su tono: un visto sobre un mensaje de error dice que la
+     operación salió bien encima del texto que dice que no (#547). */
+  const [toast, setToast] = useState<{ texto: string; malo: boolean }>({ texto: '', malo: false });
+  const avisar = useCallback(
+    (texto: string, tono: 'bien' | 'mal' = 'bien') => setToast({ texto, malo: tono === 'mal' }),
+    [],
+  );
   const [pref, setPref] = useState<Preferencias>(() => ({
     entidad: rotuloDeLaEntidad(),
     acento: '#1F3A5F',
@@ -59,15 +65,15 @@ export function App() {
   }, [pref]);
 
   useEffect(() => {
-    if (!toast) return;
-    const t = setTimeout(() => setToast(''), 3200);
+    if (!toast.texto) return;
+    const t = setTimeout(() => setToast({ texto: '', malo: false }), 3200);
     return () => clearTimeout(t);
   }, [toast]);
 
   /* Un aviso habla de lo que acaba de pasar en una pantalla, así que no
      sobrevive a irse a otra: sin esto, el «Solicitud nueva…» de Licencias se
      queda flotando sobre la matriz de permisos de Seguridad. */
-  useEffect(() => setToast(''), [ruta.modulo, ruta.dest]);
+  useEffect(() => setToast({ texto: '', malo: false }), [ruta.modulo, ruta.dest]);
 
   const ir = useCallback((modulo: string, dest?: string) => {
     const d = dest ?? moduloDe(modulo).destinos[0]?.k ?? 'panel';
@@ -77,8 +83,8 @@ export function App() {
   const onDest = useCallback((k: string) => ir(ruta.modulo, k), [ir, ruta.modulo]);
 
   const ctx = useMemo(
-    () => ({ pref, fijar: (p: Partial<Preferencias>) => setPref((v) => ({ ...v, ...p })), toast: setToast, ir }),
-    [pref, ir],
+    () => ({ pref, fijar: (p: Partial<Preferencias>) => setPref((v) => ({ ...v, ...p })), toast: avisar, ir }),
+    [pref, ir, avisar],
   );
 
   const Pantalla = PANTALLAS[ruta.modulo] ?? PANTALLAS.inicio;
@@ -88,9 +94,10 @@ export function App() {
       <Suspense fallback={<Cargando />}>
         <Pantalla dest={ruta.dest} onDest={onDest} />
       </Suspense>
-      {toast && (
+      {toast.texto && (
         <div
-          role="status"
+          /* Un error no es una nota al margen: se anuncia, no se ofrece. */
+          role={toast.malo ? 'alert' : 'status'}
           style={{
             position: 'fixed',
             zIndex: 90,
@@ -102,7 +109,7 @@ export function App() {
             gap: 10,
             padding: '11px 18px',
             borderRadius: 999,
-            background: 'var(--ink)',
+            background: toast.malo ? 'var(--error-texto)' : 'var(--ink)',
             color: 'var(--bg)',
             fontSize: 13,
             boxShadow: 'var(--shadow-3)',
@@ -110,8 +117,8 @@ export function App() {
             maxWidth: 'min(560px, 92vw)',
           }}
         >
-          <Icono d={ICO.visto} tam={15} grosor={2.4} style={{ flex: '0 0 auto' }} />
-          {toast}
+          <Icono d={toast.malo ? ICO.cerrar : ICO.visto} tam={15} grosor={2.4} style={{ flex: '0 0 auto' }} />
+          {toast.texto}
         </div>
       )}
     </PreferenciasCtx.Provider>

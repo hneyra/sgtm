@@ -295,6 +295,10 @@ export default function Tesoreria({ dest, onDest }: PantallaProps) {
   const [convenioNuevo, setConvenioNuevo] = useState<Convenio | null>(null);
   const [trabajandoConv, setTrabajandoConv] = useState(false);
   const [falloConv, setFalloConv] = useState<ErrorDeApi | null>(null);
+  /* Cuál de los dos actos falló. Decide si «Reintentar» puede salir: repetir la
+     simulación no escribe nada, y repetir el registro sí — y este endpoint no
+     lee `Idempotency-Key`, así que dos envíos son dos convenios (#606). */
+  const [actoConv, setActoConv] = useState<'simular' | 'registrar'>('simular');
 
   /* Seguimiento de convenios */
   const [fNumero, setFNumero] = useState('');
@@ -310,6 +314,7 @@ export default function Tesoreria({ dest, onDest }: PantallaProps) {
   const [memoCierre, setMemoCierre] = useState('');
   const [obsCierreConvenio, setObsCierreConvenio] = useState('');
   const [cerrandoConv, setCerrandoConv] = useState(false);
+  const [falloCierre, setFalloCierre] = useState<ErrorDeApi | null>(null);
 
   /* Recibos */
   const [numeroDeRecibo, setNumeroDeRecibo] = useState('');
@@ -541,7 +546,7 @@ export default function Tesoreria({ dest, onDest }: PantallaProps) {
     } catch (error) {
       const e = comoErrorDeApi(error, 'No se pudo cobrar');
       setFalloDeCobro(e);
-      toast(e.mensaje);
+      toast(e.mensaje, 'mal');
     } finally {
       setCobrando(false);
     }
@@ -573,6 +578,7 @@ export default function Tesoreria({ dest, onDest }: PantallaProps) {
     if (impedimentoDelConvenio !== '' || trabajandoConv) return;
     setTrabajandoConv(true);
     setFalloConv(null);
+    setActoConv('simular');
     setConvenioNuevo(null);
     try {
       setSimulacion(await simularFraccionamiento(cuerpoDelFraccionamiento()));
@@ -581,7 +587,7 @@ export default function Tesoreria({ dest, onDest }: PantallaProps) {
       const e = comoErrorDeApi(error, 'No se pudo simular el fraccionamiento');
       setSimulacion(null);
       setFalloConv(e);
-      toast(e.mensaje);
+      toast(e.mensaje, 'mal');
     } finally {
       setTrabajandoConv(false);
     }
@@ -591,6 +597,7 @@ export default function Tesoreria({ dest, onDest }: PantallaProps) {
     if (impedimentoDelConvenio !== '' || obsConvenio.trim() === '' || trabajandoConv) return;
     setTrabajandoConv(true);
     setFalloConv(null);
+    setActoConv('registrar');
     try {
       const c = await registrarPreconvenio({
         ...cuerpoDelFraccionamiento(),
@@ -601,8 +608,11 @@ export default function Tesoreria({ dest, onDest }: PantallaProps) {
       toast('Preconvenio ' + c.numero + ' registrado. Todavía no acoge deuda.');
     } catch (error) {
       const e = comoErrorDeApi(error, 'No se pudo registrar el convenio');
+      /* El panel del preconvenio anterior se va: dejarlo puesto encima del
+         fallo dice «F-2026-000007 registrado» al lado de «no se registró». */
+      setConvenioNuevo(null);
       setFalloConv(e);
-      toast(e.mensaje);
+      toast(e.mensaje, 'mal');
     } finally {
       setTrabajandoConv(false);
     }
@@ -611,6 +621,7 @@ export default function Tesoreria({ dest, onDest }: PantallaProps) {
   const cerrarElConvenio = async () => {
     if (abierto === null || motivoCierre.trim() === '' || obsCierreConvenio.trim() === '' || cerrandoConv) return;
     setCerrandoConv(true);
+    setFalloCierre(null);
     try {
       const c = await cerrarConvenio(abierto, {
         accion,
@@ -625,7 +636,19 @@ export default function Tesoreria({ dest, onDest }: PantallaProps) {
       fichaConvenio.reintentar();
       toast('Convenio ' + c.numero + ' ' + c.estado.toLowerCase() + '. La deuda volvió a su fase de origen.');
     } catch (error) {
-      toast(comoErrorDeApi(error, 'No se pudo cerrar el convenio').mensaje);
+      /* Y no sólo un aviso que se va en 3,2 s: anular es un acto con
+         resolución, y su negativa es lo que hay que poder leer y dictar por
+         teléfono. Antes de #547 esto era el único sitio donde salía el motivo,
+         y salía en un aviso efímero con un visto al lado. */
+      const e = comoErrorDeApi(error, 'No se pudo cerrar el convenio');
+      setFalloCierre(e);
+      /* Y se vuelve a leer el convenio. Un 500 puede haberlo cerrado ANTES de
+         romperse, y sin releer la pantalla seguiría diciendo VIGENTE encima de
+         un aviso de fallo: quien atiende repetiría un acto ya hecho. En un 422
+         no se escribió nada y releer no cuesta más que una lectura. */
+      convenios.reintentar();
+      fichaConvenio.reintentar();
+      toast(e.mensaje, 'mal');
     } finally {
       setCerrandoConv(false);
     }
@@ -648,7 +671,7 @@ export default function Tesoreria({ dest, onDest }: PantallaProps) {
         'Recibo ' + a.numero + ' anulado. ' + a.asientosReversados + ' asientos reversados en el libro.',
       );
     } catch (error) {
-      toast(comoErrorDeApi(error, 'No se pudo anular el recibo').mensaje);
+      toast(comoErrorDeApi(error, 'No se pudo anular el recibo').mensaje, 'mal');
     } finally {
       setAnulando(false);
     }
@@ -689,7 +712,7 @@ export default function Tesoreria({ dest, onDest }: PantallaProps) {
           : 'Cierre reversado: el turno vuelve a estar abierto.',
       );
     } catch (error) {
-      toast(comoErrorDeApi(error, 'No se pudo cerrar el turno').mensaje);
+      toast(comoErrorDeApi(error, 'No se pudo cerrar el turno').mensaje, 'mal');
     } finally {
       setCerrando(false);
     }
@@ -697,8 +720,31 @@ export default function Tesoreria({ dest, onDest }: PantallaProps) {
 
   /* ══════════ Piezas compartidas ══════════ */
 
-  /** El aviso de un fallo, con la ruta y la referencia: se dicta por teléfono. */
-  const fallo = (error: ErrorDeApi | null, operacion: string, ruta: string): ReactNode =>
+  /**
+   * El aviso de un fallo, con la ruta y la referencia: se dicta por teléfono.
+   *
+   * Separa las TRES cosas que hasta #547 se veían igual, y las separa por el
+   * **código**, no por el texto:
+   *
+   * <ul>
+   *   <li>el servidor se rompió de verdad —`ERROR_INTERNO`, con incidencia—:
+   *       reintentar puede funcionar, y por eso el botón sale <b>aquí</b>;
+   *   <li>no hubo respuesta —`SIN_RESPUESTA`—: igual, reintentar puede cambiar
+   *       algo en cuanto vuelva la red;
+   *   <li>el servidor contestó que no —`VALIDACION`, `CONFLICTO`,
+   *       `NO_ENCONTRADO`, `SIN_PRIVILEGIO`—: reintentar tal cual no cambia
+   *       nada, y ofrecer el botón manda a pulsarlo para siempre.
+   * </ul>
+   *
+   * `alReintentar` es opcional a propósito: hay fallos que no tienen una acción
+   * que repetir. Cuando la hay, el botón depende de `ErrorDeApi.reintentable`.
+   */
+  const fallo = (
+    error: ErrorDeApi | null,
+    operacion: string,
+    ruta: string,
+    alReintentar?: () => void,
+  ): ReactNode =>
     error === null ? null : (
       <section
         style={{
@@ -741,6 +787,21 @@ export default function Tesoreria({ dest, onDest }: PantallaProps) {
         >
           {explicacionDelFallo(error)}
         </p>
+        {/* Lo que se puede hacer a continuación, que es lo único que quien
+            atiende necesita decidir. Sale del CÓDIGO, nunca del texto. */}
+        <p
+          style={{
+            margin: 0,
+            maxWidth: '62ch',
+            fontSize: 12,
+            lineHeight: 1.55,
+            color: 'var(--ink-3)',
+            textAlign: 'center',
+            textWrap: 'pretty',
+          }}
+        >
+          {queSePuedeHacer(error)}
+        </p>
         <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginTop: 3, ...META }}>
           <span>
             {ruta} · {error.estado || 'sin respuesta'}
@@ -752,6 +813,14 @@ export default function Tesoreria({ dest, onDest }: PantallaProps) {
             </>
           )}
         </div>
+        {/* «Reintentar» sólo donde reintentar puede cambiar algo: un 422 dice
+            que la petición, tal cual, no se puede atender, y el botón encima de
+            una cifra sin publicar manda a pulsarlo para siempre (#540, #547). */}
+        {error.reintentable && alReintentar !== undefined && (
+          <button onClick={alReintentar} className="hov-linea" style={{ ...BOTON_LINEA, marginTop: 4 }}>
+            Reintentar
+          </button>
+        )}
         {/* Todavía no hay puerta de sesión: la interfaz no sabe pedir un token,
             así que se le da. Aparece SOLO ante un 401. */}
         {error.codigo === 'NO_AUTENTICADO' && !hayPuerta() && (
@@ -1578,7 +1647,17 @@ export default function Tesoreria({ dest, onDest }: PantallaProps) {
             </button>
           </div>
 
-          {falloConv && fallo(falloConv, 'el fraccionamiento', 'POST /api/v1/tesoreria/fraccionamientos')}
+          {falloConv &&
+            fallo(
+              falloConv,
+              'el fraccionamiento',
+              'POST /api/v1/tesoreria/fraccionamientos',
+              /* Sólo se ofrece repetir lo que NO escribe. Un 500 al registrar
+                 pudo haber escrito el convenio antes de romperse, y la ruta no
+                 lee `Idempotency-Key` —a diferencia de la cobranza—: el botón
+                 ahí produciría dos preconvenios sobre la misma deuda (#606). */
+              actoConv === 'simular' ? () => void simular() : undefined,
+            )}
 
           {simulacion && (
             <section style={TARJETA}>
@@ -1692,9 +1771,20 @@ export default function Tesoreria({ dest, onDest }: PantallaProps) {
             </div>
             {convenios.cargando && <p style={{ margin: 0, padding: '22px 16px', fontSize: 13, color: 'var(--ink-3)' }}>Buscando…</p>}
             {!convenios.cargando && convenios.error && (
-              <p style={{ margin: 0, padding: '22px 16px', fontSize: 12.5, color: 'var(--error-texto)', textWrap: 'pretty' }}>
-                {tituloDelFallo(convenios.error, 'los convenios')}. {explicacionDelFallo(convenios.error)}
-              </p>
+              <div style={{ padding: '22px 16px' }}>
+                <p style={{ margin: 0, fontSize: 12.5, color: 'var(--error-texto)', textWrap: 'pretty' }}>
+                  {tituloDelFallo(convenios.error, 'los convenios')}. {explicacionDelFallo(convenios.error)}
+                </p>
+                <p style={{ margin: '6px 0 0', fontSize: 12, color: 'var(--ink-3)', textWrap: 'pretty' }}>
+                  {queSePuedeHacer(convenios.error)}
+                </p>
+                {/* Una lectura sí se puede repetir tal cual: no escribe nada. */}
+                {convenios.error.reintentable && (
+                  <button onClick={() => convenios.reintentar()} className="hov-linea" style={{ ...BOTON_LINEA, marginTop: 10 }}>
+                    Reintentar
+                  </button>
+                )}
+              </div>
             )}
             {!convenios.cargando && !convenios.error && (convenios.datos?.contenido ?? []).length === 0 && (
               <p style={{ margin: 0, padding: '24px 16px', fontSize: 13, color: 'var(--ink-3)', textWrap: 'pretty' }}>
@@ -1724,7 +1814,7 @@ export default function Tesoreria({ dest, onDest }: PantallaProps) {
                       return (
                         <tr
                           key={c.nroConvenio}
-                          onClick={() => setAbierto(c.nroConvenio)}
+                          onClick={() => { setAbierto(c.nroConvenio); setFalloCierre(null); }}
                           className="hov-acento"
                           style={{
                             borderTop: '1px solid var(--line)',
@@ -1760,7 +1850,7 @@ export default function Tesoreria({ dest, onDest }: PantallaProps) {
             <section style={TARJETA}>
               <div style={CABECERA}>
                 <h2 style={H2}>Convenio {abierto}</h2>
-                <button onClick={() => setAbierto(null)} className="hov-linea" style={{ ...BOTON_LINEA, padding: '6px 12px', fontSize: 12 }}>
+                <button onClick={() => { setAbierto(null); setFalloCierre(null); }} className="hov-linea" style={{ ...BOTON_LINEA, padding: '6px 12px', fontSize: 12 }}>
                   Cerrar
                 </button>
               </div>
@@ -1831,6 +1921,26 @@ export default function Tesoreria({ dest, onDest }: PantallaProps) {
                       />
                     </label>
                   </div>
+                  {falloCierre && (
+                    <div style={{ padding: '0 16px 12px' }}>
+                      {/* Sin `alReintentar`: cerrar un convenio ESCRIBE —devuelve
+                          lo pendiente a su fase de origen con asientos— y la ruta
+                          no lee `Idempotency-Key` (#606). Dos cierres no llegan a
+                          escribirse —`convenio_movimiento_cierre_uq` (V31) sólo
+                          admite uno—, pero un botón que reenvía tras un 500 que
+                          sí escribió contesta 409 y se lee como otro fallo. Lo
+                          que hay que hacer es mirar el estado, no reintentar. */}
+                      {fallo(falloCierre, 'el cierre del convenio', 'POST /api/v1/tesoreria/convenios/{numero}/anulacion')}
+                      {falloCierre.reintentable && (
+                        <p style={{ margin: '8px 0 0', fontSize: 12, color: 'var(--ink-3)', textAlign: 'center', textWrap: 'pretty' }}>
+                          Un fallo del servidor pudo haber cerrado el convenio antes de romperse. El detalle de arriba
+                          se acaba de releer: mira su estado antes de repetir. Si ya dice cerrado, está hecho —volver a
+                          pulsar no lo cierra dos veces, porque la base sólo admite un cierre por convenio, pero
+                          contestaría un conflicto que se parece a un fallo nuevo—.
+                        </p>
+                      )}
+                    </div>
+                  )}
                   <div style={{ display: 'flex', gap: 10, alignItems: 'center', flexWrap: 'wrap', padding: '0 16px 16px' }}>
                     <p style={{ margin: 0, flex: 1, minWidth: 180, fontSize: 12, color: 'var(--ink-3)', textWrap: 'pretty' }}>
                       Es un acto con resolución, no una corrección de caja: exige el privilegio de eliminación y no se
@@ -2689,11 +2799,61 @@ function tituloDelFallo(error: ErrorDeApi | null, que: string): string {
       return 'El estado actual no admite esta operación';
     case 'VALIDACION':
     case 'ORDEN_NO_ADMITIDO':
-      return 'El servidor no admite esa petición';
+      /* «No admite esa petición» culpa a lo que se tecleó, y desde #547 la
+         causa más corriente de un 422 aquí NO es la petición: es que el
+         ejercicio no tiene conjunto sellado (D-02a). Con ese titular, quien
+         atiende se pone a corregir un formulario que está bien. */
+      return `El servidor rechazó ${que}`;
     case 'SIN_RESPUESTA':
       return error.estado === 0 ? 'No se pudo contactar con el servidor' : 'El servidor contestó otra cosa';
     default:
       return `No se pudo completar la operación sobre ${que}`;
+  }
+}
+
+/**
+ * Qué se puede hacer a continuación. Sale del CÓDIGO, nunca del texto.
+ *
+ * Las tres cosas que hasta #547 se veían igual son: que falte un dato de la
+ * petición, que falte una cifra normativa que nadie ha publicado, y que el
+ * servidor se haya roto de verdad. La tercera se distingue por contrato —es un
+ * 500 `ERROR_INTERNO` y trae incidencia—; **las dos primeras no**, porque las
+ * seis excepciones que #547 tradujo salen con el mismo `VALIDACION` que un
+ * campo que falta y la respuesta no lleva ningún discriminador legible por
+ * programa: `CondicionSinParametrizar` calcula su `llave()`
+ * —`INTERES_FRACCIONAMIENTO:ORDINARIO`— y el cuerpo del 422 no la publica, y
+ * ninguna ruta del contrato dice si un ejercicio tiene conjunto sellado (#604, #605).
+ *
+ * Así que esta pantalla **no las adivina**. Adivinar sería leer el texto, y el
+ * texto se reescribe en cuanto alguien lo lee en voz alta: una clasificación
+ * por subcadena acabaría llamando «cifra sin publicar» a un campo que falta.
+ * Lo que hace es decir las dos posibilidades y en qué se reconocen, y decir lo
+ * único que sí se sabe por código: que reintentar no va a cambiarlo.
+ */
+function queSePuedeHacer(error: ErrorDeApi): string {
+  switch (error.codigo) {
+    case 'NO_AUTENTICADO':
+      return 'Reintentar no cambia nada mientras el token siga sin valer.';
+    case 'SIN_PRIVILEGIO':
+      return 'Reintentar no cambia nada: el permiso lo da Seguridad, no este botón.';
+    case 'VALIDACION':
+    case 'ORDEN_NO_ADMITIDO':
+    case 'CONFLICTO':
+    case 'NO_ENCONTRADO':
+      return (
+        'El texto de arriba es el del servidor, tal cual: es el único sitio donde se nombra lo que falta, ' +
+        'y reintentar sin cambiar nada volvería a dar lo mismo. Si nombra un dato de este formulario, se ' +
+        'corrige aquí. Si nombra un ejercicio sin conjunto de parámetros sellado, o una llave como ' +
+        '«INTERES_FRACCIONAMIENTO:ORDINARIO», es una cifra que todavía no se ha publicado: eso no se ' +
+        'arregla desde esta pantalla y no es un fallo del servidor (D-02a, D-02b).'
+      );
+    case 'SIN_RESPUESTA':
+      return 'No llegó a haber respuesta, así que reintentar puede funcionar en cuanto el servidor conteste.';
+    default:
+      return (
+        'Esto sí es un fallo del servidor, y por eso trae referencia: reintentar puede funcionar, y con ' +
+        'esa referencia se busca en su registro qué pasó.'
+      );
   }
 }
 
