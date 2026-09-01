@@ -19,6 +19,7 @@ import pe.gob.sgtm.compartido.Paginacion;
 import pe.gob.sgtm.dominio.Ejercicio;
 import pe.gob.sgtm.rentas.aplicacion.ConsultaDeConciliacion;
 import pe.gob.sgtm.rentas.aplicacion.ConsultaDeConciliacion.FichaConciliada;
+import pe.gob.sgtm.rentas.dominio.ConciliacionRepository.ResumenDeConciliacion;
 import pe.gob.sgtm.web.Api;
 import pe.gob.sgtm.web.CodigoDeError;
 import pe.gob.sgtm.web.ParametrosDePaginacion;
@@ -109,6 +110,36 @@ public class ConciliacionController {
                 };
 
         return RespuestaPaginada.de(pagina, FichaConciliadaResource::de);
+    }
+
+    /**
+     * El recuento del ejercicio: cuantos predios hay, cuantos declararon y cuantos no (#564).
+     *
+     * <p>La grilla de arriba <b>no sirve para contar</b>: el filtro se aplica sobre la pagina y su
+     * {@code totalElementos} es el del padron sin filtrar. Medido sobre Catacaos, los tres valores
+     * de {@code conciliadaConRentas} devolvian 14 422, o sea el padron entero, y el panel de
+     * Catastro pintaba con esa cifra «Predios sin conciliar: 14 422» encima de «14 422 predios en
+     * el padron».
+     *
+     * <p><b>Va detras del permiso de la pantalla y no del de fiscalizacion</b>, al reves que {@code
+     * conciliadaConRentas=No}, y no deja fila en la bitacora. La diferencia es que aquella
+     * <b>nombra</b> —es la lista de a quien no le va a llegar recibo— y esta cuenta: dice cuantos,
+     * no cuales. Auditar cada pintada del panel llenaria la bitacora de filas que no contestan la
+     * pregunta que la bitacora existe para contestar.
+     *
+     * <p>No acepta los filtros de la grilla: la pregunta del panel es sobre el padron. Aceptarlos
+     * obligaria a repetir aqui el {@code WHERE} de aquella consulta, y dos copias de la misma
+     * poblacion divergen — el mismo defecto, un escalon mas abajo.
+     */
+    @GetMapping("/resumen")
+    public ResumenDeConciliacionResource resumen(
+            @RequestParam(required = false) @Nullable String ejercicio,
+            @RequestParam(required = false) @Nullable String fecha) {
+
+        LocalDate aLaFecha = fechaDe(fecha);
+        ResumenDeConciliacion resumen =
+                consulta.resumen(ejercicioDe(ejercicio, aLaFecha), aLaFecha);
+        return ResumenDeConciliacionResource.de(resumen);
     }
 
     // ------------------------------------------------------------------

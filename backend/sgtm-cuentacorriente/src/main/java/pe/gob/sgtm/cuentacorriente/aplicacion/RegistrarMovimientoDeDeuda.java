@@ -127,6 +127,12 @@ public class RegistrarMovimientoDeDeuda {
             String codigoContribuyente,
             Observacion observacion) {
 
+        // Antes que nada, y antes en particular que la comprobacion de que la baja no
+        // excede la deuda: en un ejercicio sin particion no hay ningun asiento, de modo
+        // que aquella diria «a esa fecha solo se deben 0.00» —cierto, y por la razon
+        // equivocada— sobre una deuda que ni siquiera se puede escribir (#597).
+        registrarAsiento.exigirEjercicioAsentable(movimiento.clave().ejercicio());
+
         List<Asiento> guardados = new ArrayList<>();
         for (MovimientoDeDeuda deLaCuota : movimiento.enCadaCuota(cuotas)) {
             if (deLaCuota.sentido() == SentidoDelMovimiento.BAJA) {

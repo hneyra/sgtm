@@ -14,7 +14,10 @@ import pe.gob.sgtm.cuentacorriente.dominio.ClaveDeSaldo;
 import pe.gob.sgtm.cuentacorriente.dominio.ProyeccionDelSaldo;
 import pe.gob.sgtm.cuentacorriente.dominio.SaldoProyectado;
 import pe.gob.sgtm.cuentacorriente.dominio.SaldoRepository;
+import pe.gob.sgtm.dominio.Ejercicio;
 import pe.gob.sgtm.dominio.Observacion;
+import pe.gob.sgtm.web.CodigoDeError;
+import pe.gob.sgtm.web.ProblemaDeNegocio;
 
 /**
  * Asienta cargos, abonos y su reversion (ADR-0006).
@@ -61,6 +64,7 @@ public class RegistrarAsiento {
     /** Asienta un cargo o un abono nuevo. */
     @Transactional
     public Asiento asentar(Asiento asiento, Observacion observacion) {
+        exigirEjercicioAsentable(asiento.ejercicio());
         Asiento guardado = repositorio.registrar(asiento.conMotivo(observacion.texto()));
         reproyectar(guardado);
 
@@ -74,6 +78,47 @@ public class RegistrarAsiento {
                         .con(null, descripcion(guardado)));
 
         return guardado;
+    }
+
+    /**
+     * El libro solo puede asentar en los ejercicios que tienen particion declarada (#597).
+     *
+     * <p>{@code cuenta_corriente_asiento} esta particionada por ejercicio y las particiones se
+     * declaran una a una en las migraciones. Sin esta comprobacion, un alta de deuda de 2022 —uno
+     * de los cinco anos que el desplegable de la pantalla ofrece— llega al {@code INSERT},
+     * PostgreSQL lo rechaza con «no partition of relation found for row» y eso cae en el
+     * {@code @ExceptionHandler(Exception.class)}: quien atiende ve «No se pudo completar la
+     * operacion · Incidencia 2b1f…», que dice «vuelve a intentarlo» sobre algo que no va a cambiar
+     * nunca, y el registro de errores se ensucia con un ERROR por cada intento.
+     *
+     * <p><b>No se puede atrapar por el codigo de error.</b> Medido contra PostgreSQL 16: el
+     * SQLSTATE es {@code 23514}, el mismo que una violacion de {@code CHECK}, asi que un {@code
+     * catch} confundiria «este ejercicio no cabe en el libro» con «este asiento viola una regla del
+     * esquema». Por eso se pregunta antes.
+     *
+     * <p>Va aqui y no en las dos operaciones que el issue nombra: {@link #asentar} es la unica
+     * puerta de escritura del libro, asi que el alta, la baja y todo lo demas que asienta —la caja,
+     * las papeletas, las costas— contestan lo mismo por una sola comprobacion.
+     *
+     * <p>{@link #reversar} no la lleva y no la necesita: el ejercicio de una reversion es el del
+     * asiento que reversa, y ese esta guardado, o sea que su particion existe. Ponersela ahi seria
+     * una consulta por reversion para una condicion que no puede darse.
+     */
+    public void exigirEjercicioAsentable(Ejercicio ejercicio) {
+        List<Ejercicio> asentables = repositorio.ejerciciosAsentables();
+        if (asentables.contains(ejercicio)) {
+            return;
+        }
+        throw new ProblemaDeNegocio(
+                CodigoDeError.VALIDACION,
+                "El ejercicio "
+                        + ejercicio.valor()
+                        + " no esta abierto en la cuenta corriente: el libro esta particionado por"
+                        + " ejercicio y solo tiene declaradas las particiones de "
+                        + asentables.stream()
+                                .map(cual -> String.valueOf(cual.valor()))
+                                .collect(java.util.stream.Collectors.joining(", "))
+                        + ". Anadir un ejercicio es una migracion, no un dato");
     }
 
     /**

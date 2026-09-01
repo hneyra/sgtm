@@ -3,6 +3,7 @@ package pe.gob.sgtm.catastro.aplicacion;
 import java.util.Optional;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import pe.gob.sgtm.catastro.dominio.CriterioDeVia;
 import pe.gob.sgtm.catastro.dominio.Via;
 import pe.gob.sgtm.catastro.dominio.ViaRepository;
 import pe.gob.sgtm.compartido.Pagina;
@@ -33,7 +34,19 @@ public class ConsultaDeVias {
 
     @Transactional(readOnly = true)
     public Pagina<Via> listar(Paginacion paginacion) {
-        return vias.findAll(paginacion);
+        return listar(CriterioDeVia.todas(), paginacion);
+    }
+
+    /**
+     * El catalogo vial acotado por el criterio (#565).
+     *
+     * <p>Hasta aqui esta lectura recibia solo la paginacion, asi que elegir una via desde una
+     * pantalla obligaba a traerse el catalogo entero —1 110 vias en Catacaos, tres peticiones de
+     * 500— y buscar en el cliente.
+     */
+    @Transactional(readOnly = true)
+    public Pagina<Via> listar(CriterioDeVia criterio, Paginacion paginacion) {
+        return vias.buscar(criterio, paginacion);
     }
 
     /**

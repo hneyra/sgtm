@@ -48,6 +48,17 @@ public enum CodigoDeError {
     /** Lo pedido no existe en esta municipalidad. */
     NO_ENCONTRADO(HttpStatus.NOT_FOUND, "No se encontro lo solicitado"),
 
+    /**
+     * La ruta existe, pero no con el verbo que se pidio (#556).
+     *
+     * <p>Es un codigo propio y no {@link #NO_ENCONTRADO} porque las dos respuestas se arreglan de
+     * maneras distintas: un {@code 404} dice «esa operacion no esta publicada» y un {@code 405}
+     * dice «esta publicada, y la estas pidiendo con el verbo equivocado». Y sobre todo no es {@link
+     * #ERROR_INTERNO}: la interfaz ofrece «Reintentar» sobre ese, y reintentar un verbo equivocado
+     * no puede funcionar nunca.
+     */
+    METODO_NO_ADMITIDO(HttpStatus.METHOD_NOT_ALLOWED, "El verbo HTTP no se admite en esta ruta"),
+
     /** El estado actual no admite la operacion: un recibo ya anulado, un convenio quebrado. */
     CONFLICTO(HttpStatus.CONFLICT, "El estado actual no admite esta operacion"),
 

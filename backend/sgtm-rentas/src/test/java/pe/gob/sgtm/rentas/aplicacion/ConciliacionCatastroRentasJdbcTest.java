@@ -49,9 +49,11 @@ import pe.gob.sgtm.esquema.BaseDeDatosDePrueba;
 import pe.gob.sgtm.esquema.ContextoDeTenant;
 import pe.gob.sgtm.plataforma.tenant.TenantTransactionManager;
 import pe.gob.sgtm.rentas.aplicacion.ConsultaDeConciliacion.FichaConciliada;
+import pe.gob.sgtm.rentas.dominio.ConciliacionRepository.ResumenDeConciliacion;
 import pe.gob.sgtm.rentas.dominio.DeclaracionJurada;
 import pe.gob.sgtm.rentas.dominio.EstadoDeDeclaracion;
 import pe.gob.sgtm.rentas.dominio.TipoDeDeclaracion;
+import pe.gob.sgtm.rentas.infraestructura.ConciliacionRepositoryJdbc;
 import pe.gob.sgtm.rentas.infraestructura.DeclaracionJuradaRepositoryJdbc;
 
 /**
@@ -99,6 +101,19 @@ class ConciliacionCatastroRentasJdbcTest {
     private static long municipalidadA;
     private static long municipalidadB;
 
+    /**
+     * La del recuento, y aparte a proposito: el resumen cuenta el padron ENTERO de su
+     * municipalidad, asi que compartir la de las demas pruebas haria que el resultado dependiera
+     * del orden en que JUnit las ejecute.
+     */
+    private static long municipalidadDelRecuento;
+
+    /**
+     * Una sin nada, para poder afirmar un cero. Con la municipalidad vecina no se puede: otras
+     * pruebas del archivo le siembran predios, asi que el resultado dependeria del orden.
+     */
+    private static long municipalidadSinPadron;
+
     private static TransactionTemplate transaccion;
     private static JdbcClient jdbc;
     private static DeclaracionJuradaRepositoryJdbc declaraciones;
@@ -115,6 +130,8 @@ class ConciliacionCatastroRentasJdbcTest {
         base = BaseDeDatosDePrueba.provisionar();
         municipalidadA = crearMunicipalidad("270301", "Municipalidad de la conciliacion");
         municipalidadB = crearMunicipalidad("270302", "Municipalidad vecina");
+        municipalidadDelRecuento = crearMunicipalidad("270303", "Municipalidad del recuento");
+        municipalidadSinPadron = crearMunicipalidad("270304", "Municipalidad sin padron");
 
         DriverManagerDataSource pool = new DriverManagerDataSource();
         pool.setUrl(base.url());
@@ -134,6 +151,7 @@ class ConciliacionCatastroRentasJdbcTest {
                                 new ConsultaDeFichas(
                                         new FichaCatastralRepositoryJdbc(jdbc), new PadronVacio())),
                         declaraciones,
+                        new ConciliacionRepositoryJdbc(jdbc),
                         new AuditoriaJdbc(jdbc, RELOJ),
                         RELOJ);
         consulta = envolver(sinTransaccion, gestor);
@@ -508,7 +526,135 @@ class ConciliacionCatastroRentasJdbcTest {
         }
     }
 
+    @Nested
+    @DisplayName("El recuento, que la grilla no podia dar (#564)")
+    class Recuento {
+
+        /** Dos predios que declararon y uno que no, en una municipalidad para ellos solos. */
+        @BeforeEach
+        void sembrarElPadron() throws SQLException {
+            TenantContext.fijar(new MunicipalidadId(municipalidadDelRecuento));
+            if (contarPredios(municipalidadDelRecuento) > 0) {
+                return;
+            }
+            long uno = crearPredioConFicha(municipalidadDelRecuento, nuevoCodigo());
+            long dos = crearPredioConFicha(municipalidadDelRecuento, nuevoCodigo());
+            crearPredioConFicha(municipalidadDelRecuento, nuevoCodigo());
+            declarar(municipalidadDelRecuento, uno, E2026, numeroDeDj("DJ-REC"));
+            declarar(municipalidadDelRecuento, dos, E2026, numeroDeDj("DJ-REC"));
+        }
+
+        @AfterEach
+        void volverAA() {
+            TenantContext.fijar(new MunicipalidadId(municipalidadA));
+        }
+
+        @Test
+        @DisplayName("dice 1 sin conciliar sobre 3, no 3 sobre 3")
+        void diceUnoSobreTres() {
+            ResumenDeConciliacion resumen = consulta.resumen(E2026, HOY);
+
+            assertThat(resumen.total()).isEqualTo(3);
+            assertThat(resumen.conciliados()).isEqualTo(2);
+            assertThat(resumen.noConciliados())
+                    .as(
+                            "hasta #564 la grilla contestaba el padron entero con cualquiera de los"
+                                    + " tres filtros, y el panel pintaba «sin conciliar: 3» encima"
+                                    + " de «3 predios en el padron»: una acusacion de omision a"
+                                    + " todo el distrito")
+                    .isEqualTo(1);
+        }
+
+        @Test
+        @DisplayName("el recuento lleva su ejercicio, y con otro ejercicio no concilia nadie")
+        void llevaSuEjercicio() {
+            ResumenDeConciliacion deDosMilVeintiseis = consulta.resumen(E2026, HOY);
+            ResumenDeConciliacion deDosMilVeinticinco = consulta.resumen(E2025, HOY);
+
+            assertThat(deDosMilVeintiseis.ejercicio()).isEqualTo(E2026);
+            assertThat(deDosMilVeintiseis.aLaFecha()).isEqualTo(HOY);
+            assertThat(deDosMilVeinticinco.conciliados())
+                    .as(
+                            "no existe «conciliado»: existe «conciliado a 2026». El padron afecto"
+                                    + " se rehace cada año y la DJ de 2026 no concilia 2025")
+                    .isZero();
+            assertThat(deDosMilVeinticinco.noConciliados()).isEqualTo(3);
+        }
+
+        @Test
+        @DisplayName("el total del recuento es el mismo que el de la grilla, y eso no se confia")
+        void elTotalEsElDeLaGrilla() {
+            long deLaGrilla =
+                    consulta.todas(
+                                    new BusquedaDeFichas(null, null, null, null, null),
+                                    E2026,
+                                    HOY,
+                                    unaPagina())
+                            .totalElementos();
+
+            assertThat(consulta.resumen(E2026, HOY).total())
+                    .as(
+                            "el recuento vive en rentas y lee dos tablas de catastro (ver"
+                                    + " ConciliacionRepository): el riesgo que eso arrastra es que"
+                                    + " la poblacion que CUENTA deje de ser la que la grilla"
+                                    + " LISTA, y ninguna de las dos cifras pareceria mal")
+                    .isEqualTo(deLaGrilla);
+        }
+
+        @Test
+        @DisplayName("contar no deja fila en la bitacora: dice cuantos, no cuales")
+        void contarNoDejaRastro() throws SQLException {
+            long antes = accesosRegistrados();
+
+            consulta.resumen(E2026, HOY);
+            consulta.resumen(E2026, HOY);
+
+            assertThat(accesosRegistrados())
+                    .as(
+                            "«No» deja rastro porque NOMBRA —es el mapa de a quien no le va a"
+                                    + " llegar recibo—; un recuento no nombra a nadie, y auditar"
+                                    + " cada pintada del panel llenaria la bitacora de filas que no"
+                                    + " contestan la pregunta que la bitacora existe para"
+                                    + " contestar")
+                    .isEqualTo(antes);
+        }
+
+        @Test
+        @DisplayName("no ve el padron de las otras municipalidades")
+        void noVeLasOtras() {
+            TenantContext.fijar(new MunicipalidadId(municipalidadSinPadron));
+
+            assertThat(consulta.resumen(E2026, HOY).total())
+                    .as(
+                            "los tres predios se sembraron en la del recuento, y el resto del"
+                                    + " archivo siembra en A y en B; RLS es lo unico que sostiene"
+                                    + " que este cero sea cero")
+                    .isZero();
+        }
+
+        @Test
+        @DisplayName("sin transaccion no cuenta: falla, no devuelve cero")
+        void sinTransaccionFalla() {
+            assertThatThrownBy(() -> sinTransaccion.resumen(E2026, HOY))
+                    .as(
+                            "sin SET LOCAL la politica RLS no se puede evaluar; un cero seria un"
+                                    + " «ningun predio en el padron» que nadie distinguiria")
+                    .isInstanceOf(Exception.class);
+        }
+    }
+
     // ------------------------------------------------------------------
+
+    private static long contarPredios(long municipalidad) throws SQLException {
+        try (Connection app = base.conexion(BaseDeDatosDePrueba.APP)) {
+            ContextoDeTenant.fijar(app, municipalidad);
+            try (PreparedStatement sentencia = app.prepareStatement("SELECT count(*) FROM predio");
+                    ResultSet fila = sentencia.executeQuery()) {
+                fila.next();
+                return fila.getLong(1);
+            }
+        }
+    }
 
     private static Pagina<FichaConciliada> buscar(String codigo, Ejercicio ejercicio) {
         return consulta.todas(porCodigo(codigo), ejercicio, HOY, unaPagina());

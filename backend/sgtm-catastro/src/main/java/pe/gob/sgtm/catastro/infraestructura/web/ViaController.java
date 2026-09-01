@@ -13,6 +13,7 @@ import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.PutMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
+import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.ResponseStatus;
 import org.springframework.web.bind.annotation.RestController;
 import pe.gob.sgtm.auditoria.OrigenContext;
@@ -21,6 +22,7 @@ import pe.gob.sgtm.autorizacion.Privilegio;
 import pe.gob.sgtm.autorizacion.RequiereAcceso;
 import pe.gob.sgtm.catastro.aplicacion.ConsultaDeVias;
 import pe.gob.sgtm.catastro.aplicacion.RegistrarVia;
+import pe.gob.sgtm.catastro.dominio.CriterioDeVia;
 import pe.gob.sgtm.catastro.dominio.TipoVia;
 import pe.gob.sgtm.catastro.dominio.Via;
 import pe.gob.sgtm.dominio.Observacion;
@@ -55,6 +57,10 @@ import pe.gob.sgtm.web.RespuestaPaginada;
  * ComprobadorDeAcceso}, con el usuario de {@link OrigenContext} y la fecha del reloj inyectado— y
  * lanza el mismo {@code ProblemaDeNegocio} con {@code SIN_PRIVILEGIO}, de modo que quien no la
  * tiene recibe el 403 de siempre y no distingue este camino del otro.
+ *
+ * <p><b>La lectura acota</b> desde #565: hasta entonces recibia solo la paginacion, y elegir una
+ * via desde el alta de predio obligaba a bajarse el catalogo entero —1 110 en Catacaos— y buscar en
+ * el cliente. Los filtros y lo que hace cada uno estan en el javadoc de {@link #listar}.
  *
  * <p><b>La lectura pasa por {@link ConsultaDeVias}</b>, no por el repositorio directamente: es esa
  * capa la que lleva el {@code @Transactional(readOnly = true)} donde se fija el tenant. Sin ella la
@@ -97,10 +103,63 @@ public class ViaController {
         this.reloj = reloj;
     }
 
+    /**
+     * El catalogo vial, acotado por los filtros que la pantalla dibuja (#565).
+     *
+     * <p>Hasta aqui esta lectura recibia <b>solo la paginacion</b>. Los cuatro filtros que el
+     * contrato declara desde #312 —«Codigo de via», «Nombre de calle», «Tipo de via», «Sector»— no
+     * los leia nadie: se tecleaban, viajaban y se caian en silencio, que es el hueco de #544. La
+     * consecuencia practica era que elegir una via desde el alta de predio obligaba a bajarse el
+     * catalogo entero y buscar en el cliente —1 110 vias en Catacaos, tres peticiones de 500 al
+     * abrir el asistente—.
+     *
+     * <p>Tres se sirven y uno no, y el que no se dice en voz alta:
+     *
+     * <ul>
+     *   <li>{@code codigoDeVia} y {@code nombreDeCalle}, <b>por prefijo</b>. El nombre, ademas, sin
+     *       distinguir mayusculas ni tildes: el catalogo real guarda «Cayetano Heredia» y en
+     *       ventanilla se teclea «cayetano».
+     *   <li>{@code tipoDeVia}, por igualdad contra {@link TipoVia}. Un tipo que el enumerado no
+     *       tiene es {@code 422} nombrandolo, no una pagina vacia: los dos se leen igual en
+     *       pantalla y solo uno de los dos significa «no hay ninguna».
+     *   <li>{@code sector} <b>no se sirve</b>, y se rechaza con {@code 422} en vez de ignorarse. La
+     *       tabla {@code via} (V1) no tiene columna de sector y {@link ViaResource} tampoco lo
+     *       publica —Track 2 de #290—, asi que no hay contra que comparar. Ignorarlo devolveria el
+     *       catalogo entero bajo un filtro tecleado, que es exactamente por lo que alguien confia
+     *       en una lista que no filtro nada.
+     * </ul>
+     *
+     * <p>Y uno mas que el prototipo no dibuja: {@code activa}. Una via dada de baja no deberia
+     * poder elegirse para un predio nuevo (RNF-051: no se borra, se desactiva) y hasta aqui salia
+     * en la lista sin distinguirse. Solo admite {@code true} y {@code false}; cualquier otra cosa
+     * es {@code 422}, porque un «si» tecleado que se lea como «no filtres» es la misma trampa que
+     * el sector.
+     */
     @GetMapping
-    public RespuestaPaginada<ViaResource> listar(ParametrosDePaginacion paginacion) {
+    public RespuestaPaginada<ViaResource> listar(
+            @RequestParam(required = false) @Nullable String codigoDeVia,
+            @RequestParam(required = false) @Nullable String nombreDeCalle,
+            @RequestParam(required = false) @Nullable String tipoDeVia,
+            @RequestParam(required = false) @Nullable String sector,
+            @RequestParam(required = false) @Nullable String activa,
+            ParametrosDePaginacion paginacion) {
+
+        if (vacioANulo(sector) != null) {
+            throw new ProblemaDeNegocio(
+                    CodigoDeError.VALIDACION,
+                    "El filtro 'sector' no se sirve: la tabla de vias no guarda el sector y esta"
+                            + " lectura no lo publica. Se rechaza en vez de ignorarse, porque una"
+                            + " lista sin filtrar bajo un filtro tecleado se lee como filtrada");
+        }
+        CriterioDeVia criterio =
+                new CriterioDeVia(
+                        vacioANulo(codigoDeVia),
+                        vacioANulo(nombreDeCalle),
+                        vacioANulo(tipoDeVia) == null ? null : tipoDe(tipoDeVia),
+                        siONoDe(activa));
         return RespuestaPaginada.de(
-                consulta.listar(paginacion.aPaginacion(ORDEN_POR_OMISION)), ViaResource::de);
+                consulta.listar(criterio, paginacion.aPaginacion(ORDEN_POR_OMISION)),
+                ViaResource::de);
     }
 
     /**
@@ -240,6 +299,28 @@ public class ViaController {
 
     private static @Nullable String vacioANulo(@Nullable String valor) {
         return valor == null || valor.isBlank() ? null : valor.strip();
+    }
+
+    /**
+     * {@code true} o {@code false}, y nada mas.
+     *
+     * <p>Spring convertiria «si», «1» o «SI» a {@code false} sin decir nada, y una via dada de baja
+     * volveria a la lista bajo un filtro que el usuario cree haber puesto. Ausente es «las dos».
+     */
+    private static @Nullable Boolean siONoDe(@Nullable String texto) {
+        String limpio = vacioANulo(texto);
+        if (limpio == null) {
+            return null;
+        }
+        if ("true".equalsIgnoreCase(limpio)) {
+            return Boolean.TRUE;
+        }
+        if ("false".equalsIgnoreCase(limpio)) {
+            return Boolean.FALSE;
+        }
+        throw new ProblemaDeNegocio(
+                CodigoDeError.VALIDACION,
+                "El filtro 'activa' solo admite 'true' o 'false': '" + texto + "'");
     }
 
     private static String mensajeDe(RuntimeException excepcion) {
