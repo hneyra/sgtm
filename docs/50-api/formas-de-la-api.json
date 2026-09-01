@@ -2414,6 +2414,11 @@
       "condicionEspecial": "texto",
       "activo": "booleano"
     },
+    "datosPersonales": {
+      "fechaNacimiento": "fecha",
+      "estadoCivil": "texto",
+      "conyugeId": "entero"
+    },
     "aLaFecha": "fecha",
     "domicilioFiscal": {
       "id": "entero",
