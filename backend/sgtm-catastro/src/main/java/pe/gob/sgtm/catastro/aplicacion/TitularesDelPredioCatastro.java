@@ -2,7 +2,10 @@ package pe.gob.sgtm.catastro.aplicacion;
 
 import java.time.LocalDate;
 import java.util.ArrayList;
+import java.util.Collection;
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.Objects;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -31,14 +34,33 @@ public class TitularesDelPredioCatastro implements TitularesDelPredio {
     @Transactional(readOnly = true)
     public List<TitularDelPredio> de(long predioId, LocalDate fecha) {
         Objects.requireNonNull(fecha, "De quien es el predio se pregunta a una fecha (regla 9)");
+        return proyectar(repositorio.titularesDe(predioId, fecha));
+    }
+
+    @Override
+    @Transactional(readOnly = true)
+    public Map<Long, List<TitularDelPredio>> deVarios(Collection<Long> predioIds, LocalDate fecha) {
+        Objects.requireNonNull(predioIds, "La lista de predios es vacia, no nula");
+        Objects.requireNonNull(fecha, "De quien es el predio se pregunta a una fecha (regla 9)");
+
+        Map<Long, List<TitularDelPredio>> cuotas = new HashMap<>();
+        repositorio
+                .titularesDeVarios(predioIds, fecha)
+                .forEach(
+                        (predioId, titularidades) ->
+                                cuotas.put(predioId, proyectar(titularidades)));
+        return Map.copyOf(cuotas);
+    }
+
+    private static List<TitularDelPredio> proyectar(List<Titularidad> titularidades) {
         List<TitularDelPredio> cuotas = new ArrayList<>();
-        for (Titularidad titularidad : repositorio.titularesDe(predioId, fecha)) {
+        for (Titularidad titularidad : titularidades) {
             cuotas.add(
                     new TitularDelPredio(
                             titularidad.contribuyenteId(),
                             titularidad.condicion().name(),
                             titularidad.porcentaje()));
         }
-        return cuotas;
+        return List.copyOf(cuotas);
     }
 }

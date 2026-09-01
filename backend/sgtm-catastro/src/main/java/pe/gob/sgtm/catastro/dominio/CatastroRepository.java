@@ -1,7 +1,9 @@
 package pe.gob.sgtm.catastro.dominio;
 
 import java.time.LocalDate;
+import java.util.Collection;
 import java.util.List;
+import java.util.Map;
 import java.util.Optional;
 import pe.gob.sgtm.compartido.Pagina;
 import pe.gob.sgtm.compartido.Paginacion;
@@ -72,27 +74,6 @@ public interface CatastroRepository {
      */
     Pagina<PredioDelCatastro> predios(FiltroDePredios filtro, Paginacion paginacion);
 
-    /**
-     * El padron activo con el titular y la ficha vigentes a la fecha, para {@link
-     * pe.gob.sgtm.catastro.PadronDePredios} (#49, RF-055).
-     *
-     * <p>Devuelve directamente el tipo publicado y no {@link Predio}: la respuesta necesita, en una
-     * sola consulta, el titular de {@code titularidad}, el codigo del {@code sector} y el area y el
-     * uso de la {@code ficha_catastral} vigente. Componerla arriba —una lectura de predios y luego
-     * tres por fila— seria ochenta consultas por pagina de veinte.
-     *
-     * <p>Un predio con dos copropietarios produce <b>dos</b> filas, una por titular. No es una
-     * duplicacion: cada copropietario tiene su propia obligacion de declarar, y la deteccion de
-     * omisos pregunta por personas, no por unidades.
-     *
-     * @param sectorCodigo filtro opcional; {@code null} trae el padron entero
-     * @param aLaFecha a que dia se resuelven titularidad y ficha (regla 9)
-     */
-    Pagina<pe.gob.sgtm.catastro.PredioDelPadron> padron(
-            @org.jspecify.annotations.Nullable String sectorCodigo,
-            LocalDate aLaFecha,
-            Paginacion paginacion);
-
     Predio guardar(Predio predio);
 
     /**
@@ -118,6 +99,21 @@ public interface CatastroRepository {
 
     /** Quien figura como titular del predio en esa fecha (regla 9). */
     List<Titularidad> titularesDe(long predioId, LocalDate fecha);
+
+    /**
+     * Lo mismo para un lote de predios, en <b>una</b> consulta (#545).
+     *
+     * <p>Existe porque quien recorre un padron pagina a pagina —la deteccion de omisos— necesita
+     * los titulares de las veinte filas que ya trajo, y preguntarlos de uno en uno serian veinte
+     * consultas por pagina. Es el mismo motivo por el que {@code DirectorioDeContribuyentes.porIds}
+     * existe al lado de {@code porCodigo}.
+     *
+     * <p>Un predio <b>sin titular vigente a esa fecha no aparece en el mapa</b>, igual que un
+     * contribuyente inexistente no aparece en el de {@code porIds}: devolver una entrada con lista
+     * vacia obligaria a quien consulta a distinguir «no tiene titular» de «no pregunte por el», que
+     * son la misma respuesta vista desde el mapa.
+     */
+    Map<Long, List<Titularidad>> titularesDeVarios(Collection<Long> predioIds, LocalDate fecha);
 
     /** Los predios de los que alguien es titular en esa fecha. */
     List<Titularidad> prediosDe(long contribuyenteId, LocalDate fecha);
