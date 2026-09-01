@@ -22,6 +22,21 @@ public final class ParametrosDeMentira implements LectorDeParametros {
 
     private final Map<String, String> textos = new LinkedHashMap<>();
 
+    private boolean sinSellar;
+
+    /**
+     * Ningun conjunto sellado rige el ejercicio, que es lo que ocurre <b>hoy</b> en todas las
+     * municipalidades con D-02a abierta.
+     *
+     * <p>No es lo mismo que un conjunto sin la llave: ahi hay un conjunto y le falta una cifra, y
+     * aqui no hay conjunto. Las dos situaciones se distinguen en el mensaje —una nombra la llave y
+     * la otra el ejercicio— y por eso el doble sabe fingir las dos.
+     */
+    public ParametrosDeMentira sinSellar() {
+        this.sinSellar = true;
+        return this;
+    }
+
     /** Declara un parametro de texto: {@code con("PLAZO", "NOTIFICACION_VALOR-OP", "7 ANIOS")}. */
     public ParametrosDeMentira con(String tipo, String clave, String valor) {
         textos.put(tipo + "|" + clave, valor);
@@ -30,6 +45,9 @@ public final class ParametrosDeMentira implements LectorDeParametros {
 
     @Override
     public ParametrosSellados vigenteEn(Ejercicio ejercicio) {
+        if (sinSellar) {
+            throw new EjercicioSinSellar(ejercicio);
+        }
         ParametrosSellados.Constructor constructor = ParametrosSellados.de(ejercicio, 1);
         textos.forEach(
                 (llave, valor) -> {
@@ -46,6 +64,9 @@ public final class ParametrosDeMentira implements LectorDeParametros {
 
     @Override
     public IdentificadorDeConjunto conjuntoVigenteEn(Ejercicio ejercicio) {
+        if (sinSellar) {
+            throw new EjercicioSinSellar(ejercicio);
+        }
         return IdentificadorDeConjunto.de(CONJUNTO);
     }
 }

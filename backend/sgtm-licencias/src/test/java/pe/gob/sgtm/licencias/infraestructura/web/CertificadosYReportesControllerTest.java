@@ -167,6 +167,20 @@ class CertificadosYReportesControllerTest {
                             .conCertificado(
                                     TipoDeCertificado.NUMERACION, DERECHO_NUMERACION, null));
 
+    /**
+     * El mismo controlador sin <b>ningun</b> conjunto sellado: lo que ocurre hoy en todas las
+     * municipalidades con D-02a abierta (#562). No es lo mismo que el anterior —ahi hay conjunto y
+     * le falta una cifra— y hasta este issue salia como 500 con identificador de incidencia.
+     */
+    private final MockMvc mvcSinSellar =
+            montar(
+                    new DerechosDeMentira(DERECHO_LICENCIA, "LF-009")
+                            .conCertificado(
+                                    TipoDeCertificado.NUMERACION,
+                                    DERECHO_NUMERACION,
+                                    MESES_DE_NUMERACION)
+                            .sinSellar());
+
     private MockMvc montar(DerechosDeMentira parametros) {
         DerechosDeTramiteParametrizados derechos = new DerechosDeTramiteParametrizados(parametros);
         ConsultaDeLicencias consulta =
@@ -355,6 +369,26 @@ class CertificadosYReportesControllerTest {
                     .isEqualTo(422);
             assertThat(respuesta.getResponse().getContentAsString())
                     .contains("VIGENCIA_CERTIFICADO_NUMERACION");
+        }
+
+        @Test
+        @DisplayName("sin NINGUN conjunto sellado es 422 y nombra el ejercicio, no 500 (#562)")
+        void sinConjuntoSellado() throws Exception {
+            MvcResult respuesta =
+                    mvcSinSellar
+                            .perform(
+                                    MockMvcRequestBuilders.post("/api/v1/licencias/certificados")
+                                            .contentType(MediaType.APPLICATION_JSON)
+                                            .content(cuerpoDeEmision(RECIBO)))
+                            .andReturn();
+
+            assertThat(respuesta.getResponse().getStatus())
+                    .as("no es que el servidor este roto: es que nadie ha sellado 2026 (D-02a)")
+                    .isEqualTo(422);
+            assertThat(respuesta.getResponse().getContentAsString())
+                    .contains("VALIDACION")
+                    .contains("2026")
+                    .doesNotContain("incidencia");
         }
 
         @Test

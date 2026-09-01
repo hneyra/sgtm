@@ -54,6 +54,8 @@ public interface FraccionamientoCoactivo {
      * coactiva} compruebe de que fase viene cada cuota <b>antes</b> de firmar.
      *
      * @throws SinDeudaCoactivaQueFraccionar si la seleccion no tiene deuda a la fecha de corte
+     * @throws CondicionesSinPublicar si el conjunto sellado del ejercicio no existe o no trae
+     *     alguna de las cifras con que se arma el cronograma
      */
     ConvenioCoactivo simular(SolicitudDeConvenioCoactivo solicitud);
 
@@ -62,6 +64,8 @@ public interface FraccionamientoCoactivo {
      *
      * @param observacion por que se registra (regla 10, RNF-052)
      * @throws SinDeudaCoactivaQueFraccionar si la seleccion no tiene deuda a la fecha de corte
+     * @throws CondicionesSinPublicar si el conjunto sellado del ejercicio no existe o no trae
+     *     alguna de las cifras con que se arma el cronograma
      */
     ConvenioCoactivo registrar(SolicitudDeConvenioCoactivo solicitud, Observacion observacion);
 
@@ -77,6 +81,35 @@ public interface FraccionamientoCoactivo {
         @java.io.Serial private static final long serialVersionUID = 1L;
 
         public SinDeudaCoactivaQueFraccionar(String mensaje, Throwable causa) {
+            super(mensaje, causa);
+        }
+    }
+
+    /**
+     * Falta publicar una de las cifras con que se arma el cronograma (#562).
+     *
+     * <p>Un convenio no se puede armar sin el interes de fraccionamiento, sin el maximo de cuotas y
+     * sin la politica con que se redondea cada cuota, y las tres salen del <b>conjunto sellado</b>
+     * del ejercicio del convenio (regla 5). Eso no es un fallo del servidor: es una cifra que
+     * todavia nadie ha publicado, y con D-02a y D-03c abiertas es el estado <i>normal</i> del
+     * sistema.
+     *
+     * <p><b>Se traduce aqui, en la frontera, por el mismo motivo que {@link
+     * SinDeudaCoactivaQueFraccionar}</b>: las excepciones que lo dicen viven en {@code
+     * tesoreria.aplicacion} —un subpaquete— y Spring Modulith no deja que {@code coactiva} las
+     * nombre. Sin esta clase, {@code POST /coactiva/convenios} tendria que capturar un tipo interno
+     * de otro modulo o quedarse contestando 500 (#51 midio lo primero: «depends on non-exposed
+     * type»).
+     *
+     * <p>El mensaje es el de la excepcion original, que ya nombra la llave —{@code
+     * INTERES_FRACCIONAMIENTO:ORDINARIO}, {@code REDONDEO:CUOTA}— o, cuando lo que falta es el
+     * conjunto entero y no hay llave que nombrar, el <b>ejercicio</b>.
+     */
+    final class CondicionesSinPublicar extends RuntimeException {
+
+        @java.io.Serial private static final long serialVersionUID = 1L;
+
+        public CondicionesSinPublicar(String mensaje, Throwable causa) {
             super(mensaje, causa);
         }
     }

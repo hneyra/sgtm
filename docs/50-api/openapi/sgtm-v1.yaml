@@ -2283,6 +2283,59 @@ paths:
           $ref: "#/components/responses/SinMunicipalidad"
         "422":
           $ref: "#/components/responses/ErrorDeValidacion"
+  "/rentas/declaraciones/{djNro}/hoja":
+    get:
+      operationId: hoja_de_declaracion_jurada
+      summary: "Hoja resumen de la declaración jurada"
+      description: >-
+        Lo que la hoja resumen consigna: el **declarante** —código, nombre, documento y domicilio
+        fiscal **vigente a la fecha**—, sus **predios** con su % de propiedad, y las **cifras** de
+        la última determinación predial del ejercicio (#563).
+
+        Es el único documento del módulo pensado para **imprimirse y firmarse** —termina en
+        «Declaro bajo juramento…» y dos líneas de firma— y todo lo que consignaba venía del juego
+        de datos de la maqueta: el nombre y el DNI de otra persona, dos predios que no son suyos y
+        un «total a pagar». Una vez impresa y firmada, una hoja así **no se distingue de una
+        correcta**, y a diferencia de una pantalla nadie la vuelve a mirar contra la base.
+
+        **Un campo nulo es un campo que no hay.** Sin determinación del ejercicio no hay autovalúo,
+        ni valúo afecto, ni impuesto: publicar cero sería escribir «no debe nada» en un papel que
+        alguien firma. Y ni siquiera con determinación viajan el **derecho de emisión** y el
+        **total a pagar**: la determinación guarda la base y el impuesto, no el derecho, que es
+        `DERECHO_EMISION_PREDIAL` del conjunto sellado —cifra de ordenanza local, D-02b—.
+
+        `faltan` es una **lista de motivos**, no un booleano: «no se puede imprimir» sin decir por
+        qué es lo que hace que alguien lo imprima igual desde otro sitio.
+
+        Una declaración que no existe es **404**, no una hoja vacía.
+      tags: ["Rentas · Registro"]
+      parameters:
+        - name: djNro
+          in: path
+          required: true
+          schema: { type: string }
+        - name: ano
+          in: query
+          required: false
+          description: "Ejercicio de la declaración"
+          schema: { type: string }
+          example: "2026"
+        - name: fecha
+          in: query
+          required: false
+          description: "Fecha de corte a la que se resuelven el domicilio y la titularidad (regla 9); si falta, hoy"
+          schema: { type: string }
+          example: "2026-03-01"
+      responses:
+        200:
+          description: Operacion realizada
+          content:
+            application/json:
+              schema: { type: object }
+        "403":
+          $ref: "#/components/responses/SinMunicipalidad"
+        "422":
+          $ref: "#/components/responses/ErrorDeValidacion"
   "/rentas/declaraciones":
     post:
       operationId: presentar_declaracion_jurada

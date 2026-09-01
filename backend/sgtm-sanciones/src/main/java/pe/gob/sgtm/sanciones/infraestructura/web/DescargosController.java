@@ -12,6 +12,8 @@ import org.springframework.web.bind.annotation.RestController;
 import pe.gob.sgtm.autorizacion.Privilegio;
 import pe.gob.sgtm.autorizacion.RequiereAcceso;
 import pe.gob.sgtm.dominio.Observacion;
+import pe.gob.sgtm.parametros.LectorDeParametros;
+import pe.gob.sgtm.sanciones.aplicacion.PlazosDeSancionesParametrizados;
 import pe.gob.sgtm.sanciones.aplicacion.RegistrarDescargo;
 import pe.gob.sgtm.sanciones.dominio.Descargo;
 import pe.gob.sgtm.sanciones.dominio.Familia;
@@ -37,6 +39,25 @@ import pe.gob.sgtm.web.ProblemaDeNegocio;
  * {@code in: query}; leerlos solo del cuerpo dejaba la operación publicada y sin ninguna pantalla
  * que pudiera llamarla. Se siguen aceptando en el cuerpo, y ahí ganan: ver {@link
  * FiltroDeLaConsulta}.
+ *
+ * <h2>Qué devuelve 422, y por qué no 500 (#562)</h2>
+ *
+ * <p>El plazo para presentar el descargo sale del <b>conjunto sellado</b> que rige a la fecha de la
+ * infracción ({@link PlazosDeSancionesParametrizados}, regla 5). Ni que falte el conjunto entero
+ * ({@code EjercicioSinSellar}) ni que falte la llave dentro de él ({@code PlazoSinParametrizar})
+ * estaban traducidas: las dos caían en el {@code @ExceptionHandler(Exception.class)} de {@code
+ * ManejadorDeErrores} y salían como <b>500 {@code ERROR_INTERNO} con identificador de
+ * incidencia</b>. Con D-02a abierta —y con {@code PLAZO:DESCARGO_PAPELETA} sin transcribir en el
+ * corpus— ese es el estado <i>normal</i> del sistema, así que registrar un descargo era
+ * inalcanzable y cada intento dejaba una incidencia de nivel ERROR en el registro del servidor.
+ *
+ * <p>Sanciones es el único módulo del censo de #562 donde escapaban <b>las dos</b>; en valores,
+ * coactiva y licencias la llave que falta ya estaba traducida y solo faltaba el conjunto.
+ *
+ * <p>El mensaje es el de la propia excepción: nombra la llave —{@code PLAZO:DESCARGO_PAPELETA}— o,
+ * cuando lo que falta es el conjunto entero y no hay llave que nombrar, el <b>ejercicio</b>. Un
+ * fallo de verdad del servidor sigue siendo 500 con su incidencia: la lista nombra las excepciones
+ * una a una y no captura {@code RuntimeException}.
  */
 @RestController
 @RequestMapping(Api.RAIZ + "/transito/descargos")
@@ -88,7 +109,12 @@ public class DescargosController {
         } catch (RegistrarDescargo.PapeletaInexistente noExiste) {
             throw new ProblemaDeNegocio(
                     CodigoDeError.NO_ENCONTRADO, PeticionesDeSanciones.mensajeDe(noExiste));
-        } catch (RegistrarDescargo.PapeletaSinNadaQueImpugnar | IllegalArgumentException invalido) {
+        } catch (RegistrarDescargo.PapeletaSinNadaQueImpugnar
+                | PlazosDeSancionesParametrizados.PlazoSinParametrizar
+                | LectorDeParametros.EjercicioSinSellar
+                | IllegalArgumentException invalido) {
+            // Las dos de parámetros no son un fallo del servidor: es una cifra que todavía nadie
+            // ha publicado, y con D-02a abierta es el estado normal. Ver la cabecera de la clase.
             throw PeticionesDeSanciones.invalido(invalido);
         }
     }

@@ -1,6 +1,8 @@
 package pe.gob.sgtm.contribuyentes.infraestructura.web;
 
 import java.time.Clock;
+import java.time.LocalDate;
+import java.time.format.DateTimeParseException;
 import java.util.Locale;
 import org.jspecify.annotations.Nullable;
 import org.springframework.dao.DuplicateKeyException;
@@ -177,6 +179,28 @@ public class ContribuyenteController {
      * decidir que dos filas eran la misma persona, y eso es otro acto —con otro expediente— que
      * este endpoint no finge hacer.
      *
+     * <h2>Lo que el expediente puede corregir aqui, y lo que no (#552)</h2>
+     *
+     * <p>El expediente del contribuyente dibuja del orden de cincuenta campos y esta escritura
+     * admitia <b>tres</b>. Los que faltaban no eran todos del mismo tipo, y por eso no entran
+     * todos:
+     *
+     * <ul>
+     *   <li><b>Entran</b> {@code fechaNacimiento}, {@code estadoCivil} y {@code conyugeId}: son
+     *       datos de la persona que el padron corrige a menudo —una fecha mal tecleada, una
+     *       sociedad conyugal que se declara despues— y que esta operacion ya guardaba <b>sin poder
+     *       cambiarlos</b>: los copiaba de la fila existente, asi que la pantalla los dibujaba
+     *       editables y no viajaban.
+     *   <li><b>No entran</b> el domicilio, los contactos ni los responsables solidarios: cada uno
+     *       tiene su propia escritura en {@code FichaDelContribuyenteController} (#488), y con
+     *       motivo — <b>una mudanza no es una edicion</b>: agrega un tramo y cierra el anterior el
+     *       dia antes, de modo que la direccion vieja sigue explicando por que se notifico donde se
+     *       notifico. Meterlos aqui como campos sueltos perderia esa historia.
+     *   <li><b>No entran</b> los beneficios: son de {@code rentas} —tienen su vigencia, su
+     *       resolucion y su propia pantalla ({@code GET /rentas/beneficios})—, y este contexto es
+     *       la base del grafo de modulos (ARQ-01 §2): no puede depender de rentas.
+     * </ul>
+     *
      * <p>{@code activo = false} es la baja, y <b>no borra</b> (RNF-051): el codigo aparece en
      * recibos ya emitidos y en asientos del libro. Exige ademas el privilegio {@code ELIMINACION},
      * comprobado aqui dentro por el mismo puerto que usa el guardia, porque la anotacion declara lo
@@ -217,15 +241,66 @@ public class ContribuyenteController {
                         peticion.condicionEspecial() == null
                                 ? existente.condicionEspecial()
                                 : condicionDe(peticion.condicionEspecial()),
-                        existente.fechaNacimiento(),
-                        existente.estadoCivil(),
-                        existente.conyugeId(),
+                        peticion.fechaNacimiento() == null
+                                ? existente.fechaNacimiento()
+                                : fechaDeNacimientoDe(peticion.fechaNacimiento()),
+                        peticion.estadoCivil() == null
+                                ? existente.estadoCivil()
+                                : vacioANulo(peticion.estadoCivil()),
+                        peticion.conyugeId() == null
+                                ? existente.conyugeId()
+                                : conyugeDe(peticion.conyugeId(), id),
                         peticion.activo() == null ? existente.activo() : peticion.activo());
 
         return ContribuyenteResource.de(registrar.registrar(cambiado, observacion));
     }
 
     // ------------------------------------------------------------------
+
+    /**
+     * La fecha de nacimiento del cuerpo, o {@code null} si se manda vacia para borrarla.
+     *
+     * <p>La cadena vacia es una instruccion —«este contribuyente no tiene fecha»— y la ausencia del
+     * campo es una omision, igual que en el resto de este PUT.
+     */
+    private static @Nullable LocalDate fechaDeNacimientoDe(String texto) {
+        String limpio = texto.strip();
+        if (limpio.isEmpty()) {
+            return null;
+        }
+        try {
+            return LocalDate.parse(limpio);
+        } catch (DateTimeParseException malFormada) {
+            throw new ProblemaDeNegocio(
+                    CodigoDeError.VALIDACION,
+                    "La fecha de nacimiento va en formato AAAA-MM-DD: '" + texto + "'");
+        }
+    }
+
+    /**
+     * El conyuge, comprobando que no sea el propio contribuyente.
+     *
+     * <p>{@code 0} borra el enlace, como la cadena vacia en los campos de texto. Y nadie es su
+     * propio conyuge: dejarlo pasar produciria una sociedad conyugal de una sola persona, que
+     * ninguna consulta sabria deshacer.
+     */
+    private static @Nullable Long conyugeDe(long conyugeId, long propio) {
+        if (conyugeId == 0L) {
+            return null;
+        }
+        if (conyugeId == propio) {
+            throw new ProblemaDeNegocio(
+                    CodigoDeError.VALIDACION,
+                    "Nadie es su propio conyuge: el identificador del conyuge no puede ser el del"
+                            + " contribuyente que se corrige");
+        }
+        return conyugeId;
+    }
+
+    private static @Nullable String vacioANulo(String texto) {
+        String limpio = texto.strip();
+        return limpio.isEmpty() ? null : limpio;
+    }
 
     /**
      * El contrato trae el DNI y el RUC como dos filtros distintos, no como un tipo y un numero. Si
@@ -335,5 +410,8 @@ public class ContribuyenteController {
             @Nullable String tipoPersona,
             @Nullable String nombreRazonSocial,
             @Nullable String condicionEspecial,
+            @Nullable String fechaNacimiento,
+            @Nullable String estadoCivil,
+            @Nullable Long conyugeId,
             @Nullable Boolean activo) {}
 }

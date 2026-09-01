@@ -39,6 +39,9 @@ import pe.gob.sgtm.dominio.Ejercicio;
  *     pone el repositorio desde el origen de la peticion, no quien construye el objeto
  * @param motivo por que se asienta, mas alla del concepto; obligatorio cuando {@link
  *     Concepto#exigeMotivo()}, y en la practica siempre presente (regla 10)
+ * @param acto de que acto nace, cuando el libro lo sabe: un alta o una baja de deuda (#601). {@code
+ *     null} no es «se desconoce», es «no nacio de ninguno de los dos» —una emision, una cobranza,
+ *     una reversion—; ver {@link ActoDelLibro}
  */
 public record Asiento(
         @Nullable Long id,
@@ -57,7 +60,8 @@ public record Asiento(
         String documentoOrigen,
         @Nullable Long asientoReversadoId,
         @Nullable String usuarioId,
-        @Nullable String motivo) {
+        @Nullable String motivo,
+        @Nullable ActoDelLibro acto) {
 
     /** El ancho de {@code tributo varchar(20)}. */
     private static final int TRIBUTO_MAXIMO = 20;
@@ -174,6 +178,52 @@ public record Asiento(
             Dinero monto,
             LocalDate fechaValor,
             String documentoOrigen) {
+        return nuevoDelActo(
+                ejercicio,
+                contribuyenteId,
+                tributo,
+                concepto,
+                tipo,
+                fase,
+                periodo,
+                predioId,
+                vehiculoId,
+                referenciaExterna,
+                monto,
+                fechaValor,
+                documentoOrigen,
+                null);
+    }
+
+    /**
+     * Un asiento nuevo que nace sabiendo <b>de que acto</b> viene (#601).
+     *
+     * <p>Existe porque el libro no podia distinguir el abono de una <b>baja de deuda</b> del abono
+     * de una <b>cobranza</b>: los dos son {@code ABONO} de concepto {@code INSOLUTO}, columna a
+     * columna el mismo asiento. Sin esa distincion, «lo cargado» del panel —el denominador de todas
+     * las barras de avance— se quedaba con el cargo de un alta que ya no debe nada, y lo recaudado
+     * contaba como dinero que entro una deuda que se habia extinguido.
+     *
+     * <p>No sustituye a {@link #nuevo}: lo llena {@link MovimientoDeDeuda#enAsientos}, que es el
+     * unico sitio del sistema que sabe si esta escribiendo un alta o una baja. Todos los demas
+     * caminos dejan {@code acto} en nulo, y eso significa «no nacio de ninguno de los dos», que es
+     * exactamente lo que la consulta necesita saber de ellos.
+     */
+    public static Asiento nuevoDelActo(
+            Ejercicio ejercicio,
+            long contribuyenteId,
+            String tributo,
+            Concepto concepto,
+            TipoAsiento tipo,
+            Fase fase,
+            @Nullable Integer periodo,
+            @Nullable Long predioId,
+            @Nullable Long vehiculoId,
+            @Nullable String referenciaExterna,
+            Dinero monto,
+            LocalDate fechaValor,
+            String documentoOrigen,
+            @Nullable ActoDelLibro acto) {
         return new Asiento(
                 null,
                 ejercicio,
@@ -191,7 +241,8 @@ public record Asiento(
                 documentoOrigen,
                 null,
                 null,
-                null);
+                null,
+                acto);
     }
 
     /**
@@ -240,7 +291,8 @@ public record Asiento(
                 documentoOrigen,
                 null,
                 null,
-                motivo);
+                motivo,
+                null);
     }
 
     public boolean esNuevo() {
@@ -268,7 +320,8 @@ public record Asiento(
                 documentoOrigen,
                 asientoReversadoId,
                 usuarioId,
-                otroMotivo);
+                otroMotivo,
+                acto);
     }
 
     /**
@@ -308,6 +361,10 @@ public record Asiento(
                 documentoOrigen,
                 idOriginal,
                 null,
-                motivo);
+                motivo,
+                // El acto se COPIA, como todo lo demas: la reversion de una baja sigue
+                // siendo del acto de esa baja. Que no la cuente «lo cargado» no lo decide
+                // esta columna sino `asiento_reversado_id IS NULL`, que #56 ya puso.
+                original.acto());
     }
 }

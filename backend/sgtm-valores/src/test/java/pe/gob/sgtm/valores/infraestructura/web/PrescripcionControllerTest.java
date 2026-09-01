@@ -2,6 +2,9 @@ package pe.gob.sgtm.valores.infraestructura.web;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
+import ch.qos.logback.classic.Level;
+import ch.qos.logback.classic.spi.ILoggingEvent;
+import ch.qos.logback.core.read.ListAppender;
 import java.time.Clock;
 import java.time.LocalDate;
 import java.time.ZoneOffset;
@@ -165,16 +168,81 @@ class PrescripcionControllerTest {
     @Test
     @DisplayName("sin el plazo parametrizado, 422 nombrando la llave que falta (#192)")
     void sinPlazoParametrizado422() throws Exception {
-        DeclararPrescripcion sinPlazos =
-                new DeclararPrescripcion(
-                        prescripciones,
-                        new ValoresEnMemoria(),
-                        new PlazosParametrizados(new ParametrosDeMentira()),
-                        (RegistroDeAuditoria registro) -> {});
-        MockMvc sinParametros =
+        MvcResult resultado = declararCon(new ParametrosDeMentira());
+
+        assertThat(resultado.getResponse().getStatus()).isEqualTo(422);
+        assertThat(resultado.getResponse().getContentAsString())
+                .contains("PLAZO:PRESCRIPCION-DECLARACION_PRESENTADA");
+    }
+
+    // ------------------------------------------------------- lo que falta publicar (#562)
+
+    @Test
+    @DisplayName("sin ningun conjunto sellado, 422 nombrando el ejercicio y no 500")
+    void sinConjuntoSellado422() throws Exception {
+        MvcResult resultado = declararCon(new ParametrosDeMentira().sinSellar());
+
+        assertThat(resultado.getResponse().getStatus())
+                .as("no es que el servidor este roto: es que nadie ha sellado 2026 (D-02a)")
+                .isEqualTo(422);
+        String cuerpo = resultado.getResponse().getContentAsString();
+        assertThat(cuerpo).contains("VALIDACION").contains("2026");
+        assertThat(cuerpo)
+                .as("y no hay llave que nombrar: lo que falta es el conjunto entero")
+                .doesNotContain("PLAZO:")
+                .doesNotContain("incidencia");
+        assertThat(prescripciones.porId(1L)).isEmpty();
+    }
+
+    @Test
+    @DisplayName("y no deja una incidencia de nivel ERROR en el registro del servidor")
+    void loQueFaltaPublicarNoEnsuciaElRegistro() throws Exception {
+        ch.qos.logback.classic.Logger registro =
+                (ch.qos.logback.classic.Logger)
+                        org.slf4j.LoggerFactory.getLogger(ManejadorDeErrores.class);
+        ListAppender<ILoggingEvent> anotados = new ListAppender<>();
+        anotados.start();
+        registro.addAppender(anotados);
+        try {
+            declararCon(new ParametrosDeMentira().sinSellar());
+        } finally {
+            registro.detachAppender(anotados);
+        }
+
+        assertThat(anotados.list.stream().filter(e -> e.getLevel() == Level.ERROR).toList())
+                .as("el registro de incidencias es para defectos, no para cifras sin publicar")
+                .isEmpty();
+    }
+
+    @Test
+    @DisplayName("lo que SI es un fallo del servidor sigue siendo 500 con su incidencia")
+    void loQueSiEsInternoNoSeDisfraza() throws Exception {
+        MvcResult resultado =
+                declararCon(
+                        new ParametrosDeMentira()
+                                .con("PLAZO", "PRESCRIPCION-DECLARACION_PRESENTADA", "cuatro anios")
+                                .con("PLAZO", "PRESCRIPCION_INICIO-PREDIAL", "1 ANIOS"));
+
+        assertThat(resultado.getResponse().getStatus())
+                .as(
+                        "traducir lo que falta publicar no puede convertir TODO en 422: un plazo"
+                                + " sellado que no se puede leer es un dato que hay que investigar")
+                .isEqualTo(500);
+        assertThat(resultado.getResponse().getContentAsString()).contains("incidencia");
+    }
+
+    // ------------------------------------------------------------------
+
+    /** El mismo borde con otro lector de parametros detras del computo. */
+    private MvcResult declararCon(ParametrosDeMentira lector) throws Exception {
+        MockMvc borde =
                 MockMvcBuilders.standaloneSetup(
                                 new PrescripcionController(
-                                        sinPlazos,
+                                        new DeclararPrescripcion(
+                                                prescripciones,
+                                                new ValoresEnMemoria(),
+                                                new PlazosParametrizados(lector),
+                                                (RegistroDeAuditoria registro) -> {}),
                                         contribuyentes,
                                         Clock.fixed(
                                                 HOY.atStartOfDay(ZoneOffset.UTC).toInstant(),
@@ -182,23 +250,17 @@ class PrescripcionControllerTest {
                         .setControllerAdvice(new ManejadorDeErrores())
                         .build();
 
-        MvcResult resultado =
-                sinParametros
-                        .perform(
-                                MockMvcRequestBuilders.post("/api/v1/coactiva/prescripcion")
-                                        .contentType(MediaType.APPLICATION_JSON)
-                                        .content(
-                                                """
-                                                {"codContribuyente":"C-0007","tributo":"PREDIAL",
-                                                 "ejercicioDesde":2020,"ejercicioHasta":2020,
-                                                 "plazoAplicable":"DECLARACION_PRESENTADA",
-                                                 "observacion":"Se resuelve la solicitud"}
-                                                """))
-                        .andReturn();
-
-        assertThat(resultado.getResponse().getStatus()).isEqualTo(422);
-        assertThat(resultado.getResponse().getContentAsString())
-                .contains("PLAZO:PRESCRIPCION-DECLARACION_PRESENTADA");
+        return borde.perform(
+                        MockMvcRequestBuilders.post("/api/v1/coactiva/prescripcion")
+                                .contentType(MediaType.APPLICATION_JSON)
+                                .content(
+                                        """
+                                        {"codContribuyente":"C-0007","tributo":"PREDIAL",
+                                         "ejercicioDesde":2020,"ejercicioHasta":2020,
+                                         "plazoAplicable":"DECLARACION_PRESENTADA",
+                                         "observacion":"Se resuelve la solicitud"}
+                                        """))
+                .andReturn();
     }
 
     private MvcResult declararRango(String cuerpo) throws Exception {
