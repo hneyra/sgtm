@@ -16,6 +16,7 @@ import {
   fichaDelContribuyente,
   listarAranceles,
   listarDepreciacion,
+  listarManzanasDelSector,
   listarSectores,
   listarValoresUnitarios,
   listarVias,
@@ -258,6 +259,7 @@ export default function Catastro({ dest, onDest }: PantallaProps) {
   const [tipoDelAlta, setTipoDelAlta] = useState<TipoDePredio>('URBANO');
   const [valTab, setValTab] = useState(0);
   const [sectorAbierto, setSectorAbierto] = useState('01');
+  const [paginaDeManzanas, setPaginaDeManzanas] = useState(0);
   const [capas, setCapas] = useState<Record<string, boolean>>({
     predios: true,
     vias: true,
@@ -456,6 +458,22 @@ export default function Catastro({ dest, onDest }: PantallaProps) {
     (senal) => listarSectores(senal),
     [],
     dest === 'territorio' || (dest === 'predios' && predio === null),
+  );
+
+  /* Las manzanas del sector abierto (#537).
+     Se piden al desplegar y no al entrar: un sector de una municipalidad grande
+     pasa de mil manzanas, y traerlas todas por si acaso es descargar el catastro
+     entero para dibujar una lista que casi siempre esta plegada. */
+  /* Y solo si ese sector EXISTE en esta municipalidad: `sectorAbierto` nace en
+     '01' venga de donde venga, y una municipalidad puede no tenerlo. Sin esta
+     guarda se pide un 404 que ademas no lo dibuja nadie —ninguna fila esta
+     desplegada, porque ninguna casa con ese codigo—, asi que seria una peticion
+     perdida y un fallo invisible a la vez. */
+  const sectorExiste = (sectores.datos?.contenido ?? []).some((x) => x.codigo === sectorAbierto);
+  const manzanas = useRecurso(
+    (senal) => listarManzanasDelSector(sectorAbierto, paginaDeManzanas, senal),
+    [sectorAbierto, paginaDeManzanas],
+    dest === 'territorio' && sectorExiste,
   );
 
   /* ── El alta, contra el padrón de verdad ─────────────────────
@@ -2836,7 +2854,13 @@ export default function Catastro({ dest, onDest }: PantallaProps) {
                   return (
                     <div key={s.codigo} style={{ borderBottom: '1px solid var(--line)' }}>
                       <button
-                        onClick={() => setSectorAbierto(on ? '' : s.codigo)}
+                        onClick={() => {
+                          setSectorAbierto(on ? '' : s.codigo);
+                          /* La pagina vuelve a 0 al cambiar de sector: si no, abrir
+                             uno de tres manzanas estando en la pagina 4 del anterior
+                             lo ensenia vacio, que se lee como «este no tiene». */
+                          setPaginaDeManzanas(0);
+                        }}
                         aria-expanded={on}
                         className="hov-acento"
                         style={{
@@ -2877,10 +2901,7 @@ export default function Catastro({ dest, onDest }: PantallaProps) {
                       </button>
                       {on && (
                         <div style={{ padding: '4px 14px 12px 40px', background: 'var(--bg-elev)' }}>
-                          <p style={{ margin: '0 0 8px', fontSize: 11.5, lineHeight: 1.5, color: 'var(--ink-3)', textWrap: 'pretty' }}>
-                            {`El backend cuenta las manzanas de un sector —${s.manzanas ?? 0}, con ${s.lotes ?? 0} lotes— pero no publica ninguna operación que las liste: de manzanas solo sirve el alta. Hasta que la haya, aquí se dice cuántas hay y no cuáles.`}
-                          </p>
-                          <div style={{ display: 'flex', gap: 18, flexWrap: 'wrap' }}>
+                          <div style={{ display: 'flex', gap: 18, flexWrap: 'wrap', marginBottom: 9 }}>
                             <span style={{ fontSize: 12, color: 'var(--ink-3)' }}>
                               Manzanas <strong style={{ fontFamily: 'var(--font-mono)', color: 'var(--ink)' }}>{s.manzanas ?? 0}</strong>
                             </span>
@@ -2891,6 +2912,78 @@ export default function Catastro({ dest, onDest }: PantallaProps) {
                               Predios <strong style={{ fontFamily: 'var(--font-mono)', color: 'var(--ink)' }}>{s.predios ?? 0}</strong>
                             </span>
                           </div>
+
+                          {/* Y CUALES son, desde #537.
+                              Antes aquí sólo decía cuántas hay, porque el backend
+                              no publicaba ninguna operación que las listara. */}
+                          {manzanas.error !== null && (
+                            <FalloDeLectura
+                              error={manzanas.error}
+                              que={`las manzanas del sector ${s.codigo}`}
+                              acceso="sectores"
+                              alReintentar={manzanas.reintentar}
+                            />
+                          )}
+                          {manzanas.cargando && <div data-esq="1" style={{ height: 12, width: '70%' }} />}
+                          {manzanas.error === null && !manzanas.cargando && (manzanas.datos?.contenido ?? []).length === 0 && (
+                            <p style={{ margin: 0, fontSize: 12, color: 'var(--ink-3)' }}>
+                              Este sector todavía no tiene ninguna manzana registrada.
+                            </p>
+                          )}
+                          {(manzanas.datos?.contenido ?? []).length > 0 && (
+                            <>
+                              <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
+                                {(manzanas.datos?.contenido ?? []).map((mz) => (
+                                  <span
+                                    key={mz.id}
+                                    /* El recuento va en el `title` y también escrito:
+                                       un dato que sólo se alcanza con el ratón no lo
+                                       tiene quien navega con teclado (RNF-082). */
+                                    title={`Manzana ${mz.codigo}: ${mz.predios} predios en ${mz.lotes} lotes`}
+                                    style={{
+                                      display: 'inline-flex',
+                                      alignItems: 'baseline',
+                                      gap: 6,
+                                      border: '1px solid var(--line-2)',
+                                      borderRadius: 6,
+                                      padding: '4px 8px',
+                                      background: 'var(--bg-card)',
+                                      fontSize: 11.5,
+                                    }}
+                                  >
+                                    <span style={{ fontFamily: 'var(--font-mono)', color: 'var(--accent-ink)' }}>{mz.codigo}</span>
+                                    <span style={{ color: 'var(--ink-4)' }}>
+                                      {mz.predios} pr · {mz.lotes} lt
+                                    </span>
+                                  </span>
+                                ))}
+                              </div>
+                              {(manzanas.datos?.totalPaginas ?? 1) > 1 && (
+                                <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginTop: 9 }}>
+                                  <button
+                                    onClick={() => setPaginaDeManzanas((n) => Math.max(n - 1, 0))}
+                                    disabled={paginaDeManzanas === 0}
+                                    className="hov-linea"
+                                    style={{ ...BOTON_LINEA, padding: '4px 10px', fontSize: 11.5, opacity: paginaDeManzanas === 0 ? 0.45 : 1, cursor: paginaDeManzanas === 0 ? 'not-allowed' : 'pointer' }}
+                                  >
+                                    Anterior
+                                  </button>
+                                  <span style={{ fontFamily: 'var(--font-mono)', fontSize: 11, color: 'var(--ink-3)' }}>
+                                    {paginaDeManzanas + 1} de {manzanas.datos?.totalPaginas ?? 1} ·{' '}
+                                    {(manzanas.datos?.totalElementos ?? 0).toLocaleString('es-PE')} manzanas
+                                  </span>
+                                  <button
+                                    onClick={() => setPaginaDeManzanas((n) => n + 1)}
+                                    disabled={!(manzanas.datos?.hayMas ?? false)}
+                                    className="hov-linea"
+                                    style={{ ...BOTON_LINEA, padding: '4px 10px', fontSize: 11.5, opacity: (manzanas.datos?.hayMas ?? false) ? 1 : 0.45, cursor: (manzanas.datos?.hayMas ?? false) ? 'pointer' : 'not-allowed' }}
+                                  >
+                                    Siguiente
+                                  </button>
+                                </div>
+                              )}
+                            </>
+                          )}
                         </div>
                       )}
                     </div>

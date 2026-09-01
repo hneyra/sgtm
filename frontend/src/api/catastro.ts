@@ -168,6 +168,49 @@ export function listarSectores(senal?: AbortSignal): Promise<RespuestaPaginada<S
   return solicitar('/catastro/sectores', { parametros: { tamano: 200 }, senal });
 }
 
+/**
+ * Una manzana del sector. Es `ManzanaResource`.
+ *
+ * `predios` son los **activos** que la declaran, y `lotes` cuantos valores de
+ * lote distintos hay entre ellos. Que `lotes` sea menor que `predios` es lo
+ * normal y no un descuadre: tres departamentos de un mismo lote son tres
+ * predios y UN lote.
+ *
+ * **No trae `activa`, y es a proposito**: `manzana` no tiene columna de estado
+ * porque una manzana no se edita ni se da de baja —su codigo es un tramo del
+ * codigo catastral de sus predios— y un `true` constante seria una columna que
+ * no dice nada.
+ */
+export type Manzana = {
+  id: number;
+  sectorId: number;
+  sectorCodigo: string;
+  codigo: string;
+  predios: number;
+  lotes: number;
+};
+
+/**
+ * Las manzanas de un sector (#537).
+ *
+ * Pagina como el resto de listados, y hace falta: un sector de una
+ * municipalidad grande pasa de mil manzanas.
+ *
+ * Un codigo que no existe contesta **404**, no una pagina vacia. La diferencia
+ * importa al dibujarlo: cero filas significa «ese sector todavia no tiene
+ * manzanas», que es lo contrario de «ese sector no existe».
+ */
+export function listarManzanasDelSector(
+  codigo: string,
+  pagina = 0,
+  senal?: AbortSignal,
+): Promise<RespuestaPaginada<Manzana>> {
+  return solicitar(`/catastro/sectores/${encodeURIComponent(codigo)}/manzanas`, {
+    parametros: { pagina, tamano: 50 },
+    senal,
+  });
+}
+
 
 /** Una via del catalogo. Es `ViaResource`. */
 export type Via = {
