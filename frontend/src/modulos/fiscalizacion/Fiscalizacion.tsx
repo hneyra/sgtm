@@ -2,8 +2,17 @@ import { useEffect, useMemo, useState, type CSSProperties } from 'react';
 import { Shell } from '../../shell/Shell';
 import type { PantallaProps } from '../../App';
 import { Icono } from '../../ds/Icono';
-import { listarOmisos } from '../../api/fiscalizacion';
-import { useRecurso } from '../../api/useRecurso';
+import {
+  listarOmisos,
+  listarProgramas,
+  listarMuestra,
+  listarResultados,
+  listarHistorico,
+  leerEstadoDeCuenta,
+  type ProgramaDeFiscalizacion,
+  type FilaDeMuestra,
+} from '../../api/fiscalizacion';
+import { useRecurso, useRebote } from '../../api/useRecurso';
 import { FalloDeLectura } from '../../api/Fallo';
 import type { RespuestaPaginada } from '../../api/cliente';
 import { ICO } from '../../ds/iconos';
@@ -15,24 +24,11 @@ import {
   DET_PREDIAL,
   DET_VEHICULAR,
   DIFF,
-  EMBUDO,
-  EMBUDO_BASE,
-  ENTRADA,
-  KPIS,
-  MUESTRA,
-  MUESTRA_COLS,
   OPCIONES,
   PASOS_ACTA,
-  PROGRAMAS,
-  PROG_RESUMEN,
   REP_COLS,
   REP_FILAS,
   REP_META,
-  RES_POR_ACTA,
-  RES_POR_CONTRIB,
-  RES_TOTALES,
-  RUTA,
-  VERSIONES,
   type CampoDeActa,
   type ColDef,
 } from '../../datos/fiscalizacion';
@@ -359,7 +355,10 @@ export default function Fiscalizacion({ dest, onDest }: PantallaProps) {
   const [resTab, setResTab] = useState(0);
   const [paso, setPaso] = useState(0);
   const [modoCampo, setModoCampo] = useState(false);
-  const [programa, setPrograma] = useState('PF-2026-014');
+  /* El programa elegido es el ID de uno REAL, no el codigo de la maqueta.
+     `PF-2026-014` no existe en ninguna de las dos municipalidades: la tabla
+     `programa_fiscalizacion` tiene cero filas (#546). */
+  const [programa, setPrograma] = useState<number | null>(null);
   /* Nace VACIA. Con `{0: true, 3: true}` la pantalla abria con dos predios
      REALES ya marcados —en la muni 1, C-000001 y C-000003— que nadie eligio, y
      programar una fiscalizacion abre un procedimiento sobre una persona
@@ -433,6 +432,11 @@ export default function Fiscalizacion({ dest, onDest }: PantallaProps) {
    * unico. Con el indice, marcar la fila 3 y cambiar de pagina dejaba marcada
    * a OTRA persona.
    */
+  /* `declaroFueraDePlazo` llega con valor y NO se dibuja: es el AC 3 de #49
+     —quien declaro tarde no es omiso, le toca la multa del art. 176 y no la
+     determinacion de oficio— y la pantalla todavia no distingue las dos cosas.
+     No se anade por cuenta propia porque cambia la forma de la tabla del
+     manual; queda en el issue #570 con lo que tendria que ensenar. */
   const filasDeOmisos: FilaDeDeteccion[] = (omisos.datos?.contenido ?? []).map((o) => ({
     llave: o.codRefCatastral + '·' + o.titular,
     /* El rotulo se dibuja desde el enumerado, no desde su texto: asi renombrar
@@ -475,6 +479,70 @@ export default function Fiscalizacion({ dest, onDest }: PantallaProps) {
   const marcadasN = filasVisibles.filter((f) => marcadas[f.llave] === true).length;
 
   const paginaDeOmisos = omisos.datos;
+
+  /* ── Programas, contra `GET /fiscalizacion/programas` (#431) ── */
+  const [buscaPrograma, setBuscaPrograma] = useState('');
+  const programas = useRecurso(
+    (senal) => listarProgramas({ nDePrograma: buscaPrograma || undefined }, { pagina: 0, tamano: TAMANO_DE_PAGINA }, senal),
+    [buscaPrograma],
+    dest === 'programas' || dest === 'panel',
+  );
+  const listaDeProgramas: ProgramaDeFiscalizacion[] = programas.datos?.contenido ?? [];
+
+  /* El primero de la lista, mientras nadie elija otro. Sin programas no hay
+     ninguno elegido y todo lo que cuelga de el se queda sin pedir. */
+  const programaActivo: ProgramaDeFiscalizacion | null =
+    listaDeProgramas.find((x) => x.id === programa) ?? listaDeProgramas[0] ?? null;
+
+  /* ── La muestra del programa elegido (#481) ─────────────────── */
+  const [paginaMuestra, setPaginaMuestra] = useState(0);
+  useEffect(() => setPaginaMuestra(0), [programaActivo?.id]);
+  const muestra = useRecurso(
+    (senal) => listarMuestra(programaActivo?.id ?? 0, { pagina: paginaMuestra, tamano: TAMANO_DE_PAGINA }, senal),
+    [programaActivo?.id, paginaMuestra],
+    (dest === 'programas' || dest === 'panel') && programaActivo !== null,
+  );
+
+  /* ── Resultados, contra `GET /fiscalizacion/resultados` (#49) ── */
+  const [paginaRes, setPaginaRes] = useState(0);
+  useEffect(() => setPaginaRes(0), [resTab]);
+  const resultados = useRecurso(
+    (senal) => listarResultados({}, { pagina: paginaRes, tamano: TAMANO_DE_PAGINA }, senal),
+    [paginaRes],
+    dest === 'resultados' && resTab === 0,
+  );
+
+  /* Las dos cifras del embudo que SI se pueden leer, acotadas al programa: son
+     la misma consulta de resultados con su filtro, y de ellas solo se lee el
+     total del sobre. No se componen aqui: se preguntan. */
+  const liquidadas = useRecurso(
+    (senal) => listarResultados({ programa: String(programaActivo?.id ?? 0) }, { pagina: 0, tamano: 1 }, senal),
+    [programaActivo?.id],
+    dest === 'panel' && programaActivo !== null,
+  );
+  const notificadas = useRecurso(
+    (senal) =>
+      listarResultados({ programa: String(programaActivo?.id ?? 0), estado: 'NOTIFICADA' }, { pagina: 0, tamano: 1 }, senal),
+    [programaActivo?.id],
+    dest === 'panel' && programaActivo !== null,
+  );
+
+  /* ── El estado de cuenta de un contribuyente (RF-056) ────────── */
+  const [contribuyenteRes, setContribuyenteRes] = useState('');
+  const contribuyenteReposado = useRebote(contribuyenteRes);
+  const estadoDeCuenta = useRecurso(
+    (senal) => leerEstadoDeCuenta(contribuyenteReposado.trim(), senal),
+    [contribuyenteReposado],
+    dest === 'resultados' && resTab === 1 && contribuyenteReposado.trim() !== '',
+  );
+
+  /* ── El historico del proceso (AC 5 de #49) ─────────────────── */
+  const [paginaHist, setPaginaHist] = useState(0);
+  const historico = useRecurso(
+    (senal) => listarHistorico({}, { pagina: paginaHist, tamano: TAMANO_DE_PAGINA }, senal),
+    [paginaHist],
+    dest === 'resultados' && resTab === 2,
+  );
 
   /* ── Acta: la tabla de contraste ───────────────────────────── */
   const contraste = useMemo(() => {
@@ -567,9 +635,6 @@ export default function Fiscalizacion({ dest, onDest }: PantallaProps) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [vals, contraste.hayDif]);
 
-  /* ── Resultados ────────────────────────────────────────────── */
-  const resAct = resTab === 0 ? RES_POR_ACTA : RES_POR_CONTRIB;
-
   /* ── Cabecera ──────────────────────────────────────────────── */
   const destino = m.destinos.find((x) => x.k === dest);
   const miga = esActa
@@ -628,13 +693,28 @@ export default function Fiscalizacion({ dest, onDest }: PantallaProps) {
               acta, se determina la deuda omitida y se notifica. El módulo se ordena por esas cinco etapas.
             </p>
 
+            {programas.error !== null && (
+              <FalloDeLectura error={programas.error} que="los programas de fiscalización" acceso="fisc_programa" alReintentar={programas.reintentar} />
+            )}
+
             <section style={TARJETA}>
               <div style={CABECERA}>
-                <h2 style={H2}>Programa PF-2026-014 · predial selectivo, sector 02</h2>
-                <span style={META}>17/08 — 30/09</span>
+                {/* La cabecera nombraba «Programa PF-2026-014 · predial
+                    selectivo, sector 02» y su plazo «17/08 — 30/09». Ese
+                    programa no existe: `programa_fiscalizacion` tiene cero filas
+                    en las dos municipalidades (#546). */}
+                <h2 style={H2}>
+                  {programaActivo === null
+                    ? 'El embudo de un programa'
+                    : `Programa ${programaActivo.codigo} · ${programaActivo.descripcion}`}
+                </h2>
+                <span style={META}>
+                  {programaActivo === null ? SIN_DATO : programaActivo.fechaInicio + ' — ' + (programaActivo.fechaFin ?? SIN_DATO)}
+                </span>
               </div>
+
               <button
-                onClick={() => onDest(ENTRADA.dest)}
+                onClick={() => onDest('deteccion')}
                 className="hov-acento"
                 style={{
                   display: 'flex',
@@ -653,18 +733,23 @@ export default function Fiscalizacion({ dest, onDest }: PantallaProps) {
                   Entrada
                 </span>
                 <span style={{ flex: 1, minWidth: 0 }}>
-                  <span style={{ display: 'block', fontSize: 13, color: 'var(--ink)' }}>{ENTRADA.titulo}</span>
-                  <span style={{ display: 'block', fontSize: 11.5, color: 'var(--ink-3)', marginTop: 2, textWrap: 'pretty' }}>{ENTRADA.detalle}</span>
+                  <span style={{ display: 'block', fontSize: 13, color: 'var(--ink)' }}>Detectados por el cruce de catastro contra rentas</span>
+                  <span style={{ display: 'block', fontSize: 11.5, color: 'var(--ink-3)', marginTop: 2, textWrap: 'pretty' }}>
+                    Otro conjunto: de aquí se elige la muestra de cada programa. No es una etapa del embudo.
+                  </span>
                 </span>
-                <span style={{ fontFamily: 'var(--font-mono)', fontSize: 14, color: 'var(--ink)' }}>{ENTRADA.valor}</span>
+                {/* «3,418» era del artboard. El universo del cruce lo cuenta la
+                    deteccion, y su total NO se puede traer aqui sin repetir una
+                    consulta que en el padron real tarda 8,5 s (#561). */}
+                <span style={{ fontFamily: 'var(--font-mono)', fontSize: 13, color: 'var(--ink-3)' }}>{SIN_DATO}</span>
                 <Icono d={ICO.flechaDer} tam={14} grosor={1.8} style={FLECHA} />
               </button>
-              {EMBUDO.map((e, i) => {
-                const p = (e[2] / EMBUDO_BASE) * 100;
-                return (
+
+              {etapasDelEmbudo(muestra.datos?.totalElementos ?? null, liquidadas.datos?.totalElementos ?? null, notificadas.datos?.totalElementos ?? null).map(
+                (e, i) => (
                   <button
-                    key={e[0]}
-                    onClick={() => onDest(e[3])}
+                    key={e.etapa}
+                    onClick={() => onDest(e.dest)}
                     className="hov-acento"
                     style={{
                       display: 'flex',
@@ -696,30 +781,57 @@ export default function Fiscalizacion({ dest, onDest }: PantallaProps) {
                       {i + 1}
                     </span>
                     <span style={{ flex: '0 0 190px', minWidth: 0 }}>
-                      <span style={{ display: 'block', fontSize: 13.5, fontWeight: 500 }}>{e[0]}</span>
-                      <span style={{ display: 'block', fontSize: 11.5, color: 'var(--ink-3)', marginTop: 2 }}>{e[1]}</span>
+                      <span style={{ display: 'block', fontSize: 13.5, fontWeight: 500 }}>{e.etapa}</span>
+                      <span style={{ display: 'block', fontSize: 11.5, color: 'var(--ink-3)', marginTop: 2, textWrap: 'pretty' }}>{e.detalle}</span>
                     </span>
+                    {/* La barra solo se dibuja cuando su cifra Y su base son
+                        dos lecturas. Sin las dos no hay proporcion que pintar, y
+                        una barra a medias se lee como un avance. */}
                     <span style={{ flex: 1, minWidth: 50, height: 22, borderRadius: 5, background: 'var(--accent-soft)', overflow: 'hidden', position: 'relative' }}>
-                      <span style={{ position: 'absolute', inset: '0 auto 0 0', width: `${p.toFixed(1)}%`, background: 'var(--accent)', opacity: 0.42 + i * 0.15 }} />
+                      {e.parte !== null && (
+                        <span style={{ position: 'absolute', inset: '0 auto 0 0', width: `${e.parte.toFixed(1)}%`, background: 'var(--accent)', opacity: 0.42 + i * 0.15 }} />
+                      )}
                     </span>
                     <span style={{ flex: '0 0 46px', textAlign: 'right', fontFamily: 'var(--font-mono)', fontSize: 11.5, color: 'var(--ink-3)' }}>
-                      {p.toFixed(0)} %
+                      {e.parte === null ? SIN_DATO : `${e.parte.toFixed(0)} %`}
                     </span>
-                    <span style={{ flex: '0 0 62px', textAlign: 'right', fontFamily: 'var(--font-mono)', fontSize: 14, color: 'var(--ink)' }}>{e[2]}</span>
+                    <span style={{ flex: '0 0 62px', textAlign: 'right', fontFamily: 'var(--font-mono)', fontSize: 14, color: 'var(--ink)' }}>
+                      {e.valor === null ? SIN_DATO : e.valor}
+                    </span>
                     <Icono d={ICO.flechaDer} tam={14} grosor={1.8} style={FLECHA} />
                   </button>
-                );
-              })}
-              <p style={PIE}>
-                Una etapa que se estrecha mucho respecto de la anterior es donde se pierde el programa: 35 predios inspeccionados sin
-                diferencia no son un fracaso, 12 predios cerrados sin volver a visitar sí.
-              </p>
+                ),
+              )}
+
+              <div style={{ padding: '11px 16px' }}>
+                <Aviso tono="warn" titulo="El embudo se lee a trozos, y hay que decir cuáles">
+                  {/* #505: «el embudo pide nueve cifras y el contrato publica
+                      dos». Aqui se leen tres —el tamaño de la muestra y los dos
+                      totales de resultados— y las demas se dicen «—». */}
+                  «Inspeccionados» no lo cuenta ninguna operación: la muestra publica <code>visitado</code> fila a fila y nadie publica su
+                  recuento. «Detectados» tampoco se trae: sería repetir una consulta que en el padrón real tarda 8,5 s (#561). Lo que sí se
+                  lee es el tamaño de la muestra y los dos totales de resultados, cada uno de su propia consulta. Issues #505 y #546.
+                </Aviso>
+              </div>
             </section>
 
             <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit,minmax(196px,1fr))', gap: 13 }}>
-              {KPIS.map((k) => (
+              {/* Las cuatro tarjetas del artboard eran «84 de 96», «63.5 %»,
+                  «S/ 214,882» y «3 reclamadas», y ninguna de las cuatro se puede
+                  leer: no hay recuento de actas, la efectividad es un cociente
+                  que nadie publica ni define, el importe es D-02a (#198) y
+                  `EstadoDeLiquidacion` no tiene ningun estado «reclamada». Las
+                  cuatro se sustituyen por cuatro totales que SI son lecturas. */}
+              {[
+                { valor: programas.datos?.totalElementos ?? null, etiqueta: 'Programas registrados', nota: 'Los que devuelve la consulta de programas.' },
+                { valor: muestra.datos?.totalElementos ?? null, etiqueta: 'Predios en la muestra', nota: 'Del programa que está seleccionado arriba.' },
+                { valor: liquidadas.datos?.totalElementos ?? null, etiqueta: 'Liquidaciones', nota: 'Actas de ese programa que llegaron a liquidarse.' },
+                { valor: notificadas.datos?.totalElementos ?? null, etiqueta: 'Notificadas', nota: 'Las mismas, con el filtro de estado NOTIFICADA.' },
+              ].map((k) => (
                 <div key={k.etiqueta} style={{ background: 'var(--bg-card)', border: '1px solid var(--line)', borderRadius: 10, boxShadow: 'var(--shadow-1)', padding: '16px 17px' }}>
-                  <p style={{ margin: 0, fontFamily: 'var(--font-mono)', fontSize: 25, fontWeight: 500, letterSpacing: '-.01em', color: 'var(--accent-ink)' }}>{k.valor}</p>
+                  <p style={{ margin: 0, fontFamily: 'var(--font-mono)', fontSize: 25, fontWeight: 500, letterSpacing: '-.01em', color: 'var(--accent-ink)' }}>
+                    {k.valor === null ? SIN_DATO : k.valor}
+                  </p>
                   <p style={{ margin: '5px 0 0', fontSize: 11.5, color: 'var(--ink-3)' }}>{k.etiqueta}</p>
                   <p style={{ margin: '7px 0 0', fontSize: 11.5, color: 'var(--ink-4)', textWrap: 'pretty' }}>{k.nota}</p>
                 </div>
@@ -728,39 +840,57 @@ export default function Fiscalizacion({ dest, onDest }: PantallaProps) {
 
             <section style={TARJETA}>
               <div style={CABECERA}>
-                <h2 style={H2}>Tu ruta de hoy</h2>
-                <span style={META}>3 visitas · sector 02</span>
+                {/* «Tu ruta de hoy» eran tres predios con direccion, riesgo y
+                    hora —10:00, 11:30, 15:00— y no hay ninguna operacion de
+                    ruta: ni de hoy, ni de nadie. Lo que si se puede leer es que
+                    de la muestra de este programa estas filas siguen sin acta. */}
+                <h2 style={H2}>Pendientes de visita</h2>
+                <span style={META}>
+                  {muestra.datos === null ? SIN_DATO : `${pendientesDeVisita(muestra.datos.contenido).length} en esta página de la muestra`}
+                </span>
               </div>
-              {RUTA.map((r) => (
-                <button
-                  key={r.predio}
-                  onClick={() => {
-                    setPaso(0);
-                    onDest('actas');
-                  }}
-                  className="hov-acento"
-                  style={{
-                    display: 'flex',
-                    alignItems: 'center',
-                    gap: 14,
-                    width: '100%',
-                    textAlign: 'left',
-                    border: 0,
-                    borderBottom: '1px solid var(--line)',
-                    background: 'transparent',
-                    padding: '13px 16px',
-                    cursor: 'pointer',
-                  }}
+
+              {muestra.error !== null && (
+                <div style={{ padding: '12px 16px' }}>
+                  <FalloDeLectura error={muestra.error} que="la muestra del programa" acceso="fisc_programa" alReintentar={muestra.reintentar} />
+                </div>
+              )}
+
+              {pendientesDeVisita(muestra.datos?.contenido ?? []).map((f) => (
+                <div
+                  key={String(f.predioId) + '·' + String(f.contribuyenteId)}
+                  style={{ display: 'flex', alignItems: 'center', gap: 14, borderBottom: '1px solid var(--line)', padding: '13px 16px' }}
                 >
-                  <Insignia tono={r.tono}>{r.riesgo}</Insignia>
+                  <Insignia tono={tonoDeCondicion(f.condicion)}>{etiquetaDeCondicion(f.condicion)}</Insignia>
                   <span style={{ flex: 1, minWidth: 0 }}>
-                    <span style={{ display: 'block', fontSize: 13.5, fontWeight: 500 }}>{r.predio}</span>
-                    <span style={{ display: 'block', fontSize: 12, color: 'var(--ink-3)', marginTop: 2, textWrap: 'pretty' }}>{r.detalle}</span>
+                    <span style={{ display: 'block', fontSize: 13.5, fontWeight: 500 }}>{f.codRefCatastral}</span>
+                    <span style={{ display: 'block', fontSize: 12, color: 'var(--ink-3)', marginTop: 2, textWrap: 'pretty' }}>
+                      {f.titular} · sector {f.sector ?? SIN_DATO}
+                    </span>
                   </span>
-                  <span style={{ fontSize: 12, color: 'var(--ink-3)', flex: '0 0 auto' }}>{r.hora}</span>
-                  <Icono d={ICO.flechaDer} tam={14} grosor={1.8} style={FLECHA} />
-                </button>
+                  {/* Ni hora ni riesgo: la muestra no publica ninguno de los
+                      dos, y la hora del artboard era la de una visita inventada. */}
+                  <span style={{ fontSize: 12, color: 'var(--ink-3)', flex: '0 0 auto' }}>sorteado {f.fechaSorteo}</span>
+                </div>
               ))}
+
+              {programaActivo === null ? (
+                <div style={{ padding: '11px 16px' }}>
+                  <Aviso tono="neutro" titulo="No hay ningún programa">
+                    Sin programa no hay muestra, y sin muestra no hay a quién visitar. Un programa se registra con{' '}
+                    <code>POST /fiscalizacion/programas</code>, y esta interfaz todavía no dibuja ese formulario. Issue #550.
+                  </Aviso>
+                </div>
+              ) : muestra.cargando ? (
+                <p style={PIE}>Consultando la muestra…</p>
+              ) : muestra.error === null && pendientesDeVisita(muestra.datos?.contenido ?? []).length === 0 ? (
+                <div style={{ padding: '11px 16px' }}>
+                  <Aviso tono="neutro" titulo="Nada pendiente en esta página">
+                    Ninguna fila de esta página de la muestra está sin visitar. No hay operación que cuente las pendientes del programa
+                    entero: <code>visitado</code> viaja fila a fila. Issue #546.
+                  </Aviso>
+                </div>
+              ) : null}
             </section>
           </div>
         )}
@@ -968,7 +1098,16 @@ export default function Fiscalizacion({ dest, onDest }: PantallaProps) {
                 </div>
               )}
 
-              <p style={{ ...PIE, borderTop: '1px solid var(--line)' }}>{detAct.nota}</p>
+              <p style={{ ...PIE, borderTop: '1px solid var(--line)' }}>
+                {detAct.nota}
+                {detTab === 0 && (
+                  <>
+                    {' '}
+                    La consulta publica además si el contribuyente declaró fuera de plazo, y esta tabla todavía no lo dibuja: declarar tarde
+                    no convierte a nadie en omiso —es la multa del art. 176, no una determinación de oficio—. Issue #570.
+                  </>
+                )}
+              </p>
             </section>
 
             {/* Las dos acciones estan APAGADAS, y el motivo se lee en pantalla
@@ -1033,14 +1172,49 @@ export default function Fiscalizacion({ dest, onDest }: PantallaProps) {
               <section style={TARJETA}>
                 <div style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '12px 14px', borderBottom: '1px solid var(--line)' }}>
                   <h2 style={{ margin: 0, flex: 1, fontFamily: 'var(--font-serif)', fontSize: 15, fontWeight: 600 }}>Programas</h2>
-                  <span style={META}>3</span>
+                  {/* El recuento sale del sobre, no de la longitud de la lista:
+                      «3» era el numero de programas del artboard. */}
+                  <span style={META}>{programas.datos === null ? SIN_DATO : programas.datos.totalElementos}</span>
                 </div>
-                {PROGRAMAS.map((p) => {
-                  const on = programa === p[0];
+                <div style={{ padding: '11px 14px', borderBottom: '1px solid var(--line)' }}>
+                  <input
+                    value={buscaPrograma}
+                    onChange={(e) => setBuscaPrograma(e.target.value)}
+                    placeholder="Nº de programa"
+                    aria-label="Buscar por número de programa"
+                    style={{ width: '100%', boxSizing: 'border-box', border: '1px solid var(--line-2)', borderRadius: 6, padding: '8px 10px', background: 'var(--bg-elev)', fontSize: 13 }}
+                  />
+                </div>
+
+                {programas.error !== null && (
+                  <div style={{ padding: '12px 14px' }}>
+                    <FalloDeLectura error={programas.error} que="los programas de fiscalización" acceso="fisc_programa" alReintentar={programas.reintentar} />
+                  </div>
+                )}
+
+                {programas.error === null && programas.cargando && (
+                  <p style={{ ...PIE, borderBottom: '1px solid var(--line)' }}>Consultando los programas…</p>
+                )}
+
+                {programas.error === null && !programas.cargando && listaDeProgramas.length === 0 && (
+                  <div style={{ padding: '12px 14px' }}>
+                    <Aviso tono="neutro" titulo="Todavía no hay ningún programa">
+                      {/* Los tres del artboard —PF-2026-014, PF-2026-011,
+                          PF-2025-032, con sus «96 predios», «618 vehiculos» y
+                          «1,412 predios»— no existen: `programa_fiscalizacion`
+                          tiene cero filas en las dos municipalidades (#546). */}
+                      La consulta contestó sin ninguno. Un programa se registra con <code>POST /fiscalizacion/programas</code> —código,
+                      descripción, tipo y fecha de inicio— y esta pantalla todavía no dibuja ese formulario. Issue #550.
+                    </Aviso>
+                  </div>
+                )}
+
+                {listaDeProgramas.map((prog) => {
+                  const on = programaActivo?.id === prog.id;
                   return (
                     <button
-                      key={p[0]}
-                      onClick={() => setPrograma(p[0])}
+                      key={prog.id}
+                      onClick={() => setPrograma(prog.id)}
                       aria-current={on ? 'true' : undefined}
                       className="hov-acento"
                       style={{
@@ -1056,18 +1230,31 @@ export default function Fiscalizacion({ dest, onDest }: PantallaProps) {
                     >
                       <span style={{ display: 'flex', alignItems: 'center', gap: 9 }}>
                         <span style={{ fontFamily: 'var(--font-mono)', fontSize: 12, color: 'var(--accent-ink)', background: 'var(--accent-soft)', borderRadius: 4, padding: '2px 6px' }}>
-                          {p[0]}
+                          {prog.codigo}
                         </span>
-                        <Insignia tono={p[2]}>{p[1]}</Insignia>
+                        <Insignia tono={tonoDelEstadoDelPrograma(prog.estado)}>{etiquetaDelEstadoDelPrograma(prog.estado)}</Insignia>
                       </span>
-                      <span style={{ display: 'block', fontSize: 12.5, color: 'var(--ink-2)', marginTop: 6, textWrap: 'pretty' }}>{p[3]}</span>
-                      <span style={{ display: 'block', fontSize: 11, color: 'var(--ink-4)', marginTop: 4 }}>{p[4]}</span>
+                      <span style={{ display: 'block', fontSize: 12.5, color: 'var(--ink-2)', marginTop: 6, textWrap: 'pretty' }}>{prog.descripcion}</span>
+                      {/* Solo lo que el recurso publica. El pie del artboard
+                          decia «96 predios · R. Mendoza Cruz · 17/08 — 30/09»,
+                          y el tamaño de la muestra no viene en esta fila: hay
+                          que preguntarselo a `/muestra`, que es otra consulta. */}
+                      <span style={{ display: 'block', fontSize: 11, color: 'var(--ink-4)', marginTop: 4 }}>
+                        {[prog.fiscalizador ?? SIN_DATO, prog.fechaInicio + ' — ' + (prog.fechaFin ?? SIN_DATO)].join(' · ')}
+                      </span>
                     </button>
                   );
                 })}
+
                 <div style={{ padding: '11px 14px' }}>
+                  {/* `POST /fiscalizacion/programas` existe, pero pide codigo,
+                      descripcion, tipo y fecha de inicio, y aqui no hay ningun
+                      campo donde teclearlos —ni el de observacion que toda
+                      escritura exige (regla 10)—. Apagado, con el motivo. */}
                   <button
-                    style={{ width: '100%', border: '1px dashed var(--line-2)', borderRadius: 7, padding: 9, background: 'transparent', fontSize: 12.5, color: 'var(--ink-3)', cursor: 'pointer' }}
+                    disabled
+                    title="El alta pide código, descripción, tipo y fecha de inicio, y esta pantalla no dibuja ningún campo."
+                    style={{ ...BOTON_APAGADO, width: '100%', border: '1px dashed var(--line-2)', borderRadius: 7, padding: 9, background: 'transparent', fontSize: 12.5, color: 'var(--ink-3)' }}
                   >
                     + Nuevo programa
                   </button>
@@ -1077,7 +1264,7 @@ export default function Fiscalizacion({ dest, onDest }: PantallaProps) {
               <div style={{ display: 'flex', flexDirection: 'column', gap: 14, minWidth: 0 }}>
                 <section style={TARJETA}>
                   <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit,minmax(150px,1fr))', gap: 0, background: 'var(--bg-card)' }}>
-                    {([['Programa', programa], ...PROG_RESUMEN] as [string, string][]).map((r) => (
+                    {resumenDelPrograma(programaActivo, muestra.datos?.totalElementos ?? null).map((r) => (
                       <div key={r[0]} style={{ background: 'var(--bg-card)', padding: '14px 16px', borderLeft: '1px solid var(--line)', borderTop: '1px solid var(--line)', margin: '-1px 0 0 -1px' }}>
                         <p style={{ margin: '0 0 5px', fontSize: 10, fontWeight: 500, textTransform: 'uppercase', letterSpacing: '.11em', color: 'var(--ink-3)' }}>{r[0]}</p>
                         <p style={{ margin: 0, fontFamily: 'var(--font-mono)', fontSize: 14, color: 'var(--ink)' }}>{r[1]}</p>
@@ -1088,15 +1275,20 @@ export default function Fiscalizacion({ dest, onDest }: PantallaProps) {
                     <span style={{ fontSize: 12, color: 'var(--ink-3)', flex: 1, minWidth: 150, textWrap: 'pretty' }}>
                       El criterio de riesgo decide la muestra. Cambiarlo con el programa en ejecución no reordena lo ya inspeccionado.
                     </span>
+                    {/* Las dos son ediciones de un programa, y no hay ruta de
+                        edicion: «reprogramar es registrar otro programa», dice
+                        `ProgramasController`. Apagadas con su motivo. */}
                     <button
-                      className="hov-linea"
-                      style={{ border: '1px solid var(--line-2)', borderRadius: 6, padding: '6px 12px', background: 'var(--bg-card)', fontSize: 12, cursor: 'pointer' }}
+                      disabled
+                      title="No hay ruta de edición de un programa: reprogramar es registrar otro."
+                      style={{ ...BOTON_APAGADO, border: '1px solid var(--line-2)', padding: '6px 12px', background: 'var(--bg-card)', fontSize: 12 }}
                     >
                       Reasignar fiscalizador
                     </button>
                     <button
-                      className="hov-acento-2"
-                      style={{ border: 0, borderRadius: 6, padding: '7px 15px', background: 'var(--accent)', color: '#fff', fontSize: 12.5, fontWeight: 500, cursor: 'pointer' }}
+                      disabled
+                      title="No hay ruta de edición de un programa: reprogramar es registrar otro."
+                      style={{ ...BOTON_APAGADO, border: 0, padding: '7px 15px', background: 'var(--accent)', color: '#fff', fontSize: 12.5, fontWeight: 500 }}
                     >
                       Cerrar programa
                     </button>
@@ -1106,51 +1298,71 @@ export default function Fiscalizacion({ dest, onDest }: PantallaProps) {
                 <section style={TARJETA}>
                   <div style={{ ...CABECERA, flexWrap: 'wrap' }}>
                     <h2 style={H2}>Muestra del programa</h2>
-                    <span style={META}>96 predios · 4 visibles</span>
+                    <span style={META}>
+                      {muestra.datos === null
+                        ? SIN_DATO
+                        : `${muestra.datos.totalElementos} ${muestra.datos.totalElementos === 1 ? 'predio' : 'predios'} · ${muestra.datos.contenido.length} visibles`}
+                    </span>
                   </div>
+
+                  {muestra.error !== null && (
+                    <div style={{ padding: '12px 16px' }}>
+                      <FalloDeLectura error={muestra.error} que="la muestra del programa" acceso="fisc_programa" alReintentar={muestra.reintentar} />
+                    </div>
+                  )}
+
                   <div style={{ overflowX: 'auto' }}>
                     <table style={{ width: '100%', borderCollapse: 'collapse', minWidth: 720 }}>
                       <thead>
                         <tr>
-                          <Cabeceras cols={MUESTRA_COLS} />
-                          <th style={{ padding: '10px 14px', background: 'var(--bg-elev)' }} />
+                          <Cabeceras cols={COLUMNAS_DE_MUESTRA} />
                         </tr>
                       </thead>
                       <tbody>
-                        {MUESTRA.map((r) => (
-                          <tr key={r[0]} className="hov-elev" style={{ borderTop: '1px solid var(--line)' }}>
-                            {r.slice(0, 6).map((c, j) =>
-                              j === 4 || j === 5 ? (
-                                <td key={j} style={{ padding: '11px 14px' }}>
-                                  <Insignia tono={tono(String(c))}>{c}</Insignia>
-                                </td>
-                              ) : (
-                                <td key={j} style={estiloDeCelda(j, MUESTRA_COLS)}>
-                                  {c}
-                                </td>
-                              ),
-                            )}
-                            <td style={{ padding: '9px 14px', textAlign: 'right' }}>
-                              <button
-                                onClick={() => {
-                                  setPaso(0);
-                                  onDest('actas');
-                                }}
-                                className={r[7] ? 'hov-acento-2' : 'hov-linea'}
-                                style={
-                                  r[7]
-                                    ? { border: 0, borderRadius: 6, padding: '8px 14px', background: 'var(--accent)', color: '#fff', fontSize: 12, fontWeight: 500, cursor: 'pointer', whiteSpace: 'nowrap' }
-                                    : { border: '1px solid var(--line-2)', borderRadius: 6, padding: '7px 13px', background: 'var(--bg-card)', fontSize: 12, cursor: 'pointer', whiteSpace: 'nowrap' }
-                                }
-                              >
-                                {r[6]}
-                              </button>
+                        {(muestra.datos?.contenido ?? []).map((f) => (
+                          <tr key={String(f.predioId) + '·' + String(f.contribuyenteId)} className="hov-elev" style={{ borderTop: '1px solid var(--line)' }}>
+                            <td style={TD1}>{f.codRefCatastral}</td>
+                            <td style={TD}>{f.titular}</td>
+                            {/* «Uso declarado» y «Riesgo» no los publica
+                                `MuestraResource`. El riesgo, ademas, no es un
+                                concepto del backend: lo que hay es la CONDICION
+                                del cruce, que es otra pregunta. */}
+                            <td style={TD}>{SIN_DATO}</td>
+                            <td style={TD}>{f.areaDeclarada ?? SIN_DATO}</td>
+                            <td style={{ padding: '11px 14px' }}>
+                              <Insignia tono={tonoDeCondicion(f.condicion)}>{etiquetaDeCondicion(f.condicion)}</Insignia>
+                            </td>
+                            <td style={{ padding: '11px 14px' }}>
+                              <Insignia tono={f.visitado ? 'ok' : 'neutro'}>{f.visitado ? 'Inspeccionado' : 'Programado'}</Insignia>
                             </td>
                           </tr>
                         ))}
                       </tbody>
                     </table>
                   </div>
+
+                  {programaActivo === null ? (
+                    <p style={{ ...PIE, borderTop: '1px solid var(--line)' }}>Sin ningún programa elegido no hay muestra que consultar.</p>
+                  ) : muestra.cargando ? (
+                    <p style={{ ...PIE, borderTop: '1px solid var(--line)' }}>Consultando la muestra…</p>
+                  ) : muestra.error === null && (muestra.datos?.contenido.length ?? 0) === 0 ? (
+                    <div style={{ padding: '11px 16px', borderTop: '1px solid var(--line)' }}>
+                      <Aviso tono="neutro" titulo="Este programa no ha sorteado su muestra">
+                        La muestra se sortea con <code>POST /fiscalizacion/programas/{'{id}'}/muestra</code> a partir del sector, la
+                        condición y el ejercicio que el programa declara, y esta pantalla no dibuja esa acción ni su campo de observación.
+                        Issue #550.
+                      </Aviso>
+                    </div>
+                  ) : null}
+
+                  {muestra.datos !== null && (
+                    <Paginas pagina={muestra.datos.pagina} totalPaginas={muestra.datos.totalPaginas} hayMas={muestra.datos.hayMas} ir={setPaginaMuestra} />
+                  )}
+
+                  <p style={{ ...PIE, borderTop: '1px solid var(--line)' }}>
+                    «Uso declarado» y «Riesgo» salen «—»: la muestra publica el predio, su titular, las áreas y si ya se visitó, y ninguna
+                    de esas dos. La columna de condición es la del cruce que sorteó la muestra, no un criterio de riesgo. Issue #546.
+                  </p>
                 </section>
               </div>
             </div>
@@ -1444,46 +1656,190 @@ export default function Fiscalizacion({ dest, onDest }: PantallaProps) {
             </div>
 
             {resTab === 0 && (
-              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit,minmax(160px,1fr))', gap: 0, background: 'var(--bg-card)', border: '1px solid var(--line)', borderRadius: 10, overflow: 'hidden' }}>
-                {RES_TOTALES.map((t) => (
-                  <div key={t[0]} style={{ background: t[2] ? 'var(--accent-soft)' : 'var(--bg-card)', padding: '14px 16px', borderLeft: '1px solid var(--line)', borderTop: '1px solid var(--line)', margin: '-1px 0 0 -1px' }}>
-                    <p style={{ margin: '0 0 4px', fontSize: 10.5, textTransform: 'uppercase', letterSpacing: '.1em', color: 'var(--ink-3)' }}>{t[0]}</p>
-                    <p style={{ margin: 0, fontFamily: 'var(--font-mono)', fontSize: 20, color: 'var(--ink)' }}>{t[1]}</p>
-                  </div>
-                ))}
-              </div>
+              <>
+                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit,minmax(160px,1fr))', gap: 0, background: 'var(--bg-card)', border: '1px solid var(--line)', borderRadius: 10, overflow: 'hidden' }}>
+                  {/* De las cuatro cifras del artboard —96 actas cerradas, 61
+                      con diferencia, S/ 214,882.40 y 63.5 % de efectividad—
+                      solo UNA se puede leer: cuantas liquidaciones devuelve la
+                      consulta. Las actas no las cuenta ningun endpoint (#546),
+                      el importe es D-02a —`LiquidacionResource` no lleva ni un
+                      `Dinero` (#198)— y la efectividad es un cociente que nadie
+                      publica ni define. Las tres salen «—» con su motivo. */}
+                  {[
+                    ['Liquidaciones', resultados.datos === null ? SIN_DATO : String(resultados.datos.totalElementos), 0],
+                    ['Actas cerradas', SIN_DATO, 0],
+                    ['Deuda determinada', SIN_DATO, 0],
+                    ['Efectividad', SIN_DATO, 1],
+                  ].map((t) => (
+                    <div key={String(t[0])} style={{ background: t[2] ? 'var(--accent-soft)' : 'var(--bg-card)', padding: '14px 16px', borderLeft: '1px solid var(--line)', borderTop: '1px solid var(--line)', margin: '-1px 0 0 -1px' }}>
+                      <p style={{ margin: '0 0 4px', fontSize: 10.5, textTransform: 'uppercase', letterSpacing: '.1em', color: 'var(--ink-3)' }}>{t[0]}</p>
+                      <p style={{ margin: 0, fontFamily: 'var(--font-mono)', fontSize: 20, color: 'var(--ink)' }}>{t[1]}</p>
+                    </div>
+                  ))}
+                </div>
+                <Aviso tono="warn" titulo="Tres de las cuatro cifras no se pueden dar">
+                  «Actas cerradas» no la cuenta ninguna operación: no hay lectura de actas (#546). «Deuda determinada» y «Efectividad»
+                  esperan a <strong>D-02a</strong>: la liquidación viaja sin un solo importe —insoluto omitido y multa llegan en blanco a
+                  propósito—, y un cero ahí se lee como «no debe nada» (#198).
+                </Aviso>
+              </>
             )}
 
-            {/* La tercera pestaña es el histórico y no tiene tabla propia. */}
-            {resTab !== 2 && (
+            {resTab === 0 && (
               <section style={TARJETA}>
                 <div style={{ ...CABECERA, flexWrap: 'wrap' }}>
-                  <h2 style={H2}>{resAct.titulo}</h2>
-                  <span style={META}>{resAct.conteo}</span>
+                  <h2 style={H2}>Actas con diferencia determinada</h2>
+                  <span style={META}>
+                    {resultados.datos === null
+                      ? SIN_DATO
+                      : `${resultados.datos.contenido.length} de ${resultados.datos.totalElementos}`}
+                  </span>
                   <button
-                    className="hov-linea"
-                    style={{ border: '1px solid var(--line-2)', borderRadius: 6, padding: '6px 12px', background: 'var(--bg-elev)', fontSize: 12, color: 'var(--ink-2)', cursor: 'pointer' }}
+                    disabled
+                    title="No hay ninguna operación de exportación en el contrato."
+                    style={{ ...BOTON_APAGADO, border: '1px solid var(--line-2)', padding: '6px 12px', background: 'var(--bg-elev)', fontSize: 12, color: 'var(--ink-2)' }}
                   >
                     Exportar Excel
                   </button>
                 </div>
+
+                {resultados.error !== null && (
+                  <div style={{ padding: '12px 16px' }}>
+                    <FalloDeLectura error={resultados.error} que="los resultados de fiscalización" acceso="fisc_resultados" alReintentar={resultados.reintentar} />
+                  </div>
+                )}
+
                 <div style={{ overflowX: 'auto' }}>
-                  <table style={{ width: '100%', borderCollapse: 'collapse', minWidth: resAct.min }}>
+                  <table style={{ width: '100%', borderCollapse: 'collapse', minWidth: 860 }}>
                     <thead>
                       <tr>
-                        <Cabeceras cols={resAct.cols} />
+                        <Cabeceras cols={COLUMNAS_DE_RESULTADOS} />
                       </tr>
                     </thead>
                     <tbody>
-                      {resAct.filas.map((f, i) => (
-                        <tr key={i} onClick={() => setResTab(2)} className="hov-acento" style={{ borderTop: '1px solid var(--line)', cursor: 'pointer' }}>
-                          <Celdas fila={f} cols={resAct.cols} insignia={f.length - 1} />
+                      {(resultados.datos?.contenido ?? []).map((l) => (
+                        <tr key={l.numero} className="hov-elev" style={{ borderTop: '1px solid var(--line)' }}>
+                          <td style={TD1}>{l.numero}</td>
+                          <td style={TD}>{'v' + String(l.version)}</td>
+                          <td style={TD}>{String(l.periodoDesde) + ' — ' + String(l.periodoHasta)}</td>
+                          <td style={TD}>{l.tipoDeFiscalizacion}</td>
+                          <td style={TD}>{l.motivoDeterminante}</td>
+                          <td style={TD}>{l.numeroNotificacion ?? SIN_DATO}</td>
+                          {/* Nunca una cifra: `esperaSusCifras` dice que las
+                              lineas siguen sin importes, y `insolutoOmitido` es
+                              `null` por contrato hasta D-02a. */}
+                          <td style={TD}>{SIN_DATO}</td>
+                          <td style={{ padding: '11px 14px' }}>
+                            <Insignia tono={tonoDelEstadoDeLiquidacion(l.estado)}>{etiquetaDelEstadoDeLiquidacion(l.estado)}</Insignia>
+                          </td>
                         </tr>
                       ))}
                     </tbody>
                   </table>
                 </div>
-                <p style={{ ...PIE, borderTop: '1px solid var(--line)' }}>{resAct.nota}</p>
+
+                {resultados.cargando ? (
+                  <p style={{ ...PIE, borderTop: '1px solid var(--line)' }}>Consultando los resultados…</p>
+                ) : resultados.error === null && (resultados.datos?.contenido.length ?? 0) === 0 ? (
+                  <div style={{ padding: '11px 16px', borderTop: '1px solid var(--line)' }}>
+                    <Aviso tono="neutro" titulo="Sin resultados">
+                      Ninguna acta ha llegado a liquidarse. <code>liquidacion_fiscalizacion</code> no tiene una sola fila en ninguna de las
+                      dos municipalidades (#546).
+                    </Aviso>
+                  </div>
+                ) : null}
+
+                {resultados.datos !== null && (
+                  <Paginas pagina={resultados.datos.pagina} totalPaginas={resultados.datos.totalPaginas} hayMas={resultados.datos.hayMas} ir={setPaginaRes} />
+                )}
+
+                <p style={{ ...PIE, borderTop: '1px solid var(--line)' }}>
+                  «Deuda omitida» sale «—» en todas las filas: la liquidación no publica ni un importe hasta D-02a (#198). Las columnas son
+                  las que <code>LiquidacionResource</code> publica; «Acta» era un número del artboard y lo que hay es el de la liquidación.
+                </p>
+              </section>
+            )}
+
+            {resTab === 1 && (
+              <section style={TARJETA}>
+                <div style={{ ...CABECERA, flexWrap: 'wrap' }}>
+                  <h2 style={H2}>Deuda de fiscalización por contribuyente</h2>
+                  <span style={META}>
+                    {estadoDeCuenta.datos === null ? SIN_DATO : `al ${estadoDeCuenta.datos.fechaDeConsulta}`}
+                  </span>
+                </div>
+                <div style={{ padding: '14px 16px', borderBottom: '1px solid var(--line)' }}>
+                  {/* Esta vista es de UN contribuyente: `GET
+                      /fiscalizacion/estado-cuenta` exige su codigo y contesta
+                      404 si no esta en el padron. El artboard dibujaba cuatro
+                      filas de ALBURQUEQUE INFANTE GENARO con «145.41» cada una
+                      y un total de «S/ 581.65» sin haber preguntado por nadie. */}
+                  <label style={{ display: 'flex', flexDirection: 'column', gap: 5, maxWidth: 320 }}>
+                    <span style={{ fontSize: 11.5, fontWeight: 500, color: 'var(--ink-3)' }}>Código de contribuyente</span>
+                    <input
+                      value={contribuyenteRes}
+                      onChange={(e) => setContribuyenteRes(e.target.value)}
+                      placeholder="C-000001"
+                      style={{ width: '100%', boxSizing: 'border-box', border: '1px solid var(--line-2)', borderRadius: 6, padding: '9px 10px', background: 'var(--bg-elev)', fontSize: 13.5 }}
+                    />
+                  </label>
+                </div>
+
+                {estadoDeCuenta.error !== null && (
+                  <div style={{ padding: '12px 16px' }}>
+                    <FalloDeLectura error={estadoDeCuenta.error} que="el estado de cuenta de fiscalización" acceso="fisc_estado_cuenta" alReintentar={estadoDeCuenta.reintentar} />
+                  </div>
+                )}
+
+                <div style={{ overflowX: 'auto' }}>
+                  <table style={{ width: '100%', borderCollapse: 'collapse', minWidth: 760 }}>
+                    <thead>
+                      <tr>
+                        <Cabeceras cols={COLUMNAS_DE_ESTADO_DE_CUENTA} />
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {(estadoDeCuenta.datos?.lineas ?? []).map((l, i) => (
+                        <tr key={l.deuda + '·' + String(l.ano) + '·' + String(i)} className="hov-elev" style={{ borderTop: '1px solid var(--line)' }}>
+                          <td style={TD1}>{l.deuda}</td>
+                          <td style={TD}>{String(l.ano)}</td>
+                          <td style={TD}>{l.nomTrib}</td>
+                          <td style={TD}>{l.unidad === null ? SIN_DATO : String(l.unidad)}</td>
+                          {/* El importe SIEMPRE con su fecha: es un
+                              `ImporteActualizado`, y la regla 9 dice que no hay
+                              «la deuda» sino la deuda a una fecha. */}
+                          <td style={TDN}>{l.importe === null ? SIN_DATO : 'S/ ' + l.importe.importe}</td>
+                          <td style={TD}>{l.importe === null ? SIN_DATO : l.importe.actualizadoA}</td>
+                          <td style={{ padding: '11px 14px' }}>
+                            <Insignia tono={tonoDeCondicion(l.estad)}>{etiquetaDeCondicion(l.estad)}</Insignia>
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+
+                {contribuyenteReposado.trim() === '' ? (
+                  <p style={{ ...PIE, borderTop: '1px solid var(--line)' }}>
+                    Teclea un código de contribuyente: esta vista es de una persona, no del padrón entero.
+                  </p>
+                ) : estadoDeCuenta.cargando ? (
+                  <p style={{ ...PIE, borderTop: '1px solid var(--line)' }}>Consultando el estado de cuenta…</p>
+                ) : estadoDeCuenta.error === null && (estadoDeCuenta.datos?.lineas.length ?? 0) === 0 ? (
+                  <div style={{ padding: '11px 16px', borderTop: '1px solid var(--line)' }}>
+                    <Aviso tono="neutro" titulo="Sin deuda de fiscalización">
+                      Este contribuyente no tiene ninguna obligación originada en una fiscalización a la fecha de consulta.
+                    </Aviso>
+                  </div>
+                ) : (
+                  <p style={{ ...PIE, borderTop: '1px solid var(--line)' }}>
+                    Total{' '}
+                    {estadoDeCuenta.datos?.total == null
+                      ? SIN_DATO
+                      : `S/ ${estadoDeCuenta.datos.total.importe} al ${estadoDeCuenta.datos.total.actualizadoA}`}
+                    . La deuda de fiscalización lleva su propia fase para distinguirla de la emitida en el registro ordinario.
+                  </p>
+                )}
               </section>
             )}
 
@@ -1491,10 +1847,19 @@ export default function Fiscalizacion({ dest, onDest }: PantallaProps) {
               <section style={TARJETA}>
                 <div style={{ ...CABECERA, flexWrap: 'wrap' }}>
                   <h2 style={H2}>Versiones del proceso fiscalizador</h2>
-                  <span style={META}>ACT-2026-00418 · 3 versiones</span>
+                  <span style={META}>
+                    {historico.datos === null ? SIN_DATO : `${historico.datos.totalElementos} versiones`}
+                  </span>
                 </div>
-                {VERSIONES.map((v) => (
-                  <div key={v.n} style={{ display: 'flex', alignItems: 'flex-start', gap: 14, padding: '13px 16px', borderBottom: '1px solid var(--line)' }}>
+
+                {historico.error !== null && (
+                  <div style={{ padding: '12px 16px' }}>
+                    <FalloDeLectura error={historico.error} que="el histórico de fiscalización" acceso="fisc_historico" alReintentar={historico.reintentar} />
+                  </div>
+                )}
+
+                {(historico.datos?.contenido ?? []).map((v) => (
+                  <div key={v.version.numero} style={{ display: 'flex', alignItems: 'flex-start', gap: 14, padding: '13px 16px', borderBottom: '1px solid var(--line)' }}>
                     <span
                       style={{
                         display: 'grid',
@@ -1505,23 +1870,50 @@ export default function Fiscalizacion({ dest, onDest }: PantallaProps) {
                         flex: '0 0 auto',
                         fontFamily: 'var(--font-mono)',
                         fontSize: 11.5,
-                        background: v.tono === 'acento' ? 'var(--accent)' : v.tono === 'suave' ? 'var(--accent-soft)' : 'var(--bg-elev)',
-                        color: v.tono === 'acento' ? '#fff' : v.tono === 'suave' ? 'var(--accent-ink)' : 'var(--ink-3)',
-                        border: v.tono === 'neutro' ? '1px solid var(--line-2)' : undefined,
+                        background: 'var(--accent-soft)',
+                        color: 'var(--accent-ink)',
                       }}
                     >
-                      {v.n}
+                      {v.version.version}
                     </span>
                     <span style={{ flex: 1, minWidth: 0 }}>
-                      <span style={{ display: 'block', fontSize: 13, color: 'var(--ink)' }}>{v.titulo}</span>
-                      <span style={{ display: 'block', fontSize: 12, color: 'var(--ink-3)', marginTop: 2, textWrap: 'pretty' }}>{v.detalle}</span>
+                      <span style={{ display: 'block', fontSize: 13, color: 'var(--ink)' }}>
+                        {v.version.numero} · {etiquetaDelEstadoDeLiquidacion(v.version.estado)}
+                      </span>
+                      {/* Lo que cambio respecto de la anterior lo dice el
+                          backend, concepto a concepto. El artboard lo escribia
+                          a mano —«Se corrigió el ECS de MALO a BUENO»—. */}
+                      <span style={{ display: 'block', fontSize: 12, color: 'var(--ink-3)', marginTop: 2, textWrap: 'pretty' }}>
+                        {v.cambios.length === 0
+                          ? 'Sin cambios declarados respecto de la anterior.'
+                          : v.cambios.map((c) => `${c.concepto}: ${c.antes ?? SIN_DATO} → ${c.despues ?? SIN_DATO}`).join(' · ')}
+                      </span>
+                      {v.importesSinCifra.length > 0 && (
+                        <span style={{ display: 'block', fontSize: 11.5, color: 'var(--ink-4)', marginTop: 3, textWrap: 'pretty' }}>
+                          Sin cifra todavía (D-02a): {v.importesSinCifra.join(', ')}.
+                        </span>
+                      )}
                     </span>
                     <span style={{ flex: '0 0 auto', textAlign: 'right' }}>
-                      <span style={{ display: 'block', fontFamily: 'var(--font-mono)', fontSize: 12, color: 'var(--ink-2)' }}>{v.fecha}</span>
-                      <span style={{ display: 'block', fontSize: 11, color: 'var(--ink-4)', marginTop: 2 }}>{v.usuario}</span>
+                      <span style={{ display: 'block', fontFamily: 'var(--font-mono)', fontSize: 12, color: 'var(--ink-2)' }}>{v.version.fecha}</span>
                     </span>
                   </div>
                 ))}
+
+                {historico.cargando ? (
+                  <p style={PIE}>Consultando el histórico…</p>
+                ) : historico.error === null && (historico.datos?.contenido.length ?? 0) === 0 ? (
+                  <div style={{ padding: '11px 16px' }}>
+                    <Aviso tono="neutro" titulo="Sin versiones">
+                      No hay ninguna liquidación, así que no hay proceso del que enseñar versiones (#546).
+                    </Aviso>
+                  </div>
+                ) : null}
+
+                {historico.datos !== null && (
+                  <Paginas pagina={historico.datos.pagina} totalPaginas={historico.datos.totalPaginas} hayMas={historico.datos.hayMas} ir={setPaginaHist} />
+                )}
+
                 <p style={PIE}>
                   El versionado es lo que permite defender una determinación ante una reclamación: dice qué característica cambió, quién la
                   cambió y con qué acta.
@@ -1541,10 +1933,16 @@ export default function Fiscalizacion({ dest, onDest }: PantallaProps) {
                 >
                   Ver el documento
                 </button>
+                {/* El aviso anterior decia «61 resoluciones de determinacion
+                    emitidas. La deuda entra hoy en la cuenta corriente.» sin
+                    mandar nada: 61 es del artboard, y emitir es
+                    `POST /fiscalizacion/transferencias`, que exige nLiquidacion,
+                    documento de sustento, sustento y base legal —cuatro campos
+                    que esta pantalla no dibuja— mas la observacion (regla 10). */}
                 <button
-                  onClick={() => toast('61 resoluciones de determinación emitidas. La deuda entra hoy en la cuenta corriente.')}
-                  className="hov-acento-2"
-                  style={{ border: 0, borderRadius: 6, padding: '11px 22px', background: 'var(--accent)', color: '#fff', fontSize: 13.5, fontWeight: 500, cursor: 'pointer' }}
+                  disabled
+                  title="Emitir exige el nº de liquidación, el documento de sustento, el sustento y la base legal, y esta pantalla no los pide."
+                  style={{ ...BOTON_APAGADO, border: 0, padding: '11px 22px', background: 'var(--accent)', color: '#fff', fontSize: 13.5, fontWeight: 500 }}
                 >
                   Emitir resoluciones
                 </button>
@@ -1708,14 +2106,156 @@ export default function Fiscalizacion({ dest, onDest }: PantallaProps) {
  * la cabecera, porque el dia que llegue en hectareas la cabecera mentiria.
  */
 const COLUMNAS_DE_OMISOS: ColDef[] = [
-  ['Cod. ref. catastral', 0],
+  ['Cód. ref. catastral', 0],
   ['Titular', 0],
-  ['Condicion', 0],
-  ['Area catastral', 0],
-  ['Area declarada', 0],
-  ['Diferencia de area', 0],
+  ['Condición', 0],
+  ['Área catastral', 0],
+  ['Área declarada', 0],
+  ['Diferencia de área', 0],
   ['Impuesto omitido S/', 1],
 ];
+
+/** Las seis columnas de la muestra, con lo que el recurso publica de cada una. */
+const COLUMNAS_DE_MUESTRA: ColDef[] = [
+  ['Predio', 0],
+  ['Contribuyente', 0],
+  ['Uso declarado', 0],
+  ['Área declarada', 0],
+  ['Condición del cruce', 0],
+  ['Estado', 0],
+];
+
+/**
+ * El estado de un programa: `EstadoDePrograma` tiene TRES y el artboard dibujaba
+ * dos rotulos —«En ejecución» y «Cerrado»— que no son ninguno de ellos letra por
+ * letra. Se rotulan los tres que existen, y uno que no conozcamos sale tal cual.
+ */
+const ESTADOS_DE_PROGRAMA: { valor: string; etiqueta: string; tono: Tono }[] = [
+  { valor: 'ABIERTO', etiqueta: 'Abierto', tono: 'neutro' },
+  { valor: 'EN_PROCESO', etiqueta: 'En proceso', tono: 'warn' },
+  { valor: 'CERRADO', etiqueta: 'Cerrado', tono: 'ok' },
+];
+
+function etiquetaDelEstadoDelPrograma(valor: string): string {
+  return ESTADOS_DE_PROGRAMA.find((e) => e.valor === valor)?.etiqueta ?? valor;
+}
+
+function tonoDelEstadoDelPrograma(valor: string): Tono {
+  return ESTADOS_DE_PROGRAMA.find((e) => e.valor === valor)?.tono ?? 'neutro';
+}
+
+/**
+ * Las seis celdas del resumen del programa.
+ *
+ * Cada una sale de un campo que `ProgramaResource` publica; la que no lo tiene
+ * sale «—». «Muestra» es la unica que no esta en ese recurso: es el total del
+ * sobre de `/muestra`, que es una lectura y no una cuenta compuesta aqui.
+ */
+function resumenDelPrograma(prog: ProgramaDeFiscalizacion | null, predios: number | null): [string, string][] {
+  if (prog === null) {
+    return [
+      ['Programa', SIN_DATO],
+      ['Tipo', SIN_DATO],
+      ['Criterio de riesgo', SIN_DATO],
+      ['Fiscalizador', SIN_DATO],
+      ['Muestra', SIN_DATO],
+      ['Plazo', SIN_DATO],
+    ];
+  }
+  return [
+    ['Programa', prog.codigo],
+    ['Tipo', prog.tipo],
+    /* El criterio es un `CondicionFiscalizada`, no la «SUBVALUACIÓN» del
+       artboard: ese rotulo no es ninguno de los cinco del enumerado (#546). */
+    ['Criterio de riesgo', prog.criterio === null ? SIN_DATO : etiquetaDeCondicion(prog.criterio)],
+    ['Fiscalizador', prog.fiscalizador ?? SIN_DATO],
+    ['Muestra', predios === null ? SIN_DATO : `${predios} ${predios === 1 ? 'predio' : 'predios'}`],
+    ['Plazo', prog.fechaInicio + ' — ' + (prog.fechaFin ?? SIN_DATO)],
+  ];
+}
+
+/** Las ocho columnas de resultados: lo que `LiquidacionResource` publica. */
+const COLUMNAS_DE_RESULTADOS: ColDef[] = [
+  ['Nº liquidación', 0],
+  ['Versión', 0],
+  ['Periodo', 0],
+  ['Tipo', 0],
+  ['Motivo determinante', 0],
+  ['Nº notificación', 0],
+  ['Deuda omitida S/', 0],
+  ['Estado', 0],
+];
+
+/** Las siete del estado de cuenta. El importe va con su fecha al lado (regla 9). */
+const COLUMNAS_DE_ESTADO_DE_CUENTA: ColDef[] = [
+  ['Nº liquidación', 0],
+  ['Año', 0],
+  ['Tributo', 0],
+  ['Unidad', 0],
+  ['Importe S/', 1],
+  ['Actualizado a', 0],
+  ['Condición', 0],
+];
+
+/**
+ * Los CINCO estados de `EstadoDeLiquidacion`. El artboard dibujaba
+ * «Determinado», «Notificado», «Reclamado» y «Conforme», y de los cuatro
+ * **ninguno** es un valor del enumerado letra por letra —«Reclamado» ni
+ * siquiera existe— (#546). No se traducen: se ofrecen los que hay.
+ */
+const ESTADOS_DE_LIQUIDACION: { valor: string; etiqueta: string; tono: Tono }[] = [
+  { valor: 'ABIERTA', etiqueta: 'Abierta', tono: 'neutro' },
+  { valor: 'EN_PROCESO', etiqueta: 'En proceso', tono: 'warn' },
+  { valor: 'LIQUIDADA', etiqueta: 'Liquidada', tono: 'warn' },
+  { valor: 'NOTIFICADA', etiqueta: 'Notificada', tono: 'ok' },
+  { valor: 'ANULADA', etiqueta: 'Anulada', tono: 'bad' },
+];
+
+function etiquetaDelEstadoDeLiquidacion(valor: string): string {
+  return ESTADOS_DE_LIQUIDACION.find((e) => e.valor === valor)?.etiqueta ?? valor;
+}
+
+function tonoDelEstadoDeLiquidacion(valor: string): Tono {
+  return ESTADOS_DE_LIQUIDACION.find((e) => e.valor === valor)?.tono ?? 'neutro';
+}
+
+/**
+ * Las cuatro etapas del embudo, con la cifra que cada una PUEDE leer.
+ *
+ * El artboard traia 96 / 84 / 61 / 38 sobre una base de 96, y ninguna de las
+ * cuatro sale de ningun sitio: #505 lo dice —«el embudo pide nueve cifras y el
+ * contrato publica dos»—. Aqui cada etapa es exactamente el total del sobre de
+ * una consulta, y la que no tiene consulta vale `null` y se dibuja «—».
+ *
+ * La proporcion se calcula sobre la muestra, y solo cuando la cifra Y la base
+ * son las dos lecturas: una barra pintada con una base supuesta se lee como un
+ * avance, que es justo lo que un panel no puede inventarse.
+ */
+function etapasDelEmbudo(
+  muestra: number | null,
+  liquidadas: number | null,
+  notificadas: number | null,
+): { etapa: string; detalle: string; valor: number | null; parte: number | null; dest: string }[] {
+  const proporcion = (valor: number | null): number | null =>
+    valor === null || muestra === null || muestra === 0 ? null : (valor / muestra) * 100;
+  return [
+    { etapa: 'Programados', detalle: 'Predios sorteados en la muestra', valor: muestra, parte: proporcion(muestra), dest: 'programas' },
+    {
+      etapa: 'Inspeccionados',
+      detalle: 'Nadie publica su recuento: «visitado» viaja fila a fila',
+      valor: null,
+      parte: null,
+      dest: 'programas',
+    },
+    { etapa: 'Con liquidación', detalle: 'Actas del programa que llegaron a liquidarse', valor: liquidadas, parte: proporcion(liquidadas), dest: 'resultados' },
+    { etapa: 'Notificadas', detalle: 'Las mismas, con estado NOTIFICADA', valor: notificadas, parte: proporcion(notificadas), dest: 'resultados' },
+  ];
+}
+
+/** Lo que sigue sin acta en la pagina de muestra que se trajo. */
+function pendientesDeVisita(filas: FilaDeMuestra[]): FilaDeMuestra[] {
+  return filas.filter((f) => !f.visitado);
+}
 
 /** Lo que se dibuja donde el backend no publica cifra. */
 const SIN_DATO = '—';
