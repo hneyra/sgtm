@@ -5,6 +5,7 @@ import java.time.Instant;
 import java.time.LocalDate;
 import java.util.List;
 import java.util.Objects;
+import org.jspecify.annotations.Nullable;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import pe.gob.sgtm.auditoria.Auditoria;
@@ -60,6 +61,47 @@ public class AdministrarParametros {
     @Transactional(readOnly = true)
     public Pagina<ParametroTributario> parametros(Paginacion paginacion) {
         return repositorio.parametros(paginacion);
+    }
+
+    /**
+     * Si un ejercicio tiene conjunto <b>sellado</b>, y cual (#605).
+     *
+     * <p><b>Que problema resuelve.</b> Hasta aqui la unica forma de saberlo era mandar la peticion
+     * de calculo y recibir el 422 de {@code LectorDeParametros.EjercicioSinSellar}: quien fracciona
+     * teclea el contribuyente, marca las deudas, rellena cuotas, garantia y vencimiento —y en el
+     * preconvenio, la observacion que la regla 10 obliga a redactar antes de habilitar el boton—
+     * para enterarse al final de que el ejercicio no esta parametrizado, que con D-02a abierta es
+     * el estado de <b>todas</b> las municipalidades. Y no es solo convenios: el predial, la
+     * valorizacion del FUE, la liquidacion de fiscalizacion y el resumen anual de licencias tienen
+     * la misma forma de enterarse tarde.
+     *
+     * <p><b>Ninguna cifra sale de aqui.</b> Se publica si hay conjunto sellado y su identidad
+     * —{@code conjuntoId} y {@code version}—, que es exactamente lo que {@code
+     * ConvenioResource.conjuntoDeParametros} ya publica cuando el convenio existe y lo que {@code
+     * Determinacion} guarda para poder repetirse. Los valores son otra cosa y siguen detras del
+     * permiso de {@code parametros} (REQ-03: quien opera el sistema no publica las cifras con las
+     * que se calcula).
+     *
+     * <p><b>«No hay conjunto sellado» es una respuesta, no un error.</b> La pregunta es «¿esta
+     * parametrizado?» y su respuesta puede ser que no; devolver vacio obligaria a quien pregunta a
+     * distinguir dos ausencias que aqui no son distintas —un ejercicio sin ninguna version y uno
+     * con la version abierta— porque para calcular las dos valen igual. Lo que si tiene que salir
+     * distinto es un ejercicio <b>fuera de rango</b>, y sale: {@link Ejercicio} lo rechaza en su
+     * constructor y el borde lo traduce a 422.
+     *
+     * <p>La observacion la compone el sistema y no el usuario, porque aqui no hay usuario que
+     * observe: nadie escribe un motivo para preguntar si un ejercicio esta parametrizado. Es la
+     * excepcion que {@code ConObservacionEnLasEscrituras.SIN_USUARIO_QUE_OBSERVE} nombra con este
+     * metodo y su porque.
+     */
+    @Transactional
+    public EstadoDelEjercicio estadoDelEjercicio(Ejercicio ejercicio) {
+        Objects.requireNonNull(ejercicio, "La pregunta es por un ejercicio concreto");
+
+        ConjuntoDeParametros sellado = repositorio.selladoVigenteDe(ejercicio).orElse(null);
+
+        registrarElAcceso(ejercicio, sellado);
+        return new EstadoDelEjercicio(ejercicio, sellado);
     }
 
     /**
@@ -195,6 +237,60 @@ public class AdministrarParametros {
                                         CodigoDeError.NO_ENCONTRADO,
                                         "No hay ningun conjunto de parametros con identificador "
                                                 + id));
+    }
+
+    /**
+     * La fila de la bitacora de {@link #estadoDelEjercicio}, en su misma transaccion.
+     *
+     * <p>Se escribe <b>tambien cuando no hay conjunto sellado</b>, que hoy es el caso normal: si
+     * solo quedara constancia de los ejercicios parametrizados, la bitacora contaria justamente las
+     * consultas que no hacen falta. Es el mismo criterio de {@code
+     * ConsultaDeTitulares.registrarElAcceso}.
+     */
+    private void registrarElAcceso(Ejercicio ejercicio, @Nullable ConjuntoDeParametros sellado) {
+        auditoria.registrar(
+                RegistroDeAuditoria.enLaFechaDe(
+                                // Del reloj inyectado, no del ejercicio consultado: la particion
+                                // de la bitacora es el ejercicio del ACTO, y preguntar en 2026 por
+                                // 2024 es un acto de 2026.
+                                LocalDate.now(reloj),
+                                "conjunto_parametros",
+                                "ejercicio=" + ejercicio.valor(),
+                                Operacion.ACCESO,
+                                Observacion.de(
+                                        "Consulta de si el ejercicio "
+                                                + ejercicio.valor()
+                                                + " tiene conjunto de parametros sellado, antes de"
+                                                + " calcular (#605, ADR-0007)"))
+                        // Solo cifras: aqui no entra texto del usuario, asi que no hay comilla
+                        // que pueda romper el cast a jsonb.
+                        .con(
+                                null,
+                                "{\"ejercicio\":"
+                                        + ejercicio.valor()
+                                        + ",\"sellado\":"
+                                        + (sellado != null)
+                                        + ",\"conjuntoId\":"
+                                        + (sellado == null ? "null" : sellado.id())
+                                        + "}"));
+    }
+
+    /**
+     * Si el ejercicio esta parametrizado, y con que conjunto.
+     *
+     * @param ejercicio el que se pregunto, devuelto tal cual: quien lee la respuesta tiene que
+     *     poder decir de que ano habla sin volver a mirar lo que envio
+     * @param sellado el conjunto sellado vigente, o nulo si el ejercicio no tiene ninguno
+     */
+    public record EstadoDelEjercicio(Ejercicio ejercicio, @Nullable ConjuntoDeParametros sellado) {
+
+        public EstadoDelEjercicio {
+            Objects.requireNonNull(ejercicio, "La respuesta dice de que ejercicio habla");
+        }
+
+        public boolean estaSellado() {
+            return sellado != null;
+        }
     }
 
     private void auditar(

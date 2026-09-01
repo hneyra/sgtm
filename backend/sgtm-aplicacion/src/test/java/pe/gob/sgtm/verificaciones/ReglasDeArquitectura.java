@@ -972,7 +972,21 @@ public final class ReglasDeArquitectura {
                         // no de las que si devolvieron la deuda de una persona. Y la municipalidad
                         // donde no figura no recibe ninguna fila, porque ahi no se lee nada.
                         PAQUETE_RAIZ
-                                + ".rentas.aplicacion.RamaDelCiudadano.leer(java.time.LocalDate)");
+                                + ".rentas.aplicacion.RamaDelCiudadano.leer(java.time.LocalDate)",
+                        // Si un ejercicio tiene conjunto de parametros sellado (#605). Misma forma
+                        // exacta que las tres anteriores: es una CONSULTA —no modifica ningun
+                        // dato, ni siquiera lee una cifra: contesta si se puede calcular— y lo
+                        // unico que escribe es su propia fila de ACCESO, cuya observacion no la
+                        // puede dar el usuario porque nadie escribe un motivo para preguntar si un
+                        // ejercicio esta parametrizado. Es transaccional de escritura solo para
+                        // que esa fila caiga dentro de la misma transaccion que la lectura, y se
+                        // escribe tambien cuando la respuesta es que NO hay conjunto sellado: si
+                        // solo quedara constancia de los ejercicios parametrizados, la bitacora
+                        // contaria justamente las consultas que no hacen falta.
+                        PAQUETE_RAIZ
+                                + ".parametros.aplicacion.AdministrarParametros.estadoDelEjercicio("
+                                + PAQUETE_RAIZ
+                                + ".dominio.Ejercicio)");
 
         ConObservacionEnLasEscrituras() {
             super("exigir una Observacion en todo metodo transaccional de escritura");
