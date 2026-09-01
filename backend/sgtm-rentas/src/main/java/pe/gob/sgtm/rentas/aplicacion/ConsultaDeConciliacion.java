@@ -13,6 +13,7 @@ import org.springframework.transaction.annotation.Transactional;
 import pe.gob.sgtm.auditoria.Auditoria;
 import pe.gob.sgtm.auditoria.Operacion;
 import pe.gob.sgtm.auditoria.RegistroDeAuditoria;
+import pe.gob.sgtm.catastro.AcotacionPorPredio;
 import pe.gob.sgtm.catastro.BusquedaDeFichas;
 import pe.gob.sgtm.catastro.FichaDelPadron;
 import pe.gob.sgtm.catastro.FichasDelPadron;
@@ -220,22 +221,29 @@ public class ConsultaDeConciliacion {
     }
 
     /**
-     * La pagina de catastro, anotada con el derivado y —si se pidio— filtrada.
+     * La pagina de catastro, ya <b>acotada por el filtro</b> y anotada con el derivado (#631).
      *
-     * <p><b>El filtro se aplica sobre la pagina y el total sigue siendo el del padron filtrado por
-     * catastro</b>, igual que la condicion de {@code DeteccionDeOmisos} en {@code fisc_omisos}:
-     * filtrar despues de paginar y ademas recalcular el total diria «pagina 1 de 1» sobre un padron
-     * de treinta mil predios. La alternativa —resolver primero todos los predios conciliados del
-     * ejercicio y pasarselos a catastro como lista— convierte el criterio en un {@code IN} de
-     * decenas de miles de identificadores, que es peor consulta y ademas cruzaria la frontera con
-     * el padron entero.
+     * <h2>Lo que cambio, y por que la version anterior mentia</h2>
      *
-     * <p><b>Y por eso este total no se puede usar para contar</b> (#564): la pregunta «cuantos
-     * predios no estan conciliados» la contesta {@link #resumen}, que la resuelve en una sola
-     * consulta agregada y no recorre nada. Hasta #564 no habia ninguna, y quien la necesitaba solo
-     * podia leer este total —que es otro numero— o recorrer las 722 paginas del padron.
+     * <p>Hasta #631 el filtro se aplicaba <b>sobre la pagina ya devuelta</b> y {@code
+     * totalElementos} seguia siendo el del padron sin filtrar. Medido sobre Catacaos: {@code
+     * conciliadaConRentas=Si} contestaba «722 paginas, 14 422 elementos» y <b>cero filas en
+     * todas</b>. El pie de la grilla habria dicho «0 de 14 422», que se lee como «hay 14 422 y no
+     * te caben» y no como «no hay ninguna».
      *
-     * <p>Una sola lectura de rentas por pagina, no una por fila.
+     * <p>Ahora el conjunto de predios que declararon el ejercicio se resuelve <b>una vez</b> y
+     * viaja a catastro como {@link AcotacionPorPredio}, de modo que la condicion entra en el
+     * <b>mismo</b> {@code WHERE} que ya se ejecutaba: la pagina y el {@code count(*)} salen de la
+     * misma consulta y no pueden separarse.
+     *
+     * <p><b>La alternativa era duplicar la grilla en rentas</b> —leyendo {@code predio}, {@code
+     * ficha_catastral} y {@code titularidad} por su cuenta— y es lo que el javadoc de {@code
+     * FichasDelPadron} descarta desde #344: duplicaria en otro SQL, que envejeceria aparte, la
+     * resolucion de la version vigente a una fecha. Lo que cuesta la salida elegida esta dicho en
+     * {@link AcotacionPorPredio}: los identificadores viajan por el proceso, una vez por peticion.
+     *
+     * <p>{@link #resumen} sigue existiendo y sigue siendo la forma de contar (#564): recorrer la
+     * grilla para llegar a una cifra dejaria 722 filas de bitacora con el filtro «No».
      */
     private Pagina<FichaConciliada> resolver(
             BusquedaDeFichas criterio,
@@ -247,24 +255,38 @@ public class ConsultaDeConciliacion {
         Objects.requireNonNull(ejercicio, "La conciliacion necesita el ejercicio (regla 9)");
         Objects.requireNonNull(aLaFecha, "Toda lectura del padron indica a que fecha (regla 9)");
 
-        Pagina<FichaDelPadron> pagina = fichas.buscar(criterio, aLaFecha, paginacion);
+        Set<Long> conciliados =
+                soloConciliadas == null
+                        ? Set.of()
+                        : declaraciones.prediosConDeclaracionVigente(ejercicio);
+        BusquedaDeFichas acotado =
+                soloConciliadas == null
+                        ? criterio
+                        : criterio.acotadaA(
+                                soloConciliadas
+                                        ? AcotacionPorPredio.soloEstos(conciliados)
+                                        : AcotacionPorPredio.todosMenosEstos(conciliados));
+
+        Pagina<FichaDelPadron> pagina = fichas.buscar(acotado, aLaFecha, paginacion);
         if (pagina.estaVacia()) {
             return new Pagina<>(
                     List.of(), pagina.pagina(), pagina.tamano(), pagina.totalElementos());
         }
 
-        Set<Long> predios = new LinkedHashSet<>();
-        for (FichaDelPadron fila : pagina.contenido()) {
-            predios.add(fila.predioId());
+        // Con «Todas» hay que preguntar por los predios de la pagina para pintar la columna;
+        // con «Si» o «No» ya se sabe, porque el conjunto es el que acoto la consulta.
+        Set<Long> delFiltro = conciliados;
+        if (soloConciliadas == null) {
+            Set<Long> predios = new LinkedHashSet<>();
+            for (FichaDelPadron fila : pagina.contenido()) {
+                predios.add(fila.predioId());
+            }
+            delFiltro = declaraciones.prediosConDeclaracionVigente(predios, ejercicio);
         }
-        Set<Long> conciliados = declaraciones.prediosConDeclaracionVigente(predios, ejercicio);
 
         List<FichaConciliada> filas = new ArrayList<>();
         for (FichaDelPadron fila : pagina.contenido()) {
-            boolean conciliada = conciliados.contains(fila.predioId());
-            if (soloConciliadas == null || soloConciliadas == conciliada) {
-                filas.add(new FichaConciliada(fila, conciliada, ejercicio));
-            }
+            filas.add(new FichaConciliada(fila, delFiltro.contains(fila.predioId()), ejercicio));
         }
 
         return new Pagina<>(filas, pagina.pagina(), pagina.tamano(), pagina.totalElementos());

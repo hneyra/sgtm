@@ -213,15 +213,38 @@ public class MovimientosDeDeudaController {
                             ? movimientos.registrarRepartido(
                                     movimiento,
                                     declaraSusCuotas(peticion) ? cuotas : null,
+                                    comprobacionDe(peticion),
                                     codigoContribuyente,
                                     observacion)
                             : movimientos.registrar(
-                                    movimiento, cuotas, codigoContribuyente, observacion);
+                                    movimiento,
+                                    cuotas,
+                                    comprobacionDe(peticion),
+                                    codigoContribuyente,
+                                    observacion);
         } catch (RegistrarMovimientoDeDeuda.BajaMayorQueLaDeuda excede) {
             throw new ProblemaDeNegocio(CodigoDeError.VALIDACION, mensajeDe(excede));
+        } catch (RegistrarMovimientoDeDeuda.UnidadAjena ajena) {
+            throw new ProblemaDeNegocio(CodigoDeError.VALIDACION, mensajeDe(ajena));
         }
         return MovimientoDeDeudaResource.de(
                 sentido.name(), registro.asientos(), registro.numeroDeDocumento());
+    }
+
+    /**
+     * Si hay que comprobar que la unidad sea del contribuyente, o si la peticion lo declara (#635).
+     *
+     * <p>Aqui <b>siempre</b> se comprueba: quien registra un alta o una baja desde ventanilla dice
+     * a quien y sobre que, y una unidad que no es suya deja el cargo sobre una clave que ninguna
+     * consulta va a mirar. Lo unico que la peticion puede hacer es <b>declarar</b> que la deuda es
+     * de un titular anterior —lo que ocurre de verdad con la deuda de un ejercicio previo a una
+     * transferencia—, y entonces se admite y la observacion del acto queda con esa constancia.
+     */
+    private static RegistrarMovimientoDeDeuda.ComprobacionDeUnidad comprobacionDe(
+            PeticionDeMovimiento peticion) {
+        return Boolean.TRUE.equals(peticion.deudaDeTitularAnterior())
+                ? RegistrarMovimientoDeDeuda.ComprobacionDeUnidad.DECLARADA_DE_TITULAR_ANTERIOR
+                : RegistrarMovimientoDeDeuda.ComprobacionDeUnidad.EXIGIDA;
     }
 
     /**
@@ -408,6 +431,7 @@ public class MovimientosDeDeudaController {
             @Nullable Integer cuotaDesde,
             @Nullable Integer cuotaHasta,
             @Nullable Boolean repartir,
+            @Nullable Boolean deudaDeTitularAnterior,
             @Nullable Long predioId,
             @Nullable Long vehiculoId,
             @Nullable String insoluto,
