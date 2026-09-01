@@ -483,8 +483,15 @@ export const EXPEDIENTE: SeccionDef[] = [
  * otra cosa (#541). Un control vivo que no acota nada es el defecto que #322,
  * #398 y #432 cerraron tres veces, y aquí se cierra igual: se apaga con su
  * motivo en `bloqueado`, que se lee en su `title` y bajo la rejilla.
+ *
+ * `soloCon` es el otro caso, y no es el mismo: el filtro no está apagado, es que
+ * **todavía no se pregunta**. Lleva el valor de «Alcance» que lo hace exigible
+ * —`SECTOR` el suyo, `RANGO_DE_CODIGO` sus dos extremos (#577)—, y con otro
+ * alcance elegido no se dibuja. Dibujarlo siempre sería ofrecer una caja que la
+ * corrida no va a leer, que es la mitad del defecto de un filtro que no acota;
+ * apagarlo con `bloqueado` diría que no sirve, y sirve: sirve con su alcance.
  */
-export type FiltroDef = { l: string; v: string; t?: 'sel'; o?: string[]; ph?: string; k?: string; bloqueado?: string };
+export type FiltroDef = { l: string; v: string; t?: 'sel'; o?: string[]; ph?: string; k?: string; bloqueado?: string; soloCon?: string };
 
 /**
  * Una línea de la memoria del cálculo: operador, rótulo, detalle, importe y
@@ -649,12 +656,31 @@ const DEL_CONJUNTO_SELLADO =
   'Es una cifra del conjunto sellado del ejercicio, no un dato que se teclee: escribirla aquí dejaría que ' +
   'quien corre la emisión eligiera con qué UIT se calcula (regla 5).';
 
-/* Los dos únicos alcances que `DeterminarPredialMasivo.Peticion` admite, letra
-   por letra. El desplegable del manual ofrecía cuatro —«TODO EL PADRÓN», «POR
-   SECTOR», «POR RANGO DE CÓDIGO», «SOLO OBSERVADOS»— y NINGUNO coincide: los
-   dos primeros se parecen, y parecerse no es serlo (#427). Los otros dos no
-   existen en el backend, y se dicen en la ayuda en vez de ofrecerse. */
-export const ALCANCES_DE_LA_CORRIDA = ['TODOS', 'SECTOR'] as const;
+/* Los CUATRO alcances que `DeterminarPredialMasivo.Peticion` admite, letra por
+   letra.
+
+   Hasta #577 eran dos, y lo que decía aquí era verdad entonces: el desplegable
+   del manual ofrecía «TODO EL PADRÓN», «POR SECTOR», «POR RANGO DE CÓDIGO» y
+   «SOLO OBSERVADOS», ninguno de los cuatro coincidía letra por letra —los dos
+   primeros se parecen, y parecerse no es serlo (#427)—, y los otros dos el
+   backend no los tenía: se decían en la ayuda en vez de ofrecerse, porque un
+   alcance que se elige y no se sirve devuelve un 422 con el nombre de lo que
+   quien atiende acaba de elegir de una lista.
+
+   Ya los tiene los cuatro. Lo que no cambia es de quién es el vocabulario: sale
+   de `ALCANCES` de `DeterminarPredialMasivo` y se ofrece con SUS palabras, no
+   con los rótulos del manual. Al revés haría falta una tabla de traducción, que
+   es una segunda copia de la regla y se queda vieja en silencio en cuanto el
+   enumerado gane un valor —el defecto que #427 no cometió con «ACTIVA» y que
+   `vocabularios.mjs` vigila donde sí hubo que traducir—.
+
+   Dos de los cuatro piden campos y por eso los suyos declaran `soloCon`:
+   `SECTOR` exige el sector, y `RANGO_DE_CODIGO` sus dos extremos. `OBSERVADOS`
+   no pide ninguno y aun así no es «TODOS con otro nombre»: recorre a los que la
+   ÚLTIMA corrida del ejercicio dejó fuera, y sin corrida previa no recorre a
+   nadie —«ninguno quedó observado» y «todavía no se ha corrido» son dos cosas
+   distintas, y esta pantalla tiene que poder decir la diferencia—. */
+export const ALCANCES_DE_LA_CORRIDA = ['TODOS', 'SECTOR', 'RANGO_DE_CODIGO', 'OBSERVADOS'] as const;
 
 /** La coletilla de las cuatro memorias: por qué no hay números. */
 const MEMORIA_SIN_CIFRAS =
@@ -781,7 +807,16 @@ export const DETERMINACIONES: Record<ClaveDeDeterminacion, DeterminacionDef> = {
       /* Los códigos los pone `GET /catastro/sectores` al abrir la hoja: los seis
          de aquí —«Todos», «01»…«05»— eran los de la maqueta, y con `SECTOR` el
          backend exige uno que exista. La lista vacía es a propósito. */
-      { l: 'Sector', t: 'sel', v: '', o: [], k: 'sector' },
+      { l: 'Sector', t: 'sel', v: '', o: [], k: 'sector', soloCon: 'SECTOR' },
+      /* Los dos extremos del tramo, incluidos los dos (#577). Son cajas de
+         TEXTO y no de número porque el backend los compara como texto: el
+         código del padrón es una cadena —«00000025673», «C-000007»— y ni
+         siquiera siempre numérica, así que ese es el orden con que la pantalla
+         lo lista y «del C-000100 al C-000200» es exactamente el tramo que quien
+         pide la corrida está viendo. Un control numérico se comería el prefijo
+         y los ceros de la izquierda, y el tramo dejaría de ser el que se ve. */
+      { l: 'Código desde', v: '', k: 'codigoDesde', ph: 'C-000001', soloCon: 'RANGO_DE_CODIGO' },
+      { l: 'Código hasta', v: '', k: 'codigoHasta', ph: 'C-000500', soloCon: 'RANGO_DE_CODIGO' },
       /* La UIT y el derecho de emisión los pone el conjunto sellado del
          ejercicio, y no se teclean: escribirlos aquí sería la regla 5 —una cifra
          normativa compilada— y ademas dejaria que quien corre la emision de

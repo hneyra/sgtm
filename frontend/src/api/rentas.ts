@@ -789,10 +789,25 @@ export type PeticionDeCorridaPredial = {
   simulacion: boolean;
   observacion?: string;
   ejercicio: string;
-  /** `TODOS` o `SECTOR`, letra por letra: `DeterminarPredialMasivo` no admite otra cosa. */
+  /**
+   * `TODOS`, `SECTOR`, `RANGO_DE_CODIGO` u `OBSERVADOS`, letra por letra:
+   * `ALCANCES` de `DeterminarPredialMasivo` no admite otra cosa y rechaza con
+   * 422 lo que no esté en esa lista (#577).
+   */
   alcance?: string;
   /** Obligatorio con `alcance: 'SECTOR'`. */
   sector?: string;
+  /**
+   * Los dos extremos del tramo, obligatorios con `alcance: 'RANGO_DE_CODIGO'` y
+   * **incluidos los dos**.
+   *
+   * Van como cadena y sin normalizar aquí porque el backend los compara COMO
+   * TEXTO —`enElTramo` usa `String.compareTo`—: el código del contribuyente es
+   * una cadena y ni siquiera siempre numérica, así que recortarle los ceros o
+   * pasarlo por un número aquí cambiaría el tramo sin que nada lo dijera.
+   */
+  codigoDesde?: string;
+  codigoHasta?: string;
   recalculaYaEmitidos?: boolean;
 };
 

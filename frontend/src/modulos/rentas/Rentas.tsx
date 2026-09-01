@@ -1500,7 +1500,7 @@ export default function Rentas({ dest, onDest }: PantallaProps) {
 
   /* Al cambiar de hoja, de sujeto o de ejercicio, lo dibujado deja de ser la
      respuesta a lo que está en pantalla. */
-  const sujetoDeLaDeterminacion = `${tipo}|${pref.ejercicio}|${filtroQueViaja('codContribuyente')}|${filtroQueViaja('placa')}|${alcanceDeLaCorrida}|${filtroQueViaja('sector')}`;
+  const sujetoDeLaDeterminacion = `${tipo}|${pref.ejercicio}|${filtroQueViaja('codContribuyente')}|${filtroQueViaja('placa')}|${alcanceDeLaCorrida}|${filtroQueViaja('sector')}|${filtroQueViaja('codigoDesde')}|${filtroQueViaja('codigoHasta')}`;
   useEffect(() => {
     setDeterminacion(null);
     setFalloDeLaDeterminacion(null);
@@ -1523,6 +1523,21 @@ export default function Rentas({ dest, onDest }: PantallaProps) {
     if (tipo === 'masivo' && alcanceDeLaCorrida === 'SECTOR') {
       if (sectores.error !== null) return 'No se pudieron leer los sectores del catastro, y con alcance SECTOR el backend exige uno que exista.';
       if (filtroQueViaja('sector') === '') return 'Con alcance SECTOR hay que decir cuál: sin él, «solo el sector» y «todo el padrón» serían la misma corrida.';
+    }
+    if (tipo === 'masivo' && alcanceDeLaCorrida === 'RANGO_DE_CODIGO') {
+      const desde = filtroQueViaja('codigoDesde');
+      const hasta = filtroQueViaja('codigoHasta');
+      if (desde === '' || hasta === '') {
+        return 'Con alcance RANGO_DE_CODIGO hacen falta los dos extremos: con uno solo no se sabe dónde acaba el tramo.';
+      }
+      /* El mismo orden que `enElTramo`: comparación de cadenas, que en JavaScript
+         y en `String.compareTo` de Java recorren las mismas unidades. Decirlo
+         aquí no adelanta ninguna regla —la de verdad la aplica el backend, y
+         rechaza el tramo invertido con 422—; lo que evita es mandar una corrida
+         sobre el padrón entero para que vuelva un error que ya se veía. */
+      if (desde > hasta) {
+        return `El tramo va del primero al último y «${desde}» es posterior a «${hasta}». Los códigos se comparan como texto, que es el orden con el que esta pantalla lista el padrón.`;
+      }
     }
     return undefined;
   };
@@ -1557,7 +1572,13 @@ export default function Rentas({ dest, onDest }: PantallaProps) {
             simulacion: true,
             ejercicio: pref.ejercicio,
             alcance: alcanceDeLaCorrida,
+            /* Cada alcance manda LO SUYO y nada más. Un `sector` que viajara con
+               `alcance: TODOS` lo ignoraría el backend en silencio, y quien lo
+               eligió leería la corrida del padrón entero como la de su sector. */
             ...(alcanceDeLaCorrida === 'SECTOR' ? { sector: filtroQueViaja('sector') } : null),
+            ...(alcanceDeLaCorrida === 'RANGO_DE_CODIGO'
+              ? { codigoDesde: filtroQueViaja('codigoDesde'), codigoHasta: filtroQueViaja('codigoHasta') }
+              : null),
           }),
         });
       } else if (tipo === 'vehicular') {
@@ -3031,6 +3052,13 @@ export default function Rentas({ dest, onDest }: PantallaProps) {
                 }}
               >
                 {det.filtros.map((f, i) => {
+                  /* El campo condicional no se dibuja hasta que su alcance está
+                     elegido (#577). No es lo mismo que apagarlo: apagado diría
+                     que no sirve, y sirve —con SU alcance—; dibujarlo siempre
+                     ofrecería una caja que la corrida no va a leer. El índice se
+                     conserva porque es la clave del valor tecleado: saltarse uno
+                     al pintar no puede correr los demás. */
+                  if (f.soloCon !== undefined && f.soloCon !== alcanceDeLaCorrida) return null;
                   const clave = `${tipo}|${i}`;
                   const valor = filtros[clave] ?? f.v;
                   const cambiar = (v: string) => setFiltros((s) => ({ ...s, [clave]: v }));
@@ -3085,7 +3113,10 @@ export default function Rentas({ dest, onDest }: PantallaProps) {
                   <strong style={{ fontWeight: 500 }}>{cuales}</strong> {motivo}
                 </p>
               ))}
-              {tipo === 'masivo' && sectores.error !== null && (
+              {/* Sólo con SECTOR elegido: el aviso señala una caja, y con otro
+                  alcance esa caja no está dibujada. Quien elija SECTOR se entera
+                  en el mismo gesto, que es cuando le importa. */}
+              {tipo === 'masivo' && alcanceDeLaCorrida === 'SECTOR' && sectores.error !== null && (
                 <p style={{ ...PIE, color: 'var(--bad-ink, var(--ink-2))' }}>
                   No se pudieron leer los sectores del catastro —hace falta el acceso «sectores»—, así que la corrida por sector no se
                   puede pedir: el backend exige un código que exista y aquí no hay ninguno que ofrecer.
@@ -3093,10 +3124,21 @@ export default function Rentas({ dest, onDest }: PantallaProps) {
               )}
               {tipo === 'masivo' && (
                 <p style={PIE}>
-                  «Alcance» ofrece los dos únicos valores que <code>DeterminarPredialMasivo</code> admite. El desplegable del manual traía
-                  cuatro —«TODO EL PADRÓN», «POR SECTOR», «POR RANGO DE CÓDIGO», «SOLO OBSERVADOS»— y ninguno coincidía letra por letra:
-                  los dos primeros se parecen, y parecerse no es serlo; los otros dos el backend no los implementa. Los sectores son los
-                  del catastro, no los seis códigos que dibujaba la maqueta.
+                  «Alcance» ofrece los cuatro valores que <code>DeterminarPredialMasivo</code> admite, con sus palabras y no con los
+                  rótulos del manual —«TODO EL PADRÓN», «POR SECTOR», «POR RANGO DE CÓDIGO», «SOLO OBSERVADOS»—: traducirlos sería una
+                  segunda copia de la regla, y una copia se queda vieja en silencio. Dos de ellos piden lo suyo y hasta entonces no se
+                  preguntan: <strong style={{ fontWeight: 500 }}>«Sector»</strong> sale con <code>SECTOR</code> y los códigos del catastro,
+                  no los seis que dibujaba la maqueta; <strong style={{ fontWeight: 500 }}>«Código desde» y «Código hasta»</strong> salen
+                  con <code>RANGO_DE_CODIGO</code>, y son los dos extremos del tramo, incluidos los dos.
+                </p>
+              )}
+              {tipo === 'masivo' && alcanceDeLaCorrida === 'OBSERVADOS' && (
+                <p style={PIE}>
+                  <code>OBSERVADOS</code> no es «todo el padrón» con otro nombre: recorre a los que dejó fuera la{' '}
+                  <strong style={{ fontWeight: 500 }}>última corrida de este ejercicio</strong>, que es la lista que no se puede recomponer
+                  leyendo el padrón —un observado es, por definición, el que no tiene determinación—. Si el ejercicio todavía no se ha
+                  corrido, la corrida no recorre a nadie, y eso no significa que la emisión esté limpia: «ninguno quedó observado» y
+                  «todavía no se ha corrido» son dos cosas distintas, y sólo la primera se puede emitir.
                 </p>
               )}
             </section>
