@@ -2,6 +2,7 @@ package pe.gob.sgtm.tesoreria.infraestructura.web;
 
 import org.jspecify.annotations.Nullable;
 import pe.gob.sgtm.tesoreria.aplicacion.AnularRecibo;
+import pe.gob.sgtm.tesoreria.dominio.EstadoDeRecibo;
 import pe.gob.sgtm.tesoreria.dominio.MovimientoDeRecibo;
 import pe.gob.sgtm.web.ImporteActualizado;
 
@@ -40,8 +41,11 @@ public record AnulacionResource(
 
     /**
      * El estado efectivo de un recibo con anulacion. Se deriva del movimiento, no de una columna.
+     *
+     * <p>Sale del enumerado y no de un literal (#548): el mismo vocabulario lo publica el listado
+     * de recibos y lo acepta su filtro, y tres copias de dos palabras acaban discrepando en una.
      */
-    public static final String ANULADO = "ANULADO";
+    public static final String ANULADO = EstadoDeRecibo.ANULADO.name();
 
     public static AnulacionResource de(AnularRecibo.Anulado anulado) {
         MovimientoDeRecibo anulacion = anulado.anulacion();

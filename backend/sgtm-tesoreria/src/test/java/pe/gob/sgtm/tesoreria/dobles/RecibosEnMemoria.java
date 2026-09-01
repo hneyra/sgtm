@@ -6,9 +6,13 @@ import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 import org.jspecify.annotations.Nullable;
+import pe.gob.sgtm.compartido.Pagina;
+import pe.gob.sgtm.compartido.Paginacion;
 import pe.gob.sgtm.tesoreria.dominio.Caja;
+import pe.gob.sgtm.tesoreria.dominio.CriterioDeRecibos;
 import pe.gob.sgtm.tesoreria.dominio.NumeroDeRecibo;
 import pe.gob.sgtm.tesoreria.dominio.Recibo;
+import pe.gob.sgtm.tesoreria.dominio.ReciboEnConsulta;
 import pe.gob.sgtm.tesoreria.dominio.ReciboRepository;
 
 /** Los recibos, en memoria. Solo agrega: no hay forma de editar uno, igual que en la base. */
@@ -19,8 +23,21 @@ public final class RecibosEnMemoria implements ReciboRepository {
     private final Map<String, Long> correlativos = new LinkedHashMap<>();
     private long siguienteId = 1;
 
+    private @Nullable CriterioDeRecibos ultimoCriterio;
+    private @Nullable Paginacion ultimaPaginacion;
+
     public List<Recibo> emitidos() {
         return List.copyOf(emitidos);
+    }
+
+    /** El criterio con que se pidio el ultimo listado: es lo que la capa web compone. */
+    public @Nullable CriterioDeRecibos ultimoCriterio() {
+        return ultimoCriterio;
+    }
+
+    /** Y con que paginacion. */
+    public @Nullable Paginacion ultimaPaginacion() {
+        return ultimaPaginacion;
     }
 
     @Override
@@ -61,5 +78,22 @@ public final class RecibosEnMemoria implements ReciboRepository {
     @Override
     public Optional<Recibo> porNumero(NumeroDeRecibo numero) {
         return emitidos.stream().filter(r -> r.numero().equals(numero)).findFirst();
+    }
+
+    /**
+     * Guarda lo que se pidio y devuelve una pagina vacia, igual que {@code ConveniosEnMemoria} y
+     * por lo mismo: el filtrado —y el estado, que se DERIVA de {@code recibo_movimiento} (V30)— se
+     * prueba contra PostgreSQL, y filtrar aqui en Java compararia dos derivaciones distintas sin
+     * probar ninguna.
+     *
+     * <p>Lo que si conserva es el criterio, que es lo unico que la capa web decide: que los seis
+     * filtros de la consulta lleguen al dominio, y que la pagina vacia salga como pagina vacia y no
+     * como un 404.
+     */
+    @Override
+    public Pagina<ReciboEnConsulta> buscar(CriterioDeRecibos criterio, Paginacion paginacion) {
+        ultimoCriterio = criterio;
+        ultimaPaginacion = paginacion;
+        return Pagina.vacia(paginacion);
     }
 }

@@ -261,7 +261,20 @@ class ParametrosDeLaConsultaTest {
      * contribuyente, que la operacion lee—: la brecha en las <b>dos</b> direcciones a la vez, que
      * es lo que hace que baje tambien la segunda cifra.
      */
-    private static final int OPERACIONES_CON_FILTRO_QUE_NADIE_LEE = 61;
+    /**
+     * Baja a 60 con #548: {@code POST /tesoreria/caja/tasas} declaraba {@code partida} y {@code
+     * conceptoTupa}, y su controlador solo enlaza {@code codContribuyente}. Los dos acotan el
+     * catalogo del TUPA —la tabla «Conceptos a cobrar» del prototipo—, que esta operacion no
+     * devuelve: es el POST que COBRA los conceptos que llegan en el cuerpo. Se retiraron del
+     * contrato ({@code SUPRIMIDOS} del generador) en vez de leerlos, porque leerlos aqui no podria
+     * cambiar ni una fila de la respuesta.
+     *
+     * <p><b>Las dos cifras estan MEDIDAS, no contadas</b>, poniendo el techo a 0 y leyendo el «but
+     * was»: 60 y 18 sobre el arbol ya mezclado con #546. Es la leccion que ese issue aprendio por
+     * las malas —su techo se puso contando y quedo en 62 donde la medida era 61, y con esa holgura
+     * de una sola operacion la mutacion que este criterio existe para cazar no mordia—.
+     */
+    private static final int OPERACIONES_CON_FILTRO_QUE_NADIE_LEE = 60;
 
     private static final int OPERACIONES_QUE_LEEN_UN_FILTRO_SIN_PUBLICAR = 18;
 

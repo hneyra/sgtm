@@ -2,6 +2,8 @@ package pe.gob.sgtm.tesoreria.dominio;
 
 import java.util.Optional;
 import org.jspecify.annotations.Nullable;
+import pe.gob.sgtm.compartido.Pagina;
+import pe.gob.sgtm.compartido.Paginacion;
 
 /**
  * Los recibos. <b>Solo se agregan</b>: no hay {@code actualizar} ni {@code borrar}, y no es un
@@ -35,4 +37,17 @@ public interface ReciboRepository {
 
     /** El recibo con ese numero impreso, con su detalle. */
     Optional<Recibo> porNumero(NumeroDeRecibo numero);
+
+    /**
+     * Los recibos que pide el criterio, paginados y <b>sin su detalle</b> (#548).
+     *
+     * <p>Es lo que le faltaba a la ventanilla: hasta #548 un recibo solo se podia pedir por su
+     * numero impreso, asi que quien perdia el papel no tenia forma de encontrarlo. La fila que
+     * devuelve es {@link ReciboEnConsulta}, con el estado y los duplicados ya derivados de {@code
+     * recibo_movimiento}.
+     *
+     * <p>Un criterio que no encuentra nada devuelve una <b>pagina vacia</b>, nunca una excepcion:
+     * un contribuyente sin recibos no es un error, es una busqueda sin resultados.
+     */
+    Pagina<ReciboEnConsulta> buscar(CriterioDeRecibos criterio, Paginacion paginacion);
 }
