@@ -238,7 +238,10 @@ public class MovimientosDeDeudaController {
      * a quien y sobre que, y una unidad que no es suya deja el cargo sobre una clave que ninguna
      * consulta va a mirar. Lo unico que la peticion puede hacer es <b>declarar</b> que la deuda es
      * de un titular anterior —lo que ocurre de verdad con la deuda de un ejercicio previo a una
-     * transferencia—, y entonces se admite y la observacion del acto queda con esa constancia.
+     * transferencia—, y entonces se admite y <b>la declaracion queda escrita en la fila del
+     * libro</b>: {@code cuenta_corriente_asiento.unidad_de_titular_anterior} (V71, #653), y de ahi
+     * en la fila de auditoria del asiento. No se compone dentro del texto de la observacion: esa es
+     * del usuario (regla 10).
      */
     private static RegistrarMovimientoDeDeuda.ComprobacionDeUnidad comprobacionDe(
             PeticionDeMovimiento peticion) {
