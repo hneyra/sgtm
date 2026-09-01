@@ -213,6 +213,22 @@ final class CatastroEnMemoria
     }
 
     @Override
+    public java.util.List<pe.gob.sgtm.catastro.dominio.LoteDelPlano> lotesDelPlano(
+            pe.gob.sgtm.catastro.dominio.FiltroDelPlano filtro, int tope) {
+        throw new UnsupportedOperationException("Esta carga no dibuja planos");
+    }
+
+    @Override
+    public long lotesEnElMarco(pe.gob.sgtm.catastro.dominio.FiltroDelPlano filtro) {
+        throw new UnsupportedOperationException("Esta carga no dibuja planos");
+    }
+
+    @Override
+    public long prediosSinGeometria(pe.gob.sgtm.catastro.dominio.FiltroDelPlano filtro) {
+        throw new UnsupportedOperationException("Esta carga no dibuja planos");
+    }
+
+    @Override
     public Optional<String> geometriaDe(long predioId) {
         return Optional.empty();
     }

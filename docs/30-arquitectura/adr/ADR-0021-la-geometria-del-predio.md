@@ -87,6 +87,16 @@ de una ficha en una tarea de gabinete.
 - El índice GiST se paga en cada escritura del predio. Se acepta: sin él, «qué predios caen en esta
   manzana» recorre la tabla entera, que es la única pregunta por la que la columna existe.
 
+  > **Medido en #536, y esta frase resultó ser falsa para quien hace esa pregunta.** El índice GiST
+  > **no se usa** cuando quien consulta es `sgtm_app`: `geography_overlaps` no es *leakproof*, así
+  > que bajo RLS PostgreSQL no lo promueve por encima de la política y el plan vuelve a ser un
+  > `Seq Scan` — con el índice ahí, y usándose sólo si quien mide es un superusuario. Es el hallazgo
+  > 3 de [`DAT-01`](../../40-datos/modelo-logico-fisico.md) §0 con otro operador, y su §0 hallazgo 5
+  > lo recoge con los dos planes. Lo que responde esa pregunta desde `V65` son cuatro columnas
+  > generadas con el marco del lote, comparadas con operadores que sí lo son. El índice GiST se
+  > conserva —retirarlo es revisar esta decisión, no un efecto secundario de publicar una lectura—
+  > y sigue sirviendo a cualquier trabajo espacial que corra fuera de RLS.
+
 ## Alternativas descartadas
 
 **Guardar el WKB en una columna de texto, sin PostGIS.** Evita la extensión y el cambio de imagen, y

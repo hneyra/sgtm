@@ -113,6 +113,13 @@ class ParametrosDeLaConsultaTest {
                     Map.entry(
                             "POST /rentas/vehicular/calculo",
                             Set.of("placa", "codContribuyente", "ejercicio")),
+                    // #536 — el plano catastral, y aqui van los CUATRO. Es una lectura, asi que
+                    // no hay cuerpo donde esconder nada; lo que la entrada compromete es que
+                    // sigan viajando por la URL, que es como se comparte la vista de un plano.
+                    // `bbox` ademas es obligatorio: sin el la consulta seria el padron entero.
+                    Map.entry(
+                            "GET /catastro/predios/plano",
+                            Set.of("bbox", "codigoDeSector", "codigoDeManzana", "limite")),
                     // ------------------------------------------------------------------
                     // #425 — las nueve que quedaban. De cada operacion se promete lo que su
                     // cuerpo ya llevaba y el contrato declara `in: query`; los demas parametros
@@ -206,7 +213,12 @@ class ParametrosDeLaConsultaTest {
                     // pregunta. La de predios ya leia los suyos y se compromete aqui por lo mismo:
                     // es la pareja que #541 revisa.
                     "GET /rentas/arbitrios",
-                    "GET /rentas/predios");
+                    "GET /rentas/predios",
+                    // #536 — el plano catastral. Se compromete entera desde el primer dia: nace
+                    // con controlador, y sus cuatro parametros son exactamente los cuatro que el
+                    // contrato declara. Una operacion que estrena controlador es el unico momento
+                    // en que esta promesa no cuesta nada.
+                    "GET /catastro/predios/plano");
 
     /**
      * Cuantas operaciones arrastran hoy cada mitad del desajuste. Medido, no estimado (#544).

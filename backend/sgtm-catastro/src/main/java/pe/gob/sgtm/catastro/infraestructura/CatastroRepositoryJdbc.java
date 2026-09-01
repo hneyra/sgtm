@@ -17,7 +17,9 @@ import pe.gob.sgtm.catastro.dominio.CatastroRepository;
 import pe.gob.sgtm.catastro.dominio.CondicionDeTitularidad;
 import pe.gob.sgtm.catastro.dominio.EstadoPredio;
 import pe.gob.sgtm.catastro.dominio.FiltroDePredios;
+import pe.gob.sgtm.catastro.dominio.FiltroDelPlano;
 import pe.gob.sgtm.catastro.dominio.Inquilino;
+import pe.gob.sgtm.catastro.dominio.LoteDelPlano;
 import pe.gob.sgtm.catastro.dominio.Manzana;
 import pe.gob.sgtm.catastro.dominio.ManzanaConConteos;
 import pe.gob.sgtm.catastro.dominio.Predio;
@@ -468,6 +470,177 @@ public class CatastroRepositoryJdbc extends RepositorioJdbc implements CatastroR
                 paginacion,
                 ORDEN_CATASTRO,
                 CatastroRepositoryJdbc::mapearPredioDelCatastro);
+    }
+
+    // ---------- El plano catastral (ADR-0022, #536) ----------
+
+    /**
+     * El marco, escrito con los operadores que SI llegan al indice bajo RLS.
+     *
+     * <p><b>Aqui esta el hallazgo de #536, y conviene leerlo entero antes de «simplificarlo».</b>
+     * La forma obvia de esta condicion es {@code p.geometria && ST_MakeEnvelope(...)::geography}, y
+     * medida contra PostgreSQL 16 con PostGIS 3.5, con 30 000 predios y conectado como {@code
+     * sgtm_app}, produce un {@code Seq Scan} de la tabla entera. La misma consulta como
+     * superusuario —que omite RLS— usa {@code predio_geometria_gix}.
+     *
+     * <p>El motivo es el hallazgo 3 de DAT-01 §0 trasladado al espacio: PostgreSQL solo promueve
+     * una condicion por encima de la politica de seguridad si es <i>leakproof</i>, y {@code
+     * geography_overlaps} tiene {@code proleakproof = f} —igual que {@code textlike}, y al reves
+     * que {@code int8eq}, que es lo que dejo a #313 empujar {@code ficha_id} al indice—.
+     *
+     * <p>Las cuatro columnas de {@code V65} dicen lo mismo con {@code float8le} y {@code float8ge},
+     * que si lo son. El {@code CAST} es el que convierte el parametro —{@code BigDecimal}, porque
+     * {@code double} esta prohibido en Java (regla 1)— en el {@code double precision} de la
+     * columna: sin el, la comparacion se resolveria en {@code numeric}, y {@code numeric_le}
+     * tampoco es leakproof.
+     *
+     * <p>El {@code geometria IS NOT NULL} es explicito porque el indice es parcial sobre esa misma
+     * condicion, y porque dice lo que la lectura hace: el plano dibuja lo levantado.
+     *
+     * <h2>Y por que NO lleva ademas el {@code &&}, que seria lo natural</h2>
+     *
+     * <p>Se escribio con las dos y se midio, porque parecia que el {@code &&} aportaba algo: es el
+     * unico estimador de selectividad que PostGIS trae, y sin el PostgreSQL calcula las cuatro
+     * desigualdades <b>como si fueran independientes</b> —no lo son: son un rectangulo—. Medido
+     * sobre 60 000 lotes de dos municipalidades, con el {@code &&} puesto la estimacion baja de 2
+     * 905 filas a 39 y el coste del plan de 5 097 a 3 313.
+     *
+     * <p>Y aun asi sobra, por dos motivos que solo se ven midiendo. El primero es que <b>el plan es
+     * el mismo con y sin el</b>: quien elige el indice es la condicion de la politica junto con las
+     * cuatro columnas, no la estimacion. El segundo es que <b>esa estimacion tampoco es la
+     * correcta</b>: el marco de la medida contiene unos 440 lotes, asi que 2 905 se pasa por exceso
+     * y 39 se queda corto por diez —y quedarse corto es la direccion peligrosa, la que produce
+     * planes anidados sobre una fila que resultan ser cientos—.
+     *
+     * <p>Lo que queda entonces es una <b>segunda copia del mismo predicado</b>, que es justo lo que
+     * este repositorio no admite en otros sitios. El {@code &&} de {@code geography} compara cajas
+     * envolventes y las cuatro columnas comparan la misma caja; la diferencia es que la geodesica
+     * es la conservadora y la de los vertices la exacta, asi que el resultado lo decide la segunda
+     * y el primero no decide nada.
+     */
+    private static final String EN_EL_MARCO =
+            " p.geometria IS NOT NULL"
+                    + " AND p.marco_oeste <= CAST(:este AS double precision)"
+                    + " AND p.marco_sur   <= CAST(:norte AS double precision)"
+                    + " AND p.marco_este  >= CAST(:oeste AS double precision)"
+                    + " AND p.marco_norte >= CAST(:sur AS double precision)";
+
+    private static final String PLANO_DESDE =
+            """
+             FROM predio p
+             LEFT JOIN sector s
+               ON s.municipalidad_id = p.municipalidad_id
+              AND s.id = p.sector_id
+             LEFT JOIN manzana m
+               ON m.municipalidad_id = p.municipalidad_id
+              AND m.id = p.manzana_id
+            """;
+
+    /**
+     * {@code ST_AsGeoJSON} sobre la columna, sin tocarla.
+     *
+     * <p>Ni {@code ST_Transform} ni {@code ST_Simplify} (ADR-0022 §1): un vertice movido es un
+     * lindero movido, y un lindero movido no se ve. Lo que se acota es cuantas filas se piden, no
+     * la precision de cada una.
+     */
+    private static final String COLUMNAS_PLANO =
+            "p.id AS predio_id, p.codigo_ref_catastral AS cod_ref_catastral, p.direccion,"
+                    + " s.codigo AS sector_codigo, m.codigo AS manzana_codigo, p.lote,"
+                    + " p.estado, ST_AsGeoJSON(p.geometria) AS geometria";
+
+    @Override
+    public List<LoteDelPlano> lotesDelPlano(FiltroDelPlano filtro, int tope) {
+        return jdbc().sql(
+                        "SELECT "
+                                + COLUMNAS_PLANO
+                                + PLANO_DESDE
+                                + " WHERE"
+                                + EN_EL_MARCO
+                                + condicionesDeFiltro(filtro)
+                                + " LIMIT :tope")
+                .params(parametrosDelPlano(filtro))
+                .param("tope", tope)
+                .query(CatastroRepositoryJdbc::mapearLoteDelPlano)
+                .list();
+    }
+
+    @Override
+    public long lotesEnElMarco(FiltroDelPlano filtro) {
+        return jdbc().sql(
+                        "SELECT count(*)"
+                                + PLANO_DESDE
+                                + " WHERE"
+                                + EN_EL_MARCO
+                                + condicionesDeFiltro(filtro))
+                .params(parametrosDelPlano(filtro))
+                .query(Long.class)
+                .optional()
+                .orElse(0L);
+    }
+
+    /**
+     * Los que no tienen poligono: <b>sin</b> el marco, y con los mismos filtros.
+     *
+     * <p>No es una omision. Un predio sin poligono no tiene sitio en el marco, y el unico dato que
+     * podria situarlo —el perimetro de su manzana— no existe en el esquema; derivarlo de la union
+     * de los lotes ya digitalizados es lo que ADR-0022 §5 prohibe, y ademas daria cero hoy, que es
+     * cuando no hay ni un lote digitalizado y la cifra mas hace falta.
+     */
+    @Override
+    public long prediosSinGeometria(FiltroDelPlano filtro) {
+        return jdbc().sql(
+                        "SELECT count(*)"
+                                + PLANO_DESDE
+                                + " WHERE p.geometria IS NULL"
+                                + condicionesDeFiltro(filtro))
+                .params(parametrosDeFiltro(filtro))
+                .query(Long.class)
+                .optional()
+                .orElse(0L);
+    }
+
+    private static String condicionesDeFiltro(FiltroDelPlano filtro) {
+        StringBuilder condiciones = new StringBuilder();
+        if (filtro.codigoDeSector() != null) {
+            condiciones.append(" AND s.codigo = :sector");
+        }
+        if (filtro.codigoDeManzana() != null) {
+            condiciones.append(" AND m.codigo = :manzana");
+        }
+        return condiciones.toString();
+    }
+
+    private static Map<String, Object> parametrosDeFiltro(FiltroDelPlano filtro) {
+        Map<String, Object> parametros = new HashMap<>();
+        if (filtro.codigoDeSector() != null) {
+            parametros.put("sector", filtro.codigoDeSector());
+        }
+        if (filtro.codigoDeManzana() != null) {
+            parametros.put("manzana", filtro.codigoDeManzana());
+        }
+        return parametros;
+    }
+
+    private static Map<String, Object> parametrosDelPlano(FiltroDelPlano filtro) {
+        Map<String, Object> parametros = parametrosDeFiltro(filtro);
+        parametros.put("oeste", filtro.marco().oeste());
+        parametros.put("sur", filtro.marco().sur());
+        parametros.put("este", filtro.marco().este());
+        parametros.put("norte", filtro.marco().norte());
+        return parametros;
+    }
+
+    private static LoteDelPlano mapearLoteDelPlano(ResultSet fila, int numeroDeFila)
+            throws SQLException {
+        return new LoteDelPlano(
+                fila.getLong("predio_id"),
+                CodigoReferenciaCatastral.de(fila.getString("cod_ref_catastral")),
+                fila.getString("direccion"),
+                fila.getString("sector_codigo"),
+                fila.getString("manzana_codigo"),
+                fila.getString("lote"),
+                EstadoPredio.valueOf(fila.getString("estado")),
+                fila.getString("geometria"));
     }
 
     private static PredioDelCatastro mapearPredioDelCatastro(ResultSet fila, int numeroDeFila)
