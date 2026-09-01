@@ -708,7 +708,11 @@ export default function Fiscalizacion({ dest, onDest }: PantallaProps) {
                     {(detTab === 0 ? filasDeOmisos : detAct.filas).map((f, i) => {
                       const on = marcadas[i] === true;
                       return (
-                        <tr key={f[0]} className="hov-elev" style={{ borderTop: '1px solid var(--line)', background: on ? 'var(--accent-soft)' : 'transparent' }}>
+                        /* La clave es el indice y no el codigo: el padron de
+                           omisos MULTIPLICA por copropietario —25 filas para 22
+                           predios en la muni 1— asi que el codigo se repite.
+                           Es el defecto del issue #545 visto desde aqui. */
+                        <tr key={i} className="hov-elev" style={{ borderTop: '1px solid var(--line)', background: on ? 'var(--accent-soft)' : 'transparent' }}>
                           <td style={{ padding: '11px 14px' }}>
                             <input
                               type="checkbox"
