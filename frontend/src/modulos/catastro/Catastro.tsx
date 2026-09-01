@@ -756,16 +756,27 @@ export default function Catastro({ dest, onDest }: PantallaProps) {
   const censoDeBaja = useRecurso((s2) => listarPredios({ estado: 'DADO_DE_BAJA' }, { tamano: 1 }, s2), [], enPanel);
   const sectoresDelPanel = useRecurso((s2) => listarSectores(s2), [], conCenso);
   /* **«Sin conciliar» ya se cuenta**, desde que el backend publica
-     `GET /catastro/fichas/conciliacion/resumen` (#564). No se cuenta con la
-     grilla: allí el filtro se aplica sobre la página ya devuelta y el
-     `totalElementos` sigue siendo el del padrón SIN filtrar, así que
-     `conciliadaConRentas=No` decía «14 422 sin conciliar» encima de un padrón de
-     14 422 predios. El resumen lo resuelve en una consulta agregada, trae su
-     ejercicio y su fecha de corte —y las dos se dibujan, porque no existe «sin
-     conciliar», existe «sin conciliar a 2026»—, y a diferencia de aquella no
-     exige el permiso de fiscalización ni deja fila en la bitácora: cuenta, no
-     nombra. El ejercicio que viaja es el de la barra; el que se dibuja es el que
-     contesta el servidor. */
+     `GET /catastro/fichas/conciliacion/resumen` (#564). El resumen lo resuelve
+     en una consulta agregada, trae su ejercicio y su fecha de corte —y las dos
+     se dibujan, porque no existe «sin conciliar», existe «sin conciliar a
+     2026»—. El ejercicio que viaja es el de la barra; el que se dibuja es el
+     que contesta el servidor.
+
+     **Y se sigue contando con el resumen aunque la grilla ya cuente bien.**
+     Hasta #631 el motivo era que no contaba: su filtro se aplicaba sobre la
+     página ya devuelta y su `totalElementos` seguía siendo el del padrón SIN
+     filtrar, así que `conciliadaConRentas=Si` decía «722 páginas, 14 422
+     elementos» y devolvía cero filas en todas. Eso quedó arreglado —medido
+     contra Catacaos: `Si` da 0 de 0 páginas y `No` da 14 422, las mismas cifras
+     que `conciliados` y `noConciliados` del resumen—, y **el motivo ahora es
+     otro**: cada consulta de la grilla con `No` deja una fila `ACCESO` en la
+     bitácora (ADR-0015 §2.3) —medido: dos peticiones, dos filas, con
+     `clave = conciliacion=NO;ejercicio=2026`—, así que pedirla solo para leer
+     su total llenaría la auditoría con una entrada por cada pintada del panel,
+     y de paso haría que una pantalla de solo lectura escribiera. Aquella
+     además exige el permiso de fiscalización sobre `fisc_omisos`; ésta no.
+     Aquella nombra —es la lista de a quién no le va a llegar recibo—, ésta
+     cuenta. */
   const conciliacion = useRecurso(
     (s2) => resumenDeConciliacion({ ejercicio: pref.ejercicio }, s2),
     [pref.ejercicio],
@@ -1089,7 +1100,11 @@ export default function Catastro({ dest, onDest }: PantallaProps) {
             (conciliacion.error.codigo === 'SIN_PRIVILEGIO'
               ? ' El recuento pide el mismo acceso que la consulta de fichas.'
               : '') +
-            ' Mientras no se lea, la cifra no se dice: la de la grilla no sirve para contar.'
+            /* No se sustituye por la de la grilla, y desde #631 ya no porque
+               aquélla cuente mal —cuenta bien—: porque leerla con
+               `conciliadaConRentas=No` deja fila en la bitácora y pide un
+               permiso que quien mira el panel no tiene por qué tener. */
+            ' Mientras no se lea, la cifra no se dice: no se sustituye por la de la grilla, que queda registrada en la bitácora y pide el permiso de fiscalización.'
           : conciliacion.datos
             ? `${conciliacion.datos.noConciliados.toLocaleString('es-PE')} de ${conciliacion.datos.total.toLocaleString('es-PE')} predios con ficha vigente al ` +
               `${conciliacion.datos.aLaFecha} no declararon ${conciliacion.datos.ejercicio}. ` +
