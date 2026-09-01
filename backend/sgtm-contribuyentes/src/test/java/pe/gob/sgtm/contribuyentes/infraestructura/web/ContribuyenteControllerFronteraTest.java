@@ -11,6 +11,8 @@ import java.sql.SQLException;
 import java.time.Clock;
 import java.time.LocalDate;
 import java.time.ZoneOffset;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
 import org.junit.jupiter.api.AfterAll;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeAll;
@@ -36,6 +38,7 @@ import pe.gob.sgtm.esquema.BaseDeDatosDePrueba;
 import pe.gob.sgtm.esquema.ContextoDeTenant;
 import pe.gob.sgtm.plataforma.tenant.TenantTransactionManager;
 import pe.gob.sgtm.web.ConfiguracionDeJson;
+import pe.gob.sgtm.web.GuardiaDeParametros;
 import pe.gob.sgtm.web.ManejadorDeErrores;
 import tools.jackson.databind.json.JsonMapper;
 
@@ -120,6 +123,9 @@ class ContribuyenteControllerFronteraTest {
                                                 repositorio, new AuditoriaJdbc(jdbc, RELOJ), RELOJ),
                                         (usuario, acceso, privilegio, fecha) -> true,
                                         RELOJ))
+                        // #539: el mismo interceptor que instala la aplicacion. Sin el, pedir por
+                        // `dni` en minusculas devuelve el padron entero con 200.
+                        .addInterceptors(new GuardiaDeParametros())
                         .setControllerAdvice(new ManejadorDeErrores())
                         .setMessageConverters(
                                 new JacksonJsonHttpMessageConverter(
@@ -185,6 +191,55 @@ class ContribuyenteControllerFronteraTest {
         assertThat(resultado.getResponse().getContentAsString())
                 .contains("QUISPE MAMANI")
                 .doesNotContain("PEÑA GARCIA");
+    }
+
+    @Test
+    @DisplayName("el mismo filtro bien escrito trae UNA fila del padron sembrado")
+    void elFiltroBienEscritoTraeUnaFila() throws Exception {
+        MvcResult respuesta =
+                mvc.perform(get("/api/v1/rentas/contribuyentes").param("dNI", "40123457"))
+                        .andReturn();
+
+        assertThat(filasDevueltas(respuesta))
+                .as("hay dos contribuyentes sembrados en esta municipalidad, y se pidio uno")
+                .isEqualTo(1);
+    }
+
+    @Test
+    @DisplayName("y escrito «dni» no devuelve el padron entero: 422 que nombra el parametro (#539)")
+    void elFiltroMalEscritoNoAbreElPadron() throws Exception {
+        MvcResult respuesta =
+                mvc.perform(get("/api/v1/rentas/contribuyentes").param("dni", "40123457"))
+                        .andReturn();
+
+        assertThat(filasDevueltas(respuesta))
+                .as(
+                        "esto es el defecto entero: con el parametro ignorado la respuesta era 200"
+                                + " con las DOS filas del padron —contra Catacaos, 10 603—, o sea la"
+                                + " peticion pidiendo a una persona y recibiendo a todas")
+                .isZero();
+        assertThat(respuesta.getResponse().getStatus()).isEqualTo(422);
+        assertThat(respuesta.getResponse().getContentAsString())
+                .as("y nombrarlo es lo unico que separa arreglarlo de creer que el padron esta mal")
+                .contains("Parametro desconocido: 'dni'");
+    }
+
+    /**
+     * Cuantas filas del padron devolvio la peticion: {@code 0} si no fue un {@code 200}.
+     *
+     * <p>Se mide sobre {@code totalElementos} del sobre y no sobre el codigo de estado, que es lo
+     * que #539 pide: una prueba que solo comprobara «no es 500» seguiria en verde con el defecto
+     * dentro, porque el defecto <b>era</b> un 200.
+     */
+    private static int filasDevueltas(MvcResult respuesta) throws Exception {
+        if (respuesta.getResponse().getStatus() != 200) {
+            return 0;
+        }
+        Matcher total =
+                Pattern.compile("\"totalElementos\"\\s*:\\s*(\\d+)")
+                        .matcher(respuesta.getResponse().getContentAsString());
+        assertThat(total.find()).as("el sobre paginado trae su total").isTrue();
+        return Integer.parseInt(total.group(1));
     }
 
     /**

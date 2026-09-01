@@ -55,7 +55,32 @@ const PANTALLAS = ventana.SGTM_SCREENS;
    Misma regla que `frontend/scripts/portar-catalogo.mjs`: `Tipo de Vía` →
    `tipoDeVia`. Esta duplicada a proposito —los dos generadores viven en arboles
    distintos y no comparten build— y una prueba del frontend exige que los dos
-   produzcan el mismo nombre para el mismo filtro. Si se separan, se pone roja. */
+   produzcan el mismo nombre para el mismo filtro. Si se separan, se pone roja.
+
+   ── Los once nombres con mayuscula en la segunda letra (#539) ────────────
+   De un rotulo como «D.N.I.» esta regla saca `dNI`, y de «Nº de expediente»,
+   `nExpediente`. Son once nombres distintos en 19 parametros del contrato:
+   nExpediente, rUC, nDePrograma, nDeExpediente, nDeCertificado, dNI, nPlaca,
+   nNotificacion, nLiquidacion, nDeFicha y nDeConstancia. Cada uno invita a la
+   errata —la mayuscula esta donde nadie la escribe—, y #539 nacio de esa
+   errata: `?dni=` devolvia el padron entero de Catacaos con 200.
+
+   **Se conservan, y no es por comodidad.** Tres motivos, en este orden:
+
+   1. El contrato esta DERIVADO del prototipo (#312) y el nombre lo produce el
+      rotulo del manual. Meterle una tabla de excepciones —«dNI se publica como
+      dni»— convierte el nombre en un dato que alguien mantiene a mano, que es
+      lo que este generador existe para no tener.
+   2. Renombrar solo aqui deja al controlador leyendo el nombre viejo y a la
+      pantalla mandando el nuevo: un filtro que deja de filtrar, o sea ESTE
+      MISMO issue otra vez. Hay que moverlo en los tres sitios a la vez —el
+      generador, el controlador y `frontend/src/api`—, y el frontend nuevo NO
+      genera sus tipos del contrato, asi que nada rompería la compilación: el
+      unico sintoma seria el listado entero en pantalla.
+   3. Y sobre todo: lo que hacia peligroso el nombre ya no lo es. Desde #539 la
+      errata contesta «Parametro desconocido: 'dni'» en vez de devolver el
+      padron. Renombrar pasa de arreglo a mejora de estilo, y como tal se hace
+      cuando se pueda mover el frontend en el mismo PR. */
 
 const sinTildes = (texto) =>
   texto

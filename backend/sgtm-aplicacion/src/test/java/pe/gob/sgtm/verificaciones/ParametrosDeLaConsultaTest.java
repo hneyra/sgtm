@@ -31,6 +31,7 @@ import org.springframework.web.bind.annotation.RequestMethod;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 import pe.gob.sgtm.auditoria.Operacion;
+import pe.gob.sgtm.web.GuardiaDeParametros;
 
 /**
  * El contrato y el controlador tienen que decir lo mismo sobre <b>por donde viajan los datos</b>
@@ -71,11 +72,24 @@ import pe.gob.sgtm.auditoria.Operacion;
  *   <li>{@link #LOS_DOS_DICEN_LO_MISMO}, las operaciones cuyos filtros tienen que coincidir letra
  *       por letra en los dos lados. Tambien en las dos direcciones.
  *   <li>El censo de los filtros que no filtran, que <b>no puede crecer</b>: {@link
- *       #elCensoDeFiltrosQueNoFiltranNoCrece}.
+ *       #elCensoDeFiltrosQueNoFiltranNoCrece}, en operaciones y en parametros.
  *   <li>Y el vocabulario: cuando el contrato publica un {@code enum} para un filtro, tiene que ser
  *       el del enumerado que la base guarda, o el contrato pasa a ser una segunda copia que nadie
  *       compara con la primera.
  * </ul>
+ *
+ * <h2>Lo que cambio con #539</h2>
+ *
+ * <p>El censo de «filtros que no filtran» dejo de describir un silencio y pasa a describir un
+ * <b>rechazo</b>: desde que {@code GuardiaDeParametros} esta puesto, mandar uno de esos filtros no
+ * devuelve el listado entero, contesta 422 nombrandolo. Los 155 que {@link
+ * #loQueElBordeRechazaSoloBaja} cuenta son, literalmente, los filtros que el contrato promete y el
+ * servidor no acepta. Eso los hace mas urgentes, no menos: la cifra solo baja, y baja de dos
+ * maneras —implementando el filtro, o retirandolo del contrato—.
+ *
+ * <p>Y aparece una tercera direccion, {@link #laFormaDeCadaParametroLaEntiendeLaGuarda}: la guarda
+ * enumera lo que cada handler admite a partir de su firma, asi que una forma de enlace que no sepa
+ * leer convertiria un parametro legitimo en un 422. Las formas se le ensenan antes de usarlas.
  */
 @DisplayName("Por donde viajan los datos: contrato y controlador (docs/50-api)")
 class ParametrosDeLaConsultaTest {
@@ -203,6 +217,32 @@ class ParametrosDeLaConsultaTest {
     private static final int OPERACIONES_CON_FILTRO_QUE_NADIE_LEE = 64;
 
     private static final int OPERACIONES_QUE_LEEN_UN_FILTRO_SIN_PUBLICAR = 19;
+
+    /**
+     * Y cuantos <b>parametros</b>, que es la cifra que #539 pide medir.
+     *
+     * <p>Contar operaciones deja pasar la mitad del caso: una operacion que ya arrastra un filtro
+     * que nadie lee puede ganar un segundo sin mover el recuento. Medido el 2026-09-01: 231
+     * parametros en las 64 operaciones, y 39 en las 19 de la otra mitad.
+     */
+    private static final int PARAMETROS_CON_FILTRO_QUE_NADIE_LEE = 231;
+
+    private static final int PARAMETROS_QUE_SE_LEEN_SIN_PUBLICAR = 39;
+
+    /**
+     * De esos, cuantos <b>rechaza hoy el borde</b> (#539).
+     *
+     * <p>Desde que {@code GuardiaDeParametros} esta puesto, un filtro que el contrato declara y
+     * ningun controlador lee ya no se ignora: se contesta 422 nombrandolo. La excepcion son los
+     * cuatro nombres de la paginacion, que se admiten siempre; de ahi que esta cifra sea menor que
+     * la de arriba —231 menos los 76 de paginacion—.
+     *
+     * <p>Es la medida de la <b>promesa rota</b>: 155 filtros que el contrato publica y el servidor
+     * rechaza, en 61 operaciones. Baja de dos maneras y las dos son buenas: implementando el filtro
+     * —pasa a leerse— o retirandolo del contrato en {@code generar-openapi.mjs} (SUPRIMIDOS). Lo
+     * que no puede es subir: un filtro nuevo que nadie lee nace roto.
+     */
+    private static final int PARAMETROS_QUE_EL_BORDE_RECHAZA = 155;
 
     /** Una ruta del contrato: {@code "/ruta":} con dos espacios de sangria. */
     private static final Pattern RUTA_DEL_CONTRATO = Pattern.compile("  \"(/[^\"]*)\":");
@@ -442,6 +482,109 @@ class ParametrosDeLaConsultaTest {
                                 + " declara: filtra y ninguna pantalla puede mandarlo. Misma regla: la"
                                 + " cifra solo baja")
                 .hasSizeLessThanOrEqualTo(OPERACIONES_QUE_LEEN_UN_FILTRO_SIN_PUBLICAR);
+
+        assertThat(cuantosParametros(queNadieLee))
+                .as(
+                        "y en parametros, que es lo que #539 pide medir: contar operaciones deja"
+                                + " pasar el filtro numero dos de una operacion que ya arrastraba uno")
+                .isLessThanOrEqualTo(PARAMETROS_CON_FILTRO_QUE_NADIE_LEE);
+        assertThat(cuantosParametros(sinPublicar))
+                .isLessThanOrEqualTo(PARAMETROS_QUE_SE_LEEN_SIN_PUBLICAR);
+    }
+
+    @Test
+    @DisplayName("y el borde rechaza hoy 155 filtros que el contrato publica: la cifra solo baja")
+    void loQueElBordeRechazaSoloBaja() throws IOException {
+        Map<String, Set<String>> contrato = parametrosDeConsultaDelContrato();
+        Map<String, Handler> publicados = handlersPublicados();
+
+        Map<String, Set<String>> rechazados = new TreeMap<>();
+        publicados.forEach(
+                (operacion, handler) -> {
+                    if (!contrato.containsKey(operacion)) {
+                        return;
+                    }
+                    Set<String> sinLeer = new TreeSet<>(contrato.get(operacion));
+                    sinLeer.removeAll(handler.deLaConsulta());
+                    sinLeer.removeAll(handler.delCuerpo());
+                    // El unico que la guarda perdona siempre.
+                    sinLeer.removeAll(GuardiaDeParametros.DIALECTO_DE_LA_PAGINACION);
+                    if (!sinLeer.isEmpty()) {
+                        rechazados.put(operacion, sinLeer);
+                    }
+                });
+
+        assertThat(cuantosParametros(rechazados))
+                .as(
+                        "el contrato publica estos filtros y, desde #539, el borde los contesta con"
+                                + " 422 nombrandolos: son la promesa rota, medida. Se cierra"
+                                + " implementando el filtro o retirandolo del contrato en"
+                                + " docs/50-api/generar-openapi.mjs (SUPRIMIDOS). Si esta cifra sube,"
+                                + " es que se publico un filtro nuevo que nadie lee: nace roto, y"
+                                + " ahora ademas se nota. Operaciones afectadas: %s",
+                        rechazados.keySet())
+                .isLessThanOrEqualTo(PARAMETROS_QUE_EL_BORDE_RECHAZA);
+    }
+
+    @Test
+    @DisplayName("todo parametro de handler tiene una forma que la guarda de #539 sabe leer")
+    void laFormaDeCadaParametroLaEntiendeLaGuarda() {
+        List<String> desconocidas = new ArrayList<>();
+        for (Method metodo : handlersConCuerpo()) {
+            for (Parameter parametro : metodo.getParameters()) {
+                if (formaConocida(parametro)) {
+                    continue;
+                }
+                desconocidas.add(
+                        metodo.getDeclaringClass().getSimpleName()
+                                + "#"
+                                + metodo.getName()
+                                + " recibe un "
+                                + parametro.getType().getSimpleName()
+                                + (parametro.getAnnotation(RequestParam.class) == null
+                                        ? " sin anotar"
+                                        : " como @RequestParam, que recoge la consulta entera")
+                                + ": GuardiaDeParametros no puede enumerar los nombres que aporta");
+            }
+        }
+
+        assertThat(desconocidas)
+                .as(
+                        "GuardiaDeParametros compone lo que la operacion admite de tres sitios: sus"
+                                + " @RequestParam, los componentes del record que Spring le compone de"
+                                + " la consulta, y el `params` de su mapeo. Una forma de enlace que no"
+                                + " sea ninguna de esas —un String suelto sin anotar, que Spring"
+                                + " enlaza por su nombre igual (#431); un @RequestParam Map, que"
+                                + " recoge la consulta entera— aporta nombres que la guarda no ve, y"
+                                + " entonces los rechaza: la operacion dejaria de admitir un parametro"
+                                + " que su propia firma si lee. Si hace falta una forma nueva, se"
+                                + " ensena a la guarda ANTES de usarla")
+                .isEmpty();
+    }
+
+    /**
+     * Las formas de enlace que la guarda sabe enumerar, mas las que no aportan ningun nombre.
+     *
+     * <p>{@code HttpServletRequest} entra en las segundas y es el unico caso: {@code
+     * ConsultaController} lo recibe para <b>reenviar</b> la peticion entera en su 307, no para leer
+     * un nombre que su firma no declare.
+     */
+    private static boolean formaConocida(Parameter parametro) {
+        if (parametro.getAnnotation(RequestParam.class) != null) {
+            // Un @RequestParam de tipo Map recoge TODA la consulta y no declara ni un nombre: la
+            // guarda no tendria nada que enumerar y rechazaria lo que ese metodo si lee.
+            return !Map.class.isAssignableFrom(parametro.getType());
+        }
+        if (parametro.getAnnotations().length > 0) {
+            return true;
+        }
+        return parametro.getType().isRecord()
+                || jakarta.servlet.http.HttpServletRequest.class.isAssignableFrom(
+                        parametro.getType());
+    }
+
+    private static int cuantosParametros(Map<String, Set<String>> porOperacion) {
+        return porOperacion.values().stream().mapToInt(Set::size).sum();
     }
 
     @Test
