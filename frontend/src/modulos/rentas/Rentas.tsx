@@ -32,7 +32,12 @@ import {
   type PredioDelContribuyente,
   type VehiculoDelContribuyente,
 } from '../../api/rentas';
-import { listarPredios, listarSectores } from '../../api/catastro';
+/* `titularesDelPredio` es la MISMA fuente y la MISMA fecha que el backend usa
+   para comprobar la unidad de un movimiento (#635): `TitularesDelPredio.de(
+   predioId, fecha)`. Se usa en la baja, donde la fila trae el identificador
+   interno y no el codigo predial, y donde la fecha valor es la de la
+   resolucion y no hoy. */
+import { listarPredios, listarSectores, titularesDelPredio } from '../../api/catastro';
 /* Dos lecturas de `consultas` que este módulo necesita y no duplica: la deuda de
    un contribuyente —la que se da de baja, y la que arrastra el transferente— y el
    vehículo por placa, que es de donde sale su titular vigente. */
@@ -464,9 +469,16 @@ function BloqueDeTabla({ tabla, onAnadir }: { tabla: TablaDef; onAnadir: () => v
  * El `cruce` es la otra mitad, y es la que evita el defecto caro: una obligación
  * es de un contribuyente **sobre** una unidad, de modo que un alta con la placa
  * de otro queda asentada sobre una clave que nadie va a mirar —ni la ficha del
- * vehículo, que es de su titular, ni la deuda sin unidad de quien paga—. El
- * backend no lo comprueba: `MovimientosDeDeudaController` pasa los dos
- * identificadores a `ClaveDeSaldo` tal cual (#628).
+ * vehículo, que es de su titular, ni la deuda sin unidad de quien paga—.
+ *
+ * **Desde #635 el backend también lo comprueba**, y eso cambia a qué pregunta
+ * contesta este cruce. Hasta entonces era lo único que había —el controlador
+ * pasaba los dos identificadores a `ClaveDeSaldo` tal cual (#628)— y el aviso
+ * decía «revísalo». Ahora el servidor resuelve el titular a la fecha valor y
+ * rechaza con 422 el movimiento cuya unidad no es del contribuyente, así que
+ * el cruce dice **qué va a pasar** y ofrece la única respuesta que el servidor
+ * admite: `deudaDeTitularAnterior`. El aviso sigue sin bloquear por sí mismo
+ * —el caso legítimo existe—; lo que bloquea es no haberlo contestado.
  */
 type CruceDeLaUnidad =
   | { estado: 'suya' }
@@ -488,6 +500,9 @@ type UnidadDelAlta =
 
 /** Una placa comparable: sin guion y en mayúsculas, que es como se teclea de las dos formas. */
 const placaComparable = (placa: string) => placa.replace(/-/g, '').toUpperCase();
+
+/** La misma frase, empezando oración: «el predio X» → «El predio X». */
+const conMayuscula = (texto: string) => texto.charAt(0).toUpperCase() + texto.slice(1);
 
 /**
  * Del código catastral o de la placa al identificador que el cuerpo pide.
@@ -555,6 +570,169 @@ async function resolverLaUnidadDelAlta(
 }
 
 /**
+ * Cuántos vehículos se leen para cruzar la unidad de una baja.
+ *
+ * **No hay lectura de un vehículo por identificador**: medido pidiéndoles un
+ * parámetro inventado —que los enumera—, `/rentas/vehiculos` admite
+ * `codContribuyente`, `contribuyente`, `direccion`, `fecha` y la paginación, y
+ * `/consultas/vehiculos` añade `placa`, `nroMotor` y `estado`; ninguno es el
+ * identificador. Y la fila de la deuda trae el identificador y no la placa, así
+ * que la única forma de contestar «¿es suyo?» es preguntar por los suyos y
+ * buscarlo entre ellos.
+ *
+ * **Cien y no todos.** La lectura calcula del lado del servidor la deuda de
+ * cada vehículo que devuelve, así que traerse el padrón entero de una empresa
+ * de transportes para responder un sí o un no lo pagaría el servidor en cada
+ * clic. Cien cubre de sobra lo que se ha podido medir —la municipalidad 1 tiene
+ * 8 vehículos en todo el padrón y su mayor titular 3—, y de un padrón grande no
+ * hay medida: por eso lo que no quepa **se dice** («no se pudo comprobar») en
+ * vez de darse por bueno, que es el único modo de fallo que aquí importa.
+ *
+ * El `estado` no acota nada, y hace falta que no lo haga: el controlador compone
+ * el criterio **sólo** con el contribuyente, así que un vehículo dado de baja
+ * sigue saliendo. Si no saliera, la baja de su deuda quedaría bloqueada por una
+ * unidad que sí es suya.
+ */
+const VEHICULOS_QUE_SE_CRUZAN = 100;
+
+/**
+ * De quién es la unidad de la obligación que se va a dar de baja (#635).
+ *
+ * <h2>Por qué la baja también lo necesita, y por qué duele más que el alta</h2>
+ *
+ * La comprobación de #635 la hacen las **dos** rutas, y en la baja recae sobre
+ * una obligación que YA está en el libro. El caso legítimo es el corriente: la
+ * deuda de 2024 la debe quien era titular en 2024, y el predio se vendió en
+ * 2025. Sin declararlo, esa deuda **no se puede extinguir** —medido: 422, con
+ * el mismo mensaje del alta— y quien atiende no tiene con qué resolverlo.
+ *
+ * <h2>Dos unidades, dos lecturas, y no es una asimetría gratuita</h2>
+ *
+ * El **predio** se pregunta con `titularesDelPredio`, que es la misma fuente y
+ * la misma fecha que usa el servidor (`TitularesDelPredio.de(predioId,
+ * fechaValor)`) y que además publica el nombre, así que el aviso puede decir de
+ * quién es y no sólo que no es suyo. No sirve la lectura del padrón que usa el
+ * alta: la fila trae el identificador interno y no el código predial, y
+ * `GET /rentas/predios` **no admite `fecha`** —medido: «Parametro desconocido:
+ * 'fecha'»—, de modo que contestaría por hoy sobre un acto con fecha valor de
+ * la resolución.
+ *
+ * El **vehículo** se pregunta sin fecha, y no por descuido: `delVehiculo` del
+ * backend recibe la fecha y **no la usa** —lee `vehiculo.contribuyenteId`, el
+ * titular de hoy—, así que preguntar a otra fecha diría algo que el servidor no
+ * mira. Y `/rentas/vehiculos` acota igual: el listado con `fecha=2024-01-01`
+ * devuelve los mismos vehículos que sin ella, medido; esa fecha es la del corte
+ * de la deuda de cada fila, no la de la titularidad.
+ *
+ * Es **una lectura por fila marcada** y por cambio de fecha: un clic
+ * deliberado, no una tecla parada. Ésa es la diferencia con el alta, donde la
+ * unidad se resuelve mientras se teclea y por eso no se pregunta por el titular
+ * del predio —dejaría una fila de bitácora por pulsación—.
+ *
+ * Devuelve `null` cuando la obligación **no tiene unidad**: ahí el servidor no
+ * comprueba nada —medido, 201— y no hay nada que declarar.
+ *
+ * <h2>Lo que cuesta, y qué pasa si no se puede pagar</h2>
+ *
+ * La lectura del titular pide el acceso `contribuyentes` y la de vehículos
+ * `vehiculos`; quien no los tenga recibe un 403 y `useRecurso` lo deja en
+ * `error`. Eso **no apaga la baja**: la unidad ya está identificada por la fila
+ * y la comprobación de verdad la hace el servidor. Lo que se pierde es verlo
+ * venir, y se dice —con la casilla al lado, por si quien atiende ya lo sabe—.
+ */
+async function resolverElCruceDeLaBaja(
+  o: ObligacionConDeuda,
+  codContribuyente: string,
+  fechaValor: string,
+  senal: AbortSignal,
+): Promise<CruceDeLaUnidad | null> {
+  if (o.predioId !== null) {
+    const r = await titularesDelPredio(o.predioId, fechaValor, senal);
+    /* Por código y no por identificador porque es lo único que la lectura
+       publica. El `codigo` puede venir nulo —el titular que ya no está en el
+       padrón—, y eso no falsea nada aquí: el contribuyente con el que se
+       compara acaba de salir de una búsqueda del padrón, así que si fuera
+       titular saldría con su código puesto. */
+    if (r.titulares.some((t) => t.codigo === codContribuyente)) return { estado: 'suya' };
+    /* Un predio sin ningún titular a esa fecha lo rechaza el servidor igual, y
+       con razón: sin titular no se puede comprobar que la obligación sea suya.
+       Se dice como lo que es y no como «es de otro», que sería afirmar de más. */
+    if (r.titulares.length === 0) return { estado: 'ajena', de: `no tiene ningún titular al ${r.vigenteA}` };
+    const quienes = r.titulares.map((t) => `${t.nombre ?? 'sin nombre en el padrón'} (${t.codigo ?? SIN_DATO})`).join(', ');
+    return { estado: 'ajena', de: `es de ${quienes} al ${r.vigenteA}` };
+  }
+  if (o.vehiculoId !== null) {
+    const suyos = await listarVehiculosDelContribuyente(codContribuyente, { tamano: VEHICULOS_QUE_SE_CRUZAN }, senal);
+    if (suyos.contenido.some((v) => v.vehiculoId === o.vehiculoId)) return { estado: 'suya' };
+    if (suyos.hayMas)
+      return {
+        estado: 'sin-comprobar',
+        por: `este contribuyente tiene ${suyos.totalElementos} vehículos y sólo se leyeron los ${VEHICULOS_QUE_SE_CRUZAN} primeros`,
+      };
+    return { estado: 'ajena', de: 'no figura entre los vehículos de este contribuyente' };
+  }
+  return null;
+}
+
+/**
+ * La casilla con que quien atiende declara que la deuda es de un titular
+ * anterior de la unidad (#635).
+ *
+ * <h2>Dónde vive, y por qué no en la rejilla de campos</h2>
+ *
+ * Marcarla es una **afirmación sobre un hecho** —«esta persona era titular de
+ * esta unidad cuando nació esta deuda»— que se guarda con la observación del
+ * acto y queda en la bitácora. Una casilla más entre las doce del formulario
+ * estaría en pantalla también en las altas cuya unidad sí es del contribuyente,
+ * que son casi todas, y una casilla que sobra casi siempre se acaba marcando
+ * por inercia; cuando de verdad hiciera falta, ya no significaría nada. Aquí
+ * sólo existe cuando el padrón acaba de decir, dos líneas más arriba y en la
+ * misma tarjeta, que la unidad no es suya: es la respuesta a esa frase
+ * concreta, no una opción del formulario.
+ *
+ * <h2>Y el rótulo dice lo que se afirma, no lo que hace</h2>
+ *
+ * «Permitir de todas formas» o «Omitir la comprobación» describen el efecto en
+ * el servidor e invitan a marcar para seguir. Lo que se declara es otra cosa, y
+ * se escribe entera, con el nombre del contribuyente y el de la unidad dentro:
+ * quien la marca está firmando una frase, no desbloqueando un botón.
+ */
+function DeclaracionDeTitularAnterior({
+  que,
+  contribuyente,
+  marcado,
+  onCambio,
+}: {
+  /** Cómo se nombra la unidad en la frase: «el predio X», «el vehículo Y». */
+  que: string;
+  contribuyente: Contribuyente;
+  marcado: boolean;
+  onCambio: (v: boolean) => void;
+}) {
+  return (
+    <label style={{ display: 'flex', alignItems: 'flex-start', gap: 9, marginTop: 10, cursor: 'pointer' }}>
+      <input
+        type="checkbox"
+        checked={marcado}
+        onChange={(e) => onCambio(e.target.checked)}
+        style={{ accentColor: 'var(--accent)', width: 15, height: 15, flex: '0 0 auto', marginTop: 2 }}
+      />
+      <span style={{ fontSize: 12.5, lineHeight: 1.55, textWrap: 'pretty' }}>
+        {/* La frase empieza por la unidad y no por la persona, y no es sólo
+            estilo: la otra redacción —«era titular de {que}»— compone «de el
+            predio», y una contracción mal escrita en una frase que alguien
+            firma la hace leerse como plantilla y no como declaración. */}
+        Declaro que {que} era de <strong>{contribuyente.nombreRazonSocial}</strong> ({contribuyente.codigo}) cuando nació esta deuda.{' '}
+        <span style={{ opacity: 0.85 }}>
+          Queda en la bitácora con la observación del acto. Sin marcarla, el servidor rechaza el movimiento nombrando al titular que la
+          unidad tiene a la fecha valor.
+        </span>
+      </span>
+    </label>
+  );
+}
+
+/**
  * La tarjeta que enseña **qué se resolvió** y de quién es (#554).
  *
  * Cuatro estados, y los cuatro se dicen distinto porque significan cosas
@@ -566,6 +744,16 @@ async function resolverLaUnidadDelAlta(
  * ejercicio anterior a una transferencia es del titular de entonces, no del de
  * ahora, así que un alta sobre la unidad de otro puede ser exactamente lo que
  * corresponde. Lo que no puede es pasar inadvertido.
+ *
+ * **Desde #635 el aviso lleva dentro la respuesta.** El servidor rechaza ese
+ * alta con 422 salvo que la petición declare el caso, así que la tarjeta deja
+ * de limitarse a advertir y ofrece la casilla que lo declara —aquí, pegada a la
+ * frase que la justifica, y no en la rejilla de campos: ver
+ * {@link DeclaracionDeTitularAnterior}—. Se ofrece en los **dos** estados que no
+ * son «suya», y por motivos distintos: con `ajena` el padrón dijo que no lo es y
+ * declararlo es obligatorio para poder mandar; con `sin-comprobar` el padrón no
+ * dijo nada —no se pudo preguntar—, así que la unidad puede ser suya, el alta
+ * se manda igual y la casilla está por si quien atiende sabe que no lo es.
  */
 function UnidadDelAltaResuelta({
   escrito,
@@ -573,12 +761,16 @@ function UnidadDelAltaResuelta({
   error,
   unidad,
   contribuyente,
+  declarado,
+  onDeclarar,
 }: {
   escrito: string;
   enVuelo: boolean;
   error: ErrorDeApi | null;
   unidad: UnidadDelAlta | null;
   contribuyente: Contribuyente;
+  declarado: boolean;
+  onDeclarar: (v: boolean) => void;
 }) {
   if (enVuelo)
     return (
@@ -628,17 +820,112 @@ function UnidadDelAltaResuelta({
       </div>
       {unidad.cruce.estado === 'ajena' && (
         <Aviso tono="warn" titulo={`La unidad resuelta ${unidad.cruce.de}`}>
-          El alta se registra sobre {contribuyente.nombreRazonSocial} ({contribuyente.codigo}). Si la deuda es de un ejercicio anterior
-          a la transferencia puede ser correcto; si no lo es, revísalo, porque la obligación quedaría colgada de una unidad que no es la
-          suya y no aparecería donde se la busca.
+          El alta se registra sobre {contribuyente.nombreRazonSocial} ({contribuyente.codigo}), y así el servidor no la va a admitir: desde
+          #635 comprueba que la unidad sea suya a la fecha valor y responde 422 nombrando a su titular. Si la deuda es de un ejercicio
+          anterior a la transferencia, decláralo aquí; si no lo es, corrige la unidad, porque la obligación quedaría colgada de una que no
+          es la suya y no aparecería donde se la busca.
+          <DeclaracionDeTitularAnterior
+            que={`${esPredioDeLaUnidad ? 'el predio' : 'el vehículo'} ${unidad.codigo}`}
+            contribuyente={contribuyente}
+            marcado={declarado}
+            onCambio={onDeclarar}
+          />
         </Aviso>
       )}
       {unidad.cruce.estado === 'sin-comprobar' && (
         <Aviso tono="warn" titulo="No se pudo comprobar de quién es la unidad">
-          {unidad.cruce.por}. La unidad está resuelta y el alta se puede mandar, pero de quién es no lo dice nadie: compruébalo antes.
+          {unidad.cruce.por}. La unidad está resuelta y el alta se puede mandar, pero de quién es no lo dice nadie: compruébalo antes. Y si
+          ya sabes que no es suya —y aun así la deuda le corresponde—, decláralo aquí, porque el servidor sí lo va a comprobar.
+          <DeclaracionDeTitularAnterior
+            que={`${esPredioDeLaUnidad ? 'el predio' : 'el vehículo'} ${unidad.codigo}`}
+            contribuyente={contribuyente}
+            marcado={declarado}
+            onCambio={onDeclarar}
+          />
         </Aviso>
       )}
     </div>
+  );
+}
+
+/**
+ * Lo que se sabe de la unidad de la obligación marcada para la baja (#635).
+ *
+ * Es la gemela de {@link UnidadDelAltaResuelta} y contesta lo mismo, pero la
+ * pregunta llega al revés: allí quien atiende teclea una unidad y hay que
+ * resolverla; aquí la unidad ya viene con la fila y lo único que falta es de
+ * quién es. Por eso no hay tarjeta con el identificador —la fila ya está
+ * marcada en la tabla— y sólo se dibuja la frase.
+ *
+ * **La frase se dibuja también cuando la unidad SÍ es suya**, y es deliberado:
+ * la columna «Unidad» de esa tabla enseña «—» porque el recurso publica el
+ * identificador interno y no el código predial ni la placa, de modo que ésta es
+ * la única línea de la pantalla que dice sobre qué unidad cae la baja y a
+ * nombre de quién está. Sin ella, el silencio del caso bueno sería
+ * indistinguible del de una obligación sin unidad.
+ */
+function UnidadDeLaBajaCruzada({
+  obligacion,
+  cargando,
+  error,
+  cruce,
+  contribuyente,
+  declarado,
+  onDeclarar,
+}: {
+  obligacion: ObligacionConDeuda;
+  cargando: boolean;
+  error: ErrorDeApi | null;
+  cruce: CruceDeLaUnidad | null;
+  contribuyente: Contribuyente;
+  declarado: boolean;
+  onDeclarar: (v: boolean) => void;
+}) {
+  /* Sin unidad no hay nada que comprobar ni que declarar: medido, el servidor
+     ni mira. Y no se dice nada, porque decir «esta obligación no tiene unidad»
+     en cada baja corriente sería ruido. */
+  if (obligacion.predioId === null && obligacion.vehiculoId === null) return null;
+  const que =
+    obligacion.predioId !== null
+      ? `el predio (predioId ${String(obligacion.predioId)})`
+      : `el vehículo (vehiculoId ${String(obligacion.vehiculoId)})`;
+
+  if (cargando)
+    return (
+      <p role="status" style={{ margin: 0, fontSize: 12.5, color: 'var(--ink-3)' }}>
+        Comprobando de quién es {que}…
+      </p>
+    );
+  if (error !== null)
+    return (
+      <Aviso tono="warn" titulo="No se pudo comprobar de quién es la unidad">
+        {explicacionDelFallo(error)} La baja se puede mandar igual, pero el servidor sí lo comprueba: si {que} ya no es suyo, va a
+        rechazarla nombrando a su titular.
+        <DeclaracionDeTitularAnterior que={que} contribuyente={contribuyente} marcado={declarado} onCambio={onDeclarar} />
+      </Aviso>
+    );
+  if (cruce === null) return null;
+  if (cruce.estado === 'suya')
+    return (
+      <p role="status" style={{ margin: 0, fontSize: 12.5, lineHeight: 1.5, color: 'var(--ink-3)', textWrap: 'pretty' }}>
+        {conMayuscula(que)} es de {contribuyente.nombreRazonSocial} a la fecha de la resolución.
+      </p>
+    );
+  if (cruce.estado === 'sin-comprobar')
+    return (
+      <Aviso tono="warn" titulo="No se pudo comprobar de quién es la unidad">
+        {cruce.por}. La baja se puede mandar igual, pero el servidor sí lo comprueba: si {que} ya no es suyo, va a rechazarla nombrando a
+        su titular.
+        <DeclaracionDeTitularAnterior que={que} contribuyente={contribuyente} marcado={declarado} onCambio={onDeclarar} />
+      </Aviso>
+    );
+  return (
+    <Aviso tono="warn" titulo={`${conMayuscula(que)} ${cruce.de}`}>
+      La baja se registra sobre {contribuyente.nombreRazonSocial} ({contribuyente.codigo}), y así el servidor no la va a admitir. Que la
+      deuda siga en su cuenta y la unidad ya no sea suya es lo corriente cuando el predio cambió de dueño después de que la deuda naciera:
+      la de entonces es suya y se le extingue a él. Eso hay que declararlo.
+      <DeclaracionDeTitularAnterior que={que} contribuyente={contribuyente} marcado={declarado} onCambio={onDeclarar} />
+    </Aviso>
   );
 }
 
@@ -1801,6 +2088,36 @@ export default function Rentas({ dest, onDest }: PantallaProps) {
   const unidadEnVuelo = unidadTecleada !== '' && (unidadTecleada !== unidadEscrita || resolucionDeLaUnidad.cargando);
 
   /**
+   * Si quien atiende declaró que la deuda del alta es de un titular anterior
+   * de la unidad (#635). Una por hoja: son dos actos distintos.
+   *
+   * **Se borra en cuanto cambia el hecho sobre el que se afirmó.** Una
+   * declaración es sobre esta unidad y este contribuyente; si cambia
+   * cualquiera de los dos —o se pasa a la otra hoja— lo marcado dejaría de
+   * decir lo que decía y viajaría igual. La llave es lo TECLEADO y no el valor
+   * aposentado: la casilla tiene que caer con la primera pulsación, no 300 ms
+   * después.
+   */
+  const [declaraTitularAnteriorEnElAlta, setDeclaraTitularAnteriorEnElAlta] = useState(false);
+  useEffect(() => setDeclaraTitularAnteriorEnElAlta(false), [unidadTecleada, sujetoDeDeuda?.codigo, hoja]);
+
+  /**
+   * De quién es la unidad de la obligación marcada para la baja (#635).
+   *
+   * Se pregunta a la **fecha de la resolución**, que es la fecha valor con que
+   * viaja la baja y contra la que el servidor resuelve el titular. Ver
+   * {@link resolverElCruceDeLaBaja}: `null` cuando la obligación no tiene
+   * unidad, que es cuando no hay nada que comprobar ni que declarar.
+   */
+  const [declaraTitularAnteriorEnLaBaja, setDeclaraTitularAnteriorEnLaBaja] = useState(false);
+  const cruceDeLaBaja = useRecurso(
+    (s2) => resolverElCruceDeLaBaja(obligacionDeLaBaja!, sujetoDeDeuda!.codigo, fechaDeLaBaja, s2),
+    [obligacionMarcada, sujetoDeDeuda?.codigo, fechaDeLaBaja],
+    esDeuda && hoja === 'baja' && sujetoDeDeuda !== null && obligacionDeLaBaja !== null && fechaDeLaBaja !== '',
+  );
+  useEffect(() => setDeclaraTitularAnteriorEnLaBaja(false), [obligacionMarcada, sujetoDeDeuda?.codigo, fechaDeLaBaja, hoja]);
+
+  /**
    * Lo que impide registrar la transferencia, o `undefined` si nada lo impide.
    *
    * Se calcula antes de habilitar el botón y no dentro del envío: un acto que
@@ -1994,6 +2311,27 @@ export default function Rentas({ dest, onDest }: PantallaProps) {
   };
 
   /**
+   * Si el movimiento viaja declarando que la unidad fue de un titular anterior
+   * (#635), por hoja.
+   *
+   * La casilla marcada no basta: se exige además que haya unidad y que el
+   * padrón **no** haya dicho que es suya. Una declaración es sobre un hecho
+   * concreto y no puede sobrevivir a que el hecho cambie; los dos `useEffect`
+   * la borran al cambiar de unidad, de contribuyente o de fecha, y esto es la
+   * guarda de programa por si alguna vez se quedaran cortos. Declarar de más no
+   * es inofensivo: afirma en la bitácora algo que nadie preguntó, y en la
+   * unidad que sí es suya el servidor ni siquiera lo miraría —de modo que la
+   * afirmación falsa quedaría escrita sin que nada la contradijera—.
+   */
+  const declaracionDelAlta =
+    declaraTitularAnteriorEnElAlta &&
+    unidadResuelta !== null &&
+    unidadResuelta.clase !== 'nada' &&
+    unidadResuelta.cruce.estado !== 'suya';
+  const declaracionDeLaBaja =
+    declaraTitularAnteriorEnLaBaja && cruceDeLaBaja.datos !== null && cruceDeLaBaja.datos.estado !== 'suya';
+
+  /**
    * Lo que impide dar de alta, o `undefined`.
    *
    * Los seis campos que identifican la obligación van antes que el sustento: sin
@@ -2014,6 +2352,20 @@ export default function Rentas({ dest, onDest }: PantallaProps) {
       return `No se pudo comprobar «${unidadTecleada}» contra el padrón: ${explicacionDelFallo(resolucionDeLaUnidad.error)}. Un alta con la unidad sin resolver caería sobre otra obligación`;
     if (unidadResuelta !== null && unidadResuelta.clase === 'nada')
       return `«${unidadTecleada}» no es ningún código de referencia catastral del catastro ni ninguna placa del padrón vehicular. Corrígelo, o deja la caja en blanco para dar de alta la obligación sin unidad`;
+    /* El padrón ya dijo de quién es la unidad, así que el 422 de #635 se ve
+       venir: mandarlo sería gastar una petición para que el servidor repita lo
+       que la tarjeta de arriba ya enseña, y devolver a quien atiende a un
+       formulario entero relleno. No apaga el caso legítimo —la deuda anterior
+       a una transferencia ES del titular de entonces—: apaga el caso SIN
+       CONTESTAR, y la casilla que lo contesta está dentro del mismo aviso.
+       Con `sin-comprobar` no se apaga nada: ahí el padrón no dijo que no sea
+       suya, dijo que no se pudo preguntar, y apagar el acto por nuestra propia
+       incapacidad de preguntar dejaría sin registrar una obligación que casi
+       siempre es correcta. */
+    /* Sin `clase !== 'nada'`: la rama de arriba ya lo descartó y TypeScript lo
+       sabe, así que repetirlo aquí no compila. */
+    if (unidadResuelta !== null && unidadResuelta.cruce.estado === 'ajena' && !declaraTitularAnteriorEnElAlta)
+      return `El padrón dice que «${unidadTecleada}» no es de ${sujetoDeDeuda.nombreRazonSocial}, y el servidor no lo va a admitir así. Si la deuda es de cuando sí lo era, márcalo en la casilla del aviso de arriba; si no, corrige la unidad`;
     /* Media pregunta no sale. El backend la contesta con 422 —y bien, nombrando
        el campo—, pero ese 422 es la red y no el camino: gastarlo obliga a quien
        atiende a rellenar el formulario entero para que le digan lo que se sabia
@@ -2050,6 +2402,15 @@ export default function Rentas({ dest, onDest }: PantallaProps) {
        vuelve con un 422 que habla de las cuatro partes del desglose. */
     if (numero(obligacionDeLaBaja.deuda.total.importe) === 0)
       return `Esa obligación no debe nada al ${fechaDeLaBaja}: no hay nada que extinguir`;
+    /* La baja carga con la misma comprobación que el alta (#635), y aquí pesa
+       más: la obligación YA está en el libro, así que un predio vendido después
+       de que naciera la deuda la deja inextinguible hasta que alguien declare
+       lo que pasó. Se pregunta al marcar la fila —una lectura, no una tecla— y
+       el resultado apaga el acto sólo cuando el padrón contestó que la unidad
+       es de otro. */
+    if (cruceDeLaBaja.cargando) return 'Comprobando de quién es la unidad de esa obligación…';
+    if (cruceDeLaBaja.datos !== null && cruceDeLaBaja.datos.estado === 'ajena' && !declaraTitularAnteriorEnLaBaja)
+      return `La unidad de esa obligación ${cruceDeLaBaja.datos.de}, no de ${sujetoDeDeuda.nombreRazonSocial}. Si la deuda es de cuando sí era suya, márcalo en la casilla de debajo de la tabla; si no, revisa la fila marcada`;
     if (observacionDelActo.trim() === '') return 'Falta la observación: sin motivo no se guarda';
     if (texto('numRes').trim() === '')
       return 'Falta el Nº de resolución: sin la resolución que la aprueba, una baja no se puede defender ante nadie';
@@ -2093,6 +2454,10 @@ export default function Rentas({ dest, onDest }: PantallaProps) {
         ano: texto('altaAnio'),
         ...cuotas,
         ...unidad,
+        /* Sólo cuando de verdad se declaró: mandar `false` y no mandar nada son
+           lo mismo para el servidor —los dos son `EXIGIDA`—, pero un `true` que
+           nadie marcó es una afirmación inventada en la bitácora. */
+        ...(declaracionDelAlta ? { deudaDeTitularAnterior: true } : {}),
         insoluto: importeQueViaja(texto('altaInsoluto')) || undefined,
         reajuste: importeQueViaja(texto('altaReajuste')) || undefined,
         interes: importeQueViaja(texto('altaInteres')) || undefined,
@@ -2169,6 +2534,7 @@ export default function Rentas({ dest, onDest }: PantallaProps) {
         ano: String(o.ejercicio),
         ...cuotas,
         repartir: true,
+        ...(declaracionDeLaBaja ? { deudaDeTitularAnterior: true } : {}),
         predioId: o.predioId ?? undefined,
         vehiculoId: o.vehiculoId ?? undefined,
         insoluto: o.deuda.insoluto.importe,
@@ -3823,6 +4189,24 @@ export default function Rentas({ dest, onDest }: PantallaProps) {
                     </table>
                   </div>
                 )}
+                {/* De quién es la unidad de la fila marcada, debajo de la tabla y
+                    antes de la franja del importe (#635). Aquí y no en el
+                    formulario de sustento por lo mismo que en el alta: la
+                    declaración es la respuesta a esta frase, y sin ella no
+                    significa nada. */}
+                {obligacionDeLaBaja !== null && fechaDeLaBaja !== '' && (
+                  <div style={{ padding: '0 16px 14px' }}>
+                    <UnidadDeLaBajaCruzada
+                      obligacion={obligacionDeLaBaja}
+                      cargando={cruceDeLaBaja.cargando}
+                      error={cruceDeLaBaja.error}
+                      cruce={cruceDeLaBaja.datos}
+                      contribuyente={sujetoDeDeuda}
+                      declarado={declaraTitularAnteriorEnLaBaja}
+                      onDeclarar={setDeclaraTitularAnteriorEnLaBaja}
+                    />
+                  </div>
+                )}
                 <div
                   style={{
                     display: 'flex',
@@ -3893,6 +4277,8 @@ export default function Rentas({ dest, onDest }: PantallaProps) {
                     error={resolucionDeLaUnidad.error}
                     unidad={unidadResuelta}
                     contribuyente={sujetoDeDeuda}
+                    declarado={declaraTitularAnteriorEnElAlta}
+                    onDeclarar={setDeclaraTitularAnteriorEnElAlta}
                   />
                 </div>
               )}

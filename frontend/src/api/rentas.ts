@@ -528,6 +528,27 @@ export function transferirVehiculo(peticion: PeticionDeTransferenciaDeVehiculo):
  * Esa es la forma del ALTA. La BAJA tiene desde #598 la contraria, y hay que
  * pedirla: con `repartir: true` el desglose es el **total del acto** y el
  * servidor lo parte entre las cuotas. Ver ese campo.
+ *
+ * <h2>La unidad tiene que ser del contribuyente (#635)</h2>
+ *
+ * Desde #635 el servidor comprueba, **antes de asentar**, que el `predioId` o
+ * el `vehiculoId` sea de quien va a deber: resuelve el titular de la unidad a
+ * la **fecha valor** del movimiento y, si no es el contribuyente, rechaza. Sin
+ * esa comprobación se podía cargar el predial de la casa de un vecino a
+ * cualquiera —el importe queda impecable y el cargo cae sobre quien no lo
+ * debe—. Medido, el predio 2 (de C-000002) sobre C-000001:
+ *
+ * > 422 · «El predio 2 es de 'C-000002 DEMO Yovera Sandoval Teodoro' a la fecha
+ * > valor del movimiento, no del contribuyente que lo debe. Si es deuda de un
+ * > titular anterior, hay que declararlo con «deudaDeTitularAnterior»»
+ *
+ * Vale para las **dos rutas** —el alta y la baja— y para las dos clases de
+ * unidad; el vehículo contesta lo mismo nombrando a su titular. Y **sin
+ * unidad no se comprueba nada**: medido, un alta sin `predioId` ni
+ * `vehiculoId` sigue dando 201, porque la obligación sin unidad no cuelga de
+ * ninguna y es otra obligación distinta.
+ *
+ * La única forma de decir que el caso es el legítimo es `deudaDeTitularAnterior`.
  */
 export type PeticionDeMovimientoDeDeuda = {
   observacion: string;
@@ -559,6 +580,28 @@ export type PeticionDeMovimientoDeDeuda = {
    * que no estaba no tiene tope contra el que repartir.
    */
   repartir?: boolean;
+  /**
+   * Declara que la deuda es de un **titular anterior** de la unidad (#635).
+   *
+   * No es un permiso para saltarse la comprobación: es una afirmación de quien
+   * atiende sobre un hecho —la deuda de un ejercicio anterior a una
+   * transferencia **es** del titular de entonces, así que un alta sobre la
+   * unidad de otro puede ser exactamente lo que corresponde—, y queda auditada
+   * con la observación del acto.
+   *
+   * `ComprobacionDeUnidad` tiene tres modos y este campo elige entre dos:
+   * ausente o `false` es `EXIGIDA` —la unidad tiene que ser suya— y `true` es
+   * `DECLARADA_DE_TITULAR_ANTERIOR`. El tercero, `NO_APLICA`, no se puede
+   * pedir desde aquí y no debería: es el de los contextos que asientan sus
+   * propios cargos —una papeleta se asienta con el predio de la infracción y
+   * quien la paga puede no ser su titular—.
+   *
+   * Medido, con el predio 2 sobre C-000001: sin él, 422; con `true`, 201. Y lo
+   * mismo en la baja, que es donde más pesa —una obligación que YA está en el
+   * libro sobre una unidad que cambió de dueño no se puede extinguir sin
+   * declararlo—.
+   */
+  deudaDeTitularAnterior?: boolean;
   predioId?: number;
   vehiculoId?: number;
   insoluto?: string;
