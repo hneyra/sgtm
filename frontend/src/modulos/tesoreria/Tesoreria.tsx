@@ -3121,8 +3121,13 @@ function tituloDelFallo(error: ErrorDeApi | null, que: string): string {
  * seis excepciones que #547 tradujo salen con el mismo `VALIDACION` que un
  * campo que falta y la respuesta no lleva ningún discriminador legible por
  * programa: `CondicionSinParametrizar` calcula su `llave()`
- * —`INTERES_FRACCIONAMIENTO:ORDINARIO`— y el cuerpo del 422 no la publica, y
- * ninguna ruta del contrato dice si un ejercicio tiene conjunto sellado (#604, #605).
+ * —`INTERES_FRACCIONAMIENTO:ORDINARIO`— y el cuerpo del 422 no la publica.
+ *
+ * Desde #605 hay **una** ruta que sí lo dice —`GET
+ * /seguridad/parametros/ejercicios/{ejercicio}`, sin permiso del catálogo—, así
+ * que la pantalla ya puede avisar ANTES de que se rellene el formulario en vez
+ * de clasificar el 422 del final. Esta pantalla todavía no la consume: eso es
+ * el AC 3 de #605, y hasta entonces lo de abajo sigue siendo lo que hay.
  *
  * Así que esta pantalla **no las adivina**. Adivinar sería leer el texto, y el
  * texto se reescribe en cuanto alguien lo lee en voz alta: una clasificación
