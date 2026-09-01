@@ -38,6 +38,7 @@ import pe.gob.sgtm.auditoria.AuditoriaJdbc;
 import pe.gob.sgtm.auditoria.Origen;
 import pe.gob.sgtm.auditoria.OrigenContext;
 import pe.gob.sgtm.compartido.TenantContext;
+import pe.gob.sgtm.cuentacorriente.aplicacion.ComprobarLaUnidadDelMovimiento;
 import pe.gob.sgtm.cuentacorriente.aplicacion.ConsultasDelLibro;
 import pe.gob.sgtm.cuentacorriente.aplicacion.RegistrarAsiento;
 import pe.gob.sgtm.cuentacorriente.aplicacion.RegistrarMovimientoDeDeuda;
@@ -142,6 +143,12 @@ class AltaDeDeudaPorRangoFronteraTest {
                                                         documentos),
                                                 gestor),
                                         envolver(new ConsultasDelLibro(asientos), gestor),
+                                        // Ninguna peticion de este archivo lleva unidad: la
+                                        // comprobacion de #635 tiene sus propios archivos.
+                                        envolver(
+                                                new ComprobarLaUnidadDelMovimiento(
+                                                        new PadronDeUnidadesDeMentira()),
+                                                gestor),
                                         RELOJ))
                         .setControllerAdvice(new ManejadorDeErrores())
                         .setMessageConverters(new JacksonJsonHttpMessageConverter(json))

@@ -20,6 +20,7 @@ import org.springframework.test.web.servlet.MvcResult;
 import org.springframework.test.web.servlet.setup.MockMvcBuilders;
 import pe.gob.sgtm.compartido.Pagina;
 import pe.gob.sgtm.compartido.Paginacion;
+import pe.gob.sgtm.cuentacorriente.aplicacion.ComprobarLaUnidadDelMovimiento;
 import pe.gob.sgtm.cuentacorriente.aplicacion.ConsultasDelLibro;
 import pe.gob.sgtm.cuentacorriente.aplicacion.RegistrarMovimientoDeDeuda;
 import pe.gob.sgtm.cuentacorriente.dominio.Asiento;
@@ -76,7 +77,14 @@ class MovimientosDeDeudaControllerTest {
     private final MockMvc mvc =
             MockMvcBuilders.standaloneSetup(
                             new MovimientosDeDeudaController(
-                                    movimientos, new ConsultasDelLibro(asientos), RELOJ))
+                                    movimientos,
+                                    new ConsultasDelLibro(asientos),
+                                    // Ninguna peticion de este archivo lleva unidad, asi que al
+                                    // padron no se le pregunta nada: lo que #635 comprueba tiene
+                                    // su propio archivo, UnidadDelMovimientoDeDeudaTest.
+                                    new ComprobarLaUnidadDelMovimiento(
+                                            new PadronDeUnidadesDeMentira()),
+                                    RELOJ))
                     .setControllerAdvice(new ManejadorDeErrores())
                     .setMessageConverters(
                             new JacksonJsonHttpMessageConverter(

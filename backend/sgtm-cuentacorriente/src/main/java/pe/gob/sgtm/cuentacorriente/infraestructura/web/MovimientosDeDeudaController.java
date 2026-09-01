@@ -15,6 +15,7 @@ import org.springframework.web.bind.annotation.ResponseStatus;
 import org.springframework.web.bind.annotation.RestController;
 import pe.gob.sgtm.autorizacion.Privilegio;
 import pe.gob.sgtm.autorizacion.RequiereAcceso;
+import pe.gob.sgtm.cuentacorriente.aplicacion.ComprobarLaUnidadDelMovimiento;
 import pe.gob.sgtm.cuentacorriente.aplicacion.ConsultasDelLibro;
 import pe.gob.sgtm.cuentacorriente.aplicacion.RegistrarMovimientoDeDeuda;
 import pe.gob.sgtm.cuentacorriente.dominio.ClaveDeSaldo;
@@ -105,6 +106,18 @@ import pe.gob.sgtm.web.ProblemaDeNegocio;
  * consulta en el contrato, porque su pantalla no dibuja filtros. Es el mismo cuerpo y el mismo
  * metodo privado, y por eso los tres entran hasta {@link #registrar} como argumentos y no leidos
  * dos veces.
+ *
+ * <h2>La unidad es del obligado, o se dice que no lo es (#635)</h2>
+ *
+ * <p>{@code predioId} y {@code vehiculoId} identifican la unidad de la obligacion, y hasta este
+ * issue <b>nadie los miraba</b>: llegaban del cuerpo a {@link ClaveDeSaldo} tal cual. Un alta con
+ * el vehiculo de otra persona —o con un identificador que no apunta a nada— respondia 201.
+ *
+ * <p>Lo comprueba {@link ComprobarLaUnidadDelMovimiento}, en el metodo <b>comun</b> a las dos
+ * rutas: alta y baja lo contestan igual porque lo pregunta el mismo sitio, no porque haya dos
+ * comprobaciones que alguien tenga que mantener iguales. Y el caso legitimo —la deuda de un
+ * ejercicio anterior a una transferencia, que es del titular de entonces— se registra declarando
+ * {@code unidadDeOtroTitular}, y queda dicho en el {@code motivo} del asiento y en la bitacora.
  */
 @RestController
 @RequestMapping(Api.RAIZ + "/rentas/deuda")
@@ -112,12 +125,17 @@ public class MovimientosDeDeudaController {
 
     private final RegistrarMovimientoDeDeuda movimientos;
     private final ConsultasDelLibro consulta;
+    private final ComprobarLaUnidadDelMovimiento unidad;
     private final Clock reloj;
 
     public MovimientosDeDeudaController(
-            RegistrarMovimientoDeDeuda movimientos, ConsultasDelLibro consulta, Clock reloj) {
+            RegistrarMovimientoDeDeuda movimientos,
+            ConsultasDelLibro consulta,
+            ComprobarLaUnidadDelMovimiento unidad,
+            Clock reloj) {
         this.movimientos = movimientos;
         this.consulta = consulta;
+        this.unidad = unidad;
         this.reloj = reloj;
     }
 
@@ -206,6 +224,20 @@ public class MovimientosDeDeudaController {
             throw new ProblemaDeNegocio(CodigoDeError.VALIDACION, mensajeDe(invalido));
         }
 
+        // Antes de asentar nada, y en su propia transaccion: la unidad de la obligacion tiene
+        // que existir y ser del obligado, o la peticion tiene que decir que no lo es (#635).
+        // Lo que vuelve es la observacion que llega al libro: la del usuario, o la del usuario
+        // con la nota que deja constancia del titular ajeno.
+        Observacion paraElLibro =
+                unidad.exigirQueSeaDelObligado(
+                        contribuyenteId,
+                        codigoContribuyente,
+                        peticion.predioId(),
+                        peticion.vehiculoId(),
+                        movimiento.fechaValor(),
+                        Boolean.TRUE.equals(peticion.unidadDeOtroTitular()),
+                        observacion);
+
         RegistrarMovimientoDeDeuda.Registro registro;
         try {
             registro =
@@ -214,9 +246,9 @@ public class MovimientosDeDeudaController {
                                     movimiento,
                                     declaraSusCuotas(peticion) ? cuotas : null,
                                     codigoContribuyente,
-                                    observacion)
+                                    paraElLibro)
                             : movimientos.registrar(
-                                    movimiento, cuotas, codigoContribuyente, observacion);
+                                    movimiento, cuotas, codigoContribuyente, paraElLibro);
         } catch (RegistrarMovimientoDeDeuda.BajaMayorQueLaDeuda excede) {
             throw new ProblemaDeNegocio(CodigoDeError.VALIDACION, mensajeDe(excede));
         }
@@ -398,6 +430,12 @@ public class MovimientosDeDeudaController {
      * blanca protege es que nada entre sin declararse; lo que no puede hacer es distinguir «este
      * campo no existe» de «este campo existe y se descarta», y esa es exactamente la diferencia que
      * dejaba los asientos en {@code periodo = 0} sin que nada lo dijera (#538).
+     *
+     * <p>{@code unidadDeOtroTitular} es la declaracion de #635: ausente o {@code false}, la unidad
+     * tiene que ser del contribuyente del movimiento; {@code true} deja registrar la deuda de un
+     * titular anterior y hace que la nota que lo dice acabe en el {@code motivo} de cada asiento.
+     * No exime de que la unidad <b>exista</b>: declarar que es de otro no hace que un identificador
+     * apunte a algo.
      */
     public record PeticionDeMovimiento(
             @Nullable String observacion,
@@ -410,6 +448,7 @@ public class MovimientosDeDeudaController {
             @Nullable Boolean repartir,
             @Nullable Long predioId,
             @Nullable Long vehiculoId,
+            @Nullable Boolean unidadDeOtroTitular,
             @Nullable String insoluto,
             @Nullable String reajuste,
             @Nullable String interes,

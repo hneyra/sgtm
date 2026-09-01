@@ -25,8 +25,16 @@ public record Observacion(String texto) {
     /** {@code CHECK (length(btrim(observacion)) >= 5)} en la tabla de auditoria. */
     private static final int LARGO_MINIMO = 5;
 
-    /** El ancho de {@code observacion varchar(500) NOT NULL} de las tablas de negocio. */
-    private static final int LARGO_MAXIMO = 500;
+    /**
+     * El ancho de {@code observacion varchar(500) NOT NULL} de las tablas de negocio.
+     *
+     * <p>Publico porque quien <b>compone</b> una observacion —anadiendole una nota que el sistema
+     * deja, como {@code ComprobarLaUnidadDelMovimiento} con el titular ajeno (#635)— tiene que
+     * poder decir antes si va a caber, y decirlo nombrando cuanto sobra. Escribir otro 500 alli
+     * seria un segundo sitio donde corregir el ancho de la columna, que es el mismo motivo por el
+     * que {@code ClaveDeSaldo.PERIODO_MAXIMO} es publico.
+     */
+    public static final int LARGO_MAXIMO = 500;
 
     public Observacion {
         Objects.requireNonNull(texto, "Toda escritura exige una observacion (regla 10, ADR-0008)");
