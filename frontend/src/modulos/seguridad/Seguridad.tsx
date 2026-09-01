@@ -1,6 +1,13 @@
 import { useEffect, useMemo, useState, type CSSProperties } from 'react';
 import { Icono } from '../../ds/Icono';
-import { listarAuditoria } from '../../api/seguridad';
+import {
+  listarAccesos,
+  listarAuditoria,
+  listarGrupos,
+  permisosDelGrupo,
+  ROTULO_DEL_PRIVILEGIO,
+  type Privilegio,
+} from '../../api/seguridad';
 import { useRebote, useRecurso } from '../../api/useRecurso';
 import { ICO } from '../../ds/iconos';
 import { Shell, type EntradaDePaleta } from '../../shell/Shell';
@@ -144,7 +151,10 @@ export default function Seguridad({ dest, onDest }: PantallaProps) {
   const set = (k: string, v: string | boolean) => setVals((s) => ({ ...s, [k]: v }));
 
   const esGrupo = sel.tipo === 'grupo';
-  const grupo = GRUPOS[sel.id];
+  /* Un grupo del backend no está en el juego de datos: `label` y `miembros`
+     salen de él cuando existe, y si no, del nombre —que es lo único que se
+     sabe, porque no hay lectura de miembros (#543)—. */
+  const grupo = GRUPOS[sel.id] ?? { label: sel.id, miembros: [] as string[], permisos: {} as Permisos };
   const usuario = USUARIOS[sel.id];
 
   const modulosUnicos = useMemo(() => {
@@ -155,15 +165,41 @@ export default function Seguridad({ dest, onDest }: PantallaProps) {
     return u;
   }, []);
 
-  /* El permiso efectivo: propio ∪ heredado. Dice, por nivel, de dónde viene,
-     que es lo que decide dónde hay que ir a quitarlo. */
+  /* ── La matriz, contra el backend ──────────────────────────────
+     De un GRUPO sí se puede reconstruir: `GET /seguridad/accesos` da el
+     catálogo y `GET /seguridad/grupos/{id}/permisos` sus privilegios. De un
+     USUARIO no: no hay lectura de pertenencia a grupo, la excepción no tiene
+     ruta y `PermisoResource` ni siquiera declara `usuarioId` (issue #543). Así
+     que el grupo lee del backend y el usuario sigue en el juego de datos,
+     diciéndolo. */
+  const enAccesos = dest === 'accesos';
+  const gruposReales = useRecurso((s2) => listarGrupos({ tamano: 100 }, s2), [], enAccesos);
+  const accesosReales = useRecurso((s2) => listarAccesos({ tamano: 200 }, s2), [], enAccesos);
+
+  /* El grupo del backend que corresponde al seleccionado, por nombre: el
+     artboard identifica los grupos por su rótulo y el backend por su id. */
+  const grupoReal = (gruposReales.datos?.contenido ?? []).find(
+    (g) => g.nombre.toLowerCase() === String(sel.id).toLowerCase(),
+  );
+  const permisosReales = useRecurso(
+    (s2) => permisosDelGrupo(grupoReal!.id, s2),
+    [grupoReal?.id],
+    enAccesos && esGrupo && grupoReal !== undefined,
+  );
+
+  /* El permiso efectivo. Dice, por nivel, de dónde viene, que es lo que decide
+     dónde hay que ir a quitarlo. */
   const eff = useMemo(() => {
     const propios: Permisos = {};
     const heredados: Permisos = {};
-    if (esGrupo) {
-      const g = GRUPOS[sel.id];
-      Object.keys(g.permisos).forEach((a) => {
-        propios[a] = g.permisos[a].slice();
+    if (esGrupo && permisosReales.datos) {
+      /* Del backend, traducido a los rótulos que la matriz dibuja. */
+      permisosReales.datos.forEach((p) => {
+        propios[p.acceso] = p.privilegios.map((x) => ROTULO_DEL_PRIVILEGIO[x as Privilegio]).filter(Boolean) as Nivel[];
+      });
+    } else if (esGrupo) {
+      Object.keys(grupo.permisos).forEach((a) => {
+        propios[a] = grupo.permisos[a].slice();
       });
     } else {
       const u = USUARIOS[sel.id];
@@ -183,7 +219,7 @@ export default function Seguridad({ dest, onDest }: PantallaProps) {
     }
     /* Lo editado en esta sesión manda sobre lo propio del dato. */
     return { propios, heredados, editados: permisos[sel.tipo + ':' + sel.id] || {} };
-  }, [esGrupo, sel, permisos]);
+  }, [esGrupo, sel, permisos, permisosReales.datos, grupo]);
 
   const accesosVisibles = useMemo(
     () =>
@@ -252,9 +288,18 @@ export default function Seguridad({ dest, onDest }: PantallaProps) {
   /* ── El árbol de usuarios y grupos ─────────────────────────── */
   const nodos = useMemo(() => {
     const lista: { tipo: 'usuario' | 'grupo'; id: string; label: string; nota: string; marca: string }[] = [];
-    Object.keys(GRUPOS).forEach((g) =>
-      lista.push({ tipo: 'grupo', id: g, label: GRUPOS[g].label, nota: GRUPOS[g].miembros.length + ' miembros', marca: '' }),
-    );
+    /* Los grupos son los del BACKEND cuando se pudieron leer. Listar los del
+       prototipo con la matriz conectada haría que elegir uno no pidiera nada:
+       sus nombres no existen del otro lado. */
+    if (gruposReales.datos) {
+      gruposReales.datos.contenido.forEach((g) =>
+        lista.push({ tipo: 'grupo', id: g.nombre, label: g.nombre, nota: g.descripcion ?? 'del backend', marca: g.activo ? '' : 'Inactivo' }),
+      );
+    } else {
+      Object.keys(GRUPOS).forEach((g) =>
+        lista.push({ tipo: 'grupo', id: g, label: GRUPOS[g].label, nota: GRUPOS[g].miembros.length + ' miembros', marca: '' }),
+      );
+    }
     Object.keys(USUARIOS).forEach((u) => {
       const usr = USUARIOS[u];
       lista.push({ tipo: 'usuario', id: u, label: usr.label, nota: usr.nombre, marca: usr.estado === 'Inactiva' ? 'Inactiva' : '' });
@@ -263,7 +308,7 @@ export default function Seguridad({ dest, onDest }: PantallaProps) {
     return lista.filter(
       (n) => filtro === '' || n.label.toLowerCase().indexOf(filtro) >= 0 || n.nota.toLowerCase().indexOf(filtro) >= 0,
     );
-  }, [q]);
+  }, [q, gruposReales.datos]);
 
   /* ── Los riesgos del panel, derivados de los datos ──────────── */
   /* Antes se llamaba «con nivel Total» y contaba un privilegio que no existe.
@@ -615,7 +660,9 @@ export default function Seguridad({ dest, onDest }: PantallaProps) {
                       </p>
                       <p style={{ margin: '3px 0 0', fontSize: 12.5, color: 'var(--ink-3)', textWrap: 'pretty' }}>
                         {esGrupo
-                          ? 'Grupo · ' + grupo.miembros.length + ' miembros: ' + grupo.miembros.join(', ')
+                          ? grupo.miembros.length > 0
+                            ? 'Grupo · ' + grupo.miembros.length + ' miembros: ' + grupo.miembros.join(', ')
+                            : 'Grupo · el backend no publica sus miembros (#543)'
                           : 'Usuario ' + usuario.label + ' · contraseña de hace ' + usuario.clave + ' días'}
                       </p>
                     </div>
@@ -653,7 +700,18 @@ export default function Seguridad({ dest, onDest }: PantallaProps) {
 
                 <section style={TARJETA}>
                   <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap', padding: '13px 16px', borderBottom: '1px solid var(--line)' }}>
-                    <h2 style={{ margin: 0, flex: 1, fontFamily: 'var(--font-serif)', fontSize: 16, fontWeight: 600 }}>Permisos efectivos</h2>
+                    <h2 style={{ margin: 0, flex: 1, fontFamily: 'var(--font-serif)', fontSize: 16, fontWeight: 600 }}>
+                      Permisos efectivos
+                      <span style={{ marginLeft: 9, fontFamily: 'var(--font-sans)', fontSize: 11, fontWeight: 400, color: 'var(--ink-3)' }}>
+                        {esGrupo
+                          ? permisosReales.datos
+                            ? `del backend · ${accesosReales.datos?.totalElementos ?? 0} accesos`
+                            : permisosReales.cargando
+                              ? 'leyendo…'
+                              : 'sin leer'
+                          : 'del juego de datos: la matriz de un usuario no se puede reconstruir (#543)'}
+                      </span>
+                    </h2>
                     <span style={{ fontFamily: 'var(--font-mono)', fontSize: 11, color: 'var(--ink-3)' }}>
                       {matriz.nPropios} propios · {matriz.nHeredados} heredados
                     </span>
@@ -782,8 +840,8 @@ export default function Seguridad({ dest, onDest }: PantallaProps) {
                   <p style={{ margin: 0, padding: '11px 16px', borderTop: '1px solid var(--line)', background: 'var(--bg-elev)', fontSize: 12, lineHeight: 1.5, color: 'var(--ink-3)', textWrap: 'pretty' }}>
                     {esGrupo
                       ? 'Lo que se marca aquí lo heredan los ' +
-                        grupo.miembros.length +
-                        ' miembros del grupo. Es la forma de dar permisos que se puede revisar.'
+                        (grupo.miembros.length > 0 ? grupo.miembros.length + ' miembros del grupo' : 'los miembros del grupo') +
+                        '. Es la forma de dar permisos que se puede revisar.'
                       : 'Las casillas de fondo claro vienen de ' +
                         (gruposDe(sel.id).join(', ') || 'ningún grupo') +
                         ' y no se quitan desde aquí. Las oscuras son propias de ' +
