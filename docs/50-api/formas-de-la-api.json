@@ -5408,7 +5408,7 @@
         "vehiculoId": "entero",
         "placa": "texto",
         "contribuyenteId": "entero",
-        "valorReferencial": "texto",
+        "baseImponible": "texto",
         "montoDeterminado": "texto",
         "simulacion": "booleano"
       }

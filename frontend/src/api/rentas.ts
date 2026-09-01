@@ -617,7 +617,7 @@ export type DeterminacionVehicular = {
   placa: string;
   contribuyenteId: number;
   /** La base imponible: el mayor entre el valor de adquisición y el referencial del MEF. */
-  valorReferencial: string;
+  baseImponible: string;
   montoDeterminado: string;
   simulacion: boolean;
 };
