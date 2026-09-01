@@ -396,6 +396,32 @@ public class FichaCatastralRepositoryJdbc extends RepositorioJdbc
             parametros.put("titulares", titulares);
         }
 
+        // La acotacion por predio entra en el MISMO where que los filtros del usuario, y ahi
+        // esta todo el asunto de #631: la pagina y el `count(*)` de abajo se construyen con
+        // esta misma cadena, asi que no pueden decir cosas distintas. Filtrar despues, sobre
+        // la pagina ya devuelta, dejaba `totalElementos` contando el padron entero — 722
+        // paginas de cero filas.
+        switch (filtro.acotacion().modo()) {
+            case SOLO_ESTOS -> {
+                if (filtro.acotacion().predios().isEmpty()) {
+                    // Ningun predio puede estar en un conjunto vacio. Se devuelve aqui para no
+                    // mandar un `= ANY('{}')` que el motor tiene que evaluar fila a fila.
+                    return Pagina.vacia(paginacion);
+                }
+                condiciones.add("p.id = ANY(:prediosAcotados)");
+                parametros.put(
+                        "prediosAcotados", filtro.acotacion().predios().toArray(Long[]::new));
+            }
+            case TODOS_MENOS_ESTOS -> {
+                condiciones.add("NOT (p.id = ANY(:prediosAcotados))");
+                parametros.put(
+                        "prediosAcotados", filtro.acotacion().predios().toArray(Long[]::new));
+            }
+            case TODOS -> {
+                // No acota.
+            }
+        }
+
         String donde = " WHERE " + String.join(" AND ", condiciones);
 
         // El alias no es cosmetico: OrdenSeguro deriva el campo que acepta el cliente del

@@ -527,6 +527,121 @@ class ConciliacionCatastroRentasJdbcTest {
     }
 
     @Nested
+    @DisplayName("La grilla pagina y cuenta LO FILTRADO (#631)")
+    class LaGrillaCuentaLoFiltrado {
+
+        /** Dos que declararon y uno que no, en la municipalidad del recuento. */
+        @BeforeEach
+        void sembrarElPadron() throws SQLException {
+            TenantContext.fijar(new MunicipalidadId(municipalidadDelRecuento));
+            if (contarPredios(municipalidadDelRecuento) > 0) {
+                return;
+            }
+            long uno = crearPredioConFicha(municipalidadDelRecuento, nuevoCodigo());
+            long dos = crearPredioConFicha(municipalidadDelRecuento, nuevoCodigo());
+            crearPredioConFicha(municipalidadDelRecuento, nuevoCodigo());
+            declarar(municipalidadDelRecuento, uno, E2026, numeroDeDj("DJ-GRI"));
+            // La segunda queda OBSERVADA, que TAMBIEN concilia. Sin ella, cambiar los estados
+            // que cuentan en una de las dos consultas no cambia ninguna cifra y la mutacion
+            // de la coherencia no muerde: la prueba mediria una casualidad del juego de datos.
+            long observada = declarar(municipalidadDelRecuento, dos, E2026, numeroDeDj("DJ-GRI"));
+            cambiarEstado(municipalidadDelRecuento, observada, "OBSERVADA");
+        }
+
+        @AfterEach
+        void volverAA() {
+            TenantContext.fijar(new MunicipalidadId(municipalidadA));
+        }
+
+        @Test
+        @DisplayName("«No» dice 1 elemento, no 3: el total describe la poblacion filtrada")
+        void elTotalEsElDeLaPoblacionFiltrada() {
+            Pagina<FichaConciliada> sinConciliar =
+                    consulta.noConciliadas(SIN_CRITERIO, E2026, HOY, unaPagina(1));
+
+            assertThat(sinConciliar.totalElementos())
+                    .as(
+                            "hasta #631 el filtro se aplicaba sobre la pagina ya devuelta y el"
+                                    + " total seguia siendo el del padron: «722 paginas, 14 422"
+                                    + " elementos» y cero filas en todas")
+                    .isEqualTo(1);
+            assertThat(
+                            consulta.conciliadas(SIN_CRITERIO, E2026, HOY, unaPagina(1))
+                                    .totalElementos())
+                    .isEqualTo(2);
+            assertThat(consulta.todas(SIN_CRITERIO, E2026, HOY, unaPagina(1)).totalElementos())
+                    .as("«Todas» sigue siendo el padron entero, que es lo que dice ser")
+                    .isEqualTo(3);
+        }
+
+        @Test
+        @DisplayName("la ultima pagina del filtro trae filas, y la siguiente no")
+        void laUltimaPaginaTraeFilas() {
+            Pagina<FichaConciliada> primera =
+                    consulta.conciliadas(SIN_CRITERIO, E2026, HOY, unaPagina(1));
+
+            assertThat(primera.totalPaginas()).isEqualTo(2);
+            assertThat(
+                            consulta.conciliadas(
+                                            SIN_CRITERIO,
+                                            E2026,
+                                            HOY,
+                                            new Paginacion(
+                                                    primera.totalPaginas() - 1,
+                                                    1,
+                                                    "codRefCatastral",
+                                                    Paginacion.Direccion.ASCENDENTE))
+                                    .contenido())
+                    .as("un paginador por el que se navega entero sin encontrar una fila miente")
+                    .hasSize(1);
+            assertThat(
+                            consulta.conciliadas(
+                                            SIN_CRITERIO,
+                                            E2026,
+                                            HOY,
+                                            new Paginacion(
+                                                    primera.totalPaginas(),
+                                                    1,
+                                                    "codRefCatastral",
+                                                    Paginacion.Direccion.ASCENDENTE))
+                                    .contenido())
+                    .isEmpty();
+        }
+
+        @Test
+        @DisplayName("la grilla y el recuento cuentan la misma poblacion, y eso no se confia")
+        void laGrillaYElRecuentoCuadran() {
+            ResumenDeConciliacion resumen = consulta.resumen(E2026, HOY);
+
+            assertThat(
+                            consulta.noConciliadas(SIN_CRITERIO, E2026, HOY, unaPagina(1))
+                                    .totalElementos())
+                    .as(
+                            "son dos consultas distintas —una agrega y la otra pagina— y si los"
+                                    + " estados que hacen vigente una declaracion se separan, las"
+                                    + " dos cifras dejan de cuadrar sin que ninguna parezca mal")
+                    .isEqualTo(resumen.noConciliados());
+            assertThat(
+                            consulta.conciliadas(SIN_CRITERIO, E2026, HOY, unaPagina(1))
+                                    .totalElementos())
+                    .isEqualTo(resumen.conciliados());
+            assertThat(consulta.todas(SIN_CRITERIO, E2026, HOY, unaPagina(1)).totalElementos())
+                    .isEqualTo(resumen.total());
+        }
+
+        @Test
+        @DisplayName("y las filas siguen siendo las que el filtro dice")
+        void lasFilasSiguenSiendoLasDelFiltro() {
+            assertThat(consulta.noConciliadas(SIN_CRITERIO, E2026, HOY, unaPagina(20)).contenido())
+                    .hasSize(1)
+                    .allSatisfy(fila -> assertThat(fila.conciliada()).isFalse());
+            assertThat(consulta.conciliadas(SIN_CRITERIO, E2026, HOY, unaPagina(20)).contenido())
+                    .hasSize(2)
+                    .allSatisfy(fila -> assertThat(fila.conciliada()).isTrue());
+        }
+    }
+
+    @Nested
     @DisplayName("El recuento, que la grilla no podia dar (#564)")
     class Recuento {
 
@@ -662,6 +777,14 @@ class ConciliacionCatastroRentasJdbcTest {
 
     private static BusquedaDeFichas porCodigo(String codigo) {
         return new BusquedaDeFichas(codigo, null, null, null, null);
+    }
+
+    /** Sin ningun filtro del usuario: lo unico que acota es la conciliacion. */
+    private static final BusquedaDeFichas SIN_CRITERIO =
+            new BusquedaDeFichas(null, null, null, null, null);
+
+    private static Paginacion unaPagina(int tamano) {
+        return new Paginacion(0, tamano, "codRefCatastral", Paginacion.Direccion.ASCENDENTE);
     }
 
     private static Paginacion unaPagina() {

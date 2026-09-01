@@ -28,6 +28,7 @@ import pe.gob.sgtm.auditoria.OrigenContext;
 import pe.gob.sgtm.auditoria.RegistroDeAuditoria;
 import pe.gob.sgtm.autorizacion.ComprobadorDeAcceso;
 import pe.gob.sgtm.autorizacion.Privilegio;
+import pe.gob.sgtm.catastro.AcotacionPorPredio;
 import pe.gob.sgtm.catastro.BusquedaDeFichas;
 import pe.gob.sgtm.catastro.FichaDelPadron;
 import pe.gob.sgtm.catastro.FichasDelPadron;
@@ -355,15 +356,31 @@ class ConciliacionControllerTest {
     /** Dos fichas: una del predio que declaro y otra del que no. */
     private static final class PadronDePrueba implements FichasDelPadron {
 
+        /**
+         * Honra la acotacion por predio, como hace catastro de verdad (#631).
+         *
+         * <p>Antes devolvia las dos filas dijera lo que dijera el criterio, y con eso la prueba de
+         * «Si» pasaba por el filtro <b>en memoria</b> que el caso de uso ya no hace. Un doble que
+         * ignora la mitad del criterio mide otra cosa.
+         */
         @Override
         public Pagina<FichaDelPadron> buscar(
                 BusquedaDeFichas criterio, LocalDate aLaFecha, Paginacion paginacion) {
-            return Pagina.de(
+            List<FichaDelPadron> todas =
                     List.of(
                             ficha(1L, PREDIO_QUE_DECLARO, "27030100100100100000001"),
-                            ficha(2L, PREDIO_OMISO, "27030100100100100000002")),
-                    paginacion,
-                    2);
+                            ficha(2L, PREDIO_OMISO, "27030100100100100000002"));
+            List<FichaDelPadron> acotadas =
+                    todas.stream().filter(fila -> pasa(fila, criterio.acotacion())).toList();
+            return Pagina.de(acotadas, paginacion, acotadas.size());
+        }
+
+        private static boolean pasa(FichaDelPadron fila, AcotacionPorPredio acotacion) {
+            return switch (acotacion.modo()) {
+                case TODOS -> true;
+                case SOLO_ESTOS -> acotacion.predios().contains(fila.predioId());
+                case TODOS_MENOS_ESTOS -> !acotacion.predios().contains(fila.predioId());
+            };
         }
 
         private static FichaDelPadron ficha(long fichaId, long predioId, String codigo) {
@@ -395,6 +412,12 @@ class ConciliacionControllerTest {
                 conciliados.add(PREDIO_QUE_DECLARO);
             }
             return conciliados;
+        }
+
+        /** Todos los del ejercicio (#631): aqui, el unico que declaro. */
+        @Override
+        public Set<Long> prediosConDeclaracionVigente(Ejercicio ejercicio) {
+            return Set.of(PREDIO_QUE_DECLARO);
         }
 
         @Override

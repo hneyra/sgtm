@@ -2,6 +2,7 @@ package pe.gob.sgtm.catastro.dominio;
 
 import java.util.Optional;
 import org.jspecify.annotations.Nullable;
+import pe.gob.sgtm.catastro.AcotacionPorPredio;
 
 /**
  * Los filtros de la consulta transversal de fichas (RF-006) y del resumen predial (RF-046).
@@ -35,7 +36,26 @@ public record FiltroDeFichas(
         @Nullable String manzana,
         @Nullable String lote,
         @Nullable TipoFicha tipo,
-        @Nullable String uso) {
+        @Nullable String uso,
+        AcotacionPorPredio acotacion) {
+
+    /** Los seis filtros de siempre, sin acotar por predio. */
+    public FiltroDeFichas(
+            @Nullable String codRefCatastral,
+            @Nullable String contribuyente,
+            @Nullable String manzana,
+            @Nullable String lote,
+            @Nullable TipoFicha tipo,
+            @Nullable String uso) {
+        this(
+                codRefCatastral,
+                contribuyente,
+                manzana,
+                lote,
+                tipo,
+                uso,
+                AcotacionPorPredio.ninguna());
+    }
 
     public FiltroDeFichas {
         codRefCatastral = limpio(codRefCatastral);
@@ -59,11 +79,22 @@ public record FiltroDeFichas(
         return new FiltroDeFichas(null, null, null, null, null, null);
     }
 
+    /** El mismo filtro, acotado a un conjunto de predios (#631). */
+    public FiltroDeFichas acotadoA(AcotacionPorPredio otra) {
+        return new FiltroDeFichas(codRefCatastral, contribuyente, manzana, lote, tipo, uso, otra);
+    }
+
     public Optional<String> porContribuyente() {
         return Optional.ofNullable(contribuyente);
     }
 
-    /** Si no filtra por nada. Una consulta asi devuelve el padron paginado, que es legitimo. */
+    /**
+     * Si no filtra por nada de lo que el usuario teclea. Una consulta asi devuelve el padron
+     * paginado, que es legitimo.
+     *
+     * <p>La acotacion por predio <b>no cuenta</b>: no la teclea nadie, la pone el contexto que
+     * compone la consulta (#631).
+     */
     public boolean estaVacio() {
         return codRefCatastral == null
                 && contribuyente == null
