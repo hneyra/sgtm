@@ -6054,6 +6054,11 @@ paths:
           required: false
           description: "Filtro «Código Cont.» de la pantalla"
           schema: { type: string }
+        - name: codContribuyente
+          in: query
+          required: false
+          description: "Codigo del contribuyente, con el nombre unificado. «codigoCont» es el mismo dato"
+          schema: { type: string }
         - name: ano
           in: query
           required: false
@@ -6244,6 +6249,11 @@ paths:
           required: false
           description: "Filtro «Contribuyente» de la pantalla"
           schema: { type: string }
+        - name: codContribuyente
+          in: query
+          required: false
+          description: "Codigo del contribuyente, con el nombre unificado. «contribuyente» es el mismo dato"
+          schema: { type: string }
         - name: calle
           in: query
           required: false
@@ -6313,6 +6323,11 @@ paths:
           in: query
           required: false
           description: "Filtro «Contribuyente» de la pantalla"
+          schema: { type: string }
+        - name: codContribuyente
+          in: query
+          required: false
+          description: "Codigo del contribuyente, con el nombre unificado. «contribuyente» es el mismo dato"
           schema: { type: string }
         - name: estado
           in: query

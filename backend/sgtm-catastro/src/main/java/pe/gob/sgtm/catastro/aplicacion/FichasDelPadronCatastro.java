@@ -47,7 +47,9 @@ public class FichasDelPadronCatastro implements FichasDelPadron {
                         criterio.contribuyente(),
                         criterio.manzana(),
                         criterio.lote(),
-                        tipoDe(criterio.tipo()));
+                        tipoDe(criterio.tipo()),
+                        null,
+                        criterio.acotacion());
 
         return consulta.buscar(filtro, aLaFecha, paginacion).mapear(FichasDelPadronCatastro::fila);
     }

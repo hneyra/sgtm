@@ -485,12 +485,16 @@ export type ResumenDeConciliacion = {
  * distingue una ficha conciliada —si el predio declaro— es de rentas, y catastro
  * no puede depender de el sin cerrar un ciclo de modulos.
  *
- * **Esta es la unica forma de contar la conciliacion, y hace falta una aparte
- * porque la grilla no sirve para eso**: en `GET /catastro/fichas/conciliacion` el
- * filtro se aplica sobre la pagina ya devuelta y su `totalElementos` sigue siendo
- * el del padron SIN filtrar, asi que con `conciliadaConRentas=No` decia 14 422
- * «sin conciliar» sobre un padron de 14 422 predios en Catacaos. Aquella sirve
- * para RECORRER la lista; para contarla, esta.
+ * **Esta es la unica forma de contar la conciliacion, y sigue haciendo falta una
+ * aparte aunque la grilla ya cuente bien.** Hasta #631 el motivo era que no
+ * contaba: su filtro se aplicaba sobre la pagina ya devuelta y su
+ * `totalElementos` seguia siendo el del padron SIN filtrar, asi que con
+ * `conciliadaConRentas=No` decia 14 422 «sin conciliar» sobre un padron de
+ * 14 422 predios en Catacaos. Eso quedo arreglado, y **el motivo ahora es otro**:
+ * cada consulta de la grilla con `No` deja una fila `ACCESO` en la bitacora
+ * (ADR-0015 §2.3), asi que pedirla solo para leer su total ensuciaria la
+ * auditoria con una entrada por cada pintada del panel. Aquella sirve para
+ * RECORRER la lista; para contarla, esta.
  *
  * Y a diferencia de aquella con `No`, esta **no exige el permiso de
  * fiscalizacion** (`fisc_omisos`) y **no deja fila en la bitacora**: aquella
