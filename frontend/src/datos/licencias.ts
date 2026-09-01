@@ -265,32 +265,33 @@ export const OPCIONES: [string, string][] = [
 /**
  * Lo que el panel del artboard contaba y aquí no se cuenta, con el motivo.
  *
- * [rótulo, lo que el prototipo decía, por qué no se puede decir]
+ * **La cifra que el prototipo dibujaba no se guarda ni se cita.** Estuvo aquí, y
+ * la pantalla la enseñaba tachada al lado del «—»: una cifra así es
+ * indistinguible de una correcta en cuanto sale de la pantalla, y de una
+ * captura o de una mirada rápida el tachado es lo primero que se cae. Lo que
+ * vale es el nombre de lo que falta y el motivo.
+ *
+ * [rótulo, por qué no se puede decir]
  */
-export const LO_QUE_NO_SE_CUENTA: [string, string, string][] = [
+export const LO_QUE_NO_SE_CUENTA: [string, string][] = [
   [
     'Con el plazo del TUPA agotado',
-    '42 solicitudes',
     'El backend no tiene el concepto de solicitud en evaluación con un plazo corriendo: publica el estado de la autorización —VIGENTE, VENCIDA, CANCELADA— y ninguna fecha de vencimiento del trámite. Contarlo aquí sería contar otra cosa.',
   ],
   [
     'Con requisitos sin cumplir',
-    '88 solicitudes',
     'Solo el FUE de edificación lleva sus requisitos —documentos y secciones—, y se leen de uno en uno al abrir el expediente. Ninguna lectura los agrega, así que la cifra saldría de recorrer el padrón entero.',
   ],
   [
     'Con menos de cinco días de plazo',
-    '34 solicitudes',
     'Lo mismo que la primera: sin plazo del trámite no hay «por vencer».',
   ],
   [
     'Resueltas este mes',
-    '188 solicitudes',
     'El resumen anual cuenta emitidas y canceladas por ejercicio, no por mes, y una autorización denegada no deja fila en ninguna parte.',
   ],
   [
     'Resuelto dentro del plazo del TUPA',
-    '88,4 %',
     'Es un porcentaje sobre dos cifras que no existen: cuántas se resolvieron y en cuántos días. Ninguna de las dos la publica el backend.',
   ],
 ];

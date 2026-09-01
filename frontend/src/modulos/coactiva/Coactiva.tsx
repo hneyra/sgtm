@@ -924,28 +924,34 @@ export default function Coactiva({ dest, onDest }: PantallaProps) {
               </div>
               {(
                 [
-                  ['Saldo de la cartera', 'S/ 1,53 M', 'Ninguna lectura de coactiva devuelve una suma. GET /coactiva/deudas pagina fila a fila, y sumar una página es sumar veinte expedientes de cuatro mil.'],
-                  ['Costas cargadas', 'S/ 184 K', 'El arancel no se publica y las costas liquidadas solo se leen por expediente, con GET /coactiva/liquidaciones-costas?nroExpedCoact=.'],
-                  ['Variación de la cartera en el ejercicio', '+ S/ 1,01 M', 'Las cuatro líneas —valores importados, costas del procedimiento, cobrado en caja y dejado sin efecto— son cuatro agregados que ningún endpoint del contrato calcula.'],
-                  ['«Fraccionado» como estado del expediente', '542 expedientes', 'No es un estado: el backend lo rechaza con 422. Suscribir un convenio mueve la deuda a fase CONVENIO en el libro; el expediente no se entera.'],
-                ] as [string, string, string][]
+                  ['Saldo de la cartera', 'Ninguna lectura de coactiva devuelve una suma. GET /coactiva/deudas pagina fila a fila, y sumar una página es sumar veinte expedientes de cuatro mil.'],
+                  ['Costas cargadas', 'El arancel no se publica y las costas liquidadas solo se leen por expediente, con GET /coactiva/liquidaciones-costas?nroExpedCoact=.'],
+                  ['Variación de la cartera en el ejercicio', 'Las cuatro líneas —valores importados, costas del procedimiento, cobrado en caja y dejado sin efecto— son cuatro agregados que ningún endpoint del contrato calcula.'],
+                  ['«Fraccionado» como estado del expediente', 'No es un estado: el backend lo rechaza con 422. Suscribir un convenio mueve la deuda a fase CONVENIO en el libro; el expediente no se entera.'],
+                ] as [string, string][]
               ).map((r) => (
                 <div key={r[0]} style={{ display: 'flex', gap: 14, padding: '12px 16px', borderBottom: '1px solid var(--line)', flexWrap: 'wrap' }}>
                   <span style={{ flex: 1, minWidth: 220 }}>
                     <span style={{ display: 'block', fontSize: 13, color: 'var(--ink)' }}>{r[0]}</span>
-                    <span style={{ display: 'block', fontSize: 11.5, color: 'var(--ink-3)', marginTop: 3, textWrap: 'pretty' }}>{r[2]}</span>
+                    <span style={{ display: 'block', fontSize: 11.5, color: 'var(--ink-3)', marginTop: 3, textWrap: 'pretty' }}>{r[1]}</span>
                   </span>
-                  <span style={{ flex: '0 0 auto', textAlign: 'right' }}>
-                    <span style={{ display: 'block', fontFamily: 'var(--font-mono)', fontSize: 12, color: 'var(--ink-4)', textDecoration: 'line-through' }}>
-                      {r[1]}
-                    </span>
-                    <span style={{ display: 'block', fontFamily: 'var(--font-mono)', fontSize: 15, color: 'var(--ink-2)' }}>{SIN_DATO}</span>
+                  {/* La cifra del artboard NO se cita, ni tachada.
+                      Estaba aquí con `line-through` al lado del «—», y el propio
+                      pie explicaba por qué no debía estar: una cifra así es
+                      indistinguible de una correcta en cuanto sale de la
+                      pantalla — y de una captura, de una impresión o de una
+                      mirada rápida, el tachado es lo primero que se cae. Lo que
+                      vale de esta sección es el nombre de lo que falta y el
+                      motivo; la magnitud que el prototipo se inventó, no. */}
+                  <span style={{ flex: '0 0 auto', textAlign: 'right', fontFamily: 'var(--font-mono)', fontSize: 15, color: 'var(--ink-2)' }}>
+                    {SIN_DATO}
                   </span>
                 </div>
               ))}
               <p style={PIE}>
-                Tachado, lo que el prototipo dibujaba. Una cifra de esas es indistinguible de una correcta en cuanto sale
-                de la pantalla, y este panel se lee para decidir el trabajo de la semana.
+                Cuatro cosas que el prototipo dibujaba y aquí no se dan. Sus cifras tampoco se citan: una cifra así es
+                indistinguible de una correcta en cuanto sale de la pantalla, y este panel se lee para decidir el
+                trabajo de la semana.
               </p>
             </section>
           </>

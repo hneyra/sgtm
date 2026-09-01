@@ -995,19 +995,17 @@ export default function Licencias({ dest, onDest }: PantallaProps) {
                 <div key={r[0]} style={{ display: 'flex', gap: 14, padding: '12px 16px', borderBottom: '1px solid var(--line)', flexWrap: 'wrap' }}>
                   <span style={{ flex: 1, minWidth: 240 }}>
                     <span style={{ display: 'block', fontSize: 13, color: 'var(--ink)' }}>{r[0]}</span>
-                    <span style={{ display: 'block', fontSize: 11.5, color: 'var(--ink-3)', marginTop: 3, textWrap: 'pretty' }}>{r[2]}</span>
+                    <span style={{ display: 'block', fontSize: 11.5, color: 'var(--ink-3)', marginTop: 3, textWrap: 'pretty' }}>{r[1]}</span>
                   </span>
-                  <span style={{ flex: '0 0 auto', textAlign: 'right' }}>
-                    <span style={{ display: 'block', fontFamily: 'var(--font-mono)', fontSize: 12, color: 'var(--ink-4)', textDecoration: 'line-through' }}>
-                      {r[1]}
-                    </span>
-                    <span style={{ display: 'block', fontFamily: 'var(--font-mono)', fontSize: 15, color: 'var(--ink-2)' }}>{SIN_DATO}</span>
+                  <span style={{ flex: '0 0 auto', textAlign: 'right', fontFamily: 'var(--font-mono)', fontSize: 15, color: 'var(--ink-2)' }}>
+                    {SIN_DATO}
                   </span>
                 </div>
               ))}
               <p style={PIE}>
-                Tachado, lo que el prototipo dibujaba. El módulo del manual no tiene una bandeja de solicitudes en
-                evaluación: tiene tres padrones de autorizaciones ya otorgadas y un formulario que se completa por partes.
+                Cinco cosas que el prototipo contaba y aquí no se cuentan; sus cifras tampoco se citan. El módulo del
+                manual no tiene una bandeja de solicitudes en evaluación: tiene tres padrones de autorizaciones ya
+                otorgadas y un formulario que se completa por partes.
               </p>
             </section>
           </>
