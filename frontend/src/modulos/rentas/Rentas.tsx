@@ -448,6 +448,17 @@ function BloqueDeTabla({ tabla, onAnadir }: { tabla: TablaDef; onAnadir: () => v
 const SIN_DATO = '—';
 
 /**
+ * Cuántas unidades se piden por página en el expediente.
+ *
+ * No es una cifra cómoda: `MUNICIPALIDAD DISTRITAL DE CATACAOS` tiene **105
+ * predios** en el padrón real, y es el único de los 400 contribuyentes medidos
+ * que pasa de 4. Pedirlos todos de una vez sería una página de 105 filas dentro
+ * de una sección plegada; pedir 50 y callarlo sería decir «105 predios» encima
+ * de una rejilla de 50.
+ */
+const UNIDADES_POR_PAGINA = 20;
+
+/**
  * Una tabla del expediente que la llena el backend, no el catálogo.
  *
  * <h2>Las tres respuestas de `GET /rentas/predios`, dichas por separado (#541)</h2>
@@ -478,6 +489,8 @@ function TablaLeida<T>({
   fila,
   vacia,
   cuenta,
+  pagina,
+  irAPagina,
 }: {
   tabla: TablaDef;
   estado: { datos: RespuestaPaginada<T> | null; cargando: boolean; error: ErrorDeApi | null; reintentar: () => void };
@@ -486,6 +499,8 @@ function TablaLeida<T>({
   vacia: string;
   /** Cómo se cuenta lo que trajo: «3 predios», «1 vehículo». */
   cuenta: (n: number) => string;
+  pagina: number;
+  irAPagina: (n: number) => void;
 }) {
   const filas = (estado.datos?.contenido ?? []).map(fila);
   const total = estado.datos?.totalElementos ?? 0;
@@ -520,6 +535,35 @@ function TablaLeida<T>({
             min={tabla.min}
             vacia={estado.cargando ? 'Consultando el padrón…' : estado.error !== null ? undefined : vacia}
           />
+        </div>
+      )}
+      {/* La tabla PAGINA, y no es un adorno: `MUNICIPALIDAD DISTRITAL DE
+          CATACAOS` tiene **105 predios** en el padrón real (medido). Pidiendo
+          una página grande y dejándolo ahí, la franja diría «105 predios» y la
+          rejilla enseñaría 50: el recuento y lo que se ve discreparían sin que
+          nada lo dijera, que es la forma silenciosa del mismo defecto que esta
+          sección acaba de dejar atrás. */}
+      {(estado.datos?.totalPaginas ?? 0) > 1 && (
+        <div style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '10px 16px', borderTop: '1px solid var(--line)' }}>
+          <button
+            onClick={() => irAPagina(Math.max(0, pagina - 1))}
+            disabled={pagina === 0}
+            className="hov-linea"
+            style={{ ...BOTON_DE_TABLA, opacity: pagina === 0 ? 0.45 : 1, cursor: pagina === 0 ? 'not-allowed' : 'pointer' }}
+          >
+            Anterior
+          </button>
+          <span style={{ fontFamily: 'var(--font-mono)', fontSize: 12, color: 'var(--ink-3)' }}>
+            {(estado.datos?.pagina ?? 0) + 1} de {estado.datos?.totalPaginas}
+          </span>
+          <button
+            onClick={() => irAPagina(pagina + 1)}
+            disabled={estado.datos?.hayMas !== true}
+            className="hov-linea"
+            style={{ ...BOTON_DE_TABLA, opacity: estado.datos?.hayMas === true ? 1 : 0.45, cursor: estado.datos?.hayMas === true ? 'pointer' : 'not-allowed' }}
+          >
+            Siguiente
+          </button>
         </div>
       )}
       {tabla.nota !== undefined && <p style={PIE}>{tabla.nota}</p>}
@@ -631,14 +675,24 @@ export default function Rentas({ dest, onDest }: PantallaProps) {
    * `predios_rentas` y `vehiculos`. Quien tenga uno y no el otro ve la tabla
    * que puede y el aviso de permiso en la que no, en vez de perder las dos.
    */
+  /* Cambiar de contribuyente vuelve a la primera página de las dos: sin esto,
+     abrir a alguien con un predio estando en la página 3 del anterior deja las
+     dos tablas vacías sin motivo. */
+  const [paginaDePredios, setPaginaDePredios] = useState(0);
+  const [paginaDeVehiculos, setPaginaDeVehiculos] = useState(0);
+  useEffect(() => {
+    setPaginaDePredios(0);
+    setPaginaDeVehiculos(0);
+  }, [contribuyenteAbierto?.codigo]);
+
   const prediosDelContribuyente = useRecurso(
-    (senal) => listarPrediosDelContribuyente(contribuyenteAbierto!.codigo, {}, { tamano: 50 }, senal),
-    [contribuyenteAbierto?.codigo],
+    (senal) => listarPrediosDelContribuyente(contribuyenteAbierto!.codigo, {}, { pagina: paginaDePredios, tamano: UNIDADES_POR_PAGINA }, senal),
+    [contribuyenteAbierto?.codigo, paginaDePredios],
     contribuyenteAbierto !== null,
   );
   const vehiculosDelContribuyente = useRecurso(
-    (senal) => listarVehiculosDelContribuyente(contribuyenteAbierto!.codigo, { tamano: 50 }, senal),
-    [contribuyenteAbierto?.codigo],
+    (senal) => listarVehiculosDelContribuyente(contribuyenteAbierto!.codigo, { pagina: paginaDeVehiculos, tamano: UNIDADES_POR_PAGINA }, senal),
+    [contribuyenteAbierto?.codigo, paginaDeVehiculos],
     contribuyenteAbierto !== null,
   );
   const cargando = padron.cargando;
@@ -1994,6 +2048,8 @@ export default function Rentas({ dest, onDest }: PantallaProps) {
                                 <TablaLeida
                                   tabla={bl.tabla}
                                   estado={prediosDelContribuyente}
+                                  pagina={paginaDePredios}
+                                  irAPagina={setPaginaDePredios}
                                   cuenta={(n) => `${n} ${n === 1 ? 'predio' : 'predios'}`}
                                   vacia="Este contribuyente está en el padrón y no tiene ningún predio inscrito a su nombre."
                                   fila={(p: PredioDelContribuyente) => [
@@ -2012,6 +2068,8 @@ export default function Rentas({ dest, onDest }: PantallaProps) {
                                 <TablaLeida
                                   tabla={bl.tabla}
                                   estado={vehiculosDelContribuyente}
+                                  pagina={paginaDeVehiculos}
+                                  irAPagina={setPaginaDeVehiculos}
                                   cuenta={(n) => `${n} ${n === 1 ? 'vehículo' : 'vehículos'}`}
                                   vacia="Este contribuyente está en el padrón y no tiene ningún vehículo a su nombre."
                                   fila={(v: VehiculoDelContribuyente) => [
