@@ -100,10 +100,10 @@ public class ArbitriosController {
     /**
      * Los dos filtros que esta consulta no puede servir, dichos en vez de ignorados (#541).
      *
-     * <p>Se leen —{@code @RequestParam}— para poder rechazarlos: un parámetro que el controlador
-     * no declara lo descarta Spring en silencio, la consulta sale sin acotar y el listado vuelve
-     * entero. El mensaje dice <b>por qué</b> y por dónde se sale, porque quien filtra por zona
-     * está haciendo una pregunta legítima que este servicio no sabe contestar.
+     * <p>Se leen —{@code @RequestParam}— para poder rechazarlos: un parámetro que el controlador no
+     * declara lo descarta Spring en silencio, la consulta sale sin acotar y el listado vuelve
+     * entero. El mensaje dice <b>por qué</b> y por dónde se sale, porque quien filtra por zona está
+     * haciendo una pregunta legítima que este servicio no sabe contestar.
      */
     private static void rechazarLoQueNoSeSirve(@Nullable String zona, @Nullable String uso) {
         if (zona != null && !zona.isBlank()) {
