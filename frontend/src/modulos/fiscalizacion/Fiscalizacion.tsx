@@ -4,8 +4,10 @@ import type { PantallaProps } from '../../App';
 import { Icono } from '../../ds/Icono';
 import { listarOmisos } from '../../api/fiscalizacion';
 import { useRecurso } from '../../api/useRecurso';
+import { FalloDeLectura } from '../../api/Fallo';
+import type { RespuestaPaginada } from '../../api/cliente';
 import { ICO } from '../../ds/iconos';
-import { Insignia, type Tono } from '../../ds/componentes';
+import { Aviso, Insignia, type Tono } from '../../ds/componentes';
 import { moduloDe } from '../../shell/modulos';
 import { usarPreferencias } from '../../shell/preferencias';
 import {
@@ -120,13 +122,27 @@ function Cabeceras({ cols }: { cols: ColDef[] }) {
   );
 }
 
-function Celdas({ fila, cols, insignia }: { fila: string[]; cols: ColDef[]; insignia?: number }) {
+function Celdas({
+  fila,
+  cols,
+  insignia,
+  tonoInsignia,
+}: {
+  fila: string[];
+  cols: ColDef[];
+  insignia?: number;
+  /* Cuando el tono lo decide el VALOR del enumerado y no el texto del rotulo.
+     `tono()` clasifica por expresion regular sobre lo que se lee, y hay
+     vocabularios —«Uso distinto», «No ubicado»— que no casan con ninguna y
+     acaban en verde, que es el color de «conforme». */
+  tonoInsignia?: Tono;
+}) {
   return (
     <>
       {fila.map((c, j) =>
         j === insignia ? (
           <td key={j} style={{ padding: '11px 14px' }}>
-            <Insignia tono={tono(c)}>{c}</Insignia>
+            <Insignia tono={tonoInsignia ?? tono(c)}>{c}</Insignia>
           </td>
         ) : (
           <td key={j} style={estiloDeCelda(j, cols)}>
@@ -135,6 +151,122 @@ function Celdas({ fila, cols, insignia }: { fila: string[]; cols: ColDef[]; insi
         ),
       )}
     </>
+  );
+}
+
+/** Lo que se dibuja en un boton apagado: se ve, no se pulsa, y dice por que. */
+const BOTON_APAGADO: CSSProperties = {
+  borderRadius: 6,
+  opacity: 0.5,
+  cursor: 'not-allowed',
+};
+
+/** La paginacion de la tabla de deteccion. */
+function Paginas({
+  pagina,
+  totalPaginas,
+  hayMas,
+  ir,
+}: {
+  pagina: number;
+  totalPaginas: number;
+  hayMas: boolean;
+  ir: (n: number) => void;
+}) {
+  if (totalPaginas <= 1) return null;
+  const linea: CSSProperties = { border: '1px solid var(--line-2)', borderRadius: 6, padding: '7px 14px', background: 'var(--bg-card)', fontSize: 12.5 };
+  /* No hace falta apagarlos mientras la siguiente viaja —y en Catacaos viaja
+     8,5 s (#561)—: `useRecurso` vacia `datos` en cuanto la pregunta cambia, asi
+     que durante la espera no hay paginador que pulsar ni filas viejas debajo
+     del numero nuevo. Medido: a 0,5 / 1,5 / 3 / 5 s de pulsar «Siguiente» la
+     tabla tiene 0 filas y el pie dice «Consultando el padron…». */
+  const atras = pagina === 0;
+  const alante = hayMas;
+  return (
+    <div style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '10px 16px', borderTop: '1px solid var(--line)' }}>
+      <button
+        onClick={() => ir(Math.max(0, pagina - 1))}
+        disabled={atras}
+        className="hov-linea"
+        style={{ ...linea, opacity: atras ? 0.45 : 1, cursor: atras ? 'not-allowed' : 'pointer' }}
+      >
+        Anterior
+      </button>
+      <span style={{ fontFamily: 'var(--font-mono)', fontSize: 12, color: 'var(--ink-3)' }}>
+        Página {pagina + 1} de {totalPaginas}
+      </span>
+      <button
+        onClick={() => ir(pagina + 1)}
+        disabled={!alante}
+        className="hov-linea"
+        style={{ ...linea, opacity: alante ? 1 : 0.45, cursor: alante ? 'pointer' : 'not-allowed' }}
+      >
+        Siguiente
+      </button>
+    </div>
+  );
+}
+
+/**
+ * Lo que la tabla de deteccion dice de si misma: cuantas filas hay, de cuantas,
+ * y —cuando no se puede decir— por que no.
+ *
+ * <h2>El total NO es el numero de coincidencias, y hay que decirlo</h2>
+ *
+ * `DeteccionDeOmisos` aplica `condicion` **despues de paginar**, y su propio
+ * comentario lo explica: el total del sobre es el del padron —filtrado por
+ * sector, eso si— y no el de las filas que sobreviven al filtro de condicion.
+ * Medido: `?condicion=SUBVALUADOR` devuelve `contenido: []` con
+ * `totalElementos: 25` en la muni 1 y `9445` en Catacaos.
+ *
+ * Asi que con condicion puesta no se puede escribir «0 de 25»: 25 no es «de».
+ * Se dice lo unico cierto —cuantas trae ESTA pagina, sobre cuantos predios se
+ * examinaron— y se avisa de que una pagina vacia no significa que no haya
+ * ninguno. Es el issue #545, dicho donde se lee.
+ */
+function EstadoDeLaDeteccion({
+  cargando,
+  filas,
+  pagina,
+  conCondicion,
+}: {
+  cargando: boolean;
+  filas: number;
+  pagina: RespuestaPaginada<unknown> | null;
+  conCondicion: boolean;
+}) {
+  if (cargando) {
+    return <p style={{ ...PIE, borderTop: '1px solid var(--line)' }}>Consultando el padrón…</p>;
+  }
+  if (pagina === null) return null;
+
+  const examinados = pagina.totalElementos;
+  /* Con el padron vacio la salvedad sobra: no hay nada que el filtro pudiera
+     estar escondiendo en otra pagina, porque no hay otra pagina. Repetirla ahi
+     convertiria el aviso en ruido, y un aviso que sale siempre deja de leerse. */
+  const acotaLaPagina = conCondicion && examinados > 0;
+  const cuenta = acotaLaPagina
+    ? `${filas} ${filas === 1 ? 'predio' : 'predios'} en esta página · ${examinados} examinados en total`
+    : `${filas} de ${examinados} ${examinados === 1 ? 'predio' : 'predios'}`;
+
+  return (
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 10, padding: '11px 16px', borderTop: '1px solid var(--line)' }}>
+      <span style={{ fontFamily: 'var(--font-mono)', fontSize: 11.5, color: 'var(--ink-3)' }}>{cuenta}</span>
+      {acotaLaPagina && (
+        <Aviso tono="warn" titulo="El total no cuenta las coincidencias">
+          El backend aplica «Condición» sobre los {pagina.tamano} predios de cada página, no sobre el padrón entero, y el total que devuelve
+          —{examinados}— es el de predios examinados. Una página sin filas <strong>no significa que no haya ninguno</strong>: hay que
+          recorrerlas. Issue #545.
+        </Aviso>
+      )}
+      {filas === 0 && !acotaLaPagina && (
+        <Aviso tono="neutro" titulo="Sin resultados">
+          {examinados === 0
+            ? 'El padrón no devolvió ningún predio con estos filtros.'
+            : 'Ningún predio de esta página entró en la detección.'}
+        </Aviso>
+      )}
+    </div>
   );
 }
 
@@ -228,7 +360,11 @@ export default function Fiscalizacion({ dest, onDest }: PantallaProps) {
   const [paso, setPaso] = useState(0);
   const [modoCampo, setModoCampo] = useState(false);
   const [programa, setPrograma] = useState('PF-2026-014');
-  const [marcadas, setMarcadas] = useState<Record<number, boolean>>({ 0: true, 1: false, 2: false, 3: true });
+  /* Nace VACIA. Con `{0: true, 3: true}` la pantalla abria con dos predios
+     REALES ya marcados —en la muni 1, C-000001 y C-000003— que nadie eligio, y
+     programar una fiscalizacion abre un procedimiento sobre una persona
+     concreta. La llave es la identidad de la fila, no su posicion. */
+  const [marcadas, setMarcadas] = useState<Record<string, boolean>>({});
   const [filtros, setFiltros] = useState<Record<string, string>>({});
 
   const grande = modoCampo;
@@ -258,6 +394,12 @@ export default function Fiscalizacion({ dest, onDest }: PantallaProps) {
   const [paginaDet, setPaginaDet] = useState(0);
   useEffect(() => setPaginaDet(0), [sectorDet, condicionDet, pref.ejercicio]);
 
+  /* La seleccion pertenece a la consulta que la produjo. Cambiar de sector, de
+     condicion, de ejercicio, de pagina o de pestaña la vacia: si sobreviviera,
+     seguiria contando predios que ya no estan en pantalla, y quien atiende
+     leeria «3 seleccionados» sin ver una sola casilla marcada. */
+  useEffect(() => setMarcadas({}), [sectorDet, condicionDet, pref.ejercicio, paginaDet, detTab]);
+
   const omisos = useRecurso(
     (senal) =>
       listarOmisos(
@@ -266,7 +408,7 @@ export default function Fiscalizacion({ dest, onDest }: PantallaProps) {
           sector: sectorDet || undefined,
           condicion: condicionDet || undefined,
         },
-        { pagina: paginaDet, tamano: 20 },
+        { pagina: paginaDet, tamano: TAMANO_DE_PAGINA },
         senal,
       ),
     [pref.ejercicio, sectorDet, condicionDet, paginaDet],
@@ -284,19 +426,55 @@ export default function Fiscalizacion({ dest, onDest }: PantallaProps) {
    * Y se añaden las tres que el backend SI publica con cifra y el artboard no
    * dibuja: el area catastral, la declarada y su diferencia. Son lo unico
    * cuantificado que hoy distingue a un subvaluador.
+   *
+   * `llave` es la IDENTIDAD de la fila, no su posicion: el padron de omisos
+   * multiplica por copropietario —25 filas para 22 predios en la muni 1— asi
+   * que el codigo predial solo no basta, y el par (predio, titular) si es
+   * unico. Con el indice, marcar la fila 3 y cambiar de pagina dejaba marcada
+   * a OTRA persona.
    */
-  const filasDeOmisos: string[][] = (omisos.datos?.contenido ?? []).map((o) => [
-    o.codRefCatastral,
-    o.titular,
-    o.condicion === 'OMISO' ? 'Omiso' : 'Subvaluador',
-    o.areaCatastral ?? '—',
-    o.areaDeclarada ?? '—',
-    o.diferenciaDeArea ?? '—',
-    o.impuestoOmitidoS ?? '—',
-  ]);
+  const filasDeOmisos: FilaDeDeteccion[] = (omisos.datos?.contenido ?? []).map((o) => ({
+    llave: o.codRefCatastral + '·' + o.titular,
+    /* El rotulo se dibuja desde el enumerado, no desde su texto: asi renombrar
+       la etiqueta no puede cambiar el color, y un valor que no conozcamos sale
+       tal cual en vez de disfrazado del que mas se le parezca. */
+    condicion: o.condicion,
+    celdas: [
+      o.codRefCatastral,
+      o.titular,
+      etiquetaDeCondicion(o.condicion),
+      o.areaCatastral ?? SIN_DATO,
+      o.areaDeclarada ?? SIN_DATO,
+      o.diferenciaDeArea ?? SIN_DATO,
+      o.impuestoOmitidoS ?? SIN_DATO,
+    ],
+  }));
 
   const detAct = detTab === 0 ? DET_PREDIAL : DET_VEHICULAR;
-  const marcadasN = detAct.filas.filter((_f, i) => marcadas[i]).length;
+
+  /* Las filas que la tabla dibuja de verdad, con su llave. Las del cruce
+     vehicular siguen siendo las del prototipo —ese cruce no tiene backend— y
+     se llavean por la placa, que ahi si es unica. */
+  /**
+   * Las filas del cruce VEHICULAR no se dibujan, y no es un olvido.
+   *
+   * `DET_VEHICULAR` son cuatro vehiculos del artboard —`V1H-882`, `C2P-704`…—
+   * con su hallazgo y su deuda omitida: «S/ 3,384.00», «S/ 1,446.00». Ninguna
+   * de esas cifras existe, y no hay **ninguna** operacion del cruce registral
+   * en el contrato (#546, #504): la pestaña no pedia nada al backend y
+   * enseñaba cuatro personas con nombre y una deuda inventada al lado. Un
+   * fiscalizador que abre un procedimiento por «baja indebida · 1 446,00»
+   * lo abre sobre un numero que nadie calculo.
+   */
+  const filasVisibles: FilaDeDeteccion[] = detTab === 0 ? filasDeOmisos : [];
+
+  /* El contador se calcula sobre lo que hay EN PANTALLA, no sobre otro arreglo:
+     asi el pie y las casillas no pueden discrepar ni aunque la seleccion
+     sobreviva a algo. Antes contaba sobre `DET_PREDIAL`, del prototipo, que
+     tiene cuatro filas: marcar las veinte de la pagina decia «(4)». */
+  const marcadasN = filasVisibles.filter((f) => marcadas[f.llave] === true).length;
+
+  const paginaDeOmisos = omisos.datos;
 
   /* ── Acta: la tabla de contraste ───────────────────────────── */
   const contraste = useMemo(() => {
@@ -406,15 +584,6 @@ export default function Fiscalizacion({ dest, onDest }: PantallaProps) {
       : (destino?.label ?? 'Fiscalización');
 
   const paleta = OPCIONES.map((o) => ({ label: o[0], nota: 'Fiscalización', ir: () => onDest(o[1]) }));
-
-  const programarSeleccion = () => {
-    if (marcadasN === 0) {
-      toast('Marca al menos un registro.');
-      return;
-    }
-    onDest('programas');
-    toast(marcadasN + ' registros añadidos a la muestra del PF-2026-014.');
-  };
 
   const adelante = () => {
     if (pasoIdx >= PASOS_ACTA.length - 1) {
@@ -631,8 +800,18 @@ export default function Fiscalizacion({ dest, onDest }: PantallaProps) {
                   </button>
                 );
               })}
+              {/* El cruce predial NO es un lote nocturno: `DeteccionDeOmisos`
+                  resuelve el padron contra las declaraciones del ejercicio en
+                  la propia peticion, a la fecha de hoy. «Actualizacion diaria»
+                  —lo que decia el prototipo— prometia una foto reciente que
+                  nadie toma, y con ella la excusa de que un predio que falta
+                  «entrara mañana». */}
               <span data-sm-hide="1" style={{ marginLeft: 'auto', fontSize: 11.5, color: 'var(--ink-3)' }}>
-                {detAct.fuente}
+                {detTab === 0
+                  ? 'Cruce de catastro contra las declaraciones del ejercicio, resuelto al consultar'
+                  : /* «última importación 11/08/2026» es una fecha del artboard: no
+                       hay importacion ninguna, porque no hay cruce. */
+                    'Cruce del padrón vehicular contra SUNARP, SUNAT y MTC — sin operación todavía'}
               </span>
             </div>
 
@@ -666,8 +845,15 @@ export default function Fiscalizacion({ dest, onDest }: PantallaProps) {
                         style={{ width: '100%', border: '1px solid var(--line-2)', borderRadius: 6, padding: '9px 10px', background: 'var(--bg-elev)', fontSize: 13.5 }}
                       >
                         <option value="">Todas</option>
-                        <option value="OMISO">OMISO</option>
-                        <option value="SUBVALUADOR">SUBVALUADOR</option>
+                        {/* Los CINCO del enumerado, no dos. El desplegable
+                            ofrecia OMISO y SUBVALUADOR, y la consulta acepta
+                            los cinco: quien buscara un predio no ubicado no
+                            tenia como pedirlo. */}
+                        {CONDICIONES.map((c) => (
+                          <option key={c.valor} value={c.valor}>
+                            {c.valor}
+                          </option>
+                        ))}
                       </select>
                     </label>
                     {/* «Ordenar por» del artboard ofrece tres campos y los tres
@@ -678,24 +864,46 @@ export default function Fiscalizacion({ dest, onDest }: PantallaProps) {
                     </p>
                   </>
                 ) : (
-                  detAct.filtros.map((f) => (
-                    <label key={f.label} style={{ display: 'flex', flexDirection: 'column', gap: 5, minWidth: 0 }}>
-                      <span style={{ fontSize: 11.5, fontWeight: 500, color: 'var(--ink-3)' }}>{f.label}</span>
-                      <select
-                        value={filtroDe(f.label, f.valor)}
-                        onChange={(e) => setFiltros((s) => ({ ...s, [detTab + ':' + f.label]: e.target.value }))}
-                        style={{ width: '100%', border: '1px solid var(--line-2)', borderRadius: 6, padding: '9px 10px', background: 'var(--bg-elev)', fontSize: 13.5 }}
-                      >
-                        {f.opts.map((o) => (
-                          <option key={o} value={o}>
-                            {o}
-                          </option>
-                        ))}
-                      </select>
-                    </label>
-                  ))
+                  <>
+                    {/* Los tres filtros del cruce registral se dibujan y NO se
+                        pueden usar: no hay ninguna operacion que los reciba, asi
+                        que un desplegable vivo prometeria una busqueda que no se
+                        hace. Mismo trato que los filtros bloqueados de #322. */}
+                    {detAct.filtros.map((f) => (
+                      <label key={f.label} style={{ display: 'flex', flexDirection: 'column', gap: 5, minWidth: 0 }}>
+                        <span style={{ fontSize: 11.5, fontWeight: 500, color: 'var(--ink-3)' }}>{f.label}</span>
+                        <select
+                          disabled
+                          value={filtroDe(f.label, f.valor)}
+                          onChange={(e) => setFiltros((s) => ({ ...s, [detTab + ':' + f.label]: e.target.value }))}
+                          title="El cruce registral no tiene ninguna operación en el backend: no hay nada que filtrar."
+                          style={{ width: '100%', border: '1px solid var(--line-2)', borderRadius: 6, padding: '9px 10px', background: 'var(--bg-elev)', fontSize: 13.5, opacity: 0.5, cursor: 'not-allowed' }}
+                        >
+                          {f.opts.map((o) => (
+                            <option key={o} value={o}>
+                              {o}
+                            </option>
+                          ))}
+                        </select>
+                      </label>
+                    ))}
+                    <p style={{ margin: 0, gridColumn: '1 / -1', fontSize: 11.5, lineHeight: 1.5, color: 'var(--ink-4)', textWrap: 'pretty' }}>
+                      Los tres filtros están bloqueados: no hay ninguna operación del cruce registral en el contrato, así que no hay nada
+                      que filtrar.
+                    </p>
+                  </>
                 )}
               </div>
+              {/* Una lectura que falla NO es una tabla vacia: sin esto, un 403
+                  sobre `fisc_omisos` y una red caida se dibujan los dos como
+                  «este ejercicio no tiene omisos», que es la lectura contraria
+                  a la verdadera. */}
+              {detTab === 0 && omisos.error !== null && (
+                <div style={{ padding: '14px 16px', borderBottom: '1px solid var(--line)' }}>
+                  <FalloDeLectura error={omisos.error} que="la detección de omisos" acceso="fisc_omisos" alReintentar={omisos.reintentar} />
+                </div>
+              )}
+
               <div style={{ overflowX: 'auto' }}>
                 <table style={{ width: '100%', borderCollapse: 'collapse', minWidth: detAct.min }}>
                   <thead>
@@ -705,64 +913,109 @@ export default function Fiscalizacion({ dest, onDest }: PantallaProps) {
                     </tr>
                   </thead>
                   <tbody>
-                    {(detTab === 0 ? filasDeOmisos : detAct.filas).map((f, i) => {
-                      const on = marcadas[i] === true;
+                    {filasVisibles.map((f) => {
+                      const on = marcadas[f.llave] === true;
                       return (
-                        /* La clave es el indice y no el codigo: el padron de
-                           omisos MULTIPLICA por copropietario —25 filas para 22
-                           predios en la muni 1— asi que el codigo se repite.
-                           Es el defecto del issue #545 visto desde aqui. */
-                        <tr key={i} className="hov-elev" style={{ borderTop: '1px solid var(--line)', background: on ? 'var(--accent-soft)' : 'transparent' }}>
+                        /* La clave es la IDENTIDAD de la fila. El codigo predial
+                           solo no vale: el padron de omisos multiplica por
+                           copropietario —25 filas para 22 predios en la muni 1—
+                           y el par (predio, titular) si es unico (comprobado:
+                           25 de 25). El indice tampoco valia, y ese era el
+                           defecto: marcar la fila 3 y pasar de pagina dejaba
+                           marcada a otra persona. */
+                        <tr key={f.llave} className="hov-elev" style={{ borderTop: '1px solid var(--line)', background: on ? 'var(--accent-soft)' : 'transparent' }}>
                           <td style={{ padding: '11px 14px' }}>
                             <input
                               type="checkbox"
                               checked={on}
-                              onChange={() => setMarcadas((x) => ({ ...x, [i]: !on }))}
-                              aria-label={'Seleccionar ' + f[0]}
+                              onChange={() => setMarcadas((x) => ({ ...x, [f.llave]: !on }))}
+                              /* Nombra las DOS partes: con solo el codigo, las
+                                 filas de un predio en copropiedad tenian dos
+                                 casillas con el mismo nombre accesible. */
+                              aria-label={'Seleccionar ' + f.celdas[0] + ' de ' + f.celdas[1]}
                               style={{ accentColor: 'var(--accent)', width: 16, height: 16 }}
                             />
                           </td>
-                          <Celdas fila={f} cols={detTab === 0 ? COLUMNAS_DE_OMISOS : detAct.cols} insignia={detTab === 0 ? 2 : 5} />
+                          <Celdas
+                            fila={f.celdas}
+                            cols={detTab === 0 ? COLUMNAS_DE_OMISOS : detAct.cols}
+                            insignia={detTab === 0 ? 2 : 5}
+                            tonoInsignia={detTab === 0 ? tonoDeCondicion(f.condicion) : undefined}
+                          />
                         </tr>
                       );
                     })}
                   </tbody>
                 </table>
               </div>
+
+              {/* Ni una tabla vacia en silencio ni un total que no es el que
+                  parece. Los dos casos se dicen por separado. */}
+              {detTab === 0 && omisos.error === null && (
+                <EstadoDeLaDeteccion cargando={omisos.cargando} filas={filasDeOmisos.length} pagina={paginaDeOmisos} conCondicion={condicionDet !== ''} />
+              )}
+              {detTab === 0 && paginaDeOmisos !== null && (
+                <Paginas pagina={paginaDeOmisos.pagina} totalPaginas={paginaDeOmisos.totalPaginas} hayMas={paginaDeOmisos.hayMas} ir={setPaginaDet} />
+              )}
+              {detTab === 1 && (
+                <div style={{ padding: '11px 16px', borderTop: '1px solid var(--line)' }}>
+                  <Aviso tono="neutro" titulo="El cruce registral todavía no se puede consultar">
+                    No hay ninguna operación del cruce del padrón vehicular contra SUNARP, SUNAT y MTC: ni lectura ni filtros. Las cuatro
+                    filas que el diseño dibuja aquí —cuatro placas, cuatro contribuyentes con nombre, un hallazgo y una deuda omitida cada
+                    una— son la muestra del artboard, y no se enseñan: un importe puesto al lado de una placa es indistinguible de una deuda
+                    de verdad en cuanto sale de la pantalla. Issues #546 y #504.
+                  </Aviso>
+                </div>
+              )}
+
               <p style={{ ...PIE, borderTop: '1px solid var(--line)' }}>{detAct.nota}</p>
             </section>
+
+            {/* Las dos acciones estan APAGADAS, y el motivo se lee en pantalla
+                —no en un `title` que nadie abre (RNF-082)—.
+
+                «Programar fiscalizacion»: el backend NO tiene ninguna operacion
+                que reciba una seleccion de predios. Lo que hay es `POST
+                /fiscalizacion/programas`, que registra un programa con su
+                codigo, su descripcion, su tipo y su fecha de inicio —cuatro
+                campos que esta pantalla no dibuja—, y `POST
+                /fiscalizacion/programas/{id}/muestra`, que SORTEA la muestra a
+                partir de los parametros del programa y cuyo cuerpo lleva solo
+                la observacion: su javadoc dice, con todas las letras, que a
+                quien se fiscaliza lo deciden los parametros del programa y no
+                la peticion. Asi que la seleccion no tiene a donde ir, y el
+                toast anterior —«N registros añadidos a la muestra del
+                PF-2026-014»— afirmaba un acto que nunca salio de la pantalla,
+                sobre un programa que es del prototipo.
+
+                «Notificar esquela»: no tenia ni `onClick`, y no hay ninguna
+                ruta de esquela en el contrato. */}
+            <Aviso tono="warn" titulo="Desde aquí todavía no se programa nada">
+              La selección se queda en esta pantalla. Para que salga de ella el backend tendría que aceptar una lista de predios, y hoy no
+              hay ninguna operación que la reciba: un programa se registra con su código, su descripción, su tipo y su fecha de inicio
+              —cuatro datos que esta pantalla no pide— y su muestra se <em>sortea</em> a partir del sector, la condición y el ejercicio que
+              el propio programa declara. Mientras tanto, la muestra se genera desde «Programas». Issue #550.
+            </Aviso>
 
             <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>
               <p style={{ margin: 0, flex: 1, minWidth: 180, fontSize: 12.5, color: 'var(--ink-3)', textWrap: 'pretty' }}>
                 {marcadasN === 0
-                  ? 'Marca los registros que van a la muestra. Sin selección no se puede programar nada.'
-                  : marcadasN +
-                    (marcadasN === 1 ? ' registro seleccionado' : ' registros seleccionados') +
-                    '. Entran al programa con su criterio de riesgo puesto.'}
+                  ? 'Marca los registros que quieras anotar. La marca no sale de esta pantalla.'
+                  : marcadasN + (marcadasN === 1 ? ' registro marcado' : ' registros marcados') + ' en esta página.'}
               </p>
               <button
-                className="hov-linea"
-                style={{ border: '1px solid var(--line-2)', borderRadius: 6, padding: '10px 18px', background: 'var(--bg-card)', fontSize: 13, cursor: 'pointer' }}
+                disabled
+                title="No hay ninguna operación de esquela en el contrato de la API."
+                style={{ ...BOTON_APAGADO, border: '1px solid var(--line-2)', background: 'var(--bg-card)', padding: '10px 18px', fontSize: 13 }}
               >
                 Notificar esquela
               </button>
               <button
-                onClick={programarSeleccion}
-                aria-disabled={marcadasN === 0}
-                className="hov-acento-2"
-                style={{
-                  border: 0,
-                  borderRadius: 6,
-                  padding: '11px 22px',
-                  background: 'var(--accent)',
-                  color: '#fff',
-                  fontSize: 13.5,
-                  fontWeight: 500,
-                  cursor: 'pointer',
-                  opacity: marcadasN === 0 ? 0.55 : 1,
-                }}
+                disabled
+                title="Ninguna operación del backend recibe una selección de predios."
+                style={{ ...BOTON_APAGADO, border: 0, background: 'var(--accent)', color: '#fff', padding: '11px 22px', fontSize: 13.5, fontWeight: 500 }}
               >
-                {marcadasN === 0 ? 'Programar fiscalización' : `Programar fiscalización (${marcadasN})`}
+                Programar fiscalización
               </button>
             </div>
           </div>
@@ -1443,12 +1696,70 @@ export default function Fiscalizacion({ dest, onDest }: PantallaProps) {
  * impuesto omitido se queda —es la cifra que da sentido a la pantalla— y sale
  * «—» mientras D-02a impida calcularlo.
  */
+/**
+ * Las columnas de «Omisos y subvaluadores», con lo que cada una es de verdad.
+ *
+ * Las tres de area **no son numeros**: `AreaM2.toString()` del backend devuelve
+ * `valor.toPlainString() + " m2"`, o sea «180.50 m2», la cifra con su unidad
+ * dentro. Se dibujan tal cual —partirlas para volver a formatearlas es como se
+ * pierde un decimal (RNF-055)— y por eso van declaradas como texto: en una
+ * columna numerica la unidad quedaba pegada detras de un numero alineado a la
+ * derecha, prometiendo una cifra que no lo es. La unidad la lleva el dato, no
+ * la cabecera, porque el dia que llegue en hectareas la cabecera mentiria.
+ */
 const COLUMNAS_DE_OMISOS: ColDef[] = [
   ['Cod. ref. catastral', 0],
   ['Titular', 0],
   ['Condicion', 0],
-  ['Area catastral', 1],
-  ['Area declarada', 1],
-  ['Diferencia de area', 1],
+  ['Area catastral', 0],
+  ['Area declarada', 0],
+  ['Diferencia de area', 0],
   ['Impuesto omitido S/', 1],
 ];
+
+/** Lo que se dibuja donde el backend no publica cifra. */
+const SIN_DATO = '—';
+
+/** Cuantas filas se piden por pagina. */
+const TAMANO_DE_PAGINA = 20;
+
+/** Una fila de la tabla de deteccion, con la identidad que la selecciona. */
+type FilaDeDeteccion = {
+  /** Identifica la fila. Para el predial, `codRefCatastral·titular`. */
+  llave: string;
+  /** El valor del enumerado tal como viaja, no su rotulo. */
+  condicion: string;
+  celdas: string[];
+};
+
+/**
+ * Las CINCO condiciones de `CondicionFiscalizada`, letra por letra.
+ *
+ * El enumerado del backend tiene cinco valores y el desplegable ofrecia dos.
+ * Peor: el rotulo se resolvia con `condicion === 'OMISO' ? 'Omiso' :
+ * 'Subvaluador'`, asi que en cuanto exista una declaracion jurada un predio
+ * CONFORME —o uno NO_UBICADO, que es «no se pudo verificar»— saldria rotulado
+ * «Subvaluador» y teñido de ambar. Los cinco los acepta la consulta
+ * (comprobado: `?condicion=CONFORME` da 200; `?condicion=BASURA`, 422).
+ *
+ * El tono sale del VALOR y no del texto: `tono()` clasifica por expresion
+ * regular sobre el rotulo, y ahi «Uso distinto» y «No ubicado» caian en verde
+ * —el color de «conforme»— porque no casan con ningun patron.
+ */
+const CONDICIONES: { valor: string; etiqueta: string; tono: Tono }[] = [
+  { valor: 'CONFORME', etiqueta: 'Conforme', tono: 'ok' },
+  { valor: 'OMISO', etiqueta: 'Omiso', tono: 'bad' },
+  { valor: 'SUBVALUADOR', etiqueta: 'Subvaluador', tono: 'warn' },
+  { valor: 'USO_DISTINTO', etiqueta: 'Uso distinto', tono: 'warn' },
+  { valor: 'NO_UBICADO', etiqueta: 'No ubicado', tono: 'neutro' },
+];
+
+/** El rotulo de una condicion. Una que no conozcamos sale TAL CUAL. */
+function etiquetaDeCondicion(valor: string): string {
+  return CONDICIONES.find((c) => c.valor === valor)?.etiqueta ?? valor;
+}
+
+/** El tono de una condicion. Una que no conozcamos no se colorea. */
+function tonoDeCondicion(valor: string): Tono {
+  return CONDICIONES.find((c) => c.valor === valor)?.tono ?? 'neutro';
+}
