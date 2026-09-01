@@ -44,6 +44,7 @@ import pe.gob.sgtm.cuentacorriente.aplicacion.ConsultaDeDeudaCuentaCorriente;
 import pe.gob.sgtm.cuentacorriente.aplicacion.ConsultarDeuda;
 import pe.gob.sgtm.cuentacorriente.aplicacion.MovimientosDelLibroCuentaCorriente;
 import pe.gob.sgtm.cuentacorriente.aplicacion.RegistrarAsiento;
+import pe.gob.sgtm.cuentacorriente.dominio.Agregacion;
 import pe.gob.sgtm.cuentacorriente.dominio.Asiento;
 import pe.gob.sgtm.cuentacorriente.dominio.CalculoDeDeuda;
 import pe.gob.sgtm.cuentacorriente.dominio.Concepto;
@@ -279,7 +280,9 @@ class ConsultaUnificadaJdbcTest {
             ConsultaUnificada.Ficha ficha = consulta.de(criterio(codigo), PAGINA);
             Pagina<ObligacionConDeuda> individual =
                     consultarDeuda.porContribuyente(
-                            new CriterioDeDeudaPorContribuyente(codigo, HOY, null), PAGINA);
+                            new CriterioDeDeudaPorContribuyente(
+                                    codigo, HOY, null, Agregacion.POR_OBLIGACION),
+                            PAGINA);
 
             assertThat(ficha.deudas().totalElementos())
                     .as("las mismas obligaciones, contadas igual")

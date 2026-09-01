@@ -1,10 +1,14 @@
 package pe.gob.sgtm.cuentacorriente.dominio;
 
 import java.time.LocalDate;
+import java.util.ArrayList;
 import java.util.Comparator;
+import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.Objects;
 import java.util.Optional;
+import java.util.TreeMap;
 import pe.gob.sgtm.dominio.Dinero;
 import pe.gob.sgtm.dominio.PoliticaDeRedondeo;
 
@@ -67,6 +71,52 @@ public final class CalculoDeDeuda {
         }
 
         return new DeudaActualizada(fecha, insoluto, reajuste, interes, gasto);
+    }
+
+    /**
+     * Lo que debe <b>cada periodo</b> de una obligacion a una fecha de corte, del primero al ultimo
+     * (#551).
+     *
+     * <p>Es {@link #deudaActualizadaA} aplicada por separado a cada cuota, y existe para que haya
+     * <b>una sola</b> definicion de esa cuenta. La necesitan dos sitios que tienen que coincidir al
+     * centimo: la lectura de {@code consulta_deuda} desglosada por periodo —lo que la pantalla
+     * ensena— y el reparto de la baja de una fila agregada (#598) —lo que el acto extingue—. Si
+     * cada uno la escribiera por su lado, lo que se lee en pantalla y lo que se puede dar de baja
+     * podrian divergir sin que ninguna cifra pareciera mal, que es el defecto que #397 documenta
+     * con las dos copias del {@code CASE} del «Estado».
+     *
+     * <p><b>El orden es por periodo y no el que traiga la lista</b>: el reparto recorre las cuotas
+     * de la primera a la ultima y ese orden es parte de lo que hace, asi que no puede depender de
+     * como ordene su {@code ORDER BY} el repositorio de turno.
+     *
+     * <p>{@code periodo} nulo es el 0 —la obligacion anual—, igual que en {@link
+     * ClaveDeSaldo#de(Asiento)}: es la unica traduccion, y aqui se respeta.
+     *
+     * @param asientos los de <b>una</b> obligacion, con todos sus periodos dentro
+     * @param fecha la fecha de corte (regla 9, RNF-075)
+     * @param redondeo la politica con la que {@link PoliticaDeMora} redondea lo que acumula (D-03)
+     * @return una entrada por periodo con al menos un asiento; un periodo sin ninguno no aparece,
+     *     porque «no hay obligacion» y «se debe 0,00» no son lo mismo y quien pregunta los
+     *     distingue
+     */
+    public Map<Integer, DeudaActualizada> deudaPorPeriodoA(
+            List<Asiento> asientos, LocalDate fecha, PoliticaDeRedondeo redondeo) {
+        Objects.requireNonNull(asientos, "La lista de asientos es vacia, no nula");
+
+        Map<Integer, List<Asiento>> porPeriodo = new TreeMap<>();
+        for (Asiento asiento : asientos) {
+            porPeriodo
+                    .computeIfAbsent(
+                            asiento.periodo() == null ? 0 : asiento.periodo(),
+                            cual -> new ArrayList<>())
+                    .add(asiento);
+        }
+
+        Map<Integer, DeudaActualizada> deudas = new LinkedHashMap<>();
+        porPeriodo.forEach(
+                (periodo, delPeriodo) ->
+                        deudas.put(periodo, deudaActualizadaA(delPeriodo, fecha, redondeo)));
+        return deudas;
     }
 
     /**
