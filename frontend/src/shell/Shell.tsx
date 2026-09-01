@@ -36,6 +36,7 @@ export function Shell({
   contexto,
   tarjeta,
   notasDeDestino,
+  pastillasDeDestino,
   paleta,
   children,
 }: {
@@ -56,8 +57,15 @@ export function Shell({
    * mientras la pantalla enseñe el juego de datos. En cuanto un destino lee del
    * backend, esa cifra queda contradicha por la que sale a su lado, así que el
    * módulo la sustituye por la que acaba de contar.
+   *
+   * **Sustituir la nota APAGA además su pastilla.** La pastilla es del mismo
+   * artboard —«8,662», «118», «214»— y quedaba encendida al lado de la nota
+   * contada, diciendo dos cifras distintas de lo mismo en la misma línea. Un
+   * módulo que sabe contar puede volver a encenderla con `pastillasDeDestino`.
    */
   notasDeDestino?: Record<string, string>;
+  /** La pastilla de un destino, cuando el módulo la ha contado de verdad. */
+  pastillasDeDestino?: Record<string, { texto: string; tono?: 'warn' | 'bad' }>;
   paleta?: EntradaDePaleta[];
   children: ReactNode;
 }) {
@@ -324,21 +332,31 @@ export function Shell({
                     {notasDeDestino?.[d.k] ?? d.nota}
                   </span>
                 </span>
-                {d.pastilla && (
-                  <span
-                    style={{
-                      fontFamily: 'var(--font-mono)',
-                      fontSize: 10.5,
-                      borderRadius: 999,
-                      padding: '2px 7px',
-                      flex: '0 0 auto',
-                      background: d.tono === 'bad' ? 'var(--bad-bg)' : 'var(--warn-bg)',
-                      color: d.tono === 'bad' ? 'var(--bad-fg)' : 'var(--warn-fg)',
-                    }}
-                  >
-                    {d.pastilla}
-                  </span>
-                )}
+                {(() => {
+                  /* La contada gana; y si el módulo sustituyó la nota sin contar
+                     la pastilla, no se dibuja ninguna: dos cifras distintas de
+                     lo mismo en la misma línea es peor que una sola. */
+                  const contada = pastillasDeDestino?.[d.k];
+                  const notaSustituida = notasDeDestino?.[d.k] !== undefined;
+                  const texto = contada?.texto ?? (notaSustituida ? undefined : d.pastilla);
+                  const tono = contada?.tono ?? d.tono;
+                  if (!texto) return null;
+                  return (
+                    <span
+                      style={{
+                        fontFamily: 'var(--font-mono)',
+                        fontSize: 10.5,
+                        borderRadius: 999,
+                        padding: '2px 7px',
+                        flex: '0 0 auto',
+                        background: tono === 'bad' ? 'var(--bad-bg)' : 'var(--warn-bg)',
+                        color: tono === 'bad' ? 'var(--bad-fg)' : 'var(--warn-fg)',
+                      }}
+                    >
+                      {texto}
+                    </span>
+                  );
+                })()}
               </button>
             );
           })}

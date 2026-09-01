@@ -412,6 +412,23 @@ export default function Rentas({ dest, onDest }: PantallaProps) {
     dest === 'padron' && sujeto === null,
   );
   const filasDelPadron = padron.datos?.contenido ?? [];
+
+  /**
+   * El contribuyente del expediente, leído del backend.
+   *
+   * Sin esto, `sujeto` solo decidía SI se dibujaba el expediente y nunca DE
+   * QUIÉN: el cuerpo entero salía del juego de datos, así que pulsar cualquier
+   * fila del padrón real abría la ficha de otra persona —con su nombre, su
+   * documento, sus predios y su deuda— y encima los botones de determinar,
+   * transferir y dar de alta deuda.
+   */
+  const expediente = useRecurso(
+    (senal) => buscarContribuyentes({ codigo: sujeto! }, { tamano: 2 }, senal),
+    [sujeto],
+    sujeto !== null && dest !== 'alta',
+  );
+  const contribuyenteAbierto =
+    (expediente.datos?.contenido ?? []).find((c) => c.codigo === sujeto) ?? null;
   const cargando = padron.cargando;
   const vacio = !padron.cargando && padron.error === null && padron.datos !== null && filasDelPadron.length === 0;
   const [tipo, setTipo] = useState<ClaveDeDeterminacion>('predial');
@@ -436,6 +453,44 @@ export default function Rentas({ dest, onDest }: PantallaProps) {
   }, [dest]);
 
   const esNuevo = dest === 'alta';
+
+  /**
+   * La franja del expediente.
+   *
+   * Con un contribuyente abierto son sus datos y **nada más**: el código, el
+   * documento, si es natural o jurídica y su condición especial, que es lo que
+   * `ContribuyenteResource` publica. Predios, autovalúo, vehículos y deuda
+   * salen «—»: viven en catastro, en el padrón vehicular y en cuenta corriente,
+   * y ponerlos aquí desde el juego de datos era enseñar la ficha de otra
+   * persona bajo el nombre de quien se acaba de buscar.
+   */
+  const resumenDelExpediente: { etiqueta: string; valor: string; color: string }[] = contribuyenteAbierto
+    ? [
+        { etiqueta: 'Código', valor: contribuyenteAbierto.codigo, color: 'var(--ink)' },
+        {
+          etiqueta: 'Documento',
+          valor: `${contribuyenteAbierto.tipoDocumento} ${contribuyenteAbierto.numeroDocumento}`,
+          color: 'var(--ink)',
+        },
+        {
+          etiqueta: 'Persona',
+          valor: contribuyenteAbierto.tipoPersona === 'JURIDICA' ? 'Jurídica' : 'Natural',
+          color: 'var(--ink)',
+        },
+        { etiqueta: 'Condición especial', valor: contribuyenteAbierto.condicionEspecial ?? '—', color: 'var(--ink)' },
+        { etiqueta: 'Estado', valor: contribuyenteAbierto.activo ? 'Activo' : 'Inactivo', color: contribuyenteAbierto.activo ? 'var(--ok-fg)' : 'var(--bad-fg)' },
+        { etiqueta: 'Deuda', valor: '—', color: 'var(--ink-4)' },
+      ]
+    : esNuevo
+      ? [
+          { etiqueta: 'Código', valor: '—', color: 'var(--ink-4)' },
+          { etiqueta: 'Documento', valor: '—', color: 'var(--ink-4)' },
+          { etiqueta: 'Persona', valor: '—', color: 'var(--ink-4)' },
+          { etiqueta: 'Condición especial', valor: '—', color: 'var(--ink-4)' },
+          { etiqueta: 'Estado', valor: 'Sin registrar', color: 'var(--warn-fg)' },
+          { etiqueta: 'Deuda', valor: '—', color: 'var(--ink-4)' },
+        ]
+      : RESUMEN_DEL_EXPEDIENTE;
   useEffect(() => {
     if (esNuevo) {
       setCerradas({});
@@ -691,10 +746,16 @@ export default function Rentas({ dest, onDest }: PantallaProps) {
     esExpediente && !esNuevo
       ? {
           volver: { label: 'Padrón', onClick: () => setSujeto(null) },
-          codigo: String(DEFECTOS.codigo),
-          titular: 'SUC. RUFINA MEDINA MEDINA',
-          ubic: 'DNI 03593174 · 2 predios · 003 pequeño contribuyente',
-          estado: sucio ? 'Cambios sin guardar' : 'Guardado · última edición 12/08/2026',
+          codigo: contribuyenteAbierto?.codigo ?? sujeto ?? String(DEFECTOS.codigo),
+          titular: expediente.cargando
+            ? 'Leyendo el padrón…'
+            : expediente.error
+              ? 'No se pudo leer este contribuyente'
+              : (contribuyenteAbierto?.nombreRazonSocial ?? 'Ese código no está en el padrón'),
+          ubic: contribuyenteAbierto
+            ? `${contribuyenteAbierto.tipoDocumento} ${contribuyenteAbierto.numeroDocumento} · ${contribuyenteAbierto.tipoPersona === 'JURIDICA' ? 'Jurídica' : 'Natural'}`
+            : '',
+          estado: sucio ? 'Cambios sin guardar' : contribuyenteAbierto ? 'Del padrón' : '',
           estadoColor: sucio ? 'var(--warn-fg)' : 'var(--ok-fg)',
         }
       : esDeuda
@@ -975,7 +1036,7 @@ export default function Rentas({ dest, onDest }: PantallaProps) {
           <div style={COLUMNA}>
             <section style={TARJETA}>
               <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit,minmax(150px,1fr))', gap: 0, background: 'var(--bg-card)' }}>
-                {RESUMEN_DEL_EXPEDIENTE.map((r) => (
+                {resumenDelExpediente.map((r) => (
                   <div
                     key={r.etiqueta}
                     style={{
