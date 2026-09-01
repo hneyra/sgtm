@@ -5,6 +5,7 @@ import { Icono } from '../../ds/Icono';
 import { ICO } from '../../ds/iconos';
 import { Insignia, type Tono } from '../../ds/componentes';
 import { usarPreferencias } from '../../shell/preferencias';
+import { causasDelRechazo } from '../../api/Fallo';
 import {
   BANDEJA,
   COLS_ACTOS,
@@ -338,7 +339,10 @@ function EstadoDeLectura({
           : e.codigo === 'NO_AUTENTICADO'
             ? 'La sesión no vale'
             : e.codigo === 'VALIDACION'
-              ? 'El servidor no admite esa consulta'
+              ? /* No dice «no admite esa consulta»: un 422 de coactiva puede ser
+                   también el arancel de costas sin publicar (#562), y ese
+                   titular manda a corregir unos criterios que están bien. */
+                'El servidor rechazó esta consulta'
               : 'No se pudo leer'}
       </p>
       <p style={{ margin: 0, maxWidth: '58ch', fontSize: 12.5, lineHeight: 1.55, color: 'var(--ink-3)', textAlign: 'center', textWrap: 'pretty' }}>
@@ -1516,6 +1520,18 @@ export default function Coactiva({ dest, onDest }: PantallaProps) {
                       <Franja tono="bad">
                         {falloDeEscritura.mensaje}
                         {falloDeEscritura.incidencia ? ` · ref ${falloDeEscritura.incidencia}` : ''}
+                        {/* Dictar la REC-1 lee su plazo del conjunto sellado, y
+                            desde #562 eso contesta 422 nombrando la llave en vez
+                            de un 500 con incidencia. El 422 llega con el mismo
+                            código que un campo mal puesto, así que la pantalla
+                            no lo adivina: dice las dos causas y en qué se
+                            reconocen. Va sólo aquí —importar valores no lee
+                            ningún parámetro sellado— y sólo en el 422. */}
+                        {causasDelRechazo(falloDeEscritura, 'PLAZO:REC1_CUMPLIMIENTO') !== null && (
+                          <span style={{ display: 'block', marginTop: 6, opacity: 0.85 }}>
+                            {causasDelRechazo(falloDeEscritura, 'PLAZO:REC1_CUMPLIMIENTO')}
+                          </span>
+                        )}
                       </Franja>
                     )}
 

@@ -23,6 +23,7 @@ import {
 import { useRebote, useRecurso, type Estado } from '../../api/useRecurso';
 import { Descargas, type FormatoDeDocumento } from '../../api/descarga';
 import { ErrorDeApi, fijarToken } from '../../api/cliente';
+import { causasDelRechazo } from '../../api/Fallo';
 import { cuentaActual, hayPuerta } from '../../api/sesion';
 import {
   descargarPadronDeNotificaciones,
@@ -261,7 +262,11 @@ function tituloDelFallo(error: ErrorDeApi | null, que: string): string {
       return 'El acto choca con algo que ya está registrado';
     case 'VALIDACION':
     case 'ORDEN_NO_ADMITIDO':
-      return 'El servidor no admite lo que se le mandó';
+      /* No dice «no admite lo que se le mandó»: dictar una resolución de
+         gerencia lee su plazo del conjunto sellado, y desde #562 eso contesta
+         422 nombrando la llave en vez de un 500 opaco. Con aquel titular, quien
+         atiende se pone a corregir un formulario que está bien. */
+      return 'El servidor rechazó la operación';
     case 'SIN_RESPUESTA':
       return error.estado === 0 ? 'No se pudo contactar con el servidor' : 'El servidor contestó otra cosa';
     default:
@@ -1131,6 +1136,14 @@ export default function Sanciones({ dest, onDest }: PantallaProps) {
               <div role="alert" style={{ display: 'flex', flexDirection: 'column', gap: 4, padding: '12px 14px', borderRadius: 8, background: 'var(--bad-bg)', color: 'var(--bad-fg)' }}>
                 <strong style={{ fontSize: 12.5 }}>{tituloDelFallo(falloDelActo, 'el acto')}</strong>
                 <span style={{ fontSize: 12.5, lineHeight: 1.55, textWrap: 'pretty' }}>{falloDelActo.mensaje}</span>
+                {/* Las dos causas de un 422 llegan con el mismo código y la
+                    respuesta no trae ningún discriminador: se dicen las dos y en
+                    qué se reconocen, en vez de clasificar por subcadena (#562). */}
+                {causasDelRechazo(falloDelActo, 'PLAZO:RG_ORDINARIA_CUMPLIMIENTO') !== null && (
+                  <span style={{ fontSize: 12, lineHeight: 1.5, textWrap: 'pretty', opacity: 0.85 }}>
+                    {causasDelRechazo(falloDelActo, 'PLAZO:RG_ORDINARIA_CUMPLIMIENTO')}
+                  </span>
+                )}
                 {falloDelActo.detalles && falloDelActo.detalles.length > 0 && (
                   <span style={{ fontFamily: 'var(--font-mono)', fontSize: 11.5 }}>{falloDelActo.detalles.join(' · ')}</span>
                 )}
