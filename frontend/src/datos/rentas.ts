@@ -724,6 +724,20 @@ export const DETERMINACIONES: Record<ClaveDeDeterminacion, DeterminacionDef> = {
 export type PasoDeTransferencia = { label: string; nota: string; campos: CampoDef[] };
 export type ClaveDeTransferencia = 'predio' | 'vehiculo';
 
+/* Los valores por omision de este formulario se han ido, y no todos por el mismo
+   motivo. Los que identifican el acto —codigo predial, placa, documentos de las
+   dos partes, fecha, minuta— y los que lo cuantifican —% transferido, valor de
+   transferencia— llegaban prellenados con una compraventa de la maqueta: quien
+   abre la pantalla se encuentra un acto entero escrito, y pulsar tres veces
+   «Continuar» y una «Registrar transferencia» cambiaria el titular de un predio
+   real. Ademas el importe venia con separador de miles («95,000.00»), que
+   `new BigDecimal(texto)` rechaza: 422 culpando al dato que el propio formulario
+   escribio. Lo que se queda es el valor por omision de los desplegables cerrados,
+   que es una eleccion legitima entre opciones y no un dato de nadie.
+
+   Los cuatro `ro` de nombre y los cuatro de afectacion tampoco llevan valor: los
+   resuelve la pantalla contra el padron —o contra el titular de la placa— y salen
+   «—» mientras no haya a quien resolver. */
 export const TRANSFERENCIAS: Record<ClaveDeTransferencia, { label: string; pasos: PasoDeTransferencia[] }> = {
   predio: {
     label: 'De predio',
@@ -732,7 +746,7 @@ export const TRANSFERENCIAS: Record<ClaveDeTransferencia, { label: string; pasos
         label: 'El acto',
         nota: 'Qué documento transfiere la propiedad y desde cuándo. La fecha del acto decide hasta cuándo responde el vendedor.',
         campos: [
-          { k: 'exp', l: 'Nº de expediente', t: 'text', v: '2026-0918' },
+          { k: 'exp', l: 'Nº de expediente', t: 'text', ayuda: 'No viaja: el cuerpo de la transferencia no tiene campo para él' },
           {
             k: 'tipoActo',
             l: 'Tipo de acto',
@@ -740,30 +754,29 @@ export const TRANSFERENCIAS: Record<ClaveDeTransferencia, { label: string; pasos
             v: 'COMPRA-VENTA',
             o: ['COMPRA-VENTA', 'DONACIÓN', 'PERMUTA', 'ANTICIPO DE LEGÍTIMA', 'ADJUDICACIÓN', 'DACIÓN EN PAGO', 'SUCESIÓN'],
           },
-          { k: 'fechaActo', l: 'Fecha del acto', t: 'date', v: '2026-07-18' },
-          { k: 'minuta', l: 'Nº de minuta / escritura', t: 'text', v: 'EP-2218-2026' },
-          { k: 'notaria', l: 'Notaría', t: 'text', v: 'NOTARÍA ZAPATA — CATACAOS' },
+          { k: 'fechaActo', l: 'Fecha del acto', t: 'date' },
+          { k: 'minuta', l: 'Nº de minuta / escritura', t: 'text', ayuda: 'Es el sustento documental del acto: sin él no se registra' },
+          { k: 'notaria', l: 'Notaría', t: 'text', ayuda: 'No viaja: el cuerpo de la transferencia no tiene campo para ella' },
           {
             k: 'codPredial',
             l: 'Código predial',
             t: 'text',
-            v: '04-021-B-07-00',
             ayuda: 'Se resuelve contra el padrón: el identificador interno no se teclea',
           },
-          { k: 'pctTransf', l: '% transferido', t: 'text', v: '50.00' },
-          { k: 'valorTransf', l: 'Valor de transferencia (S/)', t: 'text', v: '95,000.00' },
+          { k: 'pctTransf', l: '% transferido', t: 'text', ph: '100.00' },
+          { k: 'valorTransf', l: 'Valor de transferencia (S/)', t: 'text', ph: '0.00', ayuda: 'Sin separador de miles: el backend lo lee como un número' },
         ],
       },
       {
         label: 'Las partes',
         nota: 'Quién vende y quién compra. Los nombres los pone el padrón; lo que se teclea es el documento.',
         campos: [
-          { k: 'trDoc', l: 'Transferente — documento', t: 'text', v: '44218937' },
-          { k: 'trNom', l: 'Transferente — nombre', t: 'ro', v: 'CASTILLO PASCUALA, MARÍA ELENA' },
-          { k: 'trHasta', l: 'Transferente afecto hasta', t: 'ro', v: '31/12/2026' },
-          { k: 'adDoc', l: 'Adquirente — documento', t: 'text', v: '02718844' },
-          { k: 'adNom', l: 'Adquirente — nombre', t: 'ro', v: 'DÍAZ MADRID, JULIO CÉSAR' },
-          { k: 'adDesde', l: 'Adquirente afecto desde', t: 'ro', v: '01/01/2027' },
+          { k: 'trDoc', l: 'Transferente — documento', t: 'text' },
+          { k: 'trNom', l: 'Transferente — nombre', t: 'ro' },
+          { k: 'trHasta', l: 'Transferente afecto hasta', t: 'ro' },
+          { k: 'adDoc', l: 'Adquirente — documento', t: 'text' },
+          { k: 'adNom', l: 'Adquirente — nombre', t: 'ro' },
+          { k: 'adDesde', l: 'Adquirente afecto desde', t: 'ro' },
           { k: 'genAlcabala', l: 'Genera alcabala', t: 'chk', v: true, ph: 'Liquida el impuesto de alcabala al registrar' },
         ],
       },
@@ -777,9 +790,9 @@ export const TRANSFERENCIAS: Record<ClaveDeTransferencia, { label: string; pasos
         label: 'El acto',
         nota: 'El transferente responde por el impuesto hasta el 31 de diciembre del año en que se produce la venta.',
         campos: [
-          { k: 'vPlaca', l: 'Placa', t: 'text', v: 'T2G-418' },
-          { k: 'vExp', l: 'Nº de expediente', t: 'text', v: '2026-0944' },
-          { k: 'vFecha', l: 'Fecha de transferencia', t: 'date', v: '2026-06-20' },
+          { k: 'vPlaca', l: 'Placa', t: 'text', ph: 'T2G-418' },
+          { k: 'vExp', l: 'Nº de expediente', t: 'text', ayuda: 'No viaja: el cuerpo de la transferencia no tiene campo para él' },
+          { k: 'vFecha', l: 'Fecha de transferencia', t: 'date' },
           { k: 'vTipo', l: 'Tipo de acto', t: 'sel', v: 'COMPRA-VENTA', o: ['COMPRA-VENTA', 'DONACIÓN', 'REMATE', 'HERENCIA', 'DACIÓN EN PAGO'] },
           {
             k: 'vDocSust',
@@ -787,21 +800,27 @@ export const TRANSFERENCIAS: Record<ClaveDeTransferencia, { label: string; pasos
             t: 'sel',
             v: 'ACTA NOTARIAL DE TRANSFERENCIA',
             o: ['ACTA NOTARIAL DE TRANSFERENCIA', 'CONTRATO CON FIRMA LEGALIZADA', 'PARTE REGISTRAL', 'RESOLUCIÓN JUDICIAL'],
+            ayuda: 'La clase no viaja: lo que se guarda como sustento es el número de abajo',
           },
-          { k: 'vNumDoc', l: 'Nº del documento', t: 'text', v: 'AN-1182-2026' },
-          { k: 'vValor', l: 'Valor de transferencia (S/)', t: 'text', v: '42,000.00' },
+          { k: 'vNumDoc', l: 'Nº del documento', t: 'text', ayuda: 'Es el sustento documental del acto: sin él no se registra' },
+          { k: 'vValor', l: 'Valor de transferencia (S/)', t: 'text', ph: '0.00', ayuda: 'Sin separador de miles: el backend lo lee como un número' },
         ],
       },
       {
         label: 'Las partes',
         nota: 'El titular vigente lo resuelve el sistema desde la placa: no se elige.',
         campos: [
-          { k: 'vTrDoc', l: 'Transferente — documento', t: 'text', v: '44218937' },
-          { k: 'vTrNom', l: 'Transferente — nombre', t: 'ro', v: 'CASTILLO PASCUALA, MARÍA ELENA' },
-          { k: 'vTrHasta', l: 'Afecto hasta', t: 'ro', v: '31/12/2026' },
-          { k: 'vAdDoc', l: 'Adquirente — documento', t: 'text', v: '03593174' },
-          { k: 'vAdNom', l: 'Adquirente — nombre', t: 'ro', v: 'SUC. RUFINA MEDINA MEDINA' },
-          { k: 'vAdDesde', l: 'Afecto desde', t: 'ro', v: '01/01/2027' },
+          /* «Transferente — documento» pasa de caja de texto a `ro`: el cuerpo de
+             `POST /rentas/transferencias/vehiculo` no tiene `codTransferente` —el
+             backend toma al titular vigente de la placa—, asi que lo que se
+             tecleara ahi no llegaria a ningun sitio. Lo dice la nota del propio
+             manual: «El titular vigente lo resuelve el sistema desde la placa». */
+          { k: 'vTrDoc', l: 'Transferente — documento', t: 'ro' },
+          { k: 'vTrNom', l: 'Transferente — nombre', t: 'ro' },
+          { k: 'vTrHasta', l: 'Afecto hasta', t: 'ro' },
+          { k: 'vAdDoc', l: 'Adquirente — documento', t: 'text' },
+          { k: 'vAdNom', l: 'Adquirente — nombre', t: 'ro' },
+          { k: 'vAdDesde', l: 'Afecto desde', t: 'ro' },
         ],
       },
       { label: 'Deuda y registro', nota: '', campos: [] },
@@ -809,56 +828,67 @@ export const TRANSFERENCIAS: Record<ClaveDeTransferencia, { label: string; pasos
   },
 };
 
-/** La deuda del transferente que el tercer paso comprueba. */
-export const DEUDA_DEL_TRANSFERENTE: { estado: string; tono: 'ok' | 'warn' | 'bad'; concepto: string; detalle: string; monto: number }[] = [
-  {
-    estado: 'Vencida',
-    tono: 'bad',
-    concepto: 'Impuesto predial 2024 — cuotas 1 a 4',
-    detalle: '02-014-D-14-01 · vencida el 30/11/2024',
-    monto: 2055.04,
-  },
-  {
-    estado: 'Vencida',
-    tono: 'warn',
-    concepto: 'Arbitrios 2026 — cuotas 1 a 8',
-    detalle: '02-014-D-14-01 · última vencida el 31/08/2026',
-    monto: 291.6,
-  },
-  { estado: 'Al día', tono: 'ok', concepto: 'Impuesto predial 2026 — cuotas 3 y 4', detalle: 'Vencen el 31/08 y el 30/11', monto: 293.72 },
-];
+/* `DEUDA_DEL_TRANSFERENTE` se ha ido. Eran tres conceptos con sus importes
+   —S/ 2,640.36 en total— dibujados en el ultimo paso, justo encima de «Registrar
+   transferencia», como si fueran lo que debe el vendedor de ESTE acto. La deuda
+   del transferente se lee de `GET /consultas/deuda` con su codigo, que en el
+   predio sale del documento tecleado y en el vehiculo del titular de la placa. */
 
 /* ══════════ Movimientos de deuda ══════════ */
 
 export const CAMPOS_DEL_ALTA: CampoDef[] = [
   {
     k: 'altaConcepto',
+    /* Los rotulos del manual —«IMPUESTO PREDIAL», «ARBITRIOS MUNICIPALES»— NO son
+       el vocabulario del libro, y ofrecerlos tiene dos consecuencias distintas y
+       las dos malas: `cuenta_corriente_asiento.tributo` es `varchar(20)` (V2), asi
+       que «ARBITRIOS MUNICIPALES» (21) y «DERECHOS ADMINISTRATIVOS» (24) dan 422
+       —«El tributo va de 1 a 20 caracteres»— DESPUES de rellenar el formulario; y
+       los que si caben entrarian con una grafia que ninguna otra parte del sistema
+       escribe, de modo que la obligacion nacida aqui quedaria al lado de la deuda
+       del mismo tributo en vez de sumarse a ella, invisible para `consulta_deuda`.
+       Se ofrecen las grafias que el sistema SI escribe —`Determinacion`,
+       `DeterminarArbitrios`, `ObligacionDeLaPapeleta`, `TransferirARentas`— y la
+       ayuda dice cual queda fuera. Es la regla de #427: parecerse no es serlo. */
     l: 'Concepto / tributo',
     t: 'sel',
-    o: ['IMPUESTO PREDIAL', 'ARBITRIOS MUNICIPALES', 'PATRIMONIO VEHICULAR', 'ALCABALA', 'MULTA TRIBUTARIA', 'MULTA ADMINISTRATIVA', 'DERECHOS ADMINISTRATIVOS'],
+    v: 'PREDIAL',
+    o: ['PREDIAL', 'ARBITRIO', 'VEHICULAR', 'ALCABALA', 'MULTA_TRIBUTARIA', 'MULTA_ADMINISTRATIVA'],
+    ayuda:
+      'Son los nombres con que el libro escribe cada tributo, no los rótulos del manual: es lo que viaja y lo que decide sobre qué obligación cae el alta. «DERECHOS ADMINISTRATIVOS» queda fuera porque ningún acto del sistema lo asienta.',
   },
   {
     k: 'altaUnidad',
     l: 'Unidad (predio / placa)',
     t: 'text',
-    ayuda: 'Se resuelve contra el padrón de predios y de vehículos: el identificador interno no se teclea',
+    ayuda:
+      'Código predial o placa. Se resuelve contra el padrón antes de mandar: el identificador interno no se teclea. En blanco, el alta cae sobre la obligación SIN unidad, que es otra distinta de la del predio.',
   },
-  { k: 'altaAnio', l: 'Año', t: 'sel', o: ['2026', '2025', '2024', '2023', '2022'] },
-  { k: 'altaCuotaD', l: 'Cuota desde', t: 'text' },
-  { k: 'altaCuotaH', l: 'Cuota hasta', t: 'text' },
-  { k: 'altaInsoluto', l: 'Insoluto (S/)', t: 'text' },
-  { k: 'altaReajuste', l: 'Reajuste (S/)', t: 'text' },
-  { k: 'altaInteres', l: 'Interés (S/)', t: 'text' },
-  { k: 'altaGastos', l: 'Gastos (S/)', t: 'text' },
-  { k: 'altaVence', l: 'Fecha de vencimiento', t: 'date' },
+  /* El valor por omision es el primero de la lista a proposito: un desplegable que
+     ensena «2026» y manda «2024» es el defecto de #331. */
+  { k: 'altaAnio', l: 'Año', t: 'sel', v: '2026', o: ['2026', '2025', '2024', '2023', '2022'] },
+  { k: 'altaCuotaD', l: 'Cuota desde', t: 'text', ayuda: '0 es anual; 1 a 12, la cuota o el mes' },
+  { k: 'altaCuotaH', l: 'Cuota hasta', t: 'text', ayuda: 'No viaja: el backend registra una cuota por acto' },
+  { k: 'altaInsoluto', l: 'Insoluto (S/)', t: 'text', ph: '0.00' },
+  { k: 'altaReajuste', l: 'Reajuste (S/)', t: 'text', ph: '0.00' },
+  { k: 'altaInteres', l: 'Interés (S/)', t: 'text', ph: '0.00' },
+  { k: 'altaGastos', l: 'Gastos (S/)', t: 'text', ph: '0.00' },
+  {
+    k: 'altaVence',
+    l: 'Fecha de vencimiento',
+    t: 'date',
+    ayuda: 'No viaja: el cuerpo del movimiento sólo tiene la fecha con efecto tributario, y es la del acto',
+  },
   {
     k: 'altaDocSust',
     l: 'Documento que sustenta',
     t: 'sel',
+    v: 'RESOLUCIÓN DE DETERMINACIÓN',
     o: ['RESOLUCIÓN DE DETERMINACIÓN', 'RESOLUCIÓN DE MULTA', 'ACTA DE FISCALIZACIÓN', 'MIGRACIÓN DE SISTEMA ANTERIOR', 'RESOLUCIÓN GERENCIAL'],
+    ayuda: 'La clase no viaja: lo que se guarda como sustento es el número de abajo',
   },
-  { k: 'altaNumDoc', l: 'Nº del documento', t: 'text' },
-  { k: 'altaMotivo', l: 'Motivo del alta', t: 'area', ancho: true },
+  { k: 'altaNumDoc', l: 'Nº del documento', t: 'text', ayuda: 'Obligatorio: sin la resolución que lo aprueba, un alta no se puede defender ante nadie' },
+  { k: 'altaMotivo', l: 'Motivo del alta', t: 'area', ancho: true, ayuda: 'No viaja: el motivo que se audita es la observación del acto' },
 ];
 
 export const CAMPOS_DE_LA_BAJA: CampoDef[] = [
@@ -866,29 +896,47 @@ export const CAMPOS_DE_LA_BAJA: CampoDef[] = [
     k: 'causal',
     l: 'Causal',
     t: 'sel',
+    v: 'PRESCRIPCIÓN DECLARADA',
     o: ['PRESCRIPCIÓN DECLARADA', 'RESOLUCIÓN QUE DEJA SIN EFECTO', 'ERROR MATERIAL', 'COMPENSACIÓN', 'DEUDA DE COBRANZA DUDOSA', 'CONDONACIÓN POR ORDENANZA'],
+    /* `PeticionDeMovimiento` no tiene campo para la causal, asi que se copia a la
+       observacion, que es donde queda auditada (RNF-052). Dejarla suelta seria un
+       desplegable que se elige y no llega: el defecto de #331. */
+    ayuda: 'El cuerpo del backend no tiene campo propio para la causal: se antepone a la observación, que es donde queda auditada',
   },
-  { k: 'numRes', l: 'Nº de resolución', t: 'text' },
-  { k: 'fechaRes', l: 'Fecha de resolución', t: 'date' },
-  { k: 'autorizado', l: 'Autorizado por', t: 'ro' },
-  { k: 'motivoBaja', l: 'Motivo', t: 'area', ancho: true },
+  { k: 'numRes', l: 'Nº de resolución', t: 'text', ayuda: 'Es el sustento documental de la baja: sin él no se registra' },
+  {
+    k: 'fechaRes',
+    l: 'Fecha de resolución',
+    t: 'date',
+    /* Hace dos cosas: es la `fechaValor` del movimiento y es la fecha a la que se
+       lee la deuda de arriba, porque el backend valida la baja contra
+       `deudaActualizadaA(fechaValor)`. Leerla a hoy y darla de baja a otra fecha
+       produciria `BajaMayorQueLaDeuda` sin que se viera por que. */
+    ayuda: 'Es también la fecha a la que se lee la deuda de arriba: la baja se compara contra lo que se debía ese día',
+  },
+  { k: 'autorizado', l: 'Autorizado por', t: 'ro', ayuda: 'Ninguna lectura publica quién autoriza: va en la resolución' },
+  { k: 'motivoBaja', l: 'Motivo', t: 'area', ancho: true, ayuda: 'No viaja: el motivo que se audita es la observación del acto' },
 ];
 
+/* Las cuatro filas de muestra de la baja se han ido, y no por limpieza: eran la
+   deuda de otra persona con una casilla al lado, y marcarlas extinguia —o lo
+   habria hecho— una cuota que nadie miro. La deuda que se puede dar de baja se
+   lee de `GET /consultas/deuda` a la fecha de la resolucion, que es la misma
+   fecha contra la que el backend valida el movimiento. La columna «Unidad» sigue
+   dibujandose porque el manual la dibuja, y sale «—»:
+   `ObligacionConDeudaResource` publica `predioId`/`vehiculoId` —identificadores
+   internos— y no el codigo predial ni la placa, que es lo que ahi se leeria. */
 export const COLS_DE_LA_BAJA: ColDef[] = [
   ['Año', 0],
   ['Unidad', 0],
   ['Cuota', 0],
   ['Tributo', 0],
+  ['Fase', 0],
   ['Insoluto S/', 1],
+  ['Reajuste S/', 1],
   ['Interés S/', 1],
+  ['Gasto S/', 1],
   ['Total S/', 1],
-];
-
-export const FILAS_DE_LA_BAJA: string[][] = [
-  ['2016', '02-014-D-14-01', '1-4', 'IMPUESTO PREDIAL', '482.40', '388.12', '870.52'],
-  ['2016', '02-014-D-14-01', '1-12', 'ARBITRIOS', '412.00', '331.44', '743.44'],
-  ['2024', '02-014-D-14-01', '1-4', 'IMPUESTO PREDIAL', '1,842.60', '212.44', '2,055.04'],
-  ['2025', 'T2G-418', '1', 'PATRIMONIO VEHICULAR', '614.00', '182.44', '796.44'],
 ];
 
 /* ══════════ Panel del módulo ══════════ */
@@ -992,14 +1040,11 @@ export const CHIPS_DEL_PADRON: [clave: string, label: string][] = [
 
 /* ══════════ Expediente: cabecera ══════════ */
 
-export const RESUMEN_DEL_EXPEDIENTE: { etiqueta: string; valor: string; color: string }[] = [
-  { etiqueta: 'Código', valor: '00000025673', color: 'var(--ink)' },
-  { etiqueta: 'Documento', valor: 'DNI 03593174', color: 'var(--ink)' },
-  { etiqueta: 'Predios', valor: '2', color: 'var(--ink)' },
-  { etiqueta: 'Autovalúo acumulado', valor: 'S/ 170,616.75', color: 'var(--ink)' },
-  { etiqueta: 'Vehículos afectos', valor: '1', color: 'var(--ink)' },
-  { etiqueta: 'Deuda al 31/08/2026', valor: 'S/ 1,842.60', color: 'var(--bad-fg)' },
-];
+/* `RESUMEN_DEL_EXPEDIENTE` se ha ido. Era el valor por omision de las seis celdas
+   de la cabecera, y por tanto lo que se dibujaba cuando la lectura del
+   contribuyente FALLABA: sobre el codigo real de quien se acababa de pulsar
+   aparecian el codigo, el DNI, los dos predios, el autovaluo y la deuda de otra
+   persona. Ahora la cabecera sale de la lectura o dice que no se pudo leer. */
 
 /* ══════════ Declaración jurada ══════════ */
 
@@ -1126,22 +1171,17 @@ export const DEFECTOS: Record<string, string | boolean> = {
   espAforo: '2400',
   espRuc: '20525118880',
   espGarantia: '8,400.00',
-  causal: 'PRESCRIPCIÓN DECLARADA',
-  numRes: 'RGAT-0244-2026-MDC',
-  fechaRes: '2026-08-04',
-  autorizado: 'Gerencia de Administración Tributaria',
-  motivoBaja: 'Prescripción declarada de los ejercicios 2014 a 2016 conforme al artículo 43º del Código Tributario.',
-  altaConcepto: 'IMPUESTO PREDIAL',
-  altaUnidad: '02-014-D-14-01',
-  altaAnio: '2024',
-  altaCuotaD: '1',
-  altaCuotaH: '4',
-  altaInsoluto: '1,842.60',
-  altaReajuste: '84.20',
-  altaInteres: '212.44',
-  altaGastos: '0.00',
-  altaVence: '2024-11-30',
-  altaDocSust: 'RESOLUCIÓN DE DETERMINACIÓN',
-  altaNumDoc: 'RD-2026-000418',
-  altaMotivo: 'Deuda omitida detectada en fiscalización predial del programa PF-2026-014.',
+  /* Los valores por omision de las dos hojas de deuda se han ido. El alta y la
+     baja escriben en la cuenta corriente, y llegaban con una obligacion entera
+     escrita: S/ 1,842.60 de insoluto, su reajuste, su interes, el predio
+     «02-014-D-14-01» y la resolucion «RD-2026-000418» que la sustenta —el numero
+     que viaja como `documentoOrigen`—. Ninguna de esas cifras respalda ninguna
+     norma ni ningun expediente: son de la maqueta, y un alta que las mandara
+     incorporaria deuda inventada a quien estuviera abierto. Los importes ademas
+     venian con separador de miles, que el backend rechaza con 422 nombrando el
+     campo que el propio formulario relleno.
+
+     `autorizado` es `ro` y ninguna lectura lo publica, asi que sale «—»
+     (CONECTAR.md, salida 3) en vez de una gerencia que nadie firmo. */
+  autorizado: '—',
 };
