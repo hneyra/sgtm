@@ -110,6 +110,16 @@ export type Opciones = {
   parametros?: Record<string, string | number | boolean | null | undefined>;
   cuerpo?: unknown;
   senal?: AbortSignal;
+  /**
+   * Cabeceras propias de la operacion.
+   *
+   * Existe por una sola razon y conviene no ampliarla sin motivo:
+   * `Idempotency-Key`. La caja la lee y, ante un reenvio, devuelve el recibo YA
+   * emitido en vez de cobrar dos veces. Sin poder mandarla, el reintento del
+   * navegador tras un tiempo de espera agotado da un error donde debia dar el
+   * recibo — y quien atiende no sabe si cobro o no.
+   */
+  cabeceras?: Record<string, string>;
 };
 
 export async function solicitar<T>(ruta: string, opciones: Opciones = {}): Promise<T> {
@@ -125,6 +135,7 @@ export async function solicitar<T>(ruta: string, opciones: Opciones = {}): Promi
   const jwt = token();
   if (jwt) cabeceras.Authorization = `Bearer ${jwt}`;
   if (cuerpo !== undefined) cabeceras['Content-Type'] = 'application/json';
+  Object.assign(cabeceras, opciones.cabeceras ?? {});
 
   let respuesta: Response;
   try {
@@ -211,3 +222,65 @@ export type RespuestaPaginada<T> = {
   totalPaginas: number;
   hayMas: boolean;
 };
+
+
+/**
+ * Una clave de idempotencia para un intento de escritura.
+ *
+ * **Se genera una vez por intento, no por envio.** Regenerarla en cada envio
+ * convierte un reintento en un segundo cobro, que es exactamente lo que la
+ * clave existe para impedir.
+ */
+export function claveDeIdempotencia(): string {
+  return crypto.randomUUID();
+}
+
+/**
+ * Descarga un documento del backend y lo entrega al navegador.
+ *
+ * `solicitar()` no sirve: parsea JSON y un PDF no cabe por ahi. Va aparte —y no
+ * con un `fetch` suelto en la pantalla— para que el token, la raiz de la API y
+ * el trato de los errores sigan estando en un solo sitio.
+ */
+export async function descargar(
+  ruta: string,
+  parametros: Record<string, string | number | undefined> = {},
+  nombre?: string,
+): Promise<void> {
+  const url = new URL(RAIZ + ruta, window.location.origin);
+  for (const [clave, valor] of Object.entries(parametros)) {
+    if (valor === undefined || valor === '') continue;
+    url.searchParams.set(clave, String(valor));
+  }
+  const jwt = token();
+
+  let respuesta: Response;
+  try {
+    respuesta = await fetch(url, { headers: jwt ? { Authorization: `Bearer ${jwt}` } : {} });
+  } catch {
+    throw new ErrorDeApi('SIN_RESPUESTA', 'No se pudo contactar con el servidor', 0);
+  }
+  if (!respuesta.ok) {
+    /* El error SI viene en JSON, asi que se lee con el mismo trato de siempre:
+       un 500 de aqui tiene que decir lo mismo que un 500 de cualquier lectura. */
+    const texto = await respuesta.text();
+    throw errorDe(respuesta.status, texto ? intentarLeer(texto) : null);
+  }
+
+  const blob = await respuesta.blob();
+  const enlace = document.createElement('a');
+  const objeto = URL.createObjectURL(blob);
+  enlace.href = objeto;
+  enlace.download = nombre ?? deLaCabecera(respuesta) ?? 'documento';
+  document.body.appendChild(enlace);
+  enlace.click();
+  document.body.removeChild(enlace);
+  URL.revokeObjectURL(objeto);
+}
+
+/** El nombre que el propio backend propone en `Content-Disposition`. */
+function deLaCabecera(respuesta: Response): string | null {
+  const cabecera = respuesta.headers.get('Content-Disposition');
+  const encontrado = cabecera?.match(/filename="?([^";]+)"?/);
+  return encontrado ? encontrado[1]! : null;
+}
