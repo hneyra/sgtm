@@ -37,6 +37,7 @@ import pe.gob.sgtm.documentos.FormatoDeDocumento;
 import pe.gob.sgtm.dominio.ModalidadDeNotificacion;
 import pe.gob.sgtm.dominio.Observacion;
 import pe.gob.sgtm.dominio.ResultadoDeNotificacion;
+import pe.gob.sgtm.parametros.LectorDeParametros;
 import pe.gob.sgtm.web.Api;
 import pe.gob.sgtm.web.CodigoDeError;
 import pe.gob.sgtm.web.FiltroDeLaConsulta;
@@ -65,6 +66,30 @@ import pe.gob.sgtm.web.ProblemaDeNegocio;
  * lleva del documento es su numero, su formato, su resumen SHA-256 y su tamanio; la descarga es
  * otra peticion. Meter un PDF en base64 dentro de un JSON lo hincha un tercio, y una corrida de REC
  * puede ser de todo un padron.
+ *
+ * <h2>Que devuelve 422, y por que no 500 (#562)</h2>
+ *
+ * <p>El plazo de cumplimiento de la REC-1 sale del <b>conjunto sellado</b> que rige a la fecha del
+ * acto o de la diligencia ({@link PlazosCoactivosParametrizados}, regla 5). Que el conjunto exista
+ * y no traiga la llave ({@code PlazoSinParametrizar}) ya estaba traducido desde #41; que <b>no
+ * exista ningun conjunto sellado</b> ({@code EjercicioSinSellar}) no lo estaba, y con D-02a abierta
+ * ese es el estado <i>normal</i> de todas las municipalidades: caia en el
+ * {@code @ExceptionHandler(Exception.class)} de {@code ManejadorDeErrores} y salia como <b>500
+ * {@code ERROR_INTERNO} con identificador de incidencia</b>. Con eso, dictar una REC-1 o
+ * notificarla era inalcanzable, y cada intento dejaba una incidencia de nivel ERROR en el registro
+ * del servidor: el registro de errores lleno de lo que no es un error.
+ *
+ * <p><b>En {@link #emitirRec} el 422 no sale como codigo de la respuesta, y es a proposito</b>: esa
+ * ruta emite un lote, y su contrato ya dice que lo que el dominio sabe explicar se devuelve como
+ * expediente <i>rechazado</i> con su motivo. Con la traduccion puesta, el informe nombra el
+ * ejercicio sin sellar expediente por expediente; sin ella, la corrida entera moria en un 500. Lo
+ * que el issue exige —que deje de ser un fallo del servidor y deje de dejar incidencia— se cumple
+ * igual, y ademas se dice cual de los veinte fallo.
+ *
+ * <p>Un fallo de verdad del servidor sigue siendo 500 con su incidencia: la lista de arriba nombra
+ * las excepciones una a una y no captura {@code RuntimeException}. El razonamiento completo, con
+ * por que la traduccion no vive en {@code ManejadorDeErrores}, esta en {@code
+ * tesoreria.ConvenioController} (#547).
  */
 @RestController
 @RequestMapping(Api.RAIZ + "/coactiva")
@@ -373,8 +398,11 @@ public class ActoCoactivoController {
                 | EmitirDocumento.LaReimpresionNoCoincide enConflicto) {
             throw new ProblemaDeNegocio(CodigoDeError.CONFLICTO, motivoDe(enConflicto));
         } catch (PlazosCoactivosParametrizados.PlazoSinParametrizar
+                | LectorDeParametros.EjercicioSinSellar
                 | NotificarActoCoactivo.SinDireccion
                 | IllegalArgumentException invalido) {
+            // `EjercicioSinSellar` no es un fallo del servidor: es que nadie ha sellado todavia el
+            // conjunto del ejercicio del acto (D-02a). Ver la cabecera de la clase (#562).
             throw new ProblemaDeNegocio(CodigoDeError.VALIDACION, motivoDe(invalido));
         }
     }

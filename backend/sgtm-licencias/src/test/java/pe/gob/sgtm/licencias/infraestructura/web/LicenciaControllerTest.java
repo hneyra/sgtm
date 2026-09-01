@@ -127,6 +127,14 @@ class LicenciaControllerTest {
     /** El mismo controlador, con el conjunto sellado <b>sin</b> el concepto de la licencia. */
     private final MockMvc mvcSinParametro = montar(new DerechosDeMentira(null, DERECHO_DUPLICADO));
 
+    /**
+     * El mismo controlador, sin <b>ningun</b> conjunto sellado: lo que ocurre hoy en todas las
+     * municipalidades con D-02a abierta (#562). No es lo mismo que el anterior —ahi hay conjunto y
+     * le falta una cifra— y hasta este issue salia como 500 con identificador de incidencia.
+     */
+    private final MockMvc mvcSinSellar =
+            montar(new DerechosDeMentira(DERECHO_LICENCIA, DERECHO_DUPLICADO).sinSellar());
+
     private MockMvc montar(DerechosDeMentira parametros) {
         DerechosDeTramiteParametrizados derechos = new DerechosDeTramiteParametrizados(parametros);
         return MockMvcBuilders.standaloneSetup(
@@ -656,6 +664,89 @@ class LicenciaControllerTest {
         void seccionDelDesplegable() throws Exception {
             assertThat(obtener("/api/v1/licencias/ciiu?seccion=G%20%E2%80%94%20COMERCIO"))
                     .contains("\"totalElementos\":2");
+        }
+    }
+
+    // ============================== #562: lo que falta publicar es 422, no 500 ==========
+
+    @org.junit.jupiter.api.Nested
+    @DisplayName("#562 — sin ningun conjunto sellado")
+    class SinConjuntoSellado {
+
+        @Test
+        @DisplayName("emitir la licencia es 422 y nombra el ejercicio, no 500 con incidencia")
+        void emitirSinConjuntoSellado() throws Exception {
+            String cuerpo = emitir(mvcSinSellar, 422);
+
+            assertThat(cuerpo)
+                    .as("no es que el servidor este roto: es que nadie ha sellado 2026 (D-02a)")
+                    .contains("VALIDACION")
+                    .contains("2026");
+            assertThat(cuerpo)
+                    .as("un 500 traeria identificador de incidencia; esto no es una incidencia")
+                    .doesNotContain("incidencia");
+        }
+
+        @Test
+        @DisplayName("y el duplicado tambien: es la otra ruta que pide el derecho")
+        void duplicarSinConjuntoSellado() throws Exception {
+            emitir(mvc, 201);
+
+            String cuerpo =
+                    envio(
+                            mvcSinSellar,
+                            "/api/v1/licencias/funcionamiento/LF-2026-000001/duplicado",
+                            """
+                            {"motivo":"Extravio del original","nDeRecibo":"%s",
+                             "observacion":"Se autoriza el duplicado"}
+                            """
+                                    .formatted(RECIBO_DEL_DUPLICADO),
+                            422);
+
+            assertThat(cuerpo).contains("2026").doesNotContain("incidencia");
+        }
+
+        @Test
+        @DisplayName("y ninguna de las dos escribe una incidencia en el registro de errores")
+        void noEnsuciaElRegistro() throws Exception {
+            ch.qos.logback.classic.Logger registro =
+                    (ch.qos.logback.classic.Logger)
+                            org.slf4j.LoggerFactory.getLogger(ManejadorDeErrores.class);
+            ch.qos.logback.core.read.ListAppender<ch.qos.logback.classic.spi.ILoggingEvent>
+                    anotados = new ch.qos.logback.core.read.ListAppender<>();
+            anotados.start();
+            registro.addAppender(anotados);
+            try {
+                emitir(mvcSinSellar, 422);
+                emitir(mvcSinParametro, 422);
+            } finally {
+                registro.detachAppender(anotados);
+            }
+
+            assertThat(
+                            anotados.list.stream()
+                                    .filter(e -> e.getLevel() == ch.qos.logback.classic.Level.ERROR)
+                                    .toList())
+                    .as(
+                            "es la mitad del defecto que la respuesta no ensena: con D-02a abierta"
+                                    + " esto pasa en TODAS las municipalidades, y el registro de"
+                                    + " incidencias es para defectos, no para cifras sin publicar")
+                    .isEmpty();
+        }
+
+        @Test
+        @DisplayName("lo que SI es un fallo del servidor sigue siendo 500 con su incidencia")
+        void loQueSiEsInternoNoSeDisfraza() throws Exception {
+            MockMvc borde = montar(new DerechosDeMentira(DERECHO_LICENCIA, DERECHO_DUPLICADO));
+            licencias.reventarAlInsertar();
+
+            String cuerpo = emitir(borde, 500);
+
+            assertThat(cuerpo)
+                    .as(
+                            "traducir lo que falta publicar no puede convertir TODO en 422: un"
+                                    + " defecto del servidor tiene que seguir diciendo que lo es")
+                    .contains("incidencia");
         }
     }
 

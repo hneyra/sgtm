@@ -2,6 +2,9 @@ package pe.gob.sgtm.valores.infraestructura.web;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
+import ch.qos.logback.classic.Level;
+import ch.qos.logback.classic.spi.ILoggingEvent;
+import ch.qos.logback.core.read.ListAppender;
 import java.time.Clock;
 import java.time.LocalDate;
 import java.time.ZoneOffset;
@@ -26,6 +29,7 @@ import pe.gob.sgtm.cuentacorriente.ObligacionPublica;
 import pe.gob.sgtm.dominio.Dinero;
 import pe.gob.sgtm.dominio.Ejercicio;
 import pe.gob.sgtm.dominio.Observacion;
+import pe.gob.sgtm.parametros.LectorDeParametros;
 import pe.gob.sgtm.valores.aplicacion.ConsultaDeValores;
 import pe.gob.sgtm.valores.aplicacion.IniciarCorridaMasiva;
 import pe.gob.sgtm.valores.aplicacion.PasarACoactiva;
@@ -524,7 +528,131 @@ class ValoresControllerTest {
         assertThat(resultado.getResponse().getContentAsString()).contains("modulo coactiva");
     }
 
+    // ------------------------------------------------------- lo que falta publicar (#562)
+
+    @Test
+    @DisplayName("sin ningun conjunto sellado, notificar es 422 y nombra el ejercicio, no 500")
+    void notificarSinConjuntoSellado() throws Exception {
+        emitirUnValor();
+
+        MvcResult resultado = notificarCon(new ParametrosDeMentira().sinSellar());
+
+        assertThat(resultado.getResponse().getStatus())
+                .as("no es que el servidor este roto: es que nadie ha sellado 2026 (D-02a)")
+                .isEqualTo(422);
+        String cuerpo = resultado.getResponse().getContentAsString();
+        assertThat(cuerpo).contains("VALIDACION").contains("2026");
+        assertThat(cuerpo)
+                .as("un 500 traeria identificador de incidencia; esto no es una incidencia")
+                .doesNotContain("incidencia");
+        assertThat(notificaciones.todas()).isEmpty();
+    }
+
+    @Test
+    @DisplayName("con el conjunto sellado y sin la llave sigue nombrando la llave (#192)")
+    void notificarSinLaLlaveNombraLaLlave() throws Exception {
+        emitirUnValor();
+
+        MvcResult resultado = notificarCon(new ParametrosDeMentira());
+
+        assertThat(resultado.getResponse().getStatus()).isEqualTo(422);
+        assertThat(resultado.getResponse().getContentAsString())
+                .as("hay conjunto y le falta una cifra: lo que se nombra es la llave")
+                .contains("PLAZO:NOTIFICACION_VALOR-OP")
+                .doesNotContain("incidencia");
+    }
+
+    @Test
+    @DisplayName("y ninguna de las dos escribe una incidencia en el registro de errores")
+    void loQueFaltaPublicarNoEnsuciaElRegistro() throws Exception {
+        emitirUnValor();
+
+        ch.qos.logback.classic.Logger registro =
+                (ch.qos.logback.classic.Logger)
+                        org.slf4j.LoggerFactory.getLogger(ManejadorDeErrores.class);
+        ListAppender<ILoggingEvent> anotados = new ListAppender<>();
+        anotados.start();
+        registro.addAppender(anotados);
+        try {
+            notificarCon(new ParametrosDeMentira().sinSellar());
+            notificarCon(new ParametrosDeMentira());
+        } finally {
+            registro.detachAppender(anotados);
+        }
+
+        assertThat(anotados.list.stream().filter(e -> e.getLevel() == Level.ERROR).toList())
+                .as(
+                        "es la mitad del defecto que la respuesta no ensena: con D-02a abierta esto"
+                                + " pasa en TODAS las municipalidades, y el registro de incidencias"
+                                + " es para defectos, no para cifras sin publicar")
+                .isEmpty();
+    }
+
+    @Test
+    @DisplayName("lo que SI es un fallo del servidor sigue siendo 500 con su incidencia")
+    void loQueSiEsInternoNoSeDisfraza() throws Exception {
+        emitirUnValor();
+
+        MvcResult resultado =
+                notificarCon(
+                        new ParametrosDeMentira()
+                                .con("PLAZO", "NOTIFICACION_VALOR-OP", "no es un plazo"));
+
+        assertThat(resultado.getResponse().getStatus())
+                .as(
+                        "traducir lo que falta publicar no puede convertir TODO en 422: un plazo"
+                                + " sellado que no se puede leer es un dato que hay que investigar")
+                .isEqualTo(500);
+        assertThat(resultado.getResponse().getContentAsString()).contains("incidencia");
+    }
+
     // ------------------------------------------------------------------
+
+    /**
+     * El mismo controlador con otro lector de parametros detras de la notificacion.
+     *
+     * <p>El conjunto sellado se resuelve al construir {@code PlazosParametrizados}, asi que la
+     * unica forma de probar las tres situaciones —sin conjunto, con conjunto y sin la llave, y con
+     * una llave ilegible— es montar el borde otra vez.
+     */
+    private MvcResult notificarCon(LectorDeParametros lector) throws Exception {
+        MockMvc borde =
+                MockMvcBuilders.standaloneSetup(
+                                new ValoresController(
+                                        registrar,
+                                        new ConsultaDeValores(repositorio, contribuyentes),
+                                        contribuyentes,
+                                        iniciarMasivo,
+                                        new RegistrarNotificacion(
+                                                repositorio,
+                                                notificaciones,
+                                                contribuyentes,
+                                                new PlazosParametrizados(lector),
+                                                (RegistroDeAuditoria registro) -> {}),
+                                        pasarACoactiva))
+                        .setControllerAdvice(new ManejadorDeErrores())
+                        .setMessageConverters(
+                                new JacksonJsonHttpMessageConverter(
+                                        JsonMapper.builder()
+                                                .addModule(
+                                                        new ConfiguracionDeJson()
+                                                                .moduloDeObjetosDeValor())
+                                                .build()))
+                        .build();
+        return borde.perform(
+                        MockMvcRequestBuilders.post("/api/v1/valores/OP-2026-000001/notificacion")
+                                .contentType(MediaType.APPLICATION_JSON)
+                                .content(
+                                        """
+                                        {"fechaDeNotificacion":"2026-04-03",
+                                         "tipoDeNotificacion":"PERSONAL",
+                                         "resultado":"NOTIFICADO",
+                                         "notificador":"J. RUIZ PALACIOS",
+                                         "personaQueRecibe":"TITULAR",
+                                         "observacion":"Se diligencia para la prueba"}
+                                        """))
+                .andReturn();
+    }
 
     private void emitirUnValor() throws Exception {
         contribuyentes

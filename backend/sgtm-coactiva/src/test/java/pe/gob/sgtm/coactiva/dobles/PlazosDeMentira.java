@@ -21,17 +21,38 @@ public final class PlazosDeMentira implements LectorDeParametros {
     /** El identificador del conjunto que este doble finge tener sellado. */
     public static final long CONJUNTO = 77L;
 
-    private final String plazoDeLaRec1;
+    private final @org.jspecify.annotations.Nullable String plazoDeLaRec1;
 
-    public PlazosDeMentira(String plazoDeLaRec1) {
+    private boolean sinSellar;
+
+    public PlazosDeMentira(@org.jspecify.annotations.Nullable String plazoDeLaRec1) {
         this.plazoDeLaRec1 = plazoDeLaRec1;
+    }
+
+    /**
+     * Ningun conjunto sellado rige el ejercicio, que es lo que ocurre <b>hoy</b> en todas las
+     * municipalidades con D-02a abierta (#562).
+     *
+     * <p>No es lo mismo que un conjunto sin la llave —para eso basta construirlo con {@code null}—:
+     * ahi hay un conjunto y le falta una cifra, y aqui no hay conjunto. Las dos situaciones se
+     * distinguen en el mensaje —una nombra la llave y la otra el ejercicio— y por eso el doble sabe
+     * fingir las dos.
+     */
+    public PlazosDeMentira sinSellar() {
+        this.sinSellar = true;
+        return this;
     }
 
     @Override
     public ParametrosSellados vigenteEn(Ejercicio ejercicio) {
-        return ParametrosSellados.de(ejercicio, 1)
-                .texto("PLAZO", "REC1_CUMPLIMIENTO", plazoDeLaRec1)
-                .construir();
+        if (sinSellar) {
+            throw new EjercicioSinSellar(ejercicio);
+        }
+        ParametrosSellados.Constructor constructor = ParametrosSellados.de(ejercicio, 1);
+        if (plazoDeLaRec1 != null) {
+            constructor.texto("PLAZO", "REC1_CUMPLIMIENTO", plazoDeLaRec1);
+        }
+        return constructor.construir();
     }
 
     @Override
@@ -41,6 +62,9 @@ public final class PlazosDeMentira implements LectorDeParametros {
 
     @Override
     public IdentificadorDeConjunto conjuntoVigenteEn(Ejercicio ejercicio) {
+        if (sinSellar) {
+            throw new EjercicioSinSellar(ejercicio);
+        }
         return IdentificadorDeConjunto.de(CONJUNTO);
     }
 }

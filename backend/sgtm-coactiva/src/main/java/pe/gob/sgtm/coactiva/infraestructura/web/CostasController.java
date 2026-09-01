@@ -28,6 +28,7 @@ import pe.gob.sgtm.compartido.Pagina;
 import pe.gob.sgtm.contribuyentes.DirectorioDeContribuyentes;
 import pe.gob.sgtm.contribuyentes.ResumenDeContribuyente;
 import pe.gob.sgtm.dominio.Observacion;
+import pe.gob.sgtm.parametros.LectorDeParametros;
 import pe.gob.sgtm.web.Api;
 import pe.gob.sgtm.web.CodigoDeError;
 import pe.gob.sgtm.web.FiltroDeLaConsulta;
@@ -55,6 +56,19 @@ import pe.gob.sgtm.web.RespuestaPaginada;
  * <p>La alternativa —hacer que el {@code POST} devolviera tambien la grilla— convertiria una
  * consulta en una escritura, y una pantalla que lista al abrirse consumiria un correlativo cada
  * vez.
+ *
+ * <h2>Que devuelve 422, y por que no 500 (#562)</h2>
+ *
+ * <p>El arancel de cada costa sale del <b>conjunto sellado</b> que rige a la fecha de la
+ * liquidacion ({@link ArancelDeCostasParametrizado}, regla 5). Que el conjunto exista y no traiga
+ * la llave ({@code ArancelSinParametrizar}) ya estaba traducido desde #42; que <b>no exista ningun
+ * conjunto sellado</b> ({@code EjercicioSinSellar}) no lo estaba, y con D-02a abierta ese es el
+ * estado <i>normal</i> de todas las municipalidades: salia como <b>500 {@code ERROR_INTERNO} con
+ * identificador de incidencia</b>, y cada intento ensuciaba el registro de errores del servidor.
+ *
+ * <p>El mensaje es el de la propia excepcion: nombra la llave —{@code ARANCEL_COSTA:REC1}— o, si lo
+ * que falta es el conjunto entero y no hay llave que nombrar, el <b>ejercicio</b>. Un fallo de
+ * verdad del servidor sigue siendo 500 con su incidencia.
  */
 @RestController
 @RequestMapping(Api.RAIZ + "/coactiva")
@@ -124,9 +138,12 @@ public class CostasController {
             // actual del expediente o de sus actos.
             throw new ProblemaDeNegocio(CodigoDeError.CONFLICTO, mensajeDe(enConflicto));
         } catch (ArancelDeCostasParametrizado.ArancelSinParametrizar
+                | LectorDeParametros.EjercicioSinSellar
                 | LiquidarCostas.SinActosQueLiquidar
                 | LiquidarCostas.ActoAjeno
                 | IllegalArgumentException invalido) {
+            // `EjercicioSinSellar` no es un fallo del servidor: es que nadie ha sellado todavia el
+            // conjunto del ejercicio de la liquidacion (D-02a). Ver la cabecera de la clase (#562).
             throw new ProblemaDeNegocio(CodigoDeError.VALIDACION, mensajeDe(invalido));
         }
 
