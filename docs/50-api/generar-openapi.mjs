@@ -577,6 +577,47 @@ const DEL_BACKEND = {
  * pantalla que todavia no la tiene.
  */
 const DESCRIPCIONES = {
+  // Rentas · Determinaciones (#577)
+  vehicular_calculo: bloque(`
+    Determina —o simula— el impuesto al patrimonio vehicular de **un ejercicio**, sobre los
+    vehículos que el criterio elija: una placa, o todos los del contribuyente.
+
+    **Un ejercicio, no tres.** La descripción de esta operación prometía «por los tres ejercicios
+    en que el vehículo permanece afecto» y devolvía una determinación por vehículo del ejercicio
+    pedido (#577). Los tres ejercicios son la **afectación** —estructural, y \`GET
+    /rentas/vehiculos\` ya la publica como \`afectoDesde\`/\`afectoHasta\`—, no el alcance de este
+    cálculo: determinar tres a la vez asentaría tres deudas por un botón que dice «Calcular». Cada
+    fila de la respuesta dice de qué vehículo es, con su \`placa\`.
+
+    **\`baseImponible\` se llamaba \`valorReferencial\` y no lo era**: es el mayor entre el valor
+    de adquisición y el referencial del MEF (art. 32 LTM). Los dos operandos que la memoria del
+    cálculo compara no viajan, porque la determinación guarda la base y no de qué salió.
+
+    La marca \`simulacion\` del cuerpo es **obligatoria** y distingue calcular de asentar: no hay
+    omisión segura en ninguna de las dos direcciones.
+  `),
+  // Rentas · Determinaciones (#577)
+  predial_masivo: bloque(`
+    Recalcula el padrón declarado del ejercicio y deja constancia de los contribuyentes
+    **observados** que quedan fuera de la emisión (#523).
+
+    El \`alcance\` admite las **cuatro** palabras que el manual dibuja, letra por letra (#577):
+
+    - \`TODOS\` — todo el padrón declarado del ejercicio.
+    - \`SECTOR\` — los que tienen al menos un predio en el sector; exige \`sector\`. Se determina
+      igual sobre **todos** sus predios: la base es del contribuyente (NEG-05 §1) y recortarla al
+      sector produciría un error a la baja. El sector elige a quién se emite, no qué se le cobra.
+    - \`RANGO_DE_CODIGO\` — los que caen en un tramo de código de contribuyente; exige
+      \`codigoDesde\` y \`codigoHasta\`, extremos incluidos. Se compara como texto, que es el orden
+      con que la pantalla lista el padrón.
+    - \`OBSERVADOS\` — los que la **última corrida del ejercicio** dejó observados. Sin corrida
+      previa no recorre a nadie, y eso es lo correcto: «ninguno quedó observado» y «todavía no se
+      ha corrido» son dos cosas distintas.
+
+    Los dos interruptores que la pantalla dibuja y esta corrida no hace —arbitrios y cuponera— se
+    **rechazan** con 422 en vez de ignorarse: una corrida «correcta» a quien pidió además los
+    arbitrios sólo se notaría al buscar los recibos que nadie generó.
+  `),
   // Seguridad (#543)
   permisos: bloque(`
     Fija los niveles de accesibilidad de un grupo (RF-121). Recibe la lista **completa** de

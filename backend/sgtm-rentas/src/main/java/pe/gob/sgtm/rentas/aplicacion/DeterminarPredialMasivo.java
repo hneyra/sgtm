@@ -7,6 +7,7 @@ import java.util.List;
 import java.util.Locale;
 import java.util.Map;
 import java.util.Objects;
+import java.util.Set;
 import org.jspecify.annotations.Nullable;
 import org.springframework.stereotype.Service;
 import pe.gob.sgtm.catastro.CaracteristicasDelPredio;
@@ -66,6 +67,40 @@ public class DeterminarPredialMasivo {
     /** Solo los contribuyentes con al menos un predio en el sector indicado. */
     public static final String ALCANCE_SECTOR = "SECTOR";
 
+    /**
+     * Solo los contribuyentes cuyo codigo cae en un tramo (#577).
+     *
+     * <p>Es la forma de partir una emision anual en corridas que quepan en una tarde, y la de
+     * repetir la de un tramo sin volver a recorrer el padron entero.
+     */
+    public static final String ALCANCE_RANGO_DE_CODIGO = "RANGO_DE_CODIGO";
+
+    /**
+     * Solo los que la <b>ultima corrida del ejercicio</b> dejo observados (#577).
+     *
+     * <p>Es el alcance que mas se usa en una campana —volver a correr sobre los que quedaron fuera—
+     * y el que no habia manera de pedir: un observado es, por definicion, el que <b>no</b> tiene
+     * determinacion de esta corrida, asi que la lista no se puede recomponer leyendo el padron.
+     * Vive en {@code corrida_emision_observado} desde #523, y de ahi sale.
+     *
+     * <p>Sin corrida previa del ejercicio, la corrida no recorre a nadie y lo dice: no es lo mismo
+     * «ninguno quedo observado» que «todavia no se ha corrido», y contestar cero a las dos seria
+     * decir que la emision esta limpia cuando no ha empezado.
+     */
+    public static final String ALCANCE_OBSERVADOS = "OBSERVADOS";
+
+    /**
+     * Los cuatro que el manual dibuja, en un solo sitio.
+     *
+     * <p>El desplegable de la pantalla los rotula «TODO EL PADRON / POR SECTOR / POR RANGO DE
+     * CODIGO / SOLO OBSERVADOS», y ninguno de los cuatro coincidia letra por letra con lo que el
+     * backend admitia —los dos primeros se parecian, y parecerse no es serlo (#427)—. El
+     * vocabulario que manda es este, y la pantalla ofrece estas palabras: al reves haria falta una
+     * traduccion, que es una segunda copia de la regla.
+     */
+    public static final List<String> ALCANCES =
+            List.of(ALCANCE_TODOS, ALCANCE_SECTOR, ALCANCE_RANGO_DE_CODIGO, ALCANCE_OBSERVADOS);
+
     private final PadronPredialDelEjercicio padron;
     private final DeterminarPredial individual;
     private final DirectorioDeContribuyentes directorio;
@@ -102,6 +137,7 @@ public class DeterminarPredialMasivo {
         List<PadronPredialDelEjercicio.DeterminacionConDetalle> declarados =
                 padron.ultimasDe(peticion.ejercicio());
 
+        Set<String> observadosPrevios = observadosDeLaUltimaCorrida(peticion);
         List<Observado> observados = new ArrayList<>();
         List<DeterminacionPredialCalculada> determinadas = new ArrayList<>();
         Dinero emitido = Dinero.CERO;
@@ -141,7 +177,7 @@ public class DeterminarPredialMasivo {
                                         + " emitirla"));
                 continue;
             }
-            if (!enElAlcance(fila.detalle(), peticion, hoy)) {
+            if (!enElAlcance(fila.detalle(), peticion, codigo, observadosPrevios, hoy)) {
                 continue;
             }
 
@@ -208,6 +244,8 @@ public class DeterminarPredialMasivo {
                                 corrida.ejercicio(),
                                 corrida.alcance(),
                                 peticion.sector(),
+                                peticion.codigoDesde(),
+                                peticion.codigoHasta(),
                                 peticion.modalidad(),
                                 corrida.simulacion(),
                                 corrida.nombreDelConjunto(),
@@ -237,9 +275,23 @@ public class DeterminarPredialMasivo {
      * que calcular predio por predio. El sector elige a quien se emite, no que se le cobra.
      */
     private boolean enElAlcance(
-            List<DetalleDeterminacionPredio> detalle, Peticion peticion, LocalDate hoy) {
-        String sector = peticion.sector();
-        if (!ALCANCE_SECTOR.equals(peticion.alcance()) || sector == null) {
+            List<DetalleDeterminacionPredio> detalle,
+            Peticion peticion,
+            String codigoContribuyente,
+            Set<String> observadosDeLaCorridaAnterior,
+            LocalDate hoy) {
+
+        return switch (peticion.alcance()) {
+            case ALCANCE_SECTOR -> tieneUnPredioEnElSector(detalle, peticion.sector(), hoy);
+            case ALCANCE_RANGO_DE_CODIGO -> enElTramo(codigoContribuyente, peticion);
+            case ALCANCE_OBSERVADOS -> observadosDeLaCorridaAnterior.contains(codigoContribuyente);
+            default -> true;
+        };
+    }
+
+    private boolean tieneUnPredioEnElSector(
+            List<DetalleDeterminacionPredio> detalle, @Nullable String sector, LocalDate hoy) {
+        if (sector == null) {
             return true;
         }
         for (DetalleDeterminacionPredio predio : detalle) {
@@ -256,6 +308,47 @@ public class DeterminarPredialMasivo {
     }
 
     /**
+     * Si el codigo del contribuyente cae en el tramo, extremos incluidos.
+     *
+     * <p>Se compara como <b>texto</b> y no como numero: el codigo del padron es una cadena
+     * —«00000025673», «C-000007»— y ni siquiera es siempre numerica. Comparar por texto es lo mismo
+     * que hace el orden con que la pantalla lista el padron, asi que «del C-000100 al C-000200» es
+     * exactamente el tramo que quien pide la corrida esta viendo.
+     */
+    private static boolean enElTramo(String codigo, Peticion peticion) {
+        String desde = peticion.codigoDesde();
+        String hasta = peticion.codigoHasta();
+        return desde != null
+                && hasta != null
+                && codigo.compareTo(desde) >= 0
+                && codigo.compareTo(hasta) <= 0;
+    }
+
+    /**
+     * Los codigos que la ultima corrida del ejercicio dejo observados (#577).
+     *
+     * <p>Se lee <b>una vez</b>, antes del bucle: preguntarlo por contribuyente serian treinta mil
+     * consultas. Y solo con {@link #ALCANCE_OBSERVADOS}: las otras tres no lo miran, y leerlo igual
+     * costaria una consulta por corrida a cambio de nada.
+     *
+     * <p>Sin corrida previa el conjunto sale vacio, y entonces la corrida no recorre a nadie. Eso
+     * es lo correcto y no un caso degenerado: «ninguno quedo observado» y «todavia no se ha
+     * corrido» son dos cosas distintas, y la unica que puede emitir es la primera.
+     */
+    private Set<String> observadosDeLaUltimaCorrida(Peticion peticion) {
+        if (!ALCANCE_OBSERVADOS.equals(peticion.alcance())) {
+            return Set.of();
+        }
+        return rastro.ultimaDe(peticion.ejercicio())
+                .map(
+                        corrida ->
+                                corrida.observados().stream()
+                                        .map(CorridaDeEmision.Observado::codContribuyente)
+                                        .collect(java.util.stream.Collectors.toSet()))
+                .orElse(Set.of());
+    }
+
+    /**
      * Lo que se pide correr.
      *
      * @param ejercicio el ejercicio que se recalcula
@@ -269,6 +362,8 @@ public class DeterminarPredialMasivo {
             Ejercicio ejercicio,
             String alcance,
             @Nullable String sector,
+            @Nullable String codigoDesde,
+            @Nullable String codigoHasta,
             String modalidad,
             boolean recalculaYaEmitidos,
             boolean simulacion) {
@@ -279,21 +374,37 @@ public class DeterminarPredialMasivo {
                     alcance == null || alcance.isBlank()
                             ? ALCANCE_TODOS
                             : alcance.strip().toUpperCase(Locale.ROOT);
-            if (!ALCANCE_TODOS.equals(alcance) && !ALCANCE_SECTOR.equals(alcance)) {
+            if (!ALCANCES.contains(alcance)) {
                 throw new IllegalArgumentException(
                         "Alcance desconocido: '"
                                 + alcance
-                                + "'. Se admite «"
-                                + ALCANCE_TODOS
-                                + "» y «"
-                                + ALCANCE_SECTOR
-                                + "»");
+                                + "'. Se admite "
+                                + String.join(", ", ALCANCES));
             }
             sector = sector == null || sector.isBlank() ? null : sector.strip();
+            codigoDesde = codigoDesde == null || codigoDesde.isBlank() ? null : codigoDesde.strip();
+            codigoHasta = codigoHasta == null || codigoHasta.isBlank() ? null : codigoHasta.strip();
             if (ALCANCE_SECTOR.equals(alcance) && sector == null) {
                 throw new IllegalArgumentException(
                         "El alcance por sector necesita decir que sector: sin el, «solo el sector»"
                                 + " y «todo el padron» serian la misma corrida");
+            }
+            if (ALCANCE_RANGO_DE_CODIGO.equals(alcance)
+                    && (codigoDesde == null || codigoHasta == null)) {
+                throw new IllegalArgumentException(
+                        "El alcance por rango de codigo necesita sus dos extremos, «codigoDesde» y"
+                                + " «codigoHasta»: con uno solo no se sabe donde acaba el tramo");
+            }
+            if (ALCANCE_RANGO_DE_CODIGO.equals(alcance)
+                    && codigoDesde != null
+                    && codigoHasta != null
+                    && codigoDesde.compareTo(codigoHasta) > 0) {
+                throw new IllegalArgumentException(
+                        "El rango de codigo va del primero al ultimo: '"
+                                + codigoDesde
+                                + "' no puede ser mayor que '"
+                                + codigoHasta
+                                + "'");
             }
             modalidad =
                     modalidad == null || modalidad.isBlank()
