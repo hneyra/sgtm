@@ -112,6 +112,11 @@ class AltaDeDeudaSobreUnVehiculoFronteraTest {
     /** Otro contribuyente del mismo padron, para poder medir la unidad ajena (#635). */
     private static final String AJENO = "C-VEH-635";
 
+    /** Identificadores que no apuntan a ninguna fila: la forma del defecto de #660. */
+    private static final long COLGADO_PREDIO = 9_999_998L;
+
+    private static final long COLGADO_VEHICULO = 9_999_999L;
+
     private static final String PLACA = "V5D-554";
     private static final Ejercicio EJERCICIO = new Ejercicio(2026);
     private static final LocalDate FECHA = LocalDate.of(2026, 5, 10);
@@ -533,6 +538,122 @@ class AltaDeDeudaSobreUnVehiculoFronteraTest {
     }
 
     @Test
+    @DisplayName("#660 — un alta con un vehiculoId que no apunta a nada sigue siendo 422")
+    void elAltaConVehiculoColgadoSigueSiendo422() throws Exception {
+        MvcResult resultado =
+                mvc.perform(
+                                post("/api/v1/rentas/deuda/altas")
+                                        .contentType(MediaType.APPLICATION_JSON)
+                                        .content(
+                                                cuerpoConUnidad(
+                                                        "\"vehiculoId\":" + COLGADO_VEHICULO + ",",
+                                                        AJENO,
+                                                        7,
+                                                        "RES-2026-6601")))
+                        .andReturn();
+
+        assertThat(resultado.getResponse().getStatus())
+                .as(
+                        "escribir deuda nueva sobre una clave que ninguna consulta va a mirar es lo"
+                                + " que #635 vino a impedir, y sigue impedido")
+                .isEqualTo(422);
+        assertThat(resultado.getResponse().getContentAsString())
+                .contains(String.valueOf(COLGADO_VEHICULO));
+    }
+
+    @Test
+    @DisplayName("#660 — un alta con un predioId que no apunta a nada sigue siendo 422")
+    void elAltaConPredioColgadoSigueSiendo422() throws Exception {
+        MvcResult resultado =
+                mvc.perform(
+                                post("/api/v1/rentas/deuda/altas")
+                                        .contentType(MediaType.APPLICATION_JSON)
+                                        .content(
+                                                cuerpoConUnidad(
+                                                        "\"predioId\":" + COLGADO_PREDIO + ",",
+                                                        AJENO,
+                                                        6,
+                                                        "RES-2026-6602")))
+                        .andReturn();
+
+        assertThat(resultado.getResponse().getStatus()).isEqualTo(422);
+        assertThat(resultado.getResponse().getContentAsString())
+                .contains(String.valueOf(COLGADO_PREDIO));
+    }
+
+    @Test
+    @DisplayName("#660 — la baja de una deuda con el vehiculo colgado SI se puede registrar")
+    void laBajaConVehiculoColgadoSePuede() throws Exception {
+        // El asiento se siembra por SQL directo a proposito: es la forma de las filas que ya
+        // estan escritas —nada lo impedia, porque V2 no declara clave foranea sobre `vehiculo`—
+        // y que el circuito de hoy ya no deja crear. Sin ellas el issue no se puede reproducir.
+        sembrarCargoColgado(5, null, COLGADO_VEHICULO, "RES-2026-6603");
+
+        MvcResult resultado =
+                mvc.perform(
+                                post("/api/v1/rentas/deuda/bajas")
+                                        .contentType(MediaType.APPLICATION_JSON)
+                                        .content(
+                                                cuerpoConUnidad(
+                                                        "\"vehiculoId\":" + COLGADO_VEHICULO + ",",
+                                                        AJENO,
+                                                        5,
+                                                        "RES-2026-6604")))
+                        .andReturn();
+
+        assertThat(resultado.getResponse().getStatus())
+                .as(
+                        "esta deuda no se puede borrar (regla 4) ni reescribir desde el migrador"
+                                + " (RLS con FORCE): si la baja tambien la rechaza, queda viva y"
+                                + " sin forma de extinguirla. Respuesta: %s",
+                        resultado.getResponse().getContentAsString())
+                .isEqualTo(201);
+    }
+
+    @Test
+    @DisplayName("#660 — y la del predio colgado tambien")
+    void laBajaConPredioColgadoSePuede() throws Exception {
+        sembrarCargoColgado(4, COLGADO_PREDIO, null, "RES-2026-6605");
+
+        MvcResult resultado =
+                mvc.perform(
+                                post("/api/v1/rentas/deuda/bajas")
+                                        .contentType(MediaType.APPLICATION_JSON)
+                                        .content(
+                                                cuerpoConUnidad(
+                                                        "\"predioId\":" + COLGADO_PREDIO + ",",
+                                                        AJENO,
+                                                        4,
+                                                        "RES-2026-6606")))
+                        .andReturn();
+
+        assertThat(resultado.getResponse().getStatus())
+                .as("respuesta: %s", resultado.getResponse().getContentAsString())
+                .isEqualTo(201);
+    }
+
+    @Test
+    @DisplayName(
+            "#660 — la baja sobre una unidad que existe y es de otro sigue pidiendo declararlo")
+    void laBajaSobreUnidadAjenaQueExisteSigueExigiendoDeclararlo() throws Exception {
+        MvcResult resultado =
+                mvc.perform(
+                                post("/api/v1/rentas/deuda/bajas")
+                                        .contentType(MediaType.APPLICATION_JSON)
+                                        .content(cuerpoDelAlta(AJENO, vehiculo, "RES-2026-6607")))
+                        .andReturn();
+
+        assertThat(resultado.getResponse().getStatus())
+                .as(
+                        "abrir «la unidad no existe» no puede abrir de paso «la unidad es de"
+                                + " otro»: son dos casos distintos y solo uno es irreparable")
+                .isEqualTo(422);
+        assertThat(resultado.getResponse().getContentAsString())
+                .contains(CODIGO)
+                .doesNotContain("solo se deben");
+    }
+
+    @Test
     @DisplayName("la unidad propia sigue pasando, que es el camino de todos los dias")
     void laUnidadPropiaPasa() throws Exception {
         MvcResult resultado =
@@ -700,6 +821,63 @@ class AltaDeDeudaSobreUnVehiculoFronteraTest {
                     }
                     return descripciones;
                 }
+            }
+        }
+    }
+
+    /** Un cuerpo de movimiento con la unidad que se le indique —o ninguna—, y su cuota. */
+    private static String cuerpoConUnidad(
+            String unidad, String codigo, int cuota, String documento) {
+        return "{"
+                + unidad
+                + "\"codContribuyente\":\""
+                + codigo
+                + "\",\"tributo\":\"VEHICULAR\",\"ano\":\"2026\",\"cuota\":"
+                + cuota
+                + ",\"insoluto\":\"10.00\",\"fechaValor\":\"2026-05-10\","
+                + "\"documentoOrigen\":\""
+                + documento
+                + "\",\"observacion\":\"Movimiento de prueba de la unidad colgada\"}";
+    }
+
+    /**
+     * Un cargo escrito por SQL directo con una unidad que no apunta a nada (#660).
+     *
+     * <p>Es la forma de las filas que <b>ya estan en el libro</b>: V2 no declara clave foranea
+     * sobre {@code predio} ni sobre {@code vehiculo}, asi que nada lo impidio durante toda la vida
+     * de la tabla, y el circuito de hoy —desde #635— ya no permite crearlas. Sin sembrarla asi el
+     * caso no se puede reproducir.
+     */
+    private static void sembrarCargoColgado(
+            int cuota, Long predioId, Long vehiculoId, String documento) throws SQLException {
+        try (Connection app = base.conexion(BaseDeDatosDePrueba.APP)) {
+            ContextoDeTenant.fijar(app, municipalidad);
+            try (PreparedStatement sentencia =
+                    app.prepareStatement(
+                            "INSERT INTO cuenta_corriente_asiento (municipalidad_id, ejercicio,"
+                                    + " contribuyente_id, tributo, concepto, tipo, fase, periodo,"
+                                    + " predio_id, vehiculo_id, monto, fecha_valor,"
+                                    + " documento_origen, usuario_id, motivo, acto)"
+                                    + " VALUES (?, 2026, ?, 'VEHICULAR', 'INSOLUTO', 'CARGO',"
+                                    + " 'ORDINARIA', ?, ?, ?, 10.00, DATE '2026-05-10', ?,"
+                                    + " 'prueba', 'Cargo sembrado con la unidad colgada',"
+                                    + " 'ALTA_DEUDA')")) {
+                sentencia.setLong(1, municipalidad);
+                sentencia.setLong(2, ajeno);
+                sentencia.setInt(3, cuota);
+                if (predioId == null) {
+                    sentencia.setNull(4, java.sql.Types.BIGINT);
+                } else {
+                    sentencia.setLong(4, predioId);
+                }
+                if (vehiculoId == null) {
+                    sentencia.setNull(5, java.sql.Types.BIGINT);
+                } else {
+                    sentencia.setLong(5, vehiculoId);
+                }
+                sentencia.setString(6, documento);
+                sentencia.executeUpdate();
+                app.commit();
             }
         }
     }
