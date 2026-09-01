@@ -37,12 +37,24 @@ public class AdministracionRepositoryJdbc extends RepositorioJdbc
     // siempre desempata, y sin un orden total dos paginas consecutivas pueden
     // repetir una fila y omitir otra cuando hay valores iguales en la columna
     // pedida —dos grupos con el mismo nombre, dos accesos del mismo tipo—.
+    //
+    // Y `desempatandoPor("id")` (#543) es lo que hacia falta para que eso fuera
+    // cierto tambien cuando el cliente NO pide ordenar por `id`: poder pedirlo
+    // no sirve de nada si el orden por omision —`orden`, `codigo`, `nombre`,
+    // `cuenta`— es el que empata. Los doce modulos tienen `orden = 0`, asi que
+    // ese listado estaba empatado ENTERO y su orden relativo cambiaba con el
+    // tamano de pagina; los otros tres se declaran igual porque el empate es
+    // posible en los tres —dos grupos homonimos no lo son, pero dos accesos del
+    // mismo tipo o dos usuarios del mismo nombre si— y porque una regla que solo
+    // vale en uno de cuatro listados hermanos es la que alguien no repite.
     private static final OrdenSeguro ORDEN_MODULO =
-            OrdenSeguro.sobre("codigo", "nombre", "orden", "id");
+            OrdenSeguro.sobre("codigo", "nombre", "orden", "id").desempatandoPor("id");
     private static final OrdenSeguro ORDEN_ACCESO =
-            OrdenSeguro.sobre("codigo", "nombre", "tipo", "id");
-    private static final OrdenSeguro ORDEN_GRUPO = OrdenSeguro.sobre("nombre", "id");
-    private static final OrdenSeguro ORDEN_USUARIO = OrdenSeguro.sobre("cuenta", "nombre", "id");
+            OrdenSeguro.sobre("codigo", "nombre", "tipo", "id").desempatandoPor("id");
+    private static final OrdenSeguro ORDEN_GRUPO =
+            OrdenSeguro.sobre("nombre", "id").desempatandoPor("id");
+    private static final OrdenSeguro ORDEN_USUARIO =
+            OrdenSeguro.sobre("cuenta", "nombre", "id").desempatandoPor("id");
 
     public AdministracionRepositoryJdbc(JdbcClient jdbc) {
         super(jdbc);
@@ -267,6 +279,32 @@ public class AdministracionRepositoryJdbc extends RepositorioJdbc
                 .param("usuario", usuarioId)
                 .query(AdministracionRepositoryJdbc::mapearMiembro)
                 .optional();
+    }
+
+    /**
+     * Los grupos de un usuario (#543).
+     *
+     * <p>El {@code JOIN} con {@code miembro} es interno y lleva {@code m.activo}: lo que se pide es
+     * a que grupos <b>pertenece</b>, y la fila de una baja sigue ahi porque no se borra (RNF-051).
+     * No filtra por el estado del grupo, que es otra cosa —ver el puerto—.
+     *
+     * <p>Ninguna de las dos consultas nombra la municipalidad: la ponen las politicas RLS de {@code
+     * grupo} y {@code miembro}, cada una por su lado, con el contexto de la transaccion.
+     */
+    @Override
+    public Pagina<Grupo> gruposDeUsuario(long usuarioId, Paginacion paginacion) {
+        return paginar(
+                "SELECT g.id, g.nombre, g.descripcion, g.habilitado, g.vigencia_desde,"
+                        + " g.vigencia_hasta FROM grupo g"
+                        + " JOIN miembro m ON m.grupo_id = g.id AND m.activo"
+                        + " WHERE m.usuario_id = :usuario",
+                "SELECT count(*) FROM grupo g"
+                        + " JOIN miembro m ON m.grupo_id = g.id AND m.activo"
+                        + " WHERE m.usuario_id = :usuario",
+                Map.of("usuario", usuarioId),
+                paginacion,
+                ORDEN_GRUPO,
+                AdministracionRepositoryJdbc::mapearGrupo);
     }
 
     /**

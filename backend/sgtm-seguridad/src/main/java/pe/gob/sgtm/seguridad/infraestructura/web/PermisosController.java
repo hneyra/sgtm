@@ -4,6 +4,7 @@ import java.util.ArrayList;
 import java.util.EnumSet;
 import java.util.List;
 import java.util.Set;
+import org.jspecify.annotations.Nullable;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PutMapping;
@@ -100,7 +101,25 @@ public class PermisosController {
     /** Un acceso y los privilegios que quedan otorgados sobre el. */
     public record NivelDeAcceso(String acceso, List<String> privilegios) {}
 
-    public record PermisoResource(long id, String acceso, long grupoId, List<String> privilegios) {
+    /**
+     * Un permiso configurado, del <b>grupo o del usuario</b>, y se distingue cual (#543).
+     *
+     * <p>Los dos identificadores son {@code Long} nulables y no {@code long} primitivos. Antes
+     * {@code grupoId} era primitivo y valia {@code 0L} cuando la fila no tenia grupo —o sea, cuando
+     * era una excepcion de usuario—, y esa fila salia por HTTP <b>indistinguible de una del grupo
+     * 0</b>. {@code usuarioId} directamente no se publicaba, asi que el cliente no tenia ni un dato
+     * con el que separarlas: una excepcion de usuario se leia como un permiso del grupo.
+     *
+     * <p>El esquema garantiza que hay exactamente uno de los dos ({@code permiso_sujeto_ck}, V5), y
+     * {@link Permiso} lo repite en su constructor: nulo aqui significa «el otro», no «se
+     * desconoce».
+     */
+    public record PermisoResource(
+            long id,
+            String acceso,
+            @Nullable Long grupoId,
+            @Nullable Long usuarioId,
+            List<String> privilegios) {
 
         static PermisoResource de(Permiso permiso, String acceso) {
             List<String> nombres =
@@ -111,7 +130,8 @@ public class PermisosController {
             return new PermisoResource(
                     permiso.id() == null ? 0L : permiso.id(),
                     acceso,
-                    permiso.grupoId() == null ? 0L : permiso.grupoId(),
+                    permiso.grupoId(),
+                    permiso.usuarioId(),
                     nombres);
         }
 
@@ -124,7 +144,8 @@ public class PermisosController {
             return new PermisoResource(
                     permiso.id(),
                     permiso.codigoDeAcceso(),
-                    permiso.grupoId() == null ? 0L : permiso.grupoId(),
+                    permiso.grupoId(),
+                    permiso.usuarioId(),
                     nombres);
         }
     }

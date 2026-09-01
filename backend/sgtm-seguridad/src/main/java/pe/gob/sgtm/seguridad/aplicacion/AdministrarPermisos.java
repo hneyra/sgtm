@@ -17,6 +17,7 @@ import pe.gob.sgtm.dominio.Observacion;
 import pe.gob.sgtm.seguridad.dominio.Acceso;
 import pe.gob.sgtm.seguridad.dominio.AdministracionRepository;
 import pe.gob.sgtm.seguridad.dominio.Permiso;
+import pe.gob.sgtm.seguridad.dominio.PermisoEfectivo;
 import pe.gob.sgtm.seguridad.dominio.PermisoRepository;
 import pe.gob.sgtm.web.CodigoDeError;
 import pe.gob.sgtm.web.ProblemaDeNegocio;
@@ -100,6 +101,26 @@ public class AdministrarPermisos {
                 permiso.grupoId(),
                 permiso.usuarioId(),
                 permiso.privilegios());
+    }
+
+    /**
+     * Los permisos <b>efectivos</b> de un usuario, cada uno diciendo de donde viene (#543).
+     *
+     * <p>No es {@link #deGrupo(long)} con otro sujeto. Aquella devuelve lo <b>configurado</b> de un
+     * grupo —la matriz que se edita—; esta devuelve lo que el usuario <b>puede</b>, ya resuelto por
+     * la precedencia: una excepcion de usuario sustituye al grupo entero para ese acceso, otorgue o
+     * niegue. Publicar las dos listas sin resolver obligaria a quien pregunta a reimplementar esa
+     * regla, y es la que no se puede equivocar —la interfaz la tenia invertida, {@code on =
+     * esPropio || esHeredado}, que convierte una excepcion que restringe en una que amplia—.
+     *
+     * <p>Un {@code usuarioId} que no existe en esta municipalidad es 404 y no una lista vacia: no
+     * tener permisos y no existir son dos respuestas distintas, y la segunda no se puede decir
+     * callando.
+     */
+    @Transactional(readOnly = true)
+    public List<PermisoEfectivo> efectivosDeUsuario(long usuarioId) {
+        exigirQueElUsuarioExista(usuarioId);
+        return permisos.efectivosConOrigenDe(usuarioId, LocalDate.now(reloj));
     }
 
     /** Un permiso ya resuelto: el codigo de su acceso en vez del id interno. */

@@ -3,6 +3,7 @@ package pe.gob.sgtm.persistencia;
 import java.util.Map;
 import java.util.Set;
 import java.util.TreeMap;
+import org.jspecify.annotations.Nullable;
 import pe.gob.sgtm.compartido.Paginacion;
 
 /**
@@ -22,8 +23,12 @@ public final class OrdenSeguro {
 
     private final Map<String, String> columnasPorCampo;
 
-    private OrdenSeguro(Map<String, String> columnasPorCampo) {
+    /** Columna que rompe los empates de la pedida, o nulo si no se declaro ninguna. */
+    private final @Nullable String desempate;
+
+    private OrdenSeguro(Map<String, String> columnasPorCampo, @Nullable String desempate) {
         this.columnasPorCampo = columnasPorCampo;
+        this.desempate = desempate;
     }
 
     /**
@@ -45,7 +50,33 @@ public final class OrdenSeguro {
             mapa.put(columna, columna);
             mapa.put(aCamelCase(columna), columna);
         }
-        return new OrdenSeguro(Map.copyOf(mapa));
+        return new OrdenSeguro(Map.copyOf(mapa), null);
+    }
+
+    /**
+     * La misma lista blanca, con una columna que <b>rompe los empates</b> de la pedida (#543).
+     *
+     * <p>{@code ORDER BY orden} sobre doce modulos que tienen todos {@code orden = 0} no es un
+     * orden: es doce filas empatadas y un plan de ejecucion que puede devolverlas como quiera. Se
+     * midio, y el orden relativo <b>cambia con el tamano de pagina</b> —{@code AUTORIZACIONES} sale
+     * tercero con {@code ?tamano=3}, quinto con {@code ?tamano=5} y primero con {@code
+     * ?tamano=12}—, porque el plan no es el mismo. Es el mismo motivo por el que {@link Paginacion}
+     * exige que <b>siempre</b> haya un {@code ORDER BY}, un escalon mas abajo: sin orden
+     * <b>total</b>, dos paginas consecutivas pueden repetir una fila y omitir otra.
+     *
+     * <p>El desempate va siempre {@code ASC} aunque la direccion pedida sea {@code DESC}: lo que
+     * hace falta es que el orden sea total y estable, no que la columna de desempate acompañe al
+     * sentido de la otra —cambiarlo con la direccion no aporta nada y añade un caso mas que
+     * razonar—.
+     *
+     * @param columna nombre de columna simple, tipicamente la clave primaria
+     */
+    public OrdenSeguro desempatandoPor(String columna) {
+        if (!esIdentificadorSimple(columna)) {
+            throw new IllegalArgumentException(
+                    "El desempate solo admite un nombre de columna simple: '" + columna + "'");
+        }
+        return new OrdenSeguro(columnasPorCampo, columna);
     }
 
     public Set<String> camposAdmitidos() {
@@ -62,7 +93,11 @@ public final class OrdenSeguro {
         if (columna == null) {
             throw new OrdenNoAdmitido(paginacion.ordenarPor(), columnasPorCampo.keySet());
         }
-        return "ORDER BY " + columna + " " + paginacion.direccion().sql();
+        String clausula = "ORDER BY " + columna + " " + paginacion.direccion().sql();
+        if (desempate == null || desempate.equals(columna)) {
+            return clausula;
+        }
+        return clausula + ", " + desempate + " ASC";
     }
 
     private static boolean esIdentificadorSimple(String texto) {

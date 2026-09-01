@@ -3,6 +3,7 @@ package pe.gob.sgtm.seguridad.infraestructura;
 import java.sql.ResultSet;
 import java.sql.SQLException;
 import java.time.LocalDate;
+import java.util.ArrayList;
 import java.util.EnumSet;
 import java.util.LinkedHashMap;
 import java.util.List;
@@ -17,6 +18,7 @@ import pe.gob.sgtm.auditoria.OrigenContext;
 import pe.gob.sgtm.autorizacion.Privilegio;
 import pe.gob.sgtm.persistencia.RepositorioJdbc;
 import pe.gob.sgtm.seguridad.dominio.Permiso;
+import pe.gob.sgtm.seguridad.dominio.PermisoEfectivo;
 import pe.gob.sgtm.seguridad.dominio.PermisoRepository;
 
 /**
@@ -149,6 +151,119 @@ public class PermisoRepositoryJdbc extends RepositorioJdbc implements PermisoRep
                         })
                 .list();
         return matriz;
+    }
+
+    /**
+     * La misma matriz de otro usuario, diciendo <b>de donde viene cada fila</b> (#543).
+     *
+     * <p>Es la de arriba con dos datos mas y una regla de emision distinta, y las dos diferencias
+     * son el issue entero:
+     *
+     * <ol>
+     *   <li><b>Una excepcion emite fila aunque no otorgue nada.</b> {@code efectivosDe} descarta el
+     *       conjunto vacio porque dibuja un menu, y una opcion sin privilegios no se dibuja. Aqui
+     *       se administra: «se le nego expresamente» y «nunca lo tuvo» son dos configuraciones
+     *       distintas y la matriz tiene que poder enseñar la diferencia.
+     *   <li><b>Cuenta los grupos que aportan.</b> El {@code min(g.id)} solo se publica cuando son
+     *       uno; con dos, la union no tiene <b>un</b> grupo que nombrar y el id del menor seria un
+     *       dato plausible y equivocado. El filtro de «aporta algo» va en el propio lateral, asi
+     *       que un grupo con la fila de permiso en cero no cuenta como origen de nada.
+     * </ol>
+     *
+     * <p>El sujeto es el {@code id} y no la cuenta —lo pide la ruta asi—, pero la precedencia es la
+     * misma expresion {@link #columnaEfectiva(String)} que usa la matriz de la sesion y que usa el
+     * guardia: si se separaran, la pantalla que administra permisos enseñaria una cosa y el
+     * servidor haria otra.
+     */
+    @Override
+    public List<PermisoEfectivo> efectivosConOrigenDe(long usuarioId, LocalDate fecha) {
+        String sql =
+                "SELECT a.codigo,"
+                        + " (ux.acceso_id IS NOT NULL) AS por_excepcion,"
+                        + " COALESCE(gx.grupos, 0) AS grupos,"
+                        + " gx.grupo AS grupo_id, "
+                        + columnaEfectiva("ejecucion")
+                        + ", "
+                        + columnaEfectiva("lectura")
+                        + ", "
+                        + columnaEfectiva("registro")
+                        + ", "
+                        + columnaEfectiva("modificacion")
+                        + ", "
+                        + columnaEfectiva("eliminacion")
+                        + ", "
+                        + columnaEfectiva("impresion")
+                        + ", "
+                        + columnaEfectiva("especial")
+                        + " FROM acceso a"
+                        + " LEFT JOIN LATERAL ("
+                        + "   SELECT p.acceso_id, p.ejecucion, p.lectura, p.registro, p.modificacion,"
+                        + "          p.eliminacion, p.impresion, p.especial"
+                        + "     FROM permiso p"
+                        + "    WHERE p.acceso_id = a.id AND p.usuario_id = :usuario"
+                        + " ) ux ON true"
+                        + " LEFT JOIN LATERAL ("
+                        + "   SELECT bool_or(p.ejecucion) AS ejecucion, bool_or(p.lectura) AS lectura,"
+                        + "          bool_or(p.registro) AS registro,"
+                        + "          bool_or(p.modificacion) AS modificacion,"
+                        + "          bool_or(p.eliminacion) AS eliminacion,"
+                        + "          bool_or(p.impresion) AS impresion,"
+                        + "          bool_or(p.especial) AS especial,"
+                        + "          count(*) AS grupos, min(g.id) AS grupo"
+                        + "     FROM permiso p"
+                        + "     JOIN grupo g ON g.id = p.grupo_id AND g.habilitado"
+                        + "                 AND (g.vigencia_desde IS NULL OR g.vigencia_desde <= :fecha)"
+                        + "                 AND (g.vigencia_hasta IS NULL OR g.vigencia_hasta >= :fecha)"
+                        + "     JOIN miembro m ON m.grupo_id = g.id AND m.activo"
+                        + "                   AND m.usuario_id = :usuario"
+                        + "    WHERE p.acceso_id = a.id"
+                        // Un grupo que no otorga nada no es el origen de nada: sin esto,
+                        // `grupos` contaria filas de permiso en cero y `grupo_id` saldria
+                        // nulo por «hay varios» cuando en realidad aporta uno solo.
+                        + "      AND (p.ejecucion OR p.lectura OR p.registro OR p.modificacion"
+                        + "           OR p.eliminacion OR p.impresion OR p.especial)"
+                        + " ) gx ON true"
+                        + " WHERE a.activo"
+                        + "   AND EXISTS (SELECT 1 FROM usuario u"
+                        + "                WHERE u.id = :usuario AND u.habilitado"
+                        + "                  AND (u.vigencia_desde IS NULL OR u.vigencia_desde <= :fecha)"
+                        + "                  AND (u.vigencia_hasta IS NULL OR u.vigencia_hasta >= :fecha))"
+                        + " ORDER BY a.codigo";
+
+        List<PermisoEfectivo> efectivos = new ArrayList<>();
+        jdbc().sql(sql)
+                .param("usuario", usuarioId)
+                .param("fecha", fecha)
+                .query(
+                        (fila, numero) -> {
+                            Set<Privilegio> otorgados = EnumSet.noneOf(Privilegio.class);
+                            for (Privilegio privilegio : Privilegio.values()) {
+                                if (fila.getBoolean(privilegio.columna())) {
+                                    otorgados.add(privilegio);
+                                }
+                            }
+                            boolean porExcepcion = fila.getBoolean("por_excepcion");
+                            long grupos = fila.getLong("grupos");
+                            if (porExcepcion) {
+                                efectivos.add(
+                                        new PermisoEfectivo(
+                                                fila.getString("codigo"),
+                                                otorgados,
+                                                PermisoEfectivo.OrigenDelPermiso.EXCEPCION,
+                                                null));
+                            } else if (grupos > 0) {
+                                long grupo = fila.getLong("grupo_id");
+                                efectivos.add(
+                                        new PermisoEfectivo(
+                                                fila.getString("codigo"),
+                                                otorgados,
+                                                PermisoEfectivo.OrigenDelPermiso.GRUPO,
+                                                grupos == 1 ? grupo : null));
+                            }
+                            return null;
+                        })
+                .list();
+        return List.copyOf(efectivos);
     }
 
     /**
