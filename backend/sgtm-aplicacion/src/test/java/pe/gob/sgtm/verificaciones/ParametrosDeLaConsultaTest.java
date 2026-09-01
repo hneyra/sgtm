@@ -31,6 +31,7 @@ import org.springframework.web.bind.annotation.RequestMethod;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 import pe.gob.sgtm.auditoria.Operacion;
+import pe.gob.sgtm.autorizacion.Privilegio;
 import pe.gob.sgtm.fiscalizacion.dominio.CondicionFiscalizada;
 import pe.gob.sgtm.fiscalizacion.dominio.EstadoDeLiquidacion;
 import pe.gob.sgtm.fiscalizacion.dominio.Hallazgo;
@@ -241,7 +242,15 @@ class ParametrosDeLaConsultaTest {
                     // cualquiera de ellos al contrato ponga la prueba en rojo NOMBRANDOLO. Sin
                     // esto, la comprobacion no distingue «lo lee» de «no hay nada que leer».
                     "POST /rentas/predial/calculo-individual",
-                    "POST /rentas/espectaculos");
+                    "POST /rentas/espectaculos",
+                    // #583 — «quien tiene <privilegio> sobre <acceso>». Nace con
+                    // controlador y su unico filtro propio es el unico que el contrato
+                    // declara, asi que se compromete entera desde el primer dia, como el
+                    // plano catastral: es el unico momento en que esta promesa no cuesta
+                    // nada. Y aqui el filtro es OBLIGATORIO, de modo que la mitad de
+                    // «declarado y no leido» no puede pasar desapercibida — sin el, la
+                    // operacion contesta 422 nombrandolo.
+                    "GET /seguridad/accesos/{codigo}/usuarios");
 
     /**
      * Cuantas operaciones arrastran hoy cada mitad del desajuste. Medido, no estimado (#544).
@@ -709,6 +718,20 @@ class ParametrosDeLaConsultaTest {
                                 + " acta no consigna el uso observado, asi que USO_DISTINTO no se"
                                 + " puede anotar")
                 .containsExactly(nombresDe(Hallazgo.values()));
+    }
+
+    @Test
+    @DisplayName("y el de «quien tiene X sobre Y» es el de los siete privilegios (#583)")
+    void elVocabularioDelPrivilegioEsElDeLosSietePrivilegios() throws IOException {
+        // Aqui el filtro no es un desplegable que se pueda dejar en «Todos»: es
+        // OBLIGATORIO, y una palabra que no sea ninguno de los siete no devuelve una
+        // pagina vacia -que se leeria como «nadie tiene ese privilegio», la lectura
+        // plausible y equivocada de #427- sino 422 enumerandolos. Publicar aqui una
+        // lista que no sea la del enumerado dejaria a la pantalla ofreciendo una
+        // palabra que el servidor rechaza despues de rellenar el formulario.
+        assertThat(vocabularioDelContrato("/seguridad/accesos/{codigo}/usuarios", "privilegio"))
+                .as("los siete del manual (cap. 4, RF-121), letra por letra")
+                .containsExactly(nombresDe(Privilegio.values()));
     }
 
     @Test

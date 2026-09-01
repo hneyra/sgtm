@@ -100,6 +100,17 @@ class PermisosDeUnUsuarioFronteraTest {
     private static long municipalidadB;
     private static MockMvc mvc;
 
+    /**
+     * El pool con el que hablan los repositorios, guardado para poder <b>comprobar quien es</b>
+     * (#545).
+     *
+     * <p>Todo lo que estas pruebas dicen del aislamiento depende de que este pool sea el de {@code
+     * sgtm_app}: un superusuario del cluster omite RLS incluso con {@code FORCE ROW LEVEL
+     * SECURITY}, y entonces las pruebas de aislamiento pasarian en verde sin medir nada. El
+     * centinela existe para que un cambio de fixture no lo devuelva sin que nadie lo note.
+     */
+    private static DriverManagerDataSource pool;
+
     /** Ids sembrados en A. */
     private static long moduloA;
 
@@ -112,8 +123,31 @@ class PermisosDeUnUsuarioFronteraTest {
     private static long grupoAjeno;
     private static long grupoAdministrador;
 
+    /**
+     * Y el escenario de #583: quien tiene ESPECIAL sobre «caja», y quien lo conserva sin poder
+     * usarlo.
+     *
+     * <p>Va sobre un acceso propio —{@code caja}— y con usuarios propios para no mover ninguna de
+     * las cuentas que las pruebas anteriores cuentan: el grupo «Mesa de Partes» tiene exactamente
+     * tres miembros y quitar o añadir uno pondria roja una prueba de #582 por un motivo que no es
+     * el que mide. Y <b>ninguno de estos usuarios recibe {@code registro} sobre {@code
+     * permisos}</b> : si lo tuvieran, retirarselo al grupo administrador dejaria de ser «el ultimo»
+     * y la prueba del 409 pasaria a verde sin que nadie tocara esa guarda.
+     */
+    private static long grupoCaja;
+
+    private static long grupoSupervision;
+    private static long cajaPorGrupo;
+    private static long cajaPorExcepcion;
+    private static long cajaRecortado;
+    private static long cajaDeshabilitado;
+    private static long cajaDeDosGrupos;
+    private static long deshabilitadoSinNada;
+
     /** Y el homonimo en B, para el aislamiento. */
     private static long usuarioDeB;
+
+    private static long cajaDeB;
 
     @BeforeAll
     static void provisionar() throws SQLException, IOException {
@@ -121,7 +155,7 @@ class PermisosDeUnUsuarioFronteraTest {
         municipalidadA = crearMunicipalidad("250101", "Municipalidad de permisos A");
         municipalidadB = crearMunicipalidad("250102", "Municipalidad de permisos B");
 
-        DriverManagerDataSource pool = new DriverManagerDataSource();
+        pool = new DriverManagerDataSource();
         pool.setUrl(base.url());
         pool.setUsername(BaseDeDatosDePrueba.APP);
         pool.setPassword(base.clave(BaseDeDatosDePrueba.APP));
@@ -144,6 +178,7 @@ class PermisosDeUnUsuarioFronteraTest {
                 MockMvcBuilders.standaloneSetup(
                                 new SeguridadController(seguridad),
                                 new PermisosDeUsuarioController(administrarPermisos),
+                                new TitularesDelPrivilegioController(administrarPermisos),
                                 new PermisosController(administrarPermisos))
                         .setControllerAdvice(new ManejadorDeErrores())
                         .setMessageConverters(
@@ -560,12 +595,292 @@ class PermisosDeUnUsuarioFronteraTest {
                 .isEqualTo(1);
     }
 
+    // ------------------------------- #583: quien tiene X, y que conserva quien no opera
+
+    @Test
+    @DisplayName(
+            "#583 AC 1 — quien tiene ESPECIAL sale entero en UNA peticion, por grupo y por"
+                    + " excepcion")
+    void quienTieneElPrivilegioSaleEnUnaPeticion() throws Exception {
+        List<Titular> titulares = titulares("caja", "ESPECIAL");
+
+        assertThat(cuentasDe(titulares))
+                .as(
+                        "quitando de la consulta la rama de la excepcion —el CASE sobre"
+                                + " ux.acceso_id— desaparece «caja.por.excepcion», que es la mitad"
+                                + " que ningun recorrido por grupos encontraria. Y «caja.recortado»"
+                                + " NO esta: su grupo le da ESPECIAL y su excepcion solo LECTURA,"
+                                + " asi que la excepcion SUSTITUYE al grupo; escrita como union"
+                                + " —grupo OR excepcion— aparece, que es el defecto de #543")
+                .containsExactly(
+                        "caja.deshabilitado",
+                        "caja.dos.grupos",
+                        "caja.por.excepcion",
+                        "caja.por.grupo");
+    }
+
+    @Test
+    @DisplayName("#583 AC 1 — cada fila dice de donde le viene, y de que grupo cuando hay uno")
+    void cadaTitularDiceDeDondeLeViene() throws Exception {
+        List<Titular> titulares = titulares("caja", "ESPECIAL");
+
+        assertThat(uno(titulares, "caja.por.grupo").origen()).isEqualTo("GRUPO");
+        assertThat(uno(titulares, "caja.por.grupo").grupoId()).isEqualTo(grupoCaja);
+        assertThat(uno(titulares, "caja.por.excepcion").origen()).isEqualTo("EXCEPCION");
+        assertThat(uno(titulares, "caja.por.excepcion").grupoId())
+                .as("una excepcion no viene de ningun grupo")
+                .isNull();
+        assertThat(uno(titulares, "caja.dos.grupos").grupoId())
+                .as(
+                        "pertenece a los dos, y solo «Cajeros» otorga ESPECIAL: el origen es ese."
+                                + " Contando los grupos que otorgan CUALQUIER privilegio —como hace"
+                                + " la matriz, donde es lo correcto— saldria nulo, «viene de"
+                                + " varios», y quien administra perderia el dato con el que sabria"
+                                + " de cual quitarlo")
+                .isEqualTo(grupoCaja);
+    }
+
+    @Test
+    @DisplayName("#583 AC 1 — y el mismo acceso con otro privilegio contesta otra cosa")
+    void elPrivilegioAcotaDeVerdad() throws Exception {
+        List<Titular> conLectura = titulares("caja", "LECTURA");
+
+        assertThat(cuentasDe(conLectura))
+                .as(
+                        "no es la lista de ESPECIAL con otro nombre: entra «caja.recortado», a"
+                                + " quien su excepcion le deja LECTURA, y SALE «caja.por.excepcion»"
+                                + " —su excepcion solo otorga ESPECIAL, y una excepcion sustituye"
+                                + " al grupo entero, tambien para lo que no otorga—. Un filtro que"
+                                + " no acotara devolveria lo mismo para los dos privilegios")
+                .containsExactly(
+                        "caja.deshabilitado",
+                        "caja.dos.grupos",
+                        "caja.por.grupo",
+                        "caja.recortado");
+        assertThat(uno(conLectura, "caja.dos.grupos").grupoId())
+                .as(
+                        "y aqui SI la otorgan los dos grupos: nulo significa «no hay uno solo»,"
+                                + " frente al mismo usuario con ESPECIAL, donde solo la otorga"
+                                + " «Cajeros»")
+                .isNull();
+        assertThat(cuentasDe(titulares("caja", "ELIMINACION")))
+                .as("nadie tiene ELIMINACION sobre la caja")
+                .isEmpty();
+    }
+
+    @Test
+    @DisplayName("#583 AC 1 — un privilegio que no existe es 422 enumerando los siete, no vacio")
+    void unPrivilegioQueNoExisteEs422() throws Exception {
+        MvcResult resultado =
+                mvc.perform(
+                                get(camino("/seguridad/accesos/%s/usuarios", "caja"))
+                                        .param("privilegio", "TOTAL"))
+                        .andReturn();
+
+        assertThat(resultado.getResponse().getStatus())
+                .as(
+                        "una pagina vacia se leeria como «no lo tiene nadie», que es la lectura"
+                                + " plausible y equivocada de #427")
+                .isEqualTo(422);
+        assertThat(resultado.getResponse().getContentAsString())
+                .contains("TOTAL")
+                .contains("ESPECIAL");
+    }
+
+    @Test
+    @DisplayName("#583 AC 1 — sin el privilegio es 422 nombrandolo, y un acceso que no existe, 404")
+    void faltaElPrivilegioOSobraElAcceso() throws Exception {
+        MvcResult sinPrivilegio =
+                mvc.perform(get(camino("/seguridad/accesos/%s/usuarios", "caja"))).andReturn();
+        MvcResult accesoInexistente =
+                mvc.perform(
+                                get(camino("/seguridad/accesos/%s/usuarios", "no.existe"))
+                                        .param("privilegio", "ESPECIAL"))
+                        .andReturn();
+
+        assertThat(sinPrivilegio.getResponse().getStatus()).isEqualTo(422);
+        assertThat(sinPrivilegio.getResponse().getContentAsString()).contains("privilegio");
+        assertThat(accesoInexistente.getResponse().getStatus())
+                .as("cero titulares y «ese acceso no esta en el catalogo» son dos respuestas")
+                .isEqualTo(404);
+        assertThat(accesoInexistente.getResponse().getContentAsString()).contains("no.existe");
+    }
+
+    @Test
+    @DisplayName("#583 AC 2 — la cuenta deshabilitada sale, y dice que hoy no lo ejerce")
+    void laCuentaDeshabilitadaSaleConSuBandera() throws Exception {
+        List<Titular> titulares = titulares("caja", "ESPECIAL");
+
+        assertThat(uno(titulares, "caja.deshabilitado").efectivoHoy())
+                .as(
+                        "esconderla seria esconder justo la fila que se audita —rehabilitarla le"
+                                + " devuelve el privilegio entero—; publicarla sin la bandera"
+                                + " afirmaria que entra donde el guardia le responde 403")
+                .isFalse();
+        assertThat(uno(titulares, "caja.por.grupo").efectivoHoy())
+                .as("y la habilitada dice que si, o sea que la bandera dice algo")
+                .isTrue();
+    }
+
+    @Test
+    @DisplayName("#583 AC 2 — lo configurado distingue «conserva permisos» de «nunca tuvo»")
+    void loConfiguradoDistingueLoQueLoEfectivoNoPuede() throws Exception {
+        List<Fila> conserva = configuradosDe(cajaDeshabilitado);
+        List<Fila> nuncaTuvo = configuradosDe(deshabilitadoSinNada);
+
+        assertThat(permisosDe(cajaDeshabilitado))
+                .as("lo EFECTIVO de las dos es la lista vacia, y eso no cambia (AC 3)")
+                .isEmpty();
+        assertThat(permisosDe(deshabilitadoSinNada)).isEmpty();
+
+        // Campo a campo, no «no son iguales»: dos respuestas pueden diferir en
+        // cualquier otra cosa y dejar pasar el defecto (la leccion de #546).
+        assertThat(conserva).hasSize(1);
+        assertThat(conserva.get(0).acceso()).isEqualTo("caja");
+        assertThat(conserva.get(0).privilegios()).containsExactlyInAnyOrder("LECTURA", "ESPECIAL");
+        assertThat(conserva.get(0).origen()).isEqualTo("GRUPO");
+        assertThat(conserva.get(0).grupoId()).isEqualTo(grupoCaja);
+        assertThat(nuncaTuvo)
+                .as(
+                        "devolviendo el EXISTS de u.habilitado a esta lectura, las dos vuelven a"
+                                + " ser el mismo JSON vacio y la pregunta del panel vuelve a ser"
+                                + " incontestable")
+                .isEmpty();
+    }
+
+    @Test
+    @DisplayName("#583 AC 2 — y la excepcion que niega sigue saliendo, que es lo que la distingue")
+    void loConfiguradoConservaLaNegacionExpresa() throws Exception {
+        List<Fila> sobreSectores = sobre(configuradosDe(usuarioDeLaExcepcion), "sectores");
+
+        assertThat(sobreSectores)
+                .as(
+                        "descartar el conjunto vacio aqui borraria la diferencia entre «se le nego"
+                                + " expresamente» y «nunca lo tuvo», que es la mitad del motivo por"
+                                + " el que la excepcion existe")
+                .hasSize(1);
+        assertThat(sobreSectores.get(0).origen()).isEqualTo("EXCEPCION");
+        assertThat(sobreSectores.get(0).privilegios()).isEmpty();
+    }
+
+    @Test
+    @DisplayName("#583 AC 3 — con la cuenta habilitada, lo efectivo y lo configurado coinciden")
+    void lasDosMatricesCoincidenCuandoLaCuentaOpera() throws Exception {
+        assertThat(configuradosDe(usuarioDeLaExcepcion))
+                .as(
+                        "la unica diferencia entre las dos es la habilitacion del usuario: si"
+                                + " divergieran en algo mas, se habrian escrito dos veces, y la"
+                                + " precedencia acabaria distinta en cada una (#397)")
+                .isEqualTo(permisosDe(usuarioDeLaExcepcion));
+        assertThat(configuradosDe(usuarioDeDosGrupos)).isEqualTo(permisosDe(usuarioDeDosGrupos));
+    }
+
+    @Test
+    @DisplayName("#583 AC 3 — y «quien tiene X» dice de cada cuenta lo que dice su propia matriz")
+    void losTitularesYLaMatrizDicenLoMismo() throws Exception {
+        List<Titular> titulares = titulares("caja", "ESPECIAL");
+
+        for (long usuario :
+                List.of(cajaPorGrupo, cajaPorExcepcion, cajaRecortado, cajaDeDosGrupos)) {
+            List<Fila> sobreCaja = sobre(permisosDe(usuario), "caja");
+            boolean loDiceLaMatriz =
+                    !sobreCaja.isEmpty() && sobreCaja.get(0).privilegios().contains("ESPECIAL");
+            boolean loDicenLosTitulares =
+                    titulares.stream()
+                            .anyMatch(
+                                    titular ->
+                                            titular.usuarioId() == usuario
+                                                    && titular.efectivoHoy());
+
+            assertThat(loDicenLosTitulares)
+                    .as(
+                            "las dos lecturas resuelven la precedencia con la MISMA expresion SQL;"
+                                    + " si se separaran, la insignia del panel y la matriz que se"
+                                    + " administra dirian cosas distintas del mismo usuario (%d)",
+                            usuario)
+                    .isEqualTo(loDiceLaMatriz);
+        }
+    }
+
+    @Test
+    @DisplayName("#583 AC 4 — desde B no se ve ninguna cuenta de A, ni lo que tiene configurado")
+    void elAislamientoDeLasDosLecturasNuevas() throws Exception {
+        TenantContext.fijar(new MunicipalidadId(municipalidadB));
+
+        MvcResult configurados =
+                mvc.perform(
+                                get(
+                                        camino(
+                                                "/seguridad/usuarios/%d/permisos/configurados",
+                                                cajaDeshabilitado)))
+                        .andReturn();
+        List<Titular> desdeB = titulares("caja", "ESPECIAL");
+
+        assertThat(configurados.getResponse().getStatus())
+                .as(
+                        "con un SUPERUSUARIO del cluster —que omite RLS incluso con FORCE ROW LEVEL"
+                                + " SECURITY— esto seria 200 con lo que la cuenta de A conserva."
+                                + " Con sgtm_owner NO: al dueno la politica tambien lo somete y la"
+                                + " rotura pasaria en verde (#537, #545)")
+                .isEqualTo(404);
+        assertThat(cuentasDe(desdeB))
+                .as(
+                        "el codigo «caja» existe en las dos municipalidades y aqui identifica UNO"
+                                + " solo. Sin RLS, ni siquiera se llegaria a listar: dos filas de"
+                                + " acceso con el mismo codigo dejan de identificar una (#548)")
+                .containsExactly("caja.de.b");
+        assertThat(desdeB.get(0).usuarioId()).isEqualTo(cajaDeB);
+    }
+
+    @Test
+    @DisplayName("#583 AC 4 — y el pool es el de sgtm_app, no el del dueno ni el del superusuario")
+    void seConectaComoSgtmApp() throws SQLException {
+        try (Connection conexion = pool.getConnection();
+                PreparedStatement sentencia = conexion.prepareStatement("SELECT current_user");
+                ResultSet resultado = sentencia.executeQuery()) {
+            resultado.next();
+            assertThat(resultado.getString(1))
+                    .as(
+                            "sin este centinela, un cambio de fixture puede devolver la conexion al"
+                                    + " superusuario del cluster —que omite RLS incluso con FORCE"
+                                    + " ROW LEVEL SECURITY— y todas las pruebas de aislamiento de"
+                                    + " este archivo pasarian en verde sin medir nada (#545)")
+                    .isEqualTo(BaseDeDatosDePrueba.APP);
+        }
+    }
+
     // ------------------------------------------------------------------ apoyo
 
     private record Fila(String acceso, List<String> privilegios, String origen, Long grupoId) {}
 
+    private record Titular(
+            long usuarioId, String cuenta, boolean efectivoHoy, String origen, Long grupoId) {}
+
     private static List<Fila> permisosDe(long usuario) throws Exception {
         return leerFilas(cuerpoDe(get(camino("/seguridad/usuarios/%d/permisos", usuario))));
+    }
+
+    private static List<Fila> configuradosDe(long usuario) throws Exception {
+        return leerFilas(
+                cuerpoDe(get(camino("/seguridad/usuarios/%d/permisos/configurados", usuario))));
+    }
+
+    private static List<Titular> titulares(String acceso, String privilegio) throws Exception {
+        return leerTitulares(
+                cuerpoDe(
+                        get(camino("/seguridad/accesos/%s/usuarios", acceso))
+                                .param("privilegio", privilegio)));
+    }
+
+    private static List<String> cuentasDe(List<Titular> titulares) {
+        return titulares.stream().map(Titular::cuenta).toList();
+    }
+
+    private static Titular uno(List<Titular> titulares, String cuenta) {
+        return titulares.stream()
+                .filter(titular -> titular.cuenta().equals(cuenta))
+                .findFirst()
+                .orElseThrow(() -> new AssertionError("no esta en la lista: " + cuenta));
     }
 
     private static List<Fila> sobre(List<Fila> filas, String acceso) {
@@ -603,6 +918,28 @@ class PermisosDeUnUsuarioFronteraTest {
                             "null".equals(grupo) ? null : Long.valueOf(grupo)));
         }
         return filas;
+    }
+
+    /** Las filas del sobre paginado de «quien tiene X sobre Y», con el mismo criterio. */
+    private static List<Titular> leerTitulares(String json) {
+        Pattern objeto =
+                Pattern.compile(
+                        "\\{\"usuarioId\":(\\d+),\"cuenta\":\"([^\"]+)\",\"nombre\":\"[^\"]*\","
+                                + "\"efectivoHoy\":(true|false),\"origen\":\"([^\"]+)\","
+                                + "\"grupoId\":([^,}]+)\\}");
+        List<Titular> titulares = new ArrayList<>();
+        Matcher coincidencia = objeto.matcher(json);
+        while (coincidencia.find()) {
+            String grupo = coincidencia.group(5);
+            titulares.add(
+                    new Titular(
+                            Long.parseLong(coincidencia.group(1)),
+                            coincidencia.group(2),
+                            Boolean.parseBoolean(coincidencia.group(3)),
+                            coincidencia.group(4),
+                            "null".equals(grupo) ? null : Long.valueOf(grupo)));
+        }
+        return titulares;
     }
 
     private static List<String> codigosDeModulos(int tamano, int paginas) throws Exception {
@@ -695,17 +1032,69 @@ class PermisosDeUnUsuarioFronteraTest {
             permisoDeUsuario(app, municipalidadA, calles, usuarioDeLaExcepcion, "lectura");
             permisoDeUsuario(app, municipalidadA, sectores, usuarioDeLaExcepcion);
 
+            sembrarElEscenarioDeLaCaja(app);
             app.commit();
         }
 
         try (Connection app = base.conexion(BaseDeDatosDePrueba.APP)) {
             ContextoDeTenant.fijar(app, municipalidadB);
-            modulo(app, municipalidadB, "CATASTRO", 0);
+            long moduloB = modulo(app, municipalidadB, "CATASTRO", 0);
             usuarioDeB = usuario(app, municipalidadB, "admin.local");
             long grupoDeB = grupo(app, municipalidadB, "Grupo de B");
             afiliar(app, municipalidadB, grupoDeB, usuarioDeB, true);
+
+            // El mismo codigo de acceso en las dos municipalidades, a proposito: es lo
+            // que hace que «caja» solo identifique UNO cuando la politica RLS acota, y
+            // lo que convierte al superusuario del cluster —que la omite— en una
+            // ambiguedad que se ve.
+            long cajaB = acceso(app, municipalidadB, moduloB, "caja");
+            cajaDeB = usuario(app, municipalidadB, "caja.de.b");
+            permisoDeUsuario(app, municipalidadB, cajaB, cajaDeB, "especial");
             app.commit();
         }
+    }
+
+    /**
+     * El escenario de #583, sobre un acceso propio y con cuentas propias.
+     *
+     * <p>Lo que tiene que poder distinguirse:
+     *
+     * <ul>
+     *   <li><b>por grupo</b> y <b>por excepcion</b>, porque un recorrido por grupos —el atajo
+     *       obvio— deja fuera al segundo;
+     *   <li>una excepcion que <b>recorta</b>: su grupo le da ESPECIAL y su excepcion no, asi que no
+     *       lo tiene. Escrita como union en vez de como sustitucion, aparece;
+     *   <li>una cuenta <b>deshabilitada que lo conserva</b>, frente a otra que nunca tuvo nada;
+     *   <li>y dos grupos, de los que <b>uno solo</b> otorga ESPECIAL: el origen es ese, no
+     *       «varios».
+     * </ul>
+     */
+    private static void sembrarElEscenarioDeLaCaja(Connection app) throws SQLException {
+        long caja = acceso(app, municipalidadA, moduloA, "caja");
+
+        grupoCaja = grupo(app, municipalidadA, "Cajeros");
+        grupoSupervision = grupo(app, municipalidadA, "Supervision de caja");
+        permisoDeGrupo(app, municipalidadA, caja, grupoCaja, "lectura", "especial");
+        permisoDeGrupo(app, municipalidadA, caja, grupoSupervision, "lectura");
+
+        cajaPorGrupo = usuario(app, municipalidadA, "caja.por.grupo");
+        afiliar(app, municipalidadA, grupoCaja, cajaPorGrupo, true);
+
+        cajaPorExcepcion = usuario(app, municipalidadA, "caja.por.excepcion");
+        permisoDeUsuario(app, municipalidadA, caja, cajaPorExcepcion, "especial");
+
+        cajaRecortado = usuario(app, municipalidadA, "caja.recortado");
+        afiliar(app, municipalidadA, grupoCaja, cajaRecortado, true);
+        permisoDeUsuario(app, municipalidadA, caja, cajaRecortado, "lectura");
+
+        cajaDeDosGrupos = usuario(app, municipalidadA, "caja.dos.grupos");
+        afiliar(app, municipalidadA, grupoCaja, cajaDeDosGrupos, true);
+        afiliar(app, municipalidadA, grupoSupervision, cajaDeDosGrupos, true);
+
+        cajaDeshabilitado = usuarioDeshabilitado(app, municipalidadA, "caja.deshabilitado");
+        afiliar(app, municipalidadA, grupoCaja, cajaDeshabilitado, true);
+
+        deshabilitadoSinNada = usuarioDeshabilitado(app, municipalidadA, "sin.nada.deshabilitado");
     }
 
     private static long modulo(Connection app, long municipalidad, String codigo, int orden)
@@ -738,6 +1127,18 @@ class PermisosDeUnUsuarioFronteraTest {
                 app,
                 "INSERT INTO usuario (municipalidad_id, cuenta, nombre) VALUES (?, ?, ?)"
                         + " RETURNING id",
+                municipalidad,
+                cuenta,
+                cuenta);
+    }
+
+    /** Una cuenta que hoy no puede operar y conserva lo que tuviera configurado (#583). */
+    private static long usuarioDeshabilitado(Connection app, long municipalidad, String cuenta)
+            throws SQLException {
+        return unaClave(
+                app,
+                "INSERT INTO usuario (municipalidad_id, cuenta, nombre, habilitado)"
+                        + " VALUES (?, ?, ?, false) RETURNING id",
                 municipalidad,
                 cuenta,
                 cuenta);

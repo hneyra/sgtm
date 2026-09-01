@@ -990,6 +990,29 @@ const VOCABULARIOS = {
   // lista vacia — daba 422, y una que se omite deja el acta entrando con 201 y
   // SIN hallazgo, que `LiquidarFiscalizacion` ya no liquida (lanza
   // `ActaSinHallazgo`) pero que nadie ve al registrarla.
+  // Los SIETE privilegios del manual (`Privilegio`). Aqui el parametro es
+  // OBLIGATORIO y ademas cerrado: una palabra que no sea ninguno de los siete no
+  // devuelve una lista vacia —que se leeria como «no lo tiene nadie», la lectura
+  // plausible y equivocada de #427—, sino 422 enumerandolos (#583).
+  usuarios_con_el_privilegio: {
+    privilegio: {
+      valores: [
+        'EJECUCION',
+        'LECTURA',
+        'REGISTRO',
+        'MODIFICACION',
+        'ELIMINACION',
+        'IMPRESION',
+        'ESPECIAL',
+      ],
+      enumerado: 'Privilegio',
+      descripcion:
+        'Cual de los siete privilegios se pregunta. **Obligatorio**: sin el, la respuesta seria' +
+        ' «quien tiene algo sobre este acceso», que es otra pregunta. El vocabulario es el del' +
+        ' enumerado «Privilegio», letra por letra; cualquier otra palabra se rechaza con 422' +
+        ' enumerando los siete, nunca con una pagina vacia.',
+    },
+  },
   fisc_vehicular: {
     hallazgo: {
       valores: ['CONFORME', 'OMISO', 'SUBVALUADOR', 'NO_UBICADO'],
@@ -1205,6 +1228,88 @@ const OPERACIONES_ADICIONALES = {
         usuario deshabilitado o fuera de vigencia recibe la lista **vacía**. Un \`id\`
         que no existe en esta municipalidad es **404**, no una lista vacía: no tener
         permisos y no existir son dos respuestas distintas.
+      `),
+    },
+    // Y lo CONFIGURADO de esa misma cuenta, que no es lo mismo que lo efectivo
+    // en cuanto la cuenta esta deshabilitada (#583). No es un parametro de la de
+    // arriba: es otra pregunta, y la de arriba no cambia.
+    {
+      operationId: 'permisos_configurados_de_usuario',
+      metodo: 'get',
+      ruta: '/api/v1/seguridad/usuarios/{id}/permisos/configurados',
+      titulo: 'Permisos configurados de un usuario',
+      descripcionesDeRuta: {
+        id: 'El usuario, por el `id` que publica cada fila de `GET /seguridad/usuarios`',
+      },
+      descripcion: literal(`
+        Lo que un usuario **tiene configurado**, opción por opción, aunque hoy no lo
+        pueda ejercer (#583, RF-121).
+
+        **Es la misma matriz que \`/permisos\`, sin la comprobación de habilitación y
+        vigencia del usuario**, y esa única diferencia es el motivo por el que existe.
+        Aquella aplica la regla del guardia —y no cambia: enseñar privilegios que
+        después responden 403 sería peor—, así que a una cuenta deshabilitada le
+        contesta la lista **vacía** tanto si conserva permisos como si nunca los tuvo:
+        las dos respuestas son el mismo JSON. Una cuenta que se deshabilita conserva
+        lo que tuviera configurado, y rehabilitarla se lo devuelve entero; quien audita
+        necesita saber qué volvería a poder.
+
+        **Lo que sí conserva es la vigencia del grupo y de la pertenencia.** Reactivar
+        una cuenta no reactiva un grupo inhabilitado ni devuelve a quien salió de él,
+        así que un permiso que venía de un grupo hoy inhabilitado no sale aquí. Quitar
+        también esa comprobación convertiría la respuesta en «lo que alguna vez estuvo
+        escrito», que es otra pregunta.
+
+        **La forma es exactamente la de \`/permisos\`**, a propósito: las dos se comparan
+        campo a campo, y ahí está la diferencia que esta operación existe para poder ver.
+        La precedencia es la misma expresión SQL en las dos, de modo que no puedan
+        discrepar sobre quién manda —la excepción del usuario o sus grupos—.
+
+        Un \`id\` que no existe en esta municipalidad es **404**, no una lista vacía.
+      `),
+    },
+    // Y la pregunta del padron entero: quien tiene ESTE privilegio sobre ESTE
+    // acceso. Es una lectura sobre un ACCESO, simetrica a «quien esta en un
+    // grupo» (#582), y hasta aqui costaba una peticion por cuenta (#583).
+    {
+      operationId: 'usuarios_con_el_privilegio',
+      metodo: 'get',
+      ruta: '/api/v1/seguridad/accesos/{codigo}/usuarios',
+      titulo: 'Cuentas que tienen un privilegio sobre un acceso',
+      descripcionesDeRuta: {
+        codigo:
+          'El acceso, por el `codigo` del catálogo: el mismo que publica cada fila de' +
+          ' `GET /seguridad/usuarios/{id}/permisos` y el que viaja en el cuerpo del `PUT`' +
+          ' de niveles',
+      },
+      parametros: [{ nombre: 'privilegio' }],
+      paginacion: true,
+      descripcion: literal(`
+        Quién tiene un privilegio sobre una opción del catálogo, en **una** petición
+        (#583, RF-121).
+
+        **Antes sólo se podía contestar cuenta por cuenta.** Medido el 2026-09-01
+        contra el backend local, \`GET /seguridad/usuarios/1/permisos\` devuelve 134
+        filas y 21 511 bytes, y esa operación no admite ningún filtro: con los 200
+        usuarios que la pantalla pide de una vez, pintar una insignia costaba 200
+        peticiones y ~4,2 MB de JSON.
+
+        **Y no se puede atajar por los grupos.** La excepción propia de una cuenta
+        **sustituye** a lo que su grupo le da, así que quien pertenece a un grupo sin el
+        privilegio puede tenerlo por excepción —y al revés—. Ninguna lectura lista las
+        excepciones, de modo que un recorrido por grupos deja fuera justo esa mitad. Por
+        eso cada fila trae \`origen\`, y \`grupoId\` cuando hay un solo grupo vigente que lo
+        otorgue.
+
+        **La lista es la de lo configurado, y cada fila dice si hoy sirve.** Una cuenta
+        deshabilitada o fuera de vigencia que conserva el privilegio **sale**, con
+        \`efectivoHoy: false\`: filtrarla escondería justo la fila que se audita
+        —rehabilitarla se lo devuelve entero— y publicarla sin la bandera afirmaría que
+        entra donde el guardia le responde 403.
+
+        \`privilegio\` es **obligatorio**: sin él la respuesta sería «quién tiene algo
+        sobre este acceso», que es otra pregunta. Un \`codigo\` que no está en el catálogo
+        de esta municipalidad es **404**, no una lista vacía.
       `),
     },
   ],

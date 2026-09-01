@@ -13,12 +13,15 @@ import pe.gob.sgtm.auditoria.Auditoria;
 import pe.gob.sgtm.auditoria.Operacion;
 import pe.gob.sgtm.auditoria.RegistroDeAuditoria;
 import pe.gob.sgtm.autorizacion.Privilegio;
+import pe.gob.sgtm.compartido.Pagina;
+import pe.gob.sgtm.compartido.Paginacion;
 import pe.gob.sgtm.dominio.Observacion;
 import pe.gob.sgtm.seguridad.dominio.Acceso;
 import pe.gob.sgtm.seguridad.dominio.AdministracionRepository;
 import pe.gob.sgtm.seguridad.dominio.Permiso;
 import pe.gob.sgtm.seguridad.dominio.PermisoEfectivo;
 import pe.gob.sgtm.seguridad.dominio.PermisoRepository;
+import pe.gob.sgtm.seguridad.dominio.TitularDelPrivilegio;
 import pe.gob.sgtm.web.CodigoDeError;
 import pe.gob.sgtm.web.ProblemaDeNegocio;
 
@@ -121,6 +124,51 @@ public class AdministrarPermisos {
     public List<PermisoEfectivo> efectivosDeUsuario(long usuarioId) {
         exigirQueElUsuarioExista(usuarioId);
         return permisos.efectivosConOrigenDe(usuarioId, LocalDate.now(reloj));
+    }
+
+    /**
+     * Los permisos <b>configurados</b> de un usuario: lo que conserva aunque hoy no pueda usarlo
+     * (#583).
+     *
+     * <p>No es otra respuesta a la pregunta de {@link #efectivosDeUsuario(long)}: es otra pregunta.
+     * Aquella aplica la regla del guardia, y por eso a una cuenta deshabilitada le contesta la
+     * lista vacia —enseñarle privilegios que despues responden 403 seria peor—. El efecto
+     * secundario es que <b>una cuenta deshabilitada que conserva permisos y una que nunca tuvo
+     * ninguno devuelven el mismo JSON</b>, y esa es justo la que hay que poder distinguir: una
+     * cuenta que se deshabilita conserva lo que tuviera configurado, y rehabilitarla se lo devuelve
+     * entero.
+     *
+     * <p>Las dos comparten la expresion de precedencia en el repositorio, de modo que no puedan
+     * discrepar sobre quien manda —la excepcion del usuario o sus grupos—.
+     *
+     * <p>Un {@code usuarioId} que no existe en esta municipalidad es <b>404</b>, por lo mismo que
+     * su gemela: no tener permisos y no existir son dos respuestas distintas.
+     */
+    @Transactional(readOnly = true)
+    public List<PermisoEfectivo> configuradosDeUsuario(long usuarioId) {
+        exigirQueElUsuarioExista(usuarioId);
+        return permisos.configuradosConOrigenDe(usuarioId, LocalDate.now(reloj));
+    }
+
+    /**
+     * Quien tiene un privilegio sobre un acceso (#583).
+     *
+     * <p>La pregunta inversa de {@link #efectivosDeUsuario(long)}, y hasta ahora costaba una
+     * peticion por cuenta del padron —con los 200 usuarios que la pantalla pide de una vez, 200
+     * peticiones y ~4,2 MB de JSON para pintar una insignia—. Atajarla por los grupos no vale: la
+     * excepcion de usuario sustituye a lo que el grupo da, asi que quien lo tiene por excepcion no
+     * aparece en ningun recorrido por grupos.
+     *
+     * <p>El acceso se resuelve por su <b>codigo</b> —el mismo que publica cada fila de la matriz de
+     * un usuario y el que lleva el cuerpo del {@code PUT} de niveles—, y uno que no existe en esta
+     * municipalidad es <b>404</b>: cero titulares y «ese acceso no esta en el catalogo» son dos
+     * respuestas distintas, y la segunda no se puede decir callando.
+     */
+    @Transactional(readOnly = true)
+    public Pagina<TitularDelPrivilegio> titularesDe(
+            String codigoDeAcceso, Privilegio privilegio, Paginacion paginacion) {
+        long accesoId = acceso(codigoDeAcceso);
+        return permisos.titularesDe(accesoId, privilegio, LocalDate.now(reloj), paginacion);
     }
 
     /** Un permiso ya resuelto: el codigo de su acceso en vez del id interno. */

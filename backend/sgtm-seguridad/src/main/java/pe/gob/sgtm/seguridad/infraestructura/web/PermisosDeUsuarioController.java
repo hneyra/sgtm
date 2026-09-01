@@ -47,8 +47,45 @@ public class PermisosDeUsuarioController {
     @GetMapping
     @RequiereAcceso(acceso = "permisos", privilegio = Privilegio.LECTURA)
     public List<Recursos.PermisoEfectivoResource> deUsuario(@PathVariable("id") long usuario) {
+        return comoRecursos(administrar.efectivosDeUsuario(usuario));
+    }
+
+    /**
+     * Lo <b>configurado</b> de esa cuenta: {@code GET
+     * /api/v1/seguridad/usuarios/{id}/permisos/configurados} (#583).
+     *
+     * <h2>Por que es otra ruta y no un parametro de la de arriba</h2>
+     *
+     * <p>Porque no es otra respuesta a la misma pregunta: es otra pregunta. La de arriba aplica la
+     * regla del guardia y <b>no cambia</b> —a una cuenta deshabilitada le sigue contestando la
+     * lista vacia—, porque enseñar en la matriz privilegios que despues responden 403 seria peor
+     * que no enseñar ninguno. Su efecto secundario es que «se deshabilito y conserva permisos» y
+     * «nunca tuvo ninguno» son <b>el mismo JSON</b>, y esa es exactamente la pregunta que quien
+     * audita necesita: una cuenta que se deshabilita conserva lo que tuviera configurado, y
+     * rehabilitarla se lo devuelve entero.
+     *
+     * <p>Un parametro sobre la misma operacion —{@code ?vista=configurado}— dejaria a la misma ruta
+     * contestando con dos reglas distintas segun un filtro, y el cliente que lo omita creeria estar
+     * leyendo lo que puede cuando lee lo que tiene escrito.
+     *
+     * <p><b>La forma es la misma a proposito</b>: las dos respuestas se comparan campo a campo, y
+     * ahi esta la diferencia que el issue existe para poder ver.
+     *
+     * <p>El acceso es el mismo, {@code permisos} con {@code LECTURA}, y va <b>en el metodo</b> como
+     * el de arriba: la clase declara solo el {@code @RequestMapping}, asi que un endpoint sin la
+     * suya se quedaria sin guardia.
+     */
+    @GetMapping("/configurados")
+    @RequiereAcceso(acceso = "permisos", privilegio = Privilegio.LECTURA)
+    public List<Recursos.PermisoEfectivoResource> configuradosDeUsuario(
+            @PathVariable("id") long usuario) {
+        return comoRecursos(administrar.configuradosDeUsuario(usuario));
+    }
+
+    private static List<Recursos.PermisoEfectivoResource> comoRecursos(
+            List<PermisoEfectivo> permisos) {
         List<Recursos.PermisoEfectivoResource> resultado = new ArrayList<>();
-        for (PermisoEfectivo permiso : administrar.efectivosDeUsuario(usuario)) {
+        for (PermisoEfectivo permiso : permisos) {
             resultado.add(Recursos.PermisoEfectivoResource.de(permiso));
         }
         return resultado;

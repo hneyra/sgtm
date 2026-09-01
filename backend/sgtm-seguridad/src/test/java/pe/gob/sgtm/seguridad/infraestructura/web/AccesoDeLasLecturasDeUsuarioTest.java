@@ -9,7 +9,11 @@ import pe.gob.sgtm.autorizacion.RequiereAcceso;
 import pe.gob.sgtm.web.ParametrosDePaginacion;
 
 /**
- * Las dos lecturas de #543 declaran su acceso <b>en el metodo</b>, y cual.
+ * Las lecturas de administracion de permisos declaran su acceso <b>en el metodo</b>, y cual.
+ *
+ * <p>Nacio con las dos de #543 y crece con las dos de #583 —lo configurado de una cuenta y quien
+ * tiene un privilegio sobre un acceso—, por el mismo motivo: la anotacion la ve ArchUnit, pero
+ * <b>cual</b> acceso exige, no.
  *
  * <h2>Por que esto no lo cubre ArchUnit</h2>
  *
@@ -23,7 +27,7 @@ import pe.gob.sgtm.web.ParametrosDePaginacion;
  * lectura nueva. Elegir uno u otro no es un detalle de estilo —decide quien puede abrir la pantalla
  * que la consume— y no hay ninguna otra prueba que lo fije.
  */
-@DisplayName("El acceso de las dos lecturas de un usuario (#543)")
+@DisplayName("El acceso de las lecturas de permisos de un usuario (#543, #583)")
 class AccesoDeLasLecturasDeUsuarioTest {
 
     @Test
@@ -59,6 +63,56 @@ class AccesoDeLasLecturasDeUsuarioTest {
                 .isNotNull();
         assertThat(enElMetodo.acceso())
                 .as("la misma opcion del catalogo que la matriz de un grupo")
+                .isEqualTo("permisos");
+        assertThat(enElMetodo.privilegio()).isEqualTo(Privilegio.LECTURA);
+    }
+
+    @Test
+    @DisplayName("los permisos configurados tambien: es la misma matriz con otra regla (#583)")
+    void losConfiguradosExigenLecturaSobrePermisos() throws Exception {
+        RequiereAcceso enElMetodo =
+                PermisosDeUsuarioController.class
+                        .getMethod("configuradosDeUsuario", long.class)
+                        .getAnnotation(RequiereAcceso.class);
+
+        assertThat(enElMetodo)
+                .as(
+                        "la clase declara solo el @RequestMapping: sin la del metodo, esta lectura"
+                                + " —que enseña lo que una cuenta deshabilitada conserva— se"
+                                + " quedaria sin guardia")
+                .isNotNull();
+        assertThat(enElMetodo.acceso())
+                .as(
+                        "es el mismo dato que la matriz efectiva, mirado sin la regla del guardia:"
+                                + " pedir otro acceso lo dejaria detras de un permiso distinto del"
+                                + " de la pantalla que lo dibuja. ArchUnit no ve CUAL acceso es"
+                                + " (#431, #543)")
+                .isEqualTo("permisos");
+        assertThat(enElMetodo.privilegio()).isEqualTo(Privilegio.LECTURA);
+    }
+
+    @Test
+    @DisplayName("y «quien tiene X sobre Y» exige LECTURA sobre «permisos» (#583)")
+    void losTitularesExigenLecturaSobrePermisos() throws Exception {
+        RequiereAcceso enElMetodo =
+                TitularesDelPrivilegioController.class
+                        .getMethod(
+                                "titulares",
+                                String.class,
+                                String.class,
+                                ParametrosDePaginacion.class)
+                        .getAnnotation(RequiereAcceso.class);
+
+        assertThat(enElMetodo)
+                .as("la clase no declara ninguna: sin la del metodo no hay guardia")
+                .isNotNull();
+        assertThat(enElMetodo.acceso())
+                .as(
+                        "es la misma informacion que la matriz de un usuario, mirada desde el otro"
+                                + " lado: quien puede leer los permisos de una persona puede"
+                                + " preguntar quien tiene uno. Pedir «accesos» —la ruta empieza por"
+                                + " ahi— la dejaria detras del permiso de ver el CATALOGO, que es"
+                                + " otra cosa, y deja el build en VERDE")
                 .isEqualTo("permisos");
         assertThat(enElMetodo.privilegio()).isEqualTo(Privilegio.LECTURA);
     }

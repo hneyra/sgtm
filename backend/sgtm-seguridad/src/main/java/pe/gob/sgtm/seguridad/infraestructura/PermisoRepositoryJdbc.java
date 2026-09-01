@@ -16,10 +16,14 @@ import org.springframework.stereotype.Repository;
 import pe.gob.sgtm.auditoria.Origen;
 import pe.gob.sgtm.auditoria.OrigenContext;
 import pe.gob.sgtm.autorizacion.Privilegio;
+import pe.gob.sgtm.compartido.Pagina;
+import pe.gob.sgtm.compartido.Paginacion;
+import pe.gob.sgtm.persistencia.OrdenSeguro;
 import pe.gob.sgtm.persistencia.RepositorioJdbc;
 import pe.gob.sgtm.seguridad.dominio.Permiso;
 import pe.gob.sgtm.seguridad.dominio.PermisoEfectivo;
 import pe.gob.sgtm.seguridad.dominio.PermisoRepository;
+import pe.gob.sgtm.seguridad.dominio.TitularDelPrivilegio;
 
 /**
  * Persistencia de los permisos.
@@ -45,6 +49,25 @@ public class PermisoRepositoryJdbc extends RepositorioJdbc implements PermisoRep
      * para ejercerla. Es el id de esa pantalla en el catalogo (NEG-03).
      */
     static final String ACCESO_DE_ADMINISTRACION = "permisos";
+
+    /**
+     * Por que se ordena el listado de titulares (#583).
+     *
+     * <p>Los mismos campos que el padron de usuarios —es el padron, acotado a quienes tienen el
+     * privilegio— y con el mismo {@code desempatandoPor("id")}: {@code cuenta} es unica por
+     * municipalidad y por tanto ya es un orden total, pero {@code nombre} no lo es, y sin desempate
+     * dos personas homonimas dejan de tener orden estable — dos paginas consecutivas pueden repetir
+     * a una y omitir a otra, que en una lista de «quien tiene la llave de la caja» es justamente la
+     * cuenta que no aparece (#548).
+     *
+     * <p>La columna {@code id} se admite con el nombre que la fila <b>publica</b>, {@code
+     * usuarioId}: aceptar {@code id} y no {@code usuarioId} dejaria el listado ordenando por un
+     * nombre que no esta en ninguna de sus filas, que es lo que #546 encontro en los omisos.
+     */
+    private static final OrdenSeguro ORDEN_TITULAR =
+            OrdenSeguro.sobre("cuenta", "nombre", "id")
+                    .publicandoComo("usuarioId", "id")
+                    .desempatandoPor("id");
 
     public PermisoRepositoryJdbc(JdbcClient jdbc) {
         super(jdbc);
@@ -128,9 +151,9 @@ public class PermisoRepositoryJdbc extends RepositorioJdbc implements PermisoRep
                         + " ) gx ON true"
                         + " WHERE a.activo"
                         + "   AND EXISTS (SELECT 1 FROM usuario u"
-                        + "                WHERE u.cuenta = :cuenta AND u.habilitado"
-                        + "                  AND (u.vigencia_desde IS NULL OR u.vigencia_desde <= :fecha)"
-                        + "                  AND (u.vigencia_hasta IS NULL OR u.vigencia_hasta >= :fecha))";
+                        + "                WHERE u.cuenta = :cuenta AND "
+                        + usuarioOperativo("u")
+                        + ")";
 
         Map<String, Set<Privilegio>> matriz = new LinkedHashMap<>();
         jdbc().sql(sql)
@@ -177,6 +200,28 @@ public class PermisoRepositoryJdbc extends RepositorioJdbc implements PermisoRep
      */
     @Override
     public List<PermisoEfectivo> efectivosConOrigenDe(long usuarioId, LocalDate fecha) {
+        return matriz(usuarioId, fecha, true);
+    }
+
+    /**
+     * La matriz <b>configurada</b>: la misma, sin exigir que la cuenta pueda operar hoy (#583).
+     *
+     * <p>Es la de arriba con un solo cambio —el {@code EXISTS} sobre {@code usuario} no va— y ese
+     * cambio es el issue: con el, una cuenta deshabilitada recibe la lista vacia <b>conserve
+     * permisos o no los haya tenido nunca</b>, y las dos respuestas son el mismo JSON.
+     *
+     * <p>No se escribe como otra consulta a proposito: las dos salen del mismo constructor, de modo
+     * que una mutacion de la precedencia —{@link #expresionEfectiva(String)}— pone en rojo las dos
+     * a la vez. Si solo cayera una, se habrian separado, y entonces la pantalla que administra
+     * permisos y el guardia acabarian diciendo cosas distintas (#397, #543).
+     */
+    @Override
+    public List<PermisoEfectivo> configuradosConOrigenDe(long usuarioId, LocalDate fecha) {
+        return matriz(usuarioId, fecha, false);
+    }
+
+    private List<PermisoEfectivo> matriz(
+            long usuarioId, LocalDate fecha, boolean soloSiPuedeOperarHoy) {
         String sql =
                 "SELECT a.codigo,"
                         + " (ux.acceso_id IS NOT NULL) AS por_excepcion,"
@@ -224,10 +269,12 @@ public class PermisoRepositoryJdbc extends RepositorioJdbc implements PermisoRep
                         + "           OR p.eliminacion OR p.impresion OR p.especial)"
                         + " ) gx ON true"
                         + " WHERE a.activo"
-                        + "   AND EXISTS (SELECT 1 FROM usuario u"
-                        + "                WHERE u.id = :usuario AND u.habilitado"
-                        + "                  AND (u.vigencia_desde IS NULL OR u.vigencia_desde <= :fecha)"
-                        + "                  AND (u.vigencia_hasta IS NULL OR u.vigencia_hasta >= :fecha))"
+                        + (soloSiPuedeOperarHoy
+                                ? "   AND EXISTS (SELECT 1 FROM usuario u"
+                                        + "                WHERE u.id = :usuario AND "
+                                        + usuarioOperativo("u")
+                                        + ")"
+                                : "")
                         + " ORDER BY a.codigo";
 
         List<PermisoEfectivo> efectivos = new ArrayList<>();
@@ -267,15 +314,154 @@ public class PermisoRepositoryJdbc extends RepositorioJdbc implements PermisoRep
     }
 
     /**
-     * {@code CASE WHEN ux.acceso_id IS NOT NULL THEN ux.<col> ELSE COALESCE(gx.<col>, false) END}.
+     * Quien tiene un privilegio sobre un acceso, en <b>una</b> consulta (#583).
+     *
+     * <p>Es la matriz de arriba dada vuelta: alli el sujeto es fijo y se recorren los accesos; aqui
+     * el acceso y el privilegio son fijos y se recorre el padron. La precedencia es la <b>misma
+     * expresion</b> {@link #expresionEfectiva(String)}, de modo que las dos lecturas no puedan
+     * discrepar sobre quien manda —la excepcion del usuario o sus grupos—.
+     *
+     * <p><b>Aqui el filtro de «aporta algo» del lateral de grupos es el del privilegio pedido</b>,
+     * y no el de los siete que usa la matriz. Los dos son el mismo criterio —«un grupo que no
+     * otorga no es el origen de nada»— dicho de la pregunta que cada consulta hace: contando
+     * cualquier privilegio, un grupo que da LECTURA y no ESPECIAL sumaria a {@code grupos} y
+     * dejaria {@code grupo_id} en nulo —«viene de varios»— cuando ESPECIAL lo otorga uno solo, que
+     * es el dato con el que se decide de donde quitarlo. Sobre {@code bool_or} no cambia nada: un
+     * grupo que no otorga este privilegio aporta {@code false} tanto si se filtra como si no.
+     *
+     * <p>El nombre de la columna se concatena, no se enlaza —{@code ORDER BY} y las columnas no
+     * admiten parametro—, y por eso sale de {@link Privilegio#columna()}: un enumerado de siete
+     * valores, nunca del texto que llegue por HTTP.
      */
+    @Override
+    public Pagina<TitularDelPrivilegio> titularesDe(
+            long accesoId, Privilegio privilegio, LocalDate fecha, Paginacion paginacion) {
+
+        String columna = privilegio.columna();
+        String desde =
+                " FROM usuario u"
+                        + " LEFT JOIN LATERAL ("
+                        + "   SELECT p.acceso_id, p."
+                        + columna
+                        + "     FROM permiso p"
+                        + "    WHERE p.acceso_id = :acceso AND p.usuario_id = u.id"
+                        + " ) ux ON true"
+                        + " LEFT JOIN LATERAL ("
+                        + "   SELECT bool_or(p."
+                        + columna
+                        + ") AS "
+                        + columna
+                        + ", count(*) AS grupos, min(g.id) AS grupo"
+                        + "     FROM permiso p"
+                        + "     JOIN grupo g ON g.id = p.grupo_id AND g.habilitado"
+                        + "                 AND (g.vigencia_desde IS NULL OR g.vigencia_desde <= :fecha)"
+                        + "                 AND (g.vigencia_hasta IS NULL OR g.vigencia_hasta >= :fecha)"
+                        + "     JOIN miembro m ON m.grupo_id = g.id AND m.activo"
+                        + "                   AND m.usuario_id = u.id"
+                        + "    WHERE p.acceso_id = :acceso AND p."
+                        + columna
+                        + " ) gx ON true"
+                        + " WHERE "
+                        + expresionEfectiva(columna);
+
+        return paginar(
+                "SELECT u.id AS id, u.cuenta AS cuenta, u.nombre AS nombre,"
+                        + usuarioOperativo("u")
+                        + " AS efectivo_hoy,"
+                        + " (ux.acceso_id IS NOT NULL) AS por_excepcion,"
+                        + " COALESCE(gx.grupos, 0) AS grupos,"
+                        + " gx.grupo AS grupo_id"
+                        + desde,
+                "SELECT count(*)" + desde,
+                Map.of("acceso", accesoId, "fecha", fecha),
+                paginacion,
+                ORDEN_TITULAR,
+                PermisoRepositoryJdbc::mapearTitular);
+    }
+
+    private static TitularDelPrivilegio mapearTitular(ResultSet fila, int numeroDeFila)
+            throws SQLException {
+        boolean porExcepcion = fila.getBoolean("por_excepcion");
+        long grupos = fila.getLong("grupos");
+        long grupo = fila.getLong("grupo_id");
+        return new TitularDelPrivilegio(
+                fila.getLong("id"),
+                fila.getString("cuenta"),
+                fila.getString("nombre"),
+                fila.getBoolean("efectivo_hoy"),
+                porExcepcion
+                        ? PermisoEfectivo.OrigenDelPermiso.EXCEPCION
+                        : PermisoEfectivo.OrigenDelPermiso.GRUPO,
+                porExcepcion || grupos != 1 ? null : grupo);
+    }
+
+    /** {@link #expresionEfectiva(String)} con el alias que espera el mapeo de filas. */
     private static String columnaEfectiva(String columna) {
+        return expresionEfectiva(columna) + " AS " + columna;
+    }
+
+    /**
+     * La <b>regla de precedencia</b>, en una sola expresion: {@code CASE WHEN ux.acceso_id IS NOT
+     * NULL THEN ux.<col> ELSE COALESCE(gx.<col>, false) END}.
+     *
+     * <p>Una fila de excepcion de usuario sustituye al grupo entero para ese acceso, <b>otorgue o
+     * niegue</b>; no se suma. Es la misma que aplica {@code ComprobadorDeAccesoJdbc}, y la usan las
+     * <b>cuatro</b> lecturas de esta clase: la matriz de la sesion, la matriz efectiva de otro
+     * usuario, la configurada (#583) y la de quien tiene un privilegio sobre un acceso (#583).
+     *
+     * <p>Vive aqui y no copiada en cada consulta por lo que #397 midio con el «Estado» de la
+     * infraccion administrativa: dos copias del mismo {@code CASE} divergen, y la que se lee en
+     * pantalla acaba no siendo la que filtro. Aqui seria peor, porque la copia divergente decide
+     * quien entra donde: escrita como union —{@code grupo OR excepcion}— convierte una excepcion
+     * que <b>restringe</b> en una que amplia, que es el defecto exacto que #543 encontro en la
+     * interfaz.
+     *
+     * <p>Sin alias, para que tambien se pueda poner en un {@code WHERE}: PostgreSQL no admite el
+     * nombre de una columna de salida en la clausula que filtra, y escribir el {@code CASE} dos
+     * veces en la misma consulta seria la copia divergente otra vez.
+     */
+    private static String expresionEfectiva(String columna) {
         return "CASE WHEN ux.acceso_id IS NOT NULL THEN ux."
                 + columna
                 + " ELSE COALESCE(gx."
                 + columna
-                + ", false) END AS "
-                + columna;
+                + ", false) END";
+    }
+
+    /**
+     * Que la cuenta pueda operar hoy: habilitada y dentro de vigencia (RF-123).
+     *
+     * <p>Es el eslabon del usuario de la comprobacion que hace el guardia —los otros dos, el grupo
+     * y la pertenencia, viajan dentro del lateral {@code gx}—, y esta escrito una vez porque las
+     * tres lecturas que lo usan lo usan de <b>tres maneras distintas</b> y esa es justo la
+     * diferencia entre ellas (#583):
+     *
+     * <ul>
+     *   <li>la matriz <b>efectiva</b> lo exige, en un {@code EXISTS}: un usuario deshabilitado
+     *       recibe la lista vacia, como el guardia. Enseñarle privilegios que despues responden 403
+     *       seria peor que no enseñarle ninguno;
+     *   <li>la <b>configurada</b> no lo exige: es la unica forma de distinguir «se deshabilito y
+     *       conserva permisos» de «nunca tuvo ninguno», que hoy son el mismo JSON vacio;
+     *   <li>y la de <b>titulares</b> ni lo exige ni lo calla: lo <b>publica</b> como {@code
+     *       efectivoHoy}, porque la cuenta deshabilitada que conserva el privilegio es justo la que
+     *       se audita y esconderla seria el defecto, pero decir que lo tiene sin decir que hoy no
+     *       lo ejerce seria el otro.
+     * </ul>
+     */
+    private static String usuarioOperativo(String alias) {
+        return "("
+                + alias
+                + ".habilitado"
+                + " AND ("
+                + alias
+                + ".vigencia_desde IS NULL OR "
+                + alias
+                + ".vigencia_desde <= :fecha)"
+                + " AND ("
+                + alias
+                + ".vigencia_hasta IS NULL OR "
+                + alias
+                + ".vigencia_hasta >= :fecha))";
     }
 
     /**

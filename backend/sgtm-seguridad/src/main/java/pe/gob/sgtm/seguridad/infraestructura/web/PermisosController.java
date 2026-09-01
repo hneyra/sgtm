@@ -79,18 +79,10 @@ public class PermisosController {
     private static Set<Privilegio> privilegios(NivelDeAcceso nivel) {
         Set<Privilegio> privilegios = EnumSet.noneOf(Privilegio.class);
         for (String nombre : nivel.privilegios()) {
-            try {
-                privilegios.add(
-                        Privilegio.valueOf(nombre.trim().toUpperCase(java.util.Locale.ROOT)));
-            } catch (IllegalArgumentException e) {
-                // El mensaje enumera los siete: el cliente mando un nombre que no
-                // existe, y decirle cuales hay es mas util que decirle que fallo.
-                throw new IllegalArgumentException(
-                        "Privilegio desconocido: '"
-                                + nombre
-                                + "'. Los siete son "
-                                + java.util.Arrays.toString(Privilegio.values()));
-            }
+            // La lectura del vocabulario vive en un solo sitio (#583): con una copia
+            // aqui y otra en el filtro de «quien tiene X», una acabaria admitiendo la
+            // palabra que la otra rechaza.
+            privilegios.add(Privilegios.de(nombre));
         }
         return privilegios;
     }

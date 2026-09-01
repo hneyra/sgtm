@@ -6,6 +6,8 @@ import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
 import pe.gob.sgtm.autorizacion.Privilegio;
+import pe.gob.sgtm.compartido.Pagina;
+import pe.gob.sgtm.compartido.Paginacion;
 
 /**
  * Puerto de persistencia de los permisos (RF-121).
@@ -59,6 +61,46 @@ public interface PermisoRepository {
      * @see PermisoEfectivo
      */
     List<PermisoEfectivo> efectivosConOrigenDe(long usuarioId, LocalDate fecha);
+
+    /**
+     * La misma matriz, pero <b>configurada</b> en vez de efectiva (#583).
+     *
+     * <p>Es {@link #efectivosConOrigenDe} <b>sin</b> la comprobacion de habilitacion y vigencia
+     * <b>del usuario</b>, y esa unica diferencia es el issue entero: {@code efectivosConOrigenDe}
+     * aplica la regla del guardia, asi que a una cuenta deshabilitada le devuelve la lista vacia
+     * <b>tanto si conserva permisos como si nunca los tuvo</b>. Las dos respuestas son el mismo
+     * JSON, y quien audita necesita separarlas: una cuenta que se deshabilita conserva lo que
+     * tuviera configurado, y rehabilitarla se lo devuelve entero.
+     *
+     * <p><b>Lo que si conserva es la vigencia del grupo y de la pertenencia.</b> Lo que se pregunta
+     * es que podria esta cuenta el dia que alguien la reactive, y reactivar al usuario no reactiva
+     * un grupo inhabilitado ni devuelve a quien salio de el. Quitar ahi la comprobacion convertiria
+     * la respuesta en «lo que alguna vez estuvo escrito», que es otra pregunta.
+     *
+     * <p>No sustituye a la efectiva y no la cambia: son dos preguntas, no dos respuestas a la
+     * misma. Comparten la expresion de precedencia, de modo que no puedan decir cosas distintas
+     * sobre quien manda —la excepcion o el grupo—.
+     */
+    List<PermisoEfectivo> configuradosConOrigenDe(long usuarioId, LocalDate fecha);
+
+    /**
+     * Quien tiene un privilegio sobre un acceso, en <b>una</b> consulta (#583).
+     *
+     * <p>La pregunta inversa de {@link #efectivosConOrigenDe}, y hasta ahora no se podia hacer:
+     * costaba una peticion por cuenta del padron. Componerla desde el cliente ademas <b>no
+     * funciona</b> si se atajaba por los grupos, porque la excepcion de usuario sustituye a lo que
+     * el grupo da y ningun recorrido por grupos encuentra a quien lo tiene por excepcion.
+     *
+     * <p>Devuelve lo <b>configurado</b>, no lo efectivo: la cuenta deshabilitada que conserva el
+     * privilegio sale, con {@code efectivoHoy} en falso. Filtrarla seria esconder justo la fila que
+     * se audita; publicarla sin la bandera seria afirmar que puede entrar donde el guardia le
+     * responderia 403.
+     *
+     * @param accesoId el acceso ya resuelto: un codigo que no existe es 404 antes de llegar aqui
+     * @param privilegio uno de los siete; su columna es la que decide, y no hay texto libre
+     */
+    Pagina<TitularDelPrivilegio> titularesDe(
+            long accesoId, Privilegio privilegio, LocalDate fecha, Paginacion paginacion);
 
     /**
      * Cuantos usuarios habilitados y vigentes pueden hoy administrar permisos.

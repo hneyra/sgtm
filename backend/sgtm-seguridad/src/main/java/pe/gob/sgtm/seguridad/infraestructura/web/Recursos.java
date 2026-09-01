@@ -8,6 +8,7 @@ import pe.gob.sgtm.seguridad.dominio.Acceso;
 import pe.gob.sgtm.seguridad.dominio.Grupo;
 import pe.gob.sgtm.seguridad.dominio.Modulo;
 import pe.gob.sgtm.seguridad.dominio.PermisoEfectivo;
+import pe.gob.sgtm.seguridad.dominio.TitularDelPrivilegio;
 import pe.gob.sgtm.seguridad.dominio.Usuario;
 
 /**
@@ -116,6 +117,36 @@ public final class Recursos {
                             .toList();
             return new PermisoEfectivoResource(
                     permiso.codigoDeAcceso(), nombres, permiso.origen().name(), permiso.grupoId());
+        }
+    }
+
+    /**
+     * Una cuenta que tiene el privilegio pedido sobre el acceso pedido (#583).
+     *
+     * <p><b>{@code efectivoHoy} es la mitad de la respuesta.</b> La lista es la de lo
+     * <b>configurado</b>: una cuenta deshabilitada o fuera de vigencia que conserva el privilegio
+     * sale, porque es justo la que se audita. Sin la bandera, esa fila afirmaria que hoy puede
+     * ejercerlo, y el guardia le responderia 403.
+     *
+     * @param grupoId el grupo del que lo hereda, o nulo si el origen es su excepcion <b>o</b> si
+     *     son varios los grupos vigentes que lo otorgan y no hay uno solo que nombrar
+     */
+    public record TitularDelPrivilegioResource(
+            long usuarioId,
+            String cuenta,
+            String nombre,
+            boolean efectivoHoy,
+            String origen,
+            @Nullable Long grupoId) {
+
+        public static TitularDelPrivilegioResource de(TitularDelPrivilegio titular) {
+            return new TitularDelPrivilegioResource(
+                    titular.usuarioId(),
+                    titular.cuenta(),
+                    titular.nombre(),
+                    titular.efectivoHoy(),
+                    titular.origen().name(),
+                    titular.grupoId());
         }
     }
 

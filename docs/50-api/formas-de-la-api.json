@@ -2648,6 +2648,23 @@
     "totalPaginas": "entero",
     "hayMas": "booleano"
   },
+  "GET /seguridad/accesos/{codigo}/usuarios": {
+    "contenido": [
+      {
+        "usuarioId": "entero",
+        "cuenta": "texto",
+        "nombre": "texto",
+        "efectivoHoy": "booleano",
+        "origen": "texto",
+        "grupoId": "entero"
+      }
+    ],
+    "pagina": "entero",
+    "tamano": "entero",
+    "totalElementos": "entero",
+    "totalPaginas": "entero",
+    "hayMas": "booleano"
+  },
   "GET /seguridad/auditoria": {
     "contenido": [
       {
@@ -2799,6 +2816,16 @@
     "hayMas": "booleano"
   },
   "GET /seguridad/usuarios/{id}/permisos": [
+    {
+      "acceso": "texto",
+      "privilegios": [
+        "texto"
+      ],
+      "origen": "texto",
+      "grupoId": "entero"
+    }
+  ],
+  "GET /seguridad/usuarios/{id}/permisos/configurados": [
     {
       "acceso": "texto",
       "privilegios": [

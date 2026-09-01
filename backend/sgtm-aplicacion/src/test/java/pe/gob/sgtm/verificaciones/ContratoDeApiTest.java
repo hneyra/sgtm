@@ -178,6 +178,14 @@ class ContratoDeApiTest {
                     // ruta solo habia el POST que afilia, asi que derivarla costaba una
                     // peticion por usuario del padron de cuentas.
                     "GET /seguridad/grupos/{grupo}/miembros",
+                    // #583 — las dos preguntas que el panel de seguridad no podia hacer.
+                    // «Que cuentas tienen ESPECIAL» costaba una peticion por usuario y no
+                    // se podia atajar por los grupos, porque la excepcion de usuario
+                    // SUSTITUYE a lo que el grupo da; y «que cuenta deshabilitada conserva
+                    // permisos» era incontestable, porque la matriz efectiva aplica la
+                    // regla del guardia y le devuelve la lista vacia conserve o no.
+                    "GET /seguridad/accesos/{codigo}/usuarios",
+                    "GET /seguridad/usuarios/{id}/permisos/configurados",
                     "PUT /seguridad/grupos/{id}/permisos",
                     "GET /seguridad/grupos/{id}/permisos",
                     "GET /seguridad/sesion/permisos",

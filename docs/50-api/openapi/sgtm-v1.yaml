@@ -8759,6 +8759,127 @@ paths:
           $ref: "#/components/responses/SinMunicipalidad"
         "422":
           $ref: "#/components/responses/ErrorDeValidacion"
+  "/seguridad/usuarios/{id}/permisos/configurados":
+    get:
+      operationId: permisos_configurados_de_usuario
+      summary: "Permisos configurados de un usuario"
+      description: |
+        Lo que un usuario **tiene configurado**, opción por opción, aunque hoy no lo
+        pueda ejercer (#583, RF-121).
+
+        **Es la misma matriz que `/permisos`, sin la comprobación de habilitación y
+        vigencia del usuario**, y esa única diferencia es el motivo por el que existe.
+        Aquella aplica la regla del guardia —y no cambia: enseñar privilegios que
+        después responden 403 sería peor—, así que a una cuenta deshabilitada le
+        contesta la lista **vacía** tanto si conserva permisos como si nunca los tuvo:
+        las dos respuestas son el mismo JSON. Una cuenta que se deshabilita conserva
+        lo que tuviera configurado, y rehabilitarla se lo devuelve entero; quien audita
+        necesita saber qué volvería a poder.
+
+        **Lo que sí conserva es la vigencia del grupo y de la pertenencia.** Reactivar
+        una cuenta no reactiva un grupo inhabilitado ni devuelve a quien salió de él,
+        así que un permiso que venía de un grupo hoy inhabilitado no sale aquí. Quitar
+        también esa comprobación convertiría la respuesta en «lo que alguna vez estuvo
+        escrito», que es otra pregunta.
+
+        **La forma es exactamente la de `/permisos`**, a propósito: las dos se comparan
+        campo a campo, y ahí está la diferencia que esta operación existe para poder ver.
+        La precedencia es la misma expresión SQL en las dos, de modo que no puedan
+        discrepar sobre quién manda —la excepción del usuario o sus grupos—.
+
+        Un `id` que no existe en esta municipalidad es **404**, no una lista vacía.
+      tags: ["Seguridad"]
+      parameters:
+        - name: id
+          in: path
+          required: true
+          description: "El usuario, por el `id` que publica cada fila de `GET /seguridad/usuarios`"
+          schema: { type: string }
+      responses:
+        200:
+          description: Operacion realizada
+          content:
+            application/json:
+              schema: { type: object }
+        "403":
+          $ref: "#/components/responses/SinMunicipalidad"
+        "422":
+          $ref: "#/components/responses/ErrorDeValidacion"
+  "/seguridad/accesos/{codigo}/usuarios":
+    get:
+      operationId: usuarios_con_el_privilegio
+      summary: "Cuentas que tienen un privilegio sobre un acceso"
+      description: |
+        Quién tiene un privilegio sobre una opción del catálogo, en **una** petición
+        (#583, RF-121).
+
+        **Antes sólo se podía contestar cuenta por cuenta.** Medido el 2026-09-01
+        contra el backend local, `GET /seguridad/usuarios/1/permisos` devuelve 134
+        filas y 21 511 bytes, y esa operación no admite ningún filtro: con los 200
+        usuarios que la pantalla pide de una vez, pintar una insignia costaba 200
+        peticiones y ~4,2 MB de JSON.
+
+        **Y no se puede atajar por los grupos.** La excepción propia de una cuenta
+        **sustituye** a lo que su grupo le da, así que quien pertenece a un grupo sin el
+        privilegio puede tenerlo por excepción —y al revés—. Ninguna lectura lista las
+        excepciones, de modo que un recorrido por grupos deja fuera justo esa mitad. Por
+        eso cada fila trae `origen`, y `grupoId` cuando hay un solo grupo vigente que lo
+        otorgue.
+
+        **La lista es la de lo configurado, y cada fila dice si hoy sirve.** Una cuenta
+        deshabilitada o fuera de vigencia que conserva el privilegio **sale**, con
+        `efectivoHoy: false`: filtrarla escondería justo la fila que se audita
+        —rehabilitarla se lo devuelve entero— y publicarla sin la bandera afirmaría que
+        entra donde el guardia le responde 403.
+
+        `privilegio` es **obligatorio**: sin él la respuesta sería «quién tiene algo
+        sobre este acceso», que es otra pregunta. Un `codigo` que no está en el catálogo
+        de esta municipalidad es **404**, no una lista vacía.
+      tags: ["Seguridad"]
+      parameters:
+        - name: codigo
+          in: path
+          required: true
+          description: "El acceso, por el `codigo` del catálogo: el mismo que publica cada fila de `GET /seguridad/usuarios/{id}/permisos` y el que viaja en el cuerpo del `PUT` de niveles"
+          schema: { type: string }
+        - name: privilegio
+          in: query
+          required: false
+          description: "Cual de los siete privilegios se pregunta. **Obligatorio**: sin el, la respuesta seria «quien tiene algo sobre este acceso», que es otra pregunta. El vocabulario es el del enumerado «Privilegio», letra por letra; cualquier otra palabra se rechaza con 422 enumerando los siete, nunca con una pagina vacia."
+          schema: { type: string, enum: [EJECUCION, LECTURA, REGISTRO, MODIFICACION, ELIMINACION, IMPRESION, ESPECIAL] }
+        - name: pagina
+          in: query
+          required: false
+          description: "Pagina que se pide, contada desde 0"
+          schema: { type: string }
+          example: "0"
+        - name: tamano
+          in: query
+          required: false
+          description: "Filas por pagina"
+          schema: { type: string }
+          example: "20"
+        - name: ordenarPor
+          in: query
+          required: false
+          description: "Campo por el que se ordena, en camelCase"
+          schema: { type: string }
+        - name: direccion
+          in: query
+          required: false
+          description: "ASCENDENTE | DESCENDENTE"
+          schema: { type: string }
+          example: "ASCENDENTE"
+      responses:
+        200:
+          description: Operacion realizada
+          content:
+            application/json:
+              schema: { type: object }
+        "403":
+          $ref: "#/components/responses/SinMunicipalidad"
+        "422":
+          $ref: "#/components/responses/ErrorDeValidacion"
   "/seguridad/sesion/ejercicio":
     put:
       operationId: cambiar_anio
