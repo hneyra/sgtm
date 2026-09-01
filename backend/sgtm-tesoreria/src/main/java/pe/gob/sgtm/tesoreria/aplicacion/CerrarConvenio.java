@@ -63,6 +63,21 @@ import pe.gob.sgtm.tesoreria.dominio.TipoDeMovimientoDeConvenio;
  * cierre a la vez. La lectura previa del estado esta para dar un mensaje util; la garantia es el
  * indice, porque dos peticiones simultaneas pasan las dos por cualquier {@code if} de Java —y dos
  * devoluciones dejarian al contribuyente debiendo el doble—.
+ *
+ * <h2>Y reenviar el mismo intento devuelve el acta de la primera vez (#606)</h2>
+ *
+ * <p>Que el doble cierre fuera imposible no bastaba: sin leer la cabecera {@code Idempotency-Key},
+ * el reenvio contestaba <b>409 CONFLICTO</b>, que quien atiende lee como un fallo nuevo y no como
+ * «ya estaba hecho» —y una interfaz no puede ofrecer «Reintentar» sobre una escritura cuyo
+ * reintento contesta un error—. Con la clave, el reenvio devuelve el acta que se registro y el
+ * convenio ya cerrado.
+ *
+ * <p><b>La clave la reclama el cierre, no el preconvenio que la reformulacion abre.</b> Los dos
+ * actos van en la misma transaccion y en dos tablas distintas; guardar la clave en las dos haria
+ * que identificara dos filas, y un reenvio tendria que elegir con cual contestar. Con la clave en
+ * {@code convenio_movimiento}, el reenvio se para <b>antes</b> de registrar nada, asi que no puede
+ * abrir un preconvenio de mas; y si se colara, {@code convenio_movimiento_cierre_uq} aborta la
+ * transaccion entera y el preconvenio se va con ella.
  */
 @Service
 public class CerrarConvenio {
@@ -101,13 +116,16 @@ public class CerrarConvenio {
      * explica la operacion a quien lea la bitacora, y el motivo es el sustento del acto
      * administrativo, que queda en el propio convenio y se imprime en su resolucion.
      *
+     * @param claveDeIdempotencia la cabecera {@code Idempotency-Key}; opcional
      * @throws FormalizarConvenio.ConvenioInexistente si no hay convenio con ese numero
      * @throws ConvenioSinFormalizar si todavia es un preconvenio: no acogio nada que devolver
      * @throws MovimientoDeConvenioRepository.ConvenioYaCerrado si ya estaba cerrado
      * @throws ReciboDeLaInicialVigente si se anula y el recibo de la inicial no esta anulado
+     * @throws ClaveDeOtroActo si esa clave cerro otro convenio
      */
     @Transactional
-    public Cerrado cerrar(Cierre peticion, Observacion observacion) {
+    public Cerrado cerrar(
+            Cierre peticion, @Nullable String claveDeIdempotencia, Observacion observacion) {
         Objects.requireNonNull(peticion, "No se cierra sin peticion");
         Objects.requireNonNull(observacion, "Sin observacion no se guarda (regla 10, RNF-052)");
 
@@ -119,6 +137,21 @@ public class CerrarConvenio {
                                         new FormalizarConvenio.ConvenioInexistente(
                                                 peticion.numero()));
         long convenioId = convenio.idGuardado();
+
+        // El reenvio, ANTES de la comprobacion de estado: sin esto un segundo envio del mismo
+        // intento se estrella contra `ConvenioYaCerrado` y contesta 409, que es exactamente lo
+        // que #606 arregla. La garantia sigue siendo el indice, no esta lectura.
+        String clave = limpiar(claveDeIdempotencia);
+        if (clave != null) {
+            Optional<MovimientoDeConvenio> yaHecho = movimientos.porClaveDeIdempotencia(clave);
+            if (yaHecho.isPresent()) {
+                MovimientoDeConvenio anterior = yaHecho.get();
+                if (anterior.convenioId() != convenioId) {
+                    throw new ClaveDeOtroActo(peticion.numero());
+                }
+                return reenvioDe(convenio, anterior);
+            }
+        }
 
         EstadoDeConvenio estado =
                 EstadoDeConvenio.deLosMovimientos(movimientos.deConvenio(convenioId));
@@ -159,6 +192,9 @@ public class CerrarConvenio {
                                             peticion.reformulacion(),
                                             "Una reformulacion trae el preconvenio que la sustituye")
                                     .conOrigen(convenioId),
+                            // Sin clave: la del intento la reclama el movimiento de cierre. Ver el
+                            // javadoc de la clase.
+                            null,
                             observacion);
         }
 
@@ -175,7 +211,8 @@ public class CerrarConvenio {
                                 devuelto.asientos(),
                                 reformulado == null ? null : reformulado.id(),
                                 reloj.instant(),
-                                observacion));
+                                observacion),
+                        clave);
 
         auditoria.registrar(
                 RegistroDeAuditoria.enLaFechaDe(
@@ -190,6 +227,33 @@ public class CerrarConvenio {
     }
 
     // ------------------------------------------------------------------
+
+    /**
+     * La respuesta del reenvio: el convenio y el acta que ya se registraron.
+     *
+     * <p>{@code devuelto} viene <b>nulo</b>, y es lo unico honesto que se puede poner: {@link
+     * MovimientoAsentado} deriva su importe de la lista de cuotas que movio, y recomponerla
+     * exigiria releer el libro a la fecha de entonces, que ya no dice lo mismo (regla 9). Lo que se
+     * devolvio esta congelado en el acta —{@code importe} y {@code asientos}—, que es de donde hay
+     * que leerlo.
+     */
+    private Cerrado reenvioDe(Convenio convenio, MovimientoDeConvenio cierre) {
+        Long nuevoId = cierre.convenioNuevoId();
+        return new Cerrado(
+                convenio,
+                cierre,
+                null,
+                nuevoId == null ? null : convenios.porId(nuevoId).orElse(null));
+    }
+
+    /** Una cabecera vacia o en blanco es no traer clave, no traer la cadena vacia. */
+    private static @Nullable String limpiar(@Nullable String clave) {
+        if (clave == null) {
+            return null;
+        }
+        String limpia = clave.strip();
+        return limpia.isEmpty() ? null : limpia;
+    }
 
     /**
      * Anular exige que el recibo de la inicial ya este anulado.
@@ -293,15 +357,37 @@ public class CerrarConvenio {
      * El convenio cerrado y su acta.
      *
      * @param convenio el convenio, intacto: su cronograma sigue donde estaba
-     * @param cierre la fila que se agrego
-     * @param devuelto lo que de verdad volvio a su fase de origen, con su fecha
+     * @param cierre la fila que se agrego —o la que ya estaba, si esto fue un reenvio—
+     * @param devuelto lo que de verdad volvio a su fase de origen, con su fecha. <b>Nulo en el
+     *     reenvio</b>: lo devuelto esta congelado en el acta, y recomponer la lista de cuotas
+     *     exigiria releer el libro a otra fecha (regla 9)
      * @param reformulado el preconvenio nuevo, si el cierre fue una reformulacion
      */
     public record Cerrado(
             Convenio convenio,
             MovimientoDeConvenio cierre,
-            MovimientoAsentado devuelto,
+            @Nullable MovimientoAsentado devuelto,
             @Nullable Convenio reformulado) {}
+
+    /**
+     * Esa clave de idempotencia cerro otro convenio.
+     *
+     * <p>Un reenvio es el <b>mismo</b> intento repetido. Con la clave apuntando a otro convenio,
+     * devolver el acta de la primera vez diria que se cerro un convenio que sigue vivo. Quien llama
+     * responde 409.
+     */
+    public static final class ClaveDeOtroActo extends RuntimeException {
+
+        @java.io.Serial private static final long serialVersionUID = 1L;
+
+        ClaveDeOtroActo(NumeroDeConvenio numero) {
+            super(
+                    "Esa clave de idempotencia ya cerro otro convenio, no el "
+                            + numero.impreso()
+                            + ": reenviar un intento devuelve lo de la primera vez, no lo de otra"
+                            + " peticion. Use una clave nueva");
+        }
+    }
 
     /** El convenio todavia es un preconvenio: no acogio ninguna deuda que devolver. */
     public static final class ConvenioSinFormalizar extends RuntimeException {

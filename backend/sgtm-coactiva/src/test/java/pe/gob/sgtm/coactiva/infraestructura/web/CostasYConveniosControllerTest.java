@@ -532,7 +532,52 @@ class CostasYConveniosControllerTest {
                 .andReturn();
     }
 
+    @Test
+    @org.junit.jupiter.api.DisplayName(
+            "#606 — la clave de idempotencia del intento llega al puerto por la ruta coactiva")
+    void laClaveLlegaAlPuertoDesdeCoactiva() throws Exception {
+        String expediente = expedienteConRec1();
+
+        MvcResult resultado =
+                fraccionar(
+                        expediente, false, "Se registra el convenio coactivo", "idem-coactiva-1");
+
+        assertThat(resultado.getResponse().getStatus()).isEqualTo(201);
+        assertThat(convenios.ultimaClave)
+                .as(
+                        "el comentario que estaba en FraccionamientoCoactivoTesoreria decia que"
+                                + " este puerto no lo llama un cliente HTTP, y es falso: al final"
+                                + " de esta cadena esta este mismo @PostMapping. Sin la cabecera,"
+                                + " un reenvio tras un 500 abre un SEGUNDO convenio coactivo sobre"
+                                + " la misma deuda — el defecto de #606 en la otra ruta")
+                .isEqualTo("idem-coactiva-1");
+    }
+
+    @Test
+    @org.junit.jupiter.api.DisplayName(
+            "#606 — sin cabecera sigue registrando, con la clave en nulo")
+    void sinCabeceraSigueRegistrando() throws Exception {
+        String expediente = expedienteConRec1();
+
+        MvcResult resultado = fraccionar(expediente, false, "Se registra el convenio coactivo");
+
+        assertThat(resultado.getResponse().getStatus())
+                .as("la cabecera es opcional: quien no la manda sigue pudiendo fraccionar")
+                .isEqualTo(201);
+        assertThat(convenios.llamado).isTrue();
+        assertThat(convenios.ultimaClave).isNull();
+    }
+
     private MvcResult fraccionar(String expediente, boolean simular, String observacion)
+            throws Exception {
+        return fraccionar(expediente, simular, observacion, null);
+    }
+
+    private MvcResult fraccionar(
+            String expediente,
+            boolean simular,
+            String observacion,
+            @org.jspecify.annotations.Nullable String clave)
             throws Exception {
         String cuerpo =
                 "{\"nroExpedCoact\":\""
@@ -541,12 +586,14 @@ class CostasYConveniosControllerTest {
                         + simular
                         + (observacion == null ? "" : ",\"observacion\":\"" + observacion + "\"")
                         + ",\"obligaciones\":[{\"tributo\":\"PREDIAL\",\"ejercicio\":2026}]}";
-        return conveniosMvc
-                .perform(
-                        MockMvcRequestBuilders.post("/api/v1/coactiva/convenios")
-                                .contentType(MediaType.APPLICATION_JSON)
-                                .content(cuerpo))
-                .andReturn();
+        var peticion =
+                MockMvcRequestBuilders.post("/api/v1/coactiva/convenios")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(cuerpo);
+        if (clave != null) {
+            peticion = peticion.header("Idempotency-Key", clave);
+        }
+        return conveniosMvc.perform(peticion).andReturn();
     }
 
     /** Un expediente abierto con su REC-1 dictada, sin pasar por la emision de documentos. */
@@ -719,11 +766,20 @@ class CostasYConveniosControllerTest {
             return convenio(solicitud, null);
         }
 
+        /** La ultima clave de idempotencia que le llego al puerto (#606). */
+        private @org.jspecify.annotations.Nullable String ultimaClave;
+
+        private boolean llamado;
+
         @Override
         public ConvenioCoactivo registrar(
-                SolicitudDeConvenioCoactivo solicitud, Observacion observacion) {
+                SolicitudDeConvenioCoactivo solicitud,
+                @org.jspecify.annotations.Nullable String claveDeIdempotencia,
+                Observacion observacion) {
             fallarSiToca();
             registrados++;
+            llamado = true;
+            ultimaClave = claveDeIdempotencia;
             return convenio(solicitud, "F-2026-000001");
         }
 

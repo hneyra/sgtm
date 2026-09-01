@@ -11,6 +11,7 @@ import java.time.Clock;
 import java.time.LocalDate;
 import java.time.ZoneOffset;
 import java.util.List;
+import org.jspecify.annotations.Nullable;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
@@ -19,6 +20,7 @@ import org.springframework.http.MediaType;
 import org.springframework.http.converter.json.JacksonJsonHttpMessageConverter;
 import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.test.web.servlet.MvcResult;
+import org.springframework.test.web.servlet.request.MockHttpServletRequestBuilder;
 import org.springframework.test.web.servlet.setup.MockMvcBuilders;
 import pe.gob.sgtm.auditoria.Origen;
 import pe.gob.sgtm.auditoria.OrigenContext;
@@ -77,6 +79,15 @@ import tools.jackson.databind.json.JsonMapper;
  *
  * <p>El conjunto de 2026 esta sellado y el de 2027 no, que es literalmente el estado de cualquier
  * municipalidad el 1 de enero.
+ *
+ * <h2>#606 — Y el reenvio del mismo intento, aqui y no contra la base</h2>
+ *
+ * <p>Por el mismo motivo: lo que hay que medir es que <b>este endpoint lea la cabecera</b> y que su
+ * reenvio salga 201 con el convenio ya cerrado, en vez del 409 que contestaba {@code
+ * convenio_movimiento_cierre_uq}. Llegar hasta el cierre exige un convenio formalizado, o sea su
+ * cuota inicial cobrada en caja con su recibo de verdad. Que el indice unico de la clave exista y
+ * muerda —y que la carrera de diez hilos produzca una sola fila— lo mide {@code ConvenioJdbcTest}
+ * contra PostgreSQL.
  */
 @DisplayName("#547 — Capa web: POST /api/v1/tesoreria/convenios/{numero}/anulacion")
 class ConvenioControllerTest {
@@ -252,7 +263,96 @@ class ConvenioControllerTest {
         assertThat(resultado.getResponse().getContentAsString()).contains("incidencia");
     }
 
+    // ---------------------------------------------------------------- #606: el reenvio
+
+    @Test
+    @DisplayName("#606 — el cierre reenviado devuelve 201 con el convenio ya cerrado, no 409")
+    void elCierreReenviadoDevuelve201() throws Exception {
+        String numero = convenioVigente();
+        String clave = "606-quiebre";
+
+        MvcResult primera = quebrar(numero, clave);
+        MvcResult segunda = quebrar(numero, clave);
+
+        assertThat(primera.getResponse().getStatus()).isEqualTo(201);
+        assertThat(segunda.getResponse().getStatus())
+                .as(
+                        "sin la cabecera esto era un 409, que quien atiende lee como un fallo nuevo"
+                                + " y no como «ya estaba hecho»")
+                .isEqualTo(201);
+        assertThat(segunda.getResponse().getContentAsString())
+                .as("y el cuerpo dice el estado real del convenio, no «vuelva a intentarlo»")
+                .contains("QUEBRADO")
+                .contains(numero);
+        assertThat(cierres(numero))
+                .as("un solo acta: la deuda no volvio dos veces a su fase de origen")
+                .isEqualTo(1);
+    }
+
+    @Test
+    @DisplayName("#606 — sin la cabecera, el reenvio sigue contestando 409 (el contraste)")
+    void sinLaCabeceraElReenvioEs409() throws Exception {
+        String numero = convenioVigente();
+
+        assertThat(quebrar(numero, null).getResponse().getStatus()).isEqualTo(201);
+        MvcResult reenvio = quebrar(numero, null);
+
+        assertThat(reenvio.getResponse().getStatus())
+                .as(
+                        "es el defecto que #606 describe: lo unico que separa el 201 del 409 es la"
+                                + " cabecera")
+                .isEqualTo(409);
+        assertThat(cierres(numero)).isEqualTo(1);
+    }
+
+    @Test
+    @DisplayName("#606 — la reformulacion reenviada no abre un segundo preconvenio")
+    void laReformulacionReenviadaNoAbreOtroPreconvenio() throws Exception {
+        String numero = convenioVigente();
+        String clave = "606-reformulacion";
+
+        MvcResult primera = reformular(numero, SELLADO.valor(), clave);
+        MvcResult segunda = reformular(numero, SELLADO.valor(), clave);
+
+        assertThat(primera.getResponse().getStatus()).isEqualTo(201);
+        assertThat(segunda.getResponse().getStatus()).isEqualTo(201);
+        assertThat(convenios.registrados())
+                .as(
+                        "el original y el que lo sustituye, no tres: la clave la reclama el acta de"
+                                + " cierre, y el reenvio se para antes de registrar el preconvenio")
+                .hasSize(2);
+        assertThat(cierres(numero)).isEqualTo(1);
+    }
+
     // ---------------------------------------------------------------- utilidades
+
+    /** Cuantos cierres tiene ese convenio, contados sobre el doble de los movimientos. */
+    private long cierres(String numero) {
+        Convenio convenio =
+                convenios.registrados().stream()
+                        .filter(uno -> uno.numero().impreso().equals(numero))
+                        .findFirst()
+                        .orElseThrow();
+        return movimientos.deConvenio(convenio.idGuardado()).stream()
+                .filter(movimiento -> movimiento.tipo().cierra())
+                .count();
+    }
+
+    private MvcResult quebrar(String numero, @Nullable String clave) throws Exception {
+        MockHttpServletRequestBuilder peticion =
+                post("/api/v1/tesoreria/convenios/" + numero + "/anulacion")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(
+                                """
+                                {"accion":"QUIEBRE","fechaAnul":"2026-03-16",
+                                 "motivo":"DOS CUOTAS CONSECUTIVAS IMPAGAS",
+                                 "observacion":"Quiebre pedido en ventanilla"}
+                                """);
+        if (clave != null) {
+            peticion = peticion.header("Idempotency-Key", clave);
+        }
+        return mvc.perform(peticion).andReturn();
+    }
 
     /** Un convenio ya formalizado: sin su cuota inicial cobrada no hay nada que reformular. */
     private String convenioVigente() throws Exception {
@@ -277,18 +377,26 @@ class ConvenioControllerTest {
     }
 
     private MvcResult reformular(String numero, int ejercicioDelNuevo) throws Exception {
-        return mvc.perform(
-                        post("/api/v1/tesoreria/convenios/" + numero + "/anulacion")
-                                .contentType(MediaType.APPLICATION_JSON)
-                                .content(
-                                        """
-                                        {"accion":"REFORMULACION","fechaAnul":"2026-03-16",
-                                         "motivo":"SE REFORMULA A PEDIDO DEL ADMINISTRADO",
-                                         "observacion":"Reformulacion pedida en ventanilla",
-                                         "reformulacion":%s}
-                                        """
-                                                .formatted(cuerpoDelConvenio(ejercicioDelNuevo))))
-                .andReturn();
+        return reformular(numero, ejercicioDelNuevo, null);
+    }
+
+    private MvcResult reformular(String numero, int ejercicioDelNuevo, @Nullable String clave)
+            throws Exception {
+        MockHttpServletRequestBuilder peticion =
+                post("/api/v1/tesoreria/convenios/" + numero + "/anulacion")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(
+                                """
+                                {"accion":"REFORMULACION","fechaAnul":"2026-03-16",
+                                 "motivo":"SE REFORMULA A PEDIDO DEL ADMINISTRADO",
+                                 "observacion":"Reformulacion pedida en ventanilla",
+                                 "reformulacion":%s}
+                                """
+                                        .formatted(cuerpoDelConvenio(ejercicioDelNuevo)));
+        if (clave != null) {
+            peticion = peticion.header("Idempotency-Key", clave);
+        }
+        return mvc.perform(peticion).andReturn();
     }
 
     private static String cuerpoDelConvenio(int ejercicio) {

@@ -157,7 +157,10 @@ public class FormalizarConvenio {
                                 acogido.importe(),
                                 acogido.asientos(),
                                 reloj.instant(),
-                                observacion));
+                                observacion),
+                        // Sin clave de idempotencia: la formalizacion entra por la caja y su
+                        // reenvio lo para `recibo_idempotencia_uq` (V29), antes de llegar aqui.
+                        null);
 
         auditoria.registrar(
                 RegistroDeAuditoria.enLaFechaDe(

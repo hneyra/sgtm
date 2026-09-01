@@ -921,6 +921,7 @@ class CierreDeCajaJdbcTest {
                         null,
                         null,
                         null),
+                null,
                 Observacion.de("Acogimiento a fraccionamiento, prueba de #36"));
     }
 
