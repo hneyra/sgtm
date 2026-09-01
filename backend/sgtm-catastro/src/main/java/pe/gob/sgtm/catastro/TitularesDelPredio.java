@@ -1,7 +1,9 @@
 package pe.gob.sgtm.catastro;
 
 import java.time.LocalDate;
+import java.util.Collection;
 import java.util.List;
+import java.util.Map;
 
 /**
  * Quien es titular de un predio a una fecha, publicado para otros contextos acotados (ADR-0015
@@ -54,4 +56,24 @@ public interface TitularesDelPredio {
      * distinto en cada caso convertiria esta lectura en un detector de predios ajenos.
      */
     List<TitularDelPredio> de(long predioId, LocalDate fecha);
+
+    /**
+     * Lo mismo para un lote de predios, en una sola lectura (#545).
+     *
+     * <p>Existe por lo mismo que {@code DirectorioDeContribuyentes.porIds} existe al lado de {@code
+     * porCodigo}: quien recorre un padron pagina a pagina —la deteccion de omisos de {@code
+     * fisc_omisos}— necesita los titulares de las veinte filas que ya trajo, y preguntarlos con
+     * {@link #de} en un bucle serian veinte consultas por pagina. Eso no se nota en una prueba y si
+     * en el padron de una provincia.
+     *
+     * <p>Que este metodo exista <b>no reabre lo que ADR-0015 §2.4 cerro</b>: lo que aquel decidio
+     * es que el identificador del titular no salga por HTTP en un <b>listado</b>, y esto no sale
+     * por HTTP —es una lectura entre contextos, la misma que {@link #de} ya permitia—. Quien lo
+     * publique despues sigue teniendo que decidir que enseña.
+     *
+     * <p>Un predio <b>sin titular vigente a esa fecha no aparece en el mapa</b>. No es lo mismo que
+     * no existir, y quien pregunte tiene que tratar los dos casos igual: {@link #de} ya devuelve
+     * lista vacia para los dos a proposito.
+     */
+    Map<Long, List<TitularDelPredio>> deVarios(Collection<Long> predioIds, LocalDate fecha);
 }

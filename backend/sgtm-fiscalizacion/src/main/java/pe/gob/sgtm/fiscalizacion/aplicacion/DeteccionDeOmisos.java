@@ -2,37 +2,42 @@ package pe.gob.sgtm.fiscalizacion.aplicacion;
 
 import java.time.LocalDate;
 import java.util.ArrayList;
+import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
-import java.util.Optional;
+import java.util.Set;
 import org.jspecify.annotations.Nullable;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
-import pe.gob.sgtm.catastro.LectorDeFichas;
-import pe.gob.sgtm.catastro.PadronDePredios;
-import pe.gob.sgtm.catastro.PredioDelPadron;
+import pe.gob.sgtm.catastro.TitularDelPredio;
+import pe.gob.sgtm.catastro.TitularesDelPredio;
 import pe.gob.sgtm.compartido.Pagina;
 import pe.gob.sgtm.compartido.Paginacion;
-import pe.gob.sgtm.dominio.AreaM2;
 import pe.gob.sgtm.dominio.Ejercicio;
 import pe.gob.sgtm.fiscalizacion.dominio.ComparacionHalladoDeclarado;
 import pe.gob.sgtm.fiscalizacion.dominio.CondicionFiscalizada;
+import pe.gob.sgtm.fiscalizacion.dominio.CriterioDeDeteccion;
+import pe.gob.sgtm.fiscalizacion.dominio.DeteccionRepository;
 import pe.gob.sgtm.fiscalizacion.dominio.FilaDeOmisos;
-import pe.gob.sgtm.rentas.DeclaracionDelEjercicio;
-import pe.gob.sgtm.rentas.DeclaracionesDelEjercicio;
 
 /**
  * Omisos y subvaluadores: el cruce del padrón de predios contra las declaraciones juradas de un
  * ejercicio ({@code fisc_omisos}, RF-055).
  *
- * <h2>El cruce va por puertos públicos, y solo por ellos</h2>
+ * <h2>El cruce es una consulta, y el filtro acota el conjunto (#545)</h2>
  *
- * <p>{@link PadronDePredios} de {@code catastro} y {@link DeclaracionesDelEjercicio} de {@code
- * rentas}. Este contexto no lee ni una tabla ajena (ARQ-01 §4), y los dos puertos son de <b>solo
- * lectura</b>: detectar omisos no escribe nada, ni siquiera una marca en el padrón. Lo que sale de
- * aquí es una lista; convertirla en un programa de fiscalización es la acción «Programar
- * fiscalización» de la pantalla, que ya existe desde #45.
+ * <p>Hasta #545 este caso de uso componía el cruce en Java: una página del padrón por {@code
+ * catastro.PadronDePredios} y las declaraciones de esos predios por {@code
+ * rentas.DeclaracionesDelEjercicio}. Esa forma no puede filtrar por condición —la condición se
+ * deriva del cruce, así que sólo se conoce después de traer la página— y lo que hacía era descartar
+ * filas ya paginadas: {@code ?condicion=SUBVALUADOR} contestaba «cero filas, de veinticinco, en
+ * nueve páginas». Ahora el cruce lo resuelve {@link DeteccionRepository} en una consulta, el filtro
+ * entra en el {@code WHERE} y el sobre cuenta lo filtrado. El porqué de dónde vive esa consulta
+ * está en el javadoc del puerto.
+ *
+ * <p>Lo que queda aquí es lo que no es del motor: <b>resolver los titulares</b> de la página por el
+ * puerto público de catastro, en una lectura y no una por fila.
  *
  * <h2>Omiso no es extemporáneo, y ése es el AC 3</h2>
  *
@@ -42,8 +47,9 @@ import pe.gob.sgtm.rentas.DeclaracionesDelEjercicio;
  * de oficio sobre contribuyentes que sí presentaron su declaración, y ésas se anulan en
  * reclamación.
  *
- * <p>La distinción no se escribe aquí: la hace {@link ComparacionHalladoDeclarado}, que es una
- * función pura y se puede probar sin base de datos. Esta clase resuelve los dos lados y los pasa.
+ * <p>La distinción no se decide aquí ni en el SQL sin más: {@link ComparacionHalladoDeclarado} es
+ * la función pura que la define, y la consulta es su transcripción. Que las dos no se separen lo
+ * sostiene una prueba que las compara caso por caso, no un comentario.
  *
  * <h2>El «valor catastral verificado» no existe todavía</h2>
  *
@@ -55,31 +61,24 @@ import pe.gob.sgtm.rentas.DeclaracionesDelEjercicio;
  * de la versión de ficha que la declaración jurada <b>referencia</b> —{@code
  * declaracion_jurada.ficha_catastral_id}, desde #28— frente al área de la ficha que el catastro
  * tiene vigente hoy. Si entre una y otra el catastro inscribió una ampliación que el contribuyente
- * nunca declaró, la diferencia sale sola. Es estructura, no depende de ninguna norma, y es
- * exactamente lo que la subvaluación por ampliación no declarada produce.
- *
- * <p>Comparar contra «el área declarada» de un campo suelto no serviría: la declaración jurada no
- * guarda superficies, guarda la ficha que la sustenta. Y comparar la ficha vigente contra sí misma
- * daría {@code CONFORME} siempre.
+ * nunca declaró, la diferencia sale sola.
  */
 @Service
 public class DeteccionDeOmisos {
 
-    private final PadronDePredios padron;
-    private final LectorDeFichas fichas;
-    private final DeclaracionesDelEjercicio declaraciones;
+    private final DeteccionRepository deteccion;
+    private final TitularesDelPredio titulares;
 
-    public DeteccionDeOmisos(
-            PadronDePredios padron,
-            LectorDeFichas fichas,
-            DeclaracionesDelEjercicio declaraciones) {
-        this.padron = padron;
-        this.fichas = fichas;
-        this.declaraciones = declaraciones;
+    public DeteccionDeOmisos(DeteccionRepository deteccion, TitularesDelPredio titulares) {
+        this.deteccion = deteccion;
+        this.titulares = titulares;
     }
 
     /**
-     * La página de contribuyentes detectados.
+     * La página de predios detectados.
+     *
+     * <p>{@code @Transactional(readOnly = true)}: sin transacción no hay {@code SET LOCAL}, y sin
+     * él la política RLS <b>falla</b> en vez de devolver filas.
      *
      * @param ejercicio qué ejercicio se examina
      * @param sectorCodigo filtro opcional de sector
@@ -98,78 +97,43 @@ public class DeteccionDeOmisos {
         Objects.requireNonNull(ejercicio, "La deteccion necesita el ejercicio que examina");
         Objects.requireNonNull(aLaFecha, "Toda lectura del padron indica a que fecha (regla 9)");
 
-        Pagina<PredioDelPadron> pagina = padron.porSector(sectorCodigo, aLaFecha, paginacion);
+        Pagina<FilaDeOmisos> pagina =
+                deteccion.detectar(
+                        new CriterioDeDeteccion(ejercicio, sectorCodigo, condicion, aLaFecha),
+                        paginacion);
         if (pagina.estaVacia()) {
-            return new Pagina<>(
-                    List.of(), pagina.pagina(), pagina.tamano(), pagina.totalElementos());
+            return pagina;
         }
 
-        // Una sola lectura de rentas por pagina, no una por fila.
-        List<Long> predios = pagina.contenido().stream().map(PredioDelPadron::predioId).toList();
-        Map<Long, DeclaracionDelEjercicio> declaradas = declaraciones.dePredios(predios, ejercicio);
+        // Una sola lectura de titulares por pagina, no una por fila.
+        Set<Long> predios = new LinkedHashSet<>();
+        for (FilaDeOmisos fila : pagina.contenido()) {
+            predios.add(fila.predioId());
+        }
+        Map<Long, List<TitularDelPredio>> porPredio = titulares.deVarios(predios, aLaFecha);
 
         List<FilaDeOmisos> filas = new ArrayList<>();
-        for (PredioDelPadron predio : pagina.contenido()) {
-            FilaDeOmisos fila =
-                    clasificar(
-                            predio,
-                            ejercicio,
-                            Optional.ofNullable(declaradas.get(predio.predioId())));
-            if (condicion == null || fila.condicion() == condicion) {
-                filas.add(fila);
-            }
+        for (FilaDeOmisos fila : pagina.contenido()) {
+            filas.add(fila.conTitulares(identificadoresDe(porPredio.get(fila.predioId()))));
         }
-
-        // El total es el del padron filtrado por sector, no el de las filas que sobreviven al
-        // filtro de condicion: filtrar despues de paginar y ademas recalcular el total daria
-        // «pagina 1 de 1» sobre un padron de treinta mil predios.
         return new Pagina<>(filas, pagina.pagina(), pagina.tamano(), pagina.totalElementos());
     }
 
-    // ------------------------------------------------------------------
-
-    private FilaDeOmisos clasificar(
-            PredioDelPadron predio,
-            Ejercicio ejercicio,
-            Optional<DeclaracionDelEjercicio> declarada) {
-
-        ComparacionHalladoDeclarado.LoDeclarado loDeclarado =
-                declarada.isEmpty()
-                        ? ComparacionHalladoDeclarado.LoDeclarado.nada()
-                        : new ComparacionHalladoDeclarado.LoDeclarado(
-                                true,
-                                declarada.get().fueraDePlazo(),
-                                areaQueSustentaLaDeclaracion(declarada.get()),
-                                null);
-
-        // Lo «hallado» en un cruce de gabinete es lo que el catastro tiene inscrito: no hay visita.
-        ComparacionHalladoDeclarado.LoHallado loHallado =
-                ComparacionHalladoDeclarado.LoHallado.de(predio.areaTerreno(), null);
-
-        return new FilaDeOmisos(
-                predio.predioId(),
-                predio.codigoReferenciaCatastral(),
-                predio.sectorCodigo(),
-                predio.contribuyenteId(),
-                ejercicio,
-                ComparacionHalladoDeclarado.condicion(loDeclarado, loHallado),
-                declarada.map(DeclaracionDelEjercicio::fueraDePlazo).orElse(false),
-                predio.areaTerreno(),
-                loDeclarado.area(),
-                null,
-                null,
-                null);
-    }
-
     /**
-     * El area de la version de ficha que la declaracion referencia.
+     * Los identificadores de las cuotas, en el orden que catastro las da: mayor porcentaje primero.
      *
-     * <p>{@code null} si la declaracion no referencia ninguna: una declaracion sin ficha no se
-     * puede contrastar por superficie, y suponer que declaro el area vigente la daria por conforme
-     * sin haberla comparado.
+     * <p>Un predio sin titular vigente no está en el mapa y sale con la lista vacía. Sale igual en
+     * la detección, y eso es #545: un predio que nadie reclama es exactamente el que hay que
+     * fiscalizar, y antes se caía de la lista sin que la respuesta lo dijera.
      */
-    private @Nullable AreaM2 areaQueSustentaLaDeclaracion(DeclaracionDelEjercicio declaracion) {
-        Long fichaId = declaracion.fichaCatastralId();
-        return fichaId == null ? null : fichas.areaDeLaVersion(fichaId).orElse(null);
+    private static List<Long> identificadoresDe(@Nullable List<TitularDelPredio> cuotas) {
+        if (cuotas == null || cuotas.isEmpty()) {
+            return List.of();
+        }
+        List<Long> identificadores = new ArrayList<>();
+        for (TitularDelPredio cuota : cuotas) {
+            identificadores.add(cuota.contribuyenteId());
+        }
+        return List.copyOf(identificadores);
     }
 }

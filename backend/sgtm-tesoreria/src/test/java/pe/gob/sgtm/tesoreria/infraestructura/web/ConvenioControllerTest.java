@@ -1,0 +1,403 @@
+package pe.gob.sgtm.tesoreria.infraestructura.web;
+
+import static org.assertj.core.api.Assertions.assertThat;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
+
+import ch.qos.logback.classic.Level;
+import ch.qos.logback.classic.spi.ILoggingEvent;
+import ch.qos.logback.core.read.ListAppender;
+import java.math.RoundingMode;
+import java.time.Clock;
+import java.time.LocalDate;
+import java.time.ZoneOffset;
+import java.util.List;
+import org.junit.jupiter.api.AfterEach;
+import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.DisplayName;
+import org.junit.jupiter.api.Test;
+import org.springframework.http.MediaType;
+import org.springframework.http.converter.json.JacksonJsonHttpMessageConverter;
+import org.springframework.test.web.servlet.MockMvc;
+import org.springframework.test.web.servlet.MvcResult;
+import org.springframework.test.web.servlet.setup.MockMvcBuilders;
+import pe.gob.sgtm.auditoria.Origen;
+import pe.gob.sgtm.auditoria.OrigenContext;
+import pe.gob.sgtm.auditoria.RegistroDeAuditoria;
+import pe.gob.sgtm.autorizacion.ComprobadorDeAcceso;
+import pe.gob.sgtm.autorizacion.GuardiaDeAcceso;
+import pe.gob.sgtm.autorizacion.Privilegio;
+import pe.gob.sgtm.contribuyentes.ResumenDeContribuyente;
+import pe.gob.sgtm.cuentacorriente.AcogimientoAConvenio;
+import pe.gob.sgtm.cuentacorriente.DeudaAcogida;
+import pe.gob.sgtm.cuentacorriente.MovimientoAsentado;
+import pe.gob.sgtm.cuentacorriente.SeleccionDeObligacion;
+import pe.gob.sgtm.dominio.Dinero;
+import pe.gob.sgtm.dominio.Ejercicio;
+import pe.gob.sgtm.dominio.Observacion;
+import pe.gob.sgtm.dominio.PuntoDeRedondeo;
+import pe.gob.sgtm.dominio.ValorNormativo;
+import pe.gob.sgtm.parametros.IdentificadorDeConjunto;
+import pe.gob.sgtm.parametros.LectorDeParametros;
+import pe.gob.sgtm.parametros.ParametrosSellados;
+import pe.gob.sgtm.parametros.PoliticasDeRedondeoSelladas;
+import pe.gob.sgtm.tesoreria.aplicacion.CerrarConvenio;
+import pe.gob.sgtm.tesoreria.aplicacion.CondicionesParametrizadas;
+import pe.gob.sgtm.tesoreria.aplicacion.ConsultaDeConvenios;
+import pe.gob.sgtm.tesoreria.aplicacion.FormalizarConvenio;
+import pe.gob.sgtm.tesoreria.aplicacion.RegistrarPreconvenio;
+import pe.gob.sgtm.tesoreria.dobles.AcogimientoDeMentira;
+import pe.gob.sgtm.tesoreria.dobles.ContribuyentesDeMentira;
+import pe.gob.sgtm.tesoreria.dobles.ConveniosEnMemoria;
+import pe.gob.sgtm.tesoreria.dobles.MovimientosDeConvenioEnMemoria;
+import pe.gob.sgtm.tesoreria.dobles.MovimientosEnMemoria;
+import pe.gob.sgtm.tesoreria.dominio.Convenio;
+import pe.gob.sgtm.web.ConfiguracionDeJson;
+import pe.gob.sgtm.web.ManejadorDeErrores;
+import tools.jackson.databind.json.JsonMapper;
+
+/**
+ * #547 — La gemela del fraccionamiento: {@code POST /tesoreria/convenios/{numero}/anulacion}.
+ *
+ * <h2>Por que esta ruta esta en el mismo issue</h2>
+ *
+ * <p>Porque es el mismo defecto y en el mismo modulo: cuando la accion es {@code REFORMULACION},
+ * {@code CerrarConvenio} registra el preconvenio que sustituye al que cierra, y ese preconvenio
+ * pide sus condiciones al conjunto sellado igual que el de {@code /fraccionamientos}. Con el
+ * ejercicio del convenio nuevo sin sellar, la anulacion contestaba <b>500 {@code ERROR_INTERNO} con
+ * identificador de incidencia</b>. Arreglar solo una de las dos deja el area de convenios a medias:
+ * se podria abrir un convenio y no se podria reformular.
+ *
+ * <h2>Por que con dobles y no contra PostgreSQL</h2>
+ *
+ * <p>Porque lo que hace falta demostrar aqui no es una fila que falte —eso lo mide {@code
+ * ConveniosFronteraTest} con el lector de verdad— sino que <b>el {@code catch} de este metodo</b>
+ * traduzca lo mismo que el del otro. Llegar hasta aqui exige ademas un convenio ya formalizado, o
+ * sea su cuota inicial cobrada en caja con su recibo; montarlo contra la base seria repetir el
+ * ciclo entero de {@code ConvenioJdbcTest} para medir un bloque de tres lineas.
+ *
+ * <p>El conjunto de 2026 esta sellado y el de 2027 no, que es literalmente el estado de cualquier
+ * municipalidad el 1 de enero.
+ */
+@DisplayName("#547 — Capa web: POST /api/v1/tesoreria/convenios/{numero}/anulacion")
+class ConvenioControllerTest {
+
+    private static final LocalDate HOY = LocalDate.of(2026, 3, 16);
+
+    private static final Clock RELOJ =
+            Clock.fixed(HOY.atStartOfDay(ZoneOffset.UTC).toInstant(), ZoneOffset.UTC);
+
+    private static final Ejercicio SELLADO = new Ejercicio(2026);
+
+    /** El ejercicio cuyo conjunto nadie ha sellado todavia. */
+    private static final int SIN_SELLAR = 2027;
+
+    /** El ejercicio sellado que no parametriza ningun punto de redondeo (D-03c). */
+    private static final int SIN_REDONDEO = 2028;
+
+    private static final String CODIGO = "C-0547";
+
+    private static final SeleccionDeObligacion PREDIAL =
+            new SeleccionDeObligacion("PREDIAL", SELLADO, null, null);
+
+    private final ConveniosEnMemoria convenios = new ConveniosEnMemoria();
+    private final MovimientosDeConvenioEnMemoria movimientos = new MovimientosDeConvenioEnMemoria();
+    private final AcogimientoDeMentira libro =
+            new AcogimientoDeMentira().con(PREDIAL, "ORDINARIA", Dinero.de("500.00"), HOY);
+    private final AcogimientoQuePuedeReventar acogimiento = new AcogimientoQuePuedeReventar(libro);
+
+    private final RegistrarPreconvenio preconvenios =
+            new RegistrarPreconvenio(
+                    convenios,
+                    acogimiento,
+                    new CondicionesParametrizadas(new ParametrosDeLaPrueba()),
+                    (RegistroDeAuditoria registro) -> {},
+                    RELOJ);
+
+    private final FormalizarConvenio formalizar =
+            new FormalizarConvenio(
+                    convenios,
+                    movimientos,
+                    acogimiento,
+                    (RegistroDeAuditoria registro) -> {},
+                    RELOJ);
+
+    private final MockMvc mvc =
+            MockMvcBuilders.standaloneSetup(
+                            new ConvenioController(
+                                    preconvenios,
+                                    new CerrarConvenio(
+                                            convenios,
+                                            movimientos,
+                                            new MovimientosEnMemoria(),
+                                            acogimiento,
+                                            preconvenios,
+                                            (RegistroDeAuditoria registro) -> {},
+                                            RELOJ),
+                                    new ConsultaDeConvenios(convenios, movimientos, RELOJ),
+                                    new ContribuyentesDeMentira()
+                                            .con(
+                                                    new ResumenDeContribuyente(
+                                                            7L,
+                                                            CODIGO,
+                                                            "TITULAR, PRUEBA",
+                                                            "DNI 40547001")),
+                                    RELOJ))
+                    .addInterceptors(new GuardiaDeAcceso(new TodoAutorizado(), RELOJ))
+                    .setControllerAdvice(new ManejadorDeErrores())
+                    .setMessageConverters(
+                            new JacksonJsonHttpMessageConverter(
+                                    JsonMapper.builder()
+                                            .addModule(
+                                                    new ConfiguracionDeJson()
+                                                            .moduloDeObjetosDeValor())
+                                            .build()))
+                    .build();
+
+    @BeforeEach
+    void fijarOrigen() {
+        // GuardiaDeAcceso pide OrigenContext.actual() ANTES de entrar al controlador: sin esto
+        // hasta el camino feliz daria 500, y se corregiria el controlador equivocado (#540).
+        OrigenContext.fijar(new Origen("cajero.ventanilla", "PC-07", "10.0.0.7"));
+    }
+
+    @AfterEach
+    void limpiarOrigen() {
+        OrigenContext.limpiar();
+    }
+
+    @Test
+    @DisplayName("con el conjunto sellado del ejercicio nuevo, la reformulacion se registra")
+    void laReformulacionSeRegistra() throws Exception {
+        String numero = convenioVigente();
+
+        MvcResult resultado = reformular(numero, SELLADO.valor());
+
+        assertThat(resultado.getResponse().getStatus()).isEqualTo(201);
+        assertThat(convenios.registrados())
+                .as("la reformulacion abre el convenio que sustituye al que cierra")
+                .hasSize(2);
+    }
+
+    @Test
+    @DisplayName("si el ejercicio del convenio nuevo no tiene conjunto sellado, 422 y no 500")
+    void reformularSinConjuntoSelladoEs422() throws Exception {
+        String numero = convenioVigente();
+
+        MvcResult resultado = reformular(numero, SIN_SELLAR);
+
+        assertThat(resultado.getResponse().getStatus())
+                .as("no es que el servidor este roto: es que nadie ha sellado 2027 (D-02a)")
+                .isEqualTo(422);
+        String cuerpo = resultado.getResponse().getContentAsString();
+        assertThat(cuerpo)
+                .contains("VALIDACION")
+                .contains("2027")
+                .contains("no tiene un conjunto de parametros sellado")
+                .doesNotContain("incidencia");
+        assertThat(convenios.registrados())
+                .as("y no queda medio acto: el convenio nuevo no se abrio")
+                .hasSize(1);
+    }
+
+    @Test
+    @DisplayName("y si el conjunto no parametriza ningun punto de redondeo, tambien 422")
+    void reformularSinPuntosObservadosEs422() throws Exception {
+        String numero = convenioVigente();
+
+        MvcResult resultado = reformular(numero, SIN_REDONDEO);
+
+        assertThat(resultado.getResponse().getStatus()).isEqualTo(422);
+        assertThat(resultado.getResponse().getContentAsString())
+                .as("son dos causas distintas, y se arreglan publicando cosas distintas")
+                .contains("REDONDEO")
+                .doesNotContain("no tiene un conjunto de parametros sellado")
+                .doesNotContain("incidencia");
+    }
+
+    @Test
+    @DisplayName("ninguna de las dos escribe un ERROR en el registro del servidor")
+    void loQueFaltaPublicarNoEnsuciaElRegistro() throws Exception {
+        String numero = convenioVigente();
+        ch.qos.logback.classic.Logger registro =
+                (ch.qos.logback.classic.Logger)
+                        org.slf4j.LoggerFactory.getLogger(ManejadorDeErrores.class);
+        ListAppender<ILoggingEvent> anotados = new ListAppender<>();
+        anotados.start();
+        registro.addAppender(anotados);
+        try {
+            reformular(numero, SIN_SELLAR);
+            reformular(numero, SIN_REDONDEO);
+        } finally {
+            registro.detachAppender(anotados);
+        }
+
+        assertThat(anotados.list.stream().filter(e -> e.getLevel() == Level.ERROR).toList())
+                .as("el registro de incidencias es para defectos, no para cifras sin publicar")
+                .isEmpty();
+    }
+
+    @Test
+    @DisplayName("lo que SI es un fallo del servidor sigue siendo 500 con su incidencia")
+    void loQueSiEsInternoNoSeDisfraza() throws Exception {
+        String numero = convenioVigente();
+        acogimiento.revienta = true;
+
+        MvcResult resultado = reformular(numero, SELLADO.valor());
+
+        assertThat(resultado.getResponse().getStatus())
+                .as(
+                        "una traduccion demasiado ancha —convertirlo todo en 422— es peor que el"
+                                + " defecto que arregla")
+                .isEqualTo(500);
+        assertThat(resultado.getResponse().getContentAsString()).contains("incidencia");
+    }
+
+    // ---------------------------------------------------------------- utilidades
+
+    /** Un convenio ya formalizado: sin su cuota inicial cobrada no hay nada que reformular. */
+    private String convenioVigente() throws Exception {
+        MvcResult creado =
+                mvc.perform(
+                                post("/api/v1/tesoreria/fraccionamientos")
+                                        .contentType(MediaType.APPLICATION_JSON)
+                                        .content(cuerpoDelConvenio(SELLADO.valor())))
+                        .andReturn();
+        assertThat(creado.getResponse().getStatus())
+                .as("si esto no es 201, lo que falla no es lo que la prueba mide")
+                .isEqualTo(201);
+
+        Convenio convenio = convenios.registrados().get(0);
+        formalizar.formalizar(
+                convenio.numero(),
+                999L,
+                convenio.cuotaInicial(),
+                HOY,
+                Observacion.de("Cuota inicial cobrada en ventanilla"));
+        return convenio.numero().impreso();
+    }
+
+    private MvcResult reformular(String numero, int ejercicioDelNuevo) throws Exception {
+        return mvc.perform(
+                        post("/api/v1/tesoreria/convenios/" + numero + "/anulacion")
+                                .contentType(MediaType.APPLICATION_JSON)
+                                .content(
+                                        """
+                                        {"accion":"REFORMULACION","fechaAnul":"2026-03-16",
+                                         "motivo":"SE REFORMULA A PEDIDO DEL ADMINISTRADO",
+                                         "observacion":"Reformulacion pedida en ventanilla",
+                                         "reformulacion":%s}
+                                        """
+                                                .formatted(cuerpoDelConvenio(ejercicioDelNuevo))))
+                .andReturn();
+    }
+
+    private static String cuerpoDelConvenio(int ejercicio) {
+        return """
+               {"codContribuyente":"%s","fecha":"%d-03-16","nroDeCuotas":6,
+                "cuotaInicial":"20","simular":false,
+                "observacion":"Fraccionamiento pedido en ventanilla",
+                "obligaciones":[{"tributo":"PREDIAL","ejercicio":2026}]}
+               """
+                .formatted(CODIGO, ejercicio);
+    }
+
+    // ---------------------------------------------------------------- dobles
+
+    /**
+     * Un lector que sella 2026, no sella 2027 y sella 2028 sin ningun punto de redondeo.
+     *
+     * <p>Las tres situaciones son reales y se distinguen por el ejercicio, que es exactamente por
+     * lo que {@code CondicionesParametrizadas} pregunta.
+     */
+    private static final class ParametrosDeLaPrueba implements LectorDeParametros {
+
+        @Override
+        public ParametrosSellados vigenteEn(Ejercicio ejercicio) {
+            if (ejercicio.valor() == SIN_SELLAR) {
+                throw new EjercicioSinSellar(ejercicio);
+            }
+            ParametrosSellados.Constructor constructor =
+                    ParametrosSellados.de(ejercicio, 1)
+                            .numero("INTERES_FRACCIONAMIENTO", "ORDINARIO", ValorNormativo.de("1"))
+                            .numero(
+                                    "CUOTAS_MAXIMAS_FRACCIONAMIENTO",
+                                    "ORDINARIO",
+                                    ValorNormativo.de("12"));
+            if (ejercicio.valor() != SIN_REDONDEO) {
+                constructor
+                        .numero(
+                                PoliticasDeRedondeoSelladas.TIPO,
+                                PuntoDeRedondeo.CUOTA.name(),
+                                ValorNormativo.de("2"))
+                        .texto(
+                                PoliticasDeRedondeoSelladas.TIPO,
+                                PuntoDeRedondeo.CUOTA.name(),
+                                RoundingMode.HALF_UP.name());
+            }
+            return constructor.construir();
+        }
+
+        @Override
+        public ParametrosSellados porConjunto(IdentificadorDeConjunto identificador) {
+            return vigenteEn(SELLADO);
+        }
+
+        @Override
+        public IdentificadorDeConjunto conjuntoVigenteEn(Ejercicio ejercicio) {
+            if (ejercicio.valor() == SIN_SELLAR) {
+                throw new EjercicioSinSellar(ejercicio);
+            }
+            return IdentificadorDeConjunto.de(1);
+        }
+    }
+
+    /** El libro de mentira, con un interruptor para el contraste de un fallo de verdad. */
+    private static final class AcogimientoQuePuedeReventar implements AcogimientoAConvenio {
+
+        private final AcogimientoAConvenio real;
+        private boolean revienta;
+
+        private AcogimientoQuePuedeReventar(AcogimientoAConvenio real) {
+            this.real = real;
+        }
+
+        @Override
+        public List<DeudaAcogida> deudaAcogible(
+                long contribuyenteId,
+                List<SeleccionDeObligacion> obligaciones,
+                LocalDate fechaDeCorte) {
+            return real.deudaAcogible(contribuyenteId, obligaciones, fechaDeCorte);
+        }
+
+        @Override
+        public MovimientoAsentado acoger(
+                long contribuyenteId,
+                List<DeudaAcogida> acogidas,
+                LocalDate fecha,
+                String documentoOrigen,
+                Observacion observacion) {
+            return real.acoger(contribuyenteId, acogidas, fecha, documentoOrigen, observacion);
+        }
+
+        @Override
+        public MovimientoAsentado devolver(
+                long contribuyenteId,
+                List<DeudaAcogida> acogidas,
+                LocalDate fecha,
+                String documentoOrigen,
+                Observacion observacion) {
+            if (revienta) {
+                throw new IllegalStateException("un defecto de verdad, con su rastro");
+            }
+            return real.devolver(contribuyenteId, acogidas, fecha, documentoOrigen, observacion);
+        }
+    }
+
+    private static final class TodoAutorizado implements ComprobadorDeAcceso {
+        @Override
+        public boolean autoriza(
+                String usuario, String acceso, Privilegio privilegio, LocalDate fecha) {
+            return true;
+        }
+    }
+}

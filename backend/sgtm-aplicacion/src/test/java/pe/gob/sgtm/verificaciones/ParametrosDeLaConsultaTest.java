@@ -31,6 +31,9 @@ import org.springframework.web.bind.annotation.RequestMethod;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 import pe.gob.sgtm.auditoria.Operacion;
+import pe.gob.sgtm.fiscalizacion.dominio.CondicionFiscalizada;
+import pe.gob.sgtm.fiscalizacion.dominio.EstadoDeLiquidacion;
+import pe.gob.sgtm.fiscalizacion.dominio.Hallazgo;
 import pe.gob.sgtm.web.GuardiaDeParametros;
 
 /**
@@ -82,7 +85,7 @@ import pe.gob.sgtm.web.GuardiaDeParametros;
  *
  * <p>El censo de «filtros que no filtran» dejo de describir un silencio y pasa a describir un
  * <b>rechazo</b>: desde que {@code GuardiaDeParametros} esta puesto, mandar uno de esos filtros no
- * devuelve el listado entero, contesta 422 nombrandolo. Los 155 que {@link
+ * devuelve el listado entero, contesta 422 nombrandolo. Los 146 que {@link
  * #loQueElBordeRechazaSoloBaja} cuenta son, literalmente, los filtros que el contrato promete y el
  * servidor no acepta. Eso los hace mas urgentes, no menos: la cifra solo baja, y baja de dos
  * maneras —implementando el filtro, o retirandolo del contrato—.
@@ -109,9 +112,14 @@ class ParametrosDeLaConsultaTest {
             Map.ofEntries(
                     // #395 — la capa web de la determinacion predial. Los dos filtros que la
                     // pantalla dibuja y que deciden la cifra: de quien y de que ano.
+                    //
+                    // #541 anade `ejercicio`, que es **el mismo dato con su nombre canonico**: se
+                    // llamaba `ano` en la consulta y `ejercicio` en el cuerpo, y un cliente tenia
+                    // que saber cual toca en cada mitad. Los tres se prometen aqui, que es lo que
+                    // impide arreglar una mitad y dejar la otra.
                     Map.entry(
                             "POST /rentas/predial/calculo-individual",
-                            Set.of("codContribuyente", "ano")),
+                            Set.of("codContribuyente", "ano", "ejercicio")),
                     // #399 — el calculo vehicular. Los tres filtros de la pantalla: los dos que
                     // resuelven el objetivo (placa o contribuyente) y el ejercicio. `simulacion` no
                     // esta y no es un olvido: no identifica lo que se calcula, decide si la
@@ -199,7 +207,20 @@ class ParametrosDeLaConsultaTest {
      * #elCensoDeFiltrosQueNoFiltranNoCrece}. Una entrada aqui compromete las dos direcciones a la
      * vez y cuesta una linea; se anade cuando su operacion se revisa.
      */
-    private static final Set<String> LOS_DOS_DICEN_LO_MISMO = Set.of("GET /seguridad/auditoria");
+    private static final Set<String> LOS_DOS_DICEN_LO_MISMO =
+            Set.of(
+                    "GET /seguridad/auditoria",
+                    // #541 — las dos lecturas de Rentas que se revisaron con el. La de
+                    // arbitrios declaraba cinco parametros y el controlador leia dos:
+                    // «Ejercicio» se tecleaba y no acotaba —solo entendia `anio`— y «Zona» y
+                    // «Uso» no los leia nadie. Ahora los cinco se leen: el ejercicio acota, y los
+                    // dos desplegables se **rechazan con 422** porque los valores que ofrecen no
+                    // existen en el sistema (ver ArbitriosController). Rechazar tambien es leer,
+                    // y es lo que separa un filtro que dice que no de uno que se traga la
+                    // pregunta. La de predios ya leia los suyos y se compromete aqui por lo mismo:
+                    // es la pareja que #541 revisa.
+                    "GET /rentas/arbitrios",
+                    "GET /rentas/predios");
 
     /**
      * Cuantas operaciones arrastran hoy cada mitad del desajuste. Medido, no estimado (#544).
@@ -213,21 +234,39 @@ class ParametrosDeLaConsultaTest {
      * filtra, o uno que se lee sin publicar, ponen la prueba en rojo con la operacion dentro. Y
      * bajan solas segun cada modulo se revisa; la que baja se ajusta en el mismo PR, que es donde
      * se sabe por que.
+     *
+     * <p><b>Y las dos se MIDEN, no se razonan</b>: #546 puso 62 en la primera contando las
+     * operaciones que su cambio sacaba del censo, y la medida es 61 — con el techo de 62 la guarda
+     * se quedaba con una holgura de una operacion, y devolver al contrato los tres parametros del
+     * cruce registral la dejaba en VERDE. La cifra sale de correr la prueba con el techo en 0 y
+     * leer el «but was» que imprime.
+     *
+     * <p>#546 baja las dos. {@code POST /fiscalizacion/vehicular} declaraba los tres filtros del
+     * cruce registral —{@code placa}, {@code ejercicio}, {@code origenDelCruce}— y ese cruce no
+     * existe: se retiran con {@code SUPRIMIDOS}. {@code GET /fiscalizacion/estado-cuenta} declaraba
+     * los filtros de una pantalla de PAPELETAS y la paginacion de una grilla que no tiene, y no
+     * declaraba {@code fechaDeConsulta} —el parametro de la regla 9 y el unico, con el
+     * contribuyente, que la operacion lee—: la brecha en las <b>dos</b> direcciones a la vez, que
+     * es lo que hace que baje tambien la segunda cifra.
      */
-    private static final int OPERACIONES_CON_FILTRO_QUE_NADIE_LEE = 64;
+    private static final int OPERACIONES_CON_FILTRO_QUE_NADIE_LEE = 61;
 
-    private static final int OPERACIONES_QUE_LEEN_UN_FILTRO_SIN_PUBLICAR = 19;
+    private static final int OPERACIONES_QUE_LEEN_UN_FILTRO_SIN_PUBLICAR = 18;
 
     /**
      * Y cuantos <b>parametros</b>, que es la cifra que #539 pide medir.
      *
      * <p>Contar operaciones deja pasar la mitad del caso: una operacion que ya arrastra un filtro
-     * que nadie lee puede ganar un segundo sin mover el recuento. Medido el 2026-09-01: 231
-     * parametros en las 64 operaciones, y 39 en las 19 de la otra mitad.
+     * que nadie lee puede ganar un segundo sin mover el recuento. Medido sobre el arbol de hoy
+     * —despues de #546, que retiro siete parametros y bajo los dos techos de operaciones—: 218
+     * parametros en las 61 operaciones, y 38 en las 18 de la otra mitad. Medido poniendo el techo a
+     * 0 y leyendo el «but was», nunca contando a mano: es la leccion que #546 aprendio por las
+     * malas, con un techo de 62 donde la medida era 61 y una holgura de una operacion en la que la
+     * mutacion no mordia.
      */
-    private static final int PARAMETROS_CON_FILTRO_QUE_NADIE_LEE = 231;
+    private static final int PARAMETROS_CON_FILTRO_QUE_NADIE_LEE = 218;
 
-    private static final int PARAMETROS_QUE_SE_LEEN_SIN_PUBLICAR = 39;
+    private static final int PARAMETROS_QUE_SE_LEEN_SIN_PUBLICAR = 38;
 
     /**
      * De esos, cuantos <b>rechaza hoy el borde</b> (#539).
@@ -235,14 +274,15 @@ class ParametrosDeLaConsultaTest {
      * <p>Desde que {@code GuardiaDeParametros} esta puesto, un filtro que el contrato declara y
      * ningun controlador lee ya no se ignora: se contesta 422 nombrandolo. La excepcion son los
      * cuatro nombres de la paginacion, que se admiten siempre; de ahi que esta cifra sea menor que
-     * la de arriba —231 menos los 76 de paginacion—.
+     * la de arriba —218 menos los 72 de paginacion—.
      *
-     * <p>Es la medida de la <b>promesa rota</b>: 155 filtros que el contrato publica y el servidor
-     * rechaza, en 61 operaciones. Baja de dos maneras y las dos son buenas: implementando el filtro
-     * —pasa a leerse— o retirandolo del contrato en {@code generar-openapi.mjs} (SUPRIMIDOS). Lo
-     * que no puede es subir: un filtro nuevo que nadie lee nace roto.
+     * <p>Es la medida de la <b>promesa rota</b>: 146 filtros que el contrato publica y el servidor
+     * rechaza, en 58 operaciones —tres de las 61 solo arrastraban nombres de paginacion, que se
+     * admiten siempre—. Baja de dos maneras y las dos son buenas: implementando el filtro —pasa a
+     * leerse— o retirandolo del contrato en {@code generar-openapi.mjs} (SUPRIMIDOS). Lo que no
+     * puede es subir: un filtro nuevo que nadie lee nace roto.
      */
-    private static final int PARAMETROS_QUE_EL_BORDE_RECHAZA = 155;
+    private static final int PARAMETROS_QUE_EL_BORDE_RECHAZA = 146;
 
     /** Una ruta del contrato: {@code "/ruta":} con dos espacios de sangria. */
     private static final Pattern RUTA_DEL_CONTRATO = Pattern.compile("  \"(/[^\"]*)\":");
@@ -493,7 +533,7 @@ class ParametrosDeLaConsultaTest {
     }
 
     @Test
-    @DisplayName("y el borde rechaza hoy 155 filtros que el contrato publica: la cifra solo baja")
+    @DisplayName("y el borde rechaza hoy 146 filtros que el contrato publica: la cifra solo baja")
     void loQueElBordeRechazaSoloBaja() throws IOException {
         Map<String, Set<String>> contrato = parametrosDeConsultaDelContrato();
         Map<String, Handler> publicados = handlersPublicados();
@@ -607,6 +647,48 @@ class ParametrosDeLaConsultaTest {
     }
 
     @Test
+    @DisplayName("y el de los tres desplegables de fiscalizacion es el de SUS enumerados (#546)")
+    void elVocabularioDeFiscalizacionEsElDeSusEnumerados() throws IOException {
+        // El mismo eslabon que el de arriba, en el modulo donde #546 midio cinco
+        // desplegables que no cuadraban -y hasta CERO coincidencias de seis-. Lo que
+        // hace falta comprobar no es que la lista sea «razonable» sino que sea la del
+        // enumerado LETRA POR LETRA: parecerse no es serlo, y aqui el que se parece
+        // entra con 422 -o, en el acta, con 201 y sin hallazgo-.
+        assertThat(vocabularioDelContrato("/fiscalizacion/omisos", "condicion"))
+                .as("«Condicion» de fisc_omisos es CondicionFiscalizada")
+                .containsExactly(nombresDe(CondicionFiscalizada.values()));
+        assertThat(vocabularioDelContrato("/fiscalizacion/resultados", "hallazgo"))
+                .as("«Hallazgo» de fisc_resultados tambien: lo que filtra es lo DERIVADO")
+                .containsExactly(nombresDe(CondicionFiscalizada.values()));
+        assertThat(vocabularioDelContrato("/fiscalizacion/resultados", "estado"))
+                .as("«Estado» de fisc_resultados es EstadoDeLiquidacion, y no existe «Reclamado»")
+                .containsExactly(nombresDe(EstadoDeLiquidacion.values()));
+        assertThat(vocabularioDelContrato("/fiscalizacion/vehicular", "hallazgo"))
+                .as(
+                        "y el del acta es Hallazgo -CUATRO-, que no es CondicionFiscalizada: el"
+                                + " acta no consigna el uso observado, asi que USO_DISTINTO no se"
+                                + " puede anotar")
+                .containsExactly(nombresDe(Hallazgo.values()));
+    }
+
+    @Test
+    @DisplayName("y los dos vocabularios de fiscalizacion NO son el mismo: son cuatro y cinco")
+    void hallazgoNoEsCondicionFiscalizada() {
+        // Sin esto, las cuatro comprobaciones de arriba seguirian pasando el dia que
+        // alguien «unificara» los dos enumerados, que es exactamente el arreglo comodo
+        // ante una discrepancia futura -el que #436 tuvo que impedir por escrito con
+        // las partidas del cuadro y las de la ficha-.
+        assertThat(nombresDe(Hallazgo.values()))
+                .as(
+                        "USO_DISTINTO lo DERIVA el sistema comparando usos; el acta no tiene"
+                                + " columna donde anotarlo (V4, V24), asi que no puede ser un"
+                                + " hallazgo de campo mientras eso no cambie")
+                .hasSize(4)
+                .doesNotContain("USO_DISTINTO");
+        assertThat(nombresDe(CondicionFiscalizada.values())).hasSize(5).contains("USO_DISTINTO");
+    }
+
+    @Test
     @DisplayName("todo cuerpo publicado es un record, o la regla de arriba deja de verlo")
     void todoCuerpoPublicadoEsUnRecord() {
         List<String> sinForma = new ArrayList<>();
@@ -667,6 +749,37 @@ class ParametrosDeLaConsultaTest {
                 Pattern.compile("enum: \\[([^\\]]+)\\]").matcher(yaml.substring(parametro));
         assertThat(vocabulario.find()).as("con su vocabulario dentro").isTrue();
         return Arrays.stream(vocabulario.group(1).split(",")).map(String::strip).toList();
+    }
+
+    /**
+     * El {@code enum} que el contrato declara para un parametro de una ruta (#546).
+     *
+     * <p>Se lee del YAML y no de la tabla del generador a proposito: lo que un cliente ve es el
+     * contrato comprometido, y comprobar el generador contra si mismo no diria nada.
+     */
+    private static List<String> vocabularioDelContrato(String ruta, String parametro)
+            throws IOException {
+        String yaml =
+                Files.readString(
+                        raizDelRepositorio().resolve("docs/50-api/openapi/sgtm-v1.yaml"),
+                        StandardCharsets.UTF_8);
+        int desde = yaml.indexOf("  \"" + ruta + "\":");
+        assertThat(desde).as("la ruta %s esta en el contrato", ruta).isPositive();
+        int donde = yaml.indexOf("- name: " + parametro, desde);
+        assertThat(donde).as("%s declara el parametro %s", ruta, parametro).isPositive();
+        Matcher vocabulario =
+                Pattern.compile("enum: \\[([^\\]]+)\\]").matcher(yaml.substring(donde));
+        assertThat(vocabulario.find())
+                .as(
+                        "el parametro %s de %s tiene que publicar su vocabulario: se declara en"
+                                + " docs/50-api/generar-openapi.mjs (VOCABULARIOS), nunca a mano",
+                        parametro, ruta)
+                .isTrue();
+        return Arrays.stream(vocabulario.group(1).split(",")).map(String::strip).toList();
+    }
+
+    private static String[] nombresDe(Enum<?>[] valores) {
+        return Arrays.stream(valores).map(Enum::name).toArray(String[]::new);
     }
 
     private static Map<String, Set<String>> parametrosDeConsultaDelContrato() throws IOException {

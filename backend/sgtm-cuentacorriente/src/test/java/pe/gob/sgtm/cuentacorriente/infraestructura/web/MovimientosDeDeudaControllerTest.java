@@ -31,6 +31,7 @@ import pe.gob.sgtm.cuentacorriente.dominio.CriterioDeConsulta;
 import pe.gob.sgtm.cuentacorriente.dominio.CriterioDeDeuda;
 import pe.gob.sgtm.cuentacorriente.dominio.CriterioDePagos;
 import pe.gob.sgtm.cuentacorriente.dominio.MovimientoDeDeuda;
+import pe.gob.sgtm.cuentacorriente.dominio.RangoDeCuotas;
 import pe.gob.sgtm.cuentacorriente.dominio.RecaudacionAgregada;
 import pe.gob.sgtm.dominio.Dinero;
 import pe.gob.sgtm.dominio.Ejercicio;
@@ -55,6 +56,11 @@ import tools.jackson.databind.json.JsonMapper;
  * <p>El alta hermana no cambia y tambien esta aqui: {@code POST /rentas/deuda/altas} no declara
  * ningun parametro de consulta en el contrato —su pantalla no dibuja filtros—, y la prueba lo
  * comprueba en vez de darlo por sabido.
+ *
+ * <p>#538 anade la otra mitad de «por donde entran»: <b>que cuotas</b> abarca el acto. Aqui se mide
+ * que el rango del cuerpo llegue hasta {@code registrar} y salga en la respuesta; que los asientos
+ * queden en la base con su periodo lo mide {@code AltaDeDeudaPorRangoFronteraTest}, contra
+ * PostgreSQL, porque eso es justamente lo que la respuesta no delataba.
  */
 @DisplayName("Capa web — POST /api/v1/rentas/deuda/{altas,bajas}: por donde entran los tres datos")
 class MovimientosDeDeudaControllerTest {
@@ -173,6 +179,74 @@ class MovimientosDeDeudaControllerTest {
                 .isEqualTo(new ClaveDeSaldo(7L, "PREDIAL", new Ejercicio(2025), 1, null, null));
     }
 
+    @Test
+    @DisplayName("el rango del cuerpo llega hasta el acto: «cuotas 1 a 4» son cuatro (#538)")
+    void elRangoLlegaHastaElActo() throws Exception {
+        MvcResult resultado =
+                mvc.perform(
+                                post("/api/v1/rentas/deuda/altas")
+                                        .contentType(MediaType.APPLICATION_JSON)
+                                        .content(
+                                                "{\"codContribuyente\":\"C-0007\","
+                                                        + "\"tributo\":\"PREDIAL\",\"ano\":\"2026\","
+                                                        + "\"cuotaDesde\":1,\"cuotaHasta\":4,"
+                                                        + "\"insoluto\":\"100.00\","
+                                                        + "\"fechaValor\":\"2026-03-16\","
+                                                        + "\"documentoOrigen\":\"RD-2026-000418\","
+                                                        + "\"observacion\":\"Deuda migrada\"}"))
+                        .andReturn();
+
+        assertThat(resultado.getResponse().getStatus()).isEqualTo(201);
+        assertThat(movimientos.ultimasCuotas()).isEqualTo(new RangoDeCuotas(1, 4));
+        assertThat(resultado.getResponse().getContentAsString())
+                .as("la respuesta ensena las cuatro cuotas y su total, no una sola")
+                .contains("\"periodo\":1")
+                .contains("\"periodo\":4")
+                .contains("\"total\":{\"importe\":\"400.00\"");
+    }
+
+    @Test
+    @DisplayName("sin cuota ni rango el acto es la obligacion anual, que es periodo 0 (#538)")
+    void sinCuotaNiRangoElActoEsAnual() throws Exception {
+        MvcResult resultado =
+                mvc.perform(
+                                post("/api/v1/rentas/deuda/altas")
+                                        .contentType(MediaType.APPLICATION_JSON)
+                                        .content(
+                                                "{\"codContribuyente\":\"C-0007\","
+                                                        + "\"tributo\":\"PREDIAL\",\"ano\":\"2026\","
+                                                        + "\"insoluto\":\"100.00\","
+                                                        + "\"fechaValor\":\"2026-03-16\","
+                                                        + "\"documentoOrigen\":\"RD-2026-000419\","
+                                                        + "\"observacion\":\"Deuda migrada\"}"))
+                        .andReturn();
+
+        assertThat(resultado.getResponse().getStatus()).isEqualTo(201);
+        assertThat(movimientos.ultimasCuotas()).isEqualTo(RangoDeCuotas.ANUAL);
+    }
+
+    @Test
+    @DisplayName("la baja tambien abarca el rango: es el mismo cuerpo y el mismo acto (#538)")
+    void laBajaTambienAbarcaElRango() throws Exception {
+        MvcResult resultado =
+                mvc.perform(
+                                post("/api/v1/rentas/deuda/bajas")
+                                        .param("codContribuyente", "C-0008")
+                                        .param("tributo", "ARBITRIO")
+                                        .param("ano", "2024")
+                                        .contentType(MediaType.APPLICATION_JSON)
+                                        .content(
+                                                "{\"cuotaDesde\":2,\"cuotaHasta\":3,"
+                                                        + "\"insoluto\":\"100.00\","
+                                                        + "\"fechaValor\":\"2026-03-16\","
+                                                        + "\"documentoOrigen\":\"RES-0005\","
+                                                        + "\"observacion\":\"Prescripcion declarada\"}"))
+                        .andReturn();
+
+        assertThat(resultado.getResponse().getStatus()).isEqualTo(201);
+        assertThat(movimientos.ultimasCuotas()).isEqualTo(new RangoDeCuotas(2, 3));
+    }
+
     // ------------------------------------------------------------------
 
     /**
@@ -188,6 +262,7 @@ class MovimientosDeDeudaControllerTest {
 
         private int registros;
         private @Nullable MovimientoDeDeuda ultimo;
+        private @Nullable RangoDeCuotas ultimasCuotas;
         private @Nullable String codigo;
 
         MovimientosEspiados() {
@@ -196,13 +271,28 @@ class MovimientosDeDeudaControllerTest {
 
         @Override
         public Registro registrar(
-                MovimientoDeDeuda movimiento, String codigoContribuyente, Observacion observacion) {
+                MovimientoDeDeuda movimiento,
+                RangoDeCuotas cuotas,
+                String codigoContribuyente,
+                Observacion observacion) {
             registros++;
             ultimo = movimiento;
+            ultimasCuotas = cuotas;
             codigo = codigoContribuyente;
-            // La traduccion a asientos es la del propio movimiento: la respuesta que sale por HTTP
-            // se compone de ella, y rehacerla aqui seria inventar otra.
-            return new Registro(movimiento.enAsientos(), "NC-2026-000001");
+            // La traduccion a asientos es la del propio movimiento, cuota a cuota: la respuesta
+            // que sale por HTTP se compone de ella, y rehacerla aqui seria inventar otra.
+            List<Asiento> asentados = new java.util.ArrayList<>();
+            for (MovimientoDeDeuda deLaCuota : movimiento.enCadaCuota(cuotas)) {
+                asentados.addAll(deLaCuota.enAsientos());
+            }
+            return new Registro(List.copyOf(asentados), "NC-2026-000001");
+        }
+
+        RangoDeCuotas ultimasCuotas() {
+            if (ultimasCuotas == null) {
+                throw new AssertionError("No se registro ningun movimiento");
+            }
+            return ultimasCuotas;
         }
 
         ClaveDeSaldo ultimaClave() {

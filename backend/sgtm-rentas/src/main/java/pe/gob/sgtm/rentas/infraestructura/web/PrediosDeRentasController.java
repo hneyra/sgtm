@@ -26,7 +26,9 @@ import pe.gob.sgtm.compartido.Paginacion;
 import pe.gob.sgtm.contribuyentes.DirectorioDeContribuyentes;
 import pe.gob.sgtm.contribuyentes.ResumenDeContribuyente;
 import pe.gob.sgtm.web.Api;
+import pe.gob.sgtm.web.CodigoDeError;
 import pe.gob.sgtm.web.ParametrosDePaginacion;
+import pe.gob.sgtm.web.ProblemaDeNegocio;
 import pe.gob.sgtm.web.RespuestaPaginada;
 
 /**
@@ -50,9 +52,24 @@ import pe.gob.sgtm.web.RespuestaPaginada;
  *
  * <p>{@code contribuyente} y {@code codContribuyente} son el mismo filtro con dos nombres: el
  * contrato declara los dos porque el prototipo dibuja «Cod. Contribuyente» y el resto de las
- * lecturas usa {@code contribuyente}. Sin ninguno de los dos no hay a quien listar y se responde
- * una pagina vacia, como {@code ConsultaPrediosController}: un padron entero no es la respuesta a
- * una pregunta que no se hizo.
+ * lecturas usa {@code contribuyente}. Uno de los dos es <b>obligatorio</b>.
+ *
+ * <h2>Tres cosas distintas que se decian igual (#541)</h2>
+ *
+ * <p>Hasta #541 esta operacion respondia {@code 200} con la pagina vacia en <b>dos</b> casos que no
+ * son el mismo, y ninguno de los dos es «este contribuyente no tiene predios»:
+ *
+ * <ul>
+ *   <li><b>sin ningun contribuyente</b> —la peticion no dice a quien listar—: ahora {@code 422}
+ *       nombrando el parametro, como su hermana {@code GET /rentas/vehiculos}, que ya lo hacia. Un
+ *       200 con cero filas sobre 14 422 predios se lee como una respuesta, y no lo es;
+ *   <li><b>un codigo que no esta en el padron</b> —tecleado mal, o de otra municipalidad—: ahora
+ *       {@code 404} nombrando el codigo. Es la pregunta que se hace en ventanilla, y las dos
+ *       respuestas eran identicas byte a byte.
+ * </ul>
+ *
+ * <p>Lo que sigue siendo {@code 200} con cero filas es lo unico que de verdad lo es: un
+ * contribuyente del padron que no tiene ningun predio.
  */
 @RestController
 @RequestMapping(Api.RAIZ + "/rentas/predios")
@@ -93,12 +110,19 @@ public class PrediosDeRentasController {
         Paginacion paginacion = parametros.aPaginacion(ORDEN_POR_OMISION);
         String codigo = primeroNoVacio(codContribuyente, contribuyente);
         if (codigo == null) {
-            return RespuestaPaginada.de(Pagina.vacia(paginacion));
+            throw new ProblemaDeNegocio(
+                    CodigoDeError.VALIDACION,
+                    "Hay que decir de quien son los predios: falta «codContribuyente» (o su otro"
+                            + " nombre, «contribuyente»)");
         }
         Optional<ResumenDeContribuyente> encontrado =
                 directorio.porCodigo(codigo.toUpperCase(Locale.ROOT));
         if (encontrado.isEmpty()) {
-            return RespuestaPaginada.de(Pagina.vacia(paginacion));
+            throw new ProblemaDeNegocio(
+                    CodigoDeError.NO_ENCONTRADO,
+                    "En el padron de esta municipalidad no hay ningun contribuyente con codigo '"
+                            + codigo
+                            + "'");
         }
 
         // La fecha de corte sale del reloj inyectado y no de la peticion: el contrato de esta

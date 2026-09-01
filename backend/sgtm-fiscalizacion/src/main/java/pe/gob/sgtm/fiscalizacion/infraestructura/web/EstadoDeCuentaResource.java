@@ -20,14 +20,29 @@ import pe.gob.sgtm.web.ImporteActualizado;
  * <p>{@code total} es {@code null} si alguna línea no tiene cifra. Un total parcial presentado como
  * total es peor que ningún total, porque nadie lo distingue del completo.
  *
+ * <h2>Quien nunca fue fiscalizado no debe cero: no debe nada que esta pantalla sepa</h2>
+ *
+ * <p>Hasta #546 los dos casos salían iguales —{@code "total":{"importe":"0"}}—, y son cosas
+ * distintas: a quien nunca se le abrió una liquidación no se le ha determinado nada, y a quien sí y
+ * ya pagó se le determinó y su saldo es cero. El cero de la lista vacía es el que este propio
+ * javadoc dice de sí mismo que hay que evitar.
+ *
+ * <p>Lo que los separa es {@code fiscalizado}, y no el {@code total}: {@code total} ya viaja en
+ * {@code null} —hoy, siempre— cuando alguna línea no tiene cifra, así que un nulo solo no dice cuál
+ * de las dos cosas pasa. Con la marca, {@code fiscalizado: false} con {@code lineas: []} es «no hay
+ * procedimiento», y {@code fiscalizado: true} con {@code total} en cero es «lo hubo y no queda
+ * saldo».
+ *
  * @param codContribuyente el código del fiscalizado
  * @param fechaDeConsulta el día al que están todas las cifras
+ * @param fiscalizado si alguna vez se le abrió una liquidación de fiscalización
  * @param lineas una por obligación fiscalizada
- * @param total la suma, si todas las líneas tienen cifra
+ * @param total la suma, si se le fiscalizó y todas las líneas tienen cifra
  */
 public record EstadoDeCuentaResource(
         String codContribuyente,
         String fechaDeConsulta,
+        boolean fiscalizado,
         List<LineaResource> lineas,
         @Nullable ImporteActualizado total) {
 
@@ -40,6 +55,7 @@ public record EstadoDeCuentaResource(
         return new EstadoDeCuentaResource(
                 codContribuyente,
                 estado.aLaFecha().toString(),
+                estado.fiscalizado(),
                 List.copyOf(lineas),
                 estado.total() == null
                         ? null

@@ -7,22 +7,22 @@ import org.junit.jupiter.api.Test;
 import pe.gob.sgtm.dominio.Dinero;
 
 @DisplayName(
-        "#32 — BaseImponibleDeAlcabala: el mayor entre transferencia y autoavaluo (TUO LTM art. 24)")
+        "#32 — BaseImponibleDeAlcabala: el mayor entre transferencia y autovaluo (TUO LTM art. 24)")
 class BaseImponibleDeAlcabalaTest {
 
     @Test
-    @DisplayName("elige el autoavaluo ajustado cuando supera al valor de transferencia")
-    void eligeElAutoavaluoCuandoEsMayor() {
+    @DisplayName("elige el autovaluo ajustado cuando supera al valor de transferencia")
+    void eligeElAutovaluoCuandoEsMayor() {
         EleccionDeBase eleccion =
                 BaseImponibleDeAlcabala.elegir(Dinero.de("100000.00"), Dinero.de("150000.00"));
 
         assertThat(eleccion.base()).isEqualTo(Dinero.de("150000.00"));
         assertThat(eleccion.origen()).isEqualTo(OrigenDeLaBase.AUTOAVALUO_AJUSTADO);
-        assertThat(eleccion.fundamento()).isNotBlank().contains("autoavaluo");
+        assertThat(eleccion.fundamento()).isNotBlank().contains("autovaluo");
     }
 
     @Test
-    @DisplayName("elige el valor de transferencia cuando supera al autoavaluo ajustado")
+    @DisplayName("elige el valor de transferencia cuando supera al autovaluo ajustado")
     void eligeElValorDeTransferenciaCuandoEsMayor() {
         EleccionDeBase eleccion =
                 BaseImponibleDeAlcabala.elegir(Dinero.de("200000.00"), Dinero.de("150000.00"));

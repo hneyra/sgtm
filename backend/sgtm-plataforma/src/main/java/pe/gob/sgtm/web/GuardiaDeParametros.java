@@ -74,15 +74,15 @@ import org.springframework.web.servlet.HandlerInterceptor;
  * <h2>Lo que costo, medido antes de decidirlo</h2>
  *
  * <p>Esto cambia el borde de <b>todas</b> las lecturas con filtros, asi que no se decide de paso.
- * El contrato declara 155 filtros en 61 operaciones que ningun controlador lee (#544): con esta
- * guarda, mandarlos deja de devolver el listado entero y pasa a contestar 422. Se cruzo el censo
- * contra lo que el unico cliente manda de verdad —las doce fachadas de {@code frontend/src/api},
- * ruta por ruta y campo por campo—: de esos 155, el frontend <b>no manda ninguno</b>. Los dos
- * unicos parametros que manda y nadie lee son {@code contribuyente} y {@code fechaDeConsulta} de
- * {@code GET /fiscalizacion/omisos}, que <b>el contrato tampoco declara</b> — o sea dos filtros que
- * la pantalla dibuja, que hoy no acotan nada y que devuelven el padron de omisos entero. Con la
- * guarda, esa pantalla dice cual de sus filtros no existe en vez de ensenar una lista que no es la
- * que se pidio.
+ * El contrato declara 146 filtros en 58 operaciones que ningun controlador lee (#544, ya con los
+ * siete que #546 retiro): con esta guarda, mandarlos deja de devolver el listado entero y pasa a
+ * contestar 422. Se cruzo el censo contra lo que el unico cliente manda de verdad —las doce
+ * fachadas de {@code frontend/src/api}, ruta por ruta y campo por campo—: de esos 146, el frontend
+ * <b>no manda ninguno</b>. Los dos unicos parametros que manda y nadie lee son {@code
+ * contribuyente} y {@code fechaDeConsulta} de {@code GET /fiscalizacion/omisos}, que <b>el contrato
+ * tampoco declara</b> — o sea dos filtros que la pantalla dibuja, que hoy no acotan nada y que
+ * devuelven el padron de omisos entero. Con la guarda, esa pantalla dice cual de sus filtros no
+ * existe en vez de ensenar una lista que no es la que se pidio.
  *
  * <h2>De donde se leen los nombres que llegaron</h2>
  *

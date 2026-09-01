@@ -91,6 +91,82 @@ class ArbitriosControllerTest {
                 .doesNotContain("municipalidad");
     }
 
+    @Test
+    @DisplayName("con ejercicio —el filtro que la pantalla dibuja—, consulta ese ejercicio")
+    void conEjercicioConsultaEseEjercicio() throws Exception {
+        mvc.perform(get("/api/v1/rentas/arbitrios").param("ejercicio", "2027")).andReturn();
+
+        assertThat(repositorio.ultimoCriterio.ejercicio()).isEqualTo(new Ejercicio(2027));
+    }
+
+    @Test
+    @DisplayName("cuando vienen los dos nombres manda «ejercicio», que es el canonico")
+    void elEjercicioGanaAlAnio() throws Exception {
+        mvc.perform(
+                        get("/api/v1/rentas/arbitrios")
+                                .param("ejercicio", "2027")
+                                .param("anio", "2025"))
+                .andReturn();
+
+        assertThat(repositorio.ultimoCriterio.ejercicio()).isEqualTo(new Ejercicio(2027));
+    }
+
+    @Test
+    @DisplayName("un ejercicio que no es un ano se rechaza con 422, no con 500")
+    void unEjercicioQueNoEsUnAnoSeRechaza() throws Exception {
+        MvcResult resultado =
+                mvc.perform(get("/api/v1/rentas/arbitrios").param("ejercicio", "dos mil"))
+                        .andReturn();
+
+        assertThat(resultado.getResponse().getStatus()).isEqualTo(422);
+        assertThat(resultado.getResponse().getContentAsString()).contains("ejercicio");
+    }
+
+    /**
+     * <b>Los dos filtros que esta consulta no puede servir</b> (#541).
+     *
+     * <p>Antes se tecleaban, viajaban y la tabla volvia igual. Ahora se rechazan diciendo por que:
+     * los valores que el desplegable ofrece —«Zona 1»…«Zona 4» y cinco usos en mayusculas— no
+     * existen en el sistema, porque la zona sale del sector y el uso de la ficha catastral, los dos
+     * texto libre por municipalidad. Es lo que ya hacen `ConsultaController` con «Conciliada con
+     * rentas» (#322) y los dos resumenes de transito (#398).
+     */
+    @Test
+    @DisplayName("«zona» se rechaza con 422 y dice por que, en vez de devolver todo")
+    void laZonaSeRechaza() throws Exception {
+        MvcResult resultado =
+                mvc.perform(get("/api/v1/rentas/arbitrios").param("zona", "Zona 1")).andReturn();
+
+        assertThat(resultado.getResponse().getStatus()).isEqualTo(422);
+        assertThat(resultado.getResponse().getContentAsString())
+                .contains("zona")
+                .contains("codigoPredial");
+        assertThat(repositorio.ultimoCriterio)
+                .as("y no se llega a consultar: la peticion no pasa del borde")
+                .isNull();
+    }
+
+    @Test
+    @DisplayName("«uso» tambien, y por el mismo motivo")
+    void elUsoSeRechaza() throws Exception {
+        MvcResult resultado =
+                mvc.perform(get("/api/v1/rentas/arbitrios").param("uso", "COMERCIO")).andReturn();
+
+        assertThat(resultado.getResponse().getStatus()).isEqualTo(422);
+        assertThat(resultado.getResponse().getContentAsString()).contains("uso");
+    }
+
+    @Test
+    @DisplayName("un «zona» vacio no es un filtro: no se rechaza nada")
+    void laZonaVaciaNoEsUnFiltro() throws Exception {
+        MvcResult resultado =
+                mvc.perform(get("/api/v1/rentas/arbitrios").param("zona", "")).andReturn();
+
+        // `?zona=` no significa «zona en blanco»: es el control sin elegir, y la interfaz no
+        // manda los filtros vacios. Rechazarlo dejaria la pantalla sin poder abrirse.
+        assertThat(resultado.getResponse().getStatus()).isEqualTo(200);
+    }
+
     private static final class RepositorioDeMentira implements CuotaDeArbitrioRepository {
 
         private CriterioDeArbitrio ultimoCriterio;

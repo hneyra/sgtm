@@ -1,6 +1,7 @@
 package pe.gob.sgtm.fiscalizacion.aplicacion;
 
 import java.util.HashSet;
+import java.util.Optional;
 import java.util.Set;
 import org.jspecify.annotations.Nullable;
 import org.springframework.stereotype.Service;
@@ -10,6 +11,7 @@ import pe.gob.sgtm.compartido.Paginacion;
 import pe.gob.sgtm.fiscalizacion.dominio.ActaFiscalizacionRepository;
 import pe.gob.sgtm.fiscalizacion.dominio.MuestraDelPrograma;
 import pe.gob.sgtm.fiscalizacion.dominio.MuestraDelProgramaRepository;
+import pe.gob.sgtm.fiscalizacion.dominio.ProgramaFiscalizacionRepository;
 
 /**
  * La muestra sorteada de un programa, para la grilla de {@code fisc_programa} y para que {@code
@@ -22,11 +24,15 @@ import pe.gob.sgtm.fiscalizacion.dominio.MuestraDelProgramaRepository;
 @Service
 public class ConsultaDeMuestra {
 
+    private final ProgramaFiscalizacionRepository programas;
     private final MuestraDelProgramaRepository muestras;
     private final ActaFiscalizacionRepository actas;
 
     public ConsultaDeMuestra(
-            MuestraDelProgramaRepository muestras, ActaFiscalizacionRepository actas) {
+            ProgramaFiscalizacionRepository programas,
+            MuestraDelProgramaRepository muestras,
+            ActaFiscalizacionRepository actas) {
+        this.programas = programas;
         this.muestras = muestras;
         this.actas = actas;
     }
@@ -34,10 +40,25 @@ public class ConsultaDeMuestra {
     /**
      * Una página de la muestra, con el dato derivado que la fila no guarda.
      *
+     * <p><b>{@link Optional#empty()} cuando el programa no existe</b> (#546), y no una página
+     * vacía: son dos respuestas distintas y hasta este issue eran la misma. {@code GET
+     * /programas/99999/muestra} contestaba {@code 200 {"contenido":[],"totalElementos":0}}, o sea
+     * exactamente lo que contesta un programa recién registrado al que nadie ha sorteado todavía la
+     * muestra — así que quien pide por un identificador equivocado no puede saber que se equivocó,
+     * y la pantalla dibuja «este programa no tiene predios seleccionados» de un programa que no
+     * está. Es el defecto que #537 cerró para las manzanas de un sector, y se cierra por el mismo
+     * sitio: el {@code Optional} lo devuelve el caso de uso, dentro de la misma transacción que la
+     * lectura, porque preguntárselo al repositorio desde el controlador corre sin {@code SET LOCAL}
+     * y la política RLS revienta (#486).
+     *
      * @param predioId acota a un predio; es como {@code fisc_predial} pide la suya
      */
     @Transactional(readOnly = true)
-    public Resultado buscar(long programaId, @Nullable Long predioId, Paginacion paginacion) {
+    public Optional<Resultado> buscar(
+            long programaId, @Nullable Long predioId, Paginacion paginacion) {
+        if (programas.findById(programaId).isEmpty()) {
+            return Optional.empty();
+        }
         Pagina<MuestraDelPrograma> pagina = muestras.delPrograma(programaId, predioId, paginacion);
 
         Set<Long> predios = new HashSet<>();
@@ -45,7 +66,8 @@ public class ConsultaDeMuestra {
             predios.add(fila.predioId());
         }
 
-        return new Resultado(pagina, actas.prediosConActaEnElPrograma(programaId, predios));
+        return Optional.of(
+                new Resultado(pagina, actas.prediosConActaEnElPrograma(programaId, predios)));
     }
 
     /**

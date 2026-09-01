@@ -1796,16 +1796,6 @@ class EscrituraDeFichasControllerTest {
      */
     private static final class PrediosEnMemoria implements CatastroRepository {
 
-        @Override
-        public pe.gob.sgtm.compartido.Pagina<pe.gob.sgtm.catastro.PredioDelPadron> padron(
-                @org.jspecify.annotations.Nullable String sectorCodigo,
-                java.time.LocalDate aLaFecha,
-                pe.gob.sgtm.compartido.Paginacion paginacion) {
-            // El padron con su titular vigente (#49) solo lo recorre la deteccion de omisos, que
-            // se prueba contra PostgreSQL: aqui no hay nada que devolver.
-            throw new UnsupportedOperationException("esta prueba no recorre el padron");
-        }
-
         private final List<Sector> sectores =
                 new ArrayList<>(
                         List.of(
@@ -1990,6 +1980,12 @@ class EscrituraDeFichasControllerTest {
 
         @Override
         public List<Titularidad> titularesDe(long predioId, LocalDate fecha) {
+            throw new UnsupportedOperationException("La escritura de fichas no lee titulares");
+        }
+
+        @Override
+        public java.util.Map<Long, List<Titularidad>> titularesDeVarios(
+                java.util.Collection<Long> predioIds, LocalDate fecha) {
             throw new UnsupportedOperationException("La escritura de fichas no lee titulares");
         }
 

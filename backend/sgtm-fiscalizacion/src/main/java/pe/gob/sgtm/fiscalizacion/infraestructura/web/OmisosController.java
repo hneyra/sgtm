@@ -44,7 +44,14 @@ public class OmisosController {
 
     static final String ACCESO_ESTADO_DE_CUENTA = "fisc_estado_cuenta";
 
-    private static final String ORDEN_POR_OMISION = "codigoRefCatastral";
+    /**
+     * El orden por omision, con el nombre que la fila <b>publica</b> (#546).
+     *
+     * <p>Hasta este issue era {@code codigoRefCatastral} —el {@code camelCase} de la columna— y la
+     * fila publica {@code codRefCatastral}: dos nombres para el mismo dato en la misma operacion, y
+     * pedir por el que la fila ensena daba {@code 422 ORDEN_NO_ADMITIDO}.
+     */
+    private static final String ORDEN_POR_OMISION = "codRefCatastral";
 
     private final DeteccionDeOmisos deteccion;
     private final EstadoDeCuentaDeFiscalizacion estadoDeCuenta;
@@ -81,8 +88,7 @@ public class OmisosController {
                         paginacion.aPaginacion(ORDEN_POR_OMISION));
 
         Map<Long, ResumenDeContribuyente> padron = padronDe(pagina);
-        return RespuestaPaginada.de(
-                pagina, fila -> OmisoResource.de(fila, codigoDe(padron, fila.contribuyenteId())));
+        return RespuestaPaginada.de(pagina, fila -> OmisoResource.de(fila, padron));
     }
 
     /** El estado de cuenta de fiscalización de un contribuyente (RF-056). */
@@ -112,19 +118,19 @@ public class OmisosController {
 
     // ------------------------------------------------------------------
 
+    /**
+     * Los titulares de la pagina, resueltos a codigo y nombre en <b>una</b> consulta (#545).
+     *
+     * <p>Una fila puede tener varios y otra ninguno: los que no esten en el padron simplemente no
+     * salen del mapa, y {@code OmisoResource} los publica con codigo y nombre nulos en vez de
+     * ocultar la fila —un predio cuyo titular se dio de baja es justamente el que hay que revisar—.
+     */
     private Map<Long, ResumenDeContribuyente> padronDe(Pagina<FilaDeOmisos> pagina) {
         Set<Long> ids = new HashSet<>();
         for (FilaDeOmisos fila : pagina.contenido()) {
-            ids.add(fila.contribuyenteId());
+            ids.addAll(fila.titulares());
         }
         return ids.isEmpty() ? Map.of() : contribuyentes.porIds(ids);
-    }
-
-    private static String codigoDe(Map<Long, ResumenDeContribuyente> padron, long contribuyenteId) {
-        ResumenDeContribuyente enElMapa = padron.get(contribuyenteId);
-        // Sin nombre en el padron se cae al identificador en vez de ocultar la fila: un predio
-        // cuyo titular se dio de baja es justamente el que hay que revisar.
-        return enElMapa == null ? String.valueOf(contribuyenteId) : enElMapa.codigo();
     }
 
     private static Ejercicio ejercicioDe(@Nullable String texto, LocalDate hoy) {
