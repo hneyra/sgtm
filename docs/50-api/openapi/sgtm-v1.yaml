@@ -5205,16 +5205,6 @@ paths:
           required: false
           description: "Filtro «Cod. Contribuyente» de la pantalla"
           schema: { type: string }
-        - name: partida
-          in: query
-          required: false
-          description: "Filtro «Partida» de la pantalla"
-          schema: { type: string }
-        - name: conceptoTupa
-          in: query
-          required: false
-          description: "Filtro «Concepto TUPA» de la pantalla"
-          schema: { type: string }
       requestBody:
         required: true
         content:
@@ -5283,6 +5273,79 @@ paths:
           required: false
           description: "Filtro «Hasta» de la pantalla"
           schema: { type: string }
+        - name: pagina
+          in: query
+          required: false
+          description: "Pagina que se pide, contada desde 0"
+          schema: { type: string }
+          example: "0"
+        - name: tamano
+          in: query
+          required: false
+          description: "Filas por pagina"
+          schema: { type: string }
+          example: "20"
+        - name: ordenarPor
+          in: query
+          required: false
+          description: "Campo por el que se ordena, en camelCase"
+          schema: { type: string }
+        - name: direccion
+          in: query
+          required: false
+          description: "ASCENDENTE | DESCENDENTE"
+          schema: { type: string }
+          example: "ASCENDENTE"
+      responses:
+        200:
+          description: Operacion realizada
+          content:
+            application/json:
+              schema: { type: object }
+        "403":
+          $ref: "#/components/responses/SinMunicipalidad"
+        "422":
+          $ref: "#/components/responses/ErrorDeValidacion"
+  "/tesoreria/recibos":
+    get:
+      operationId: recibos_listado
+      summary: "Recibos emitidos"
+      description: "La grilla «Recibos localizados» de la pantalla de duplicado de recibo: los recibos que cuadran con los filtros, con su número impreso, el instante de emisión, a quién se le cobró, el importe **con la fecha a la que estaba actualizado** (regla 9, RNF-075), el medio de pago, cuántos duplicados se han sacado y si sigue en pie. Agregada por #548: hasta entonces un recibo sólo se podía pedir por su número impreso, así que quien perdía el papel no tenía forma de encontrarlo. No trae el desglose —una página de veinte filas no puede costar veinte lecturas del detalle: para eso está la otra ruta, que ya recibe el número—. Un contribuyente sin recibos devuelve una página vacía con `totalElementos: 0`, no un 404."
+      tags: ["Tesorería"]
+      parameters:
+        - name: codContribuyente
+          in: query
+          required: false
+          description: "Filtro «Cod. Contribuyente» de la pantalla; el codigo exacto del padron"
+          schema: { type: string }
+        - name: caja
+          in: query
+          required: false
+          description: "Filtro «Caja» de la pantalla: el codigo de la ventanilla que emitio"
+          schema: { type: string }
+          example: "C-01"
+        - name: cajero
+          in: query
+          required: false
+          description: "La cuenta de quien cobro. Del backend: la pantalla no lo dibuja, y sin el no se puede reconstruir lo que emitio un turno"
+          schema: { type: string }
+          example: "jperez"
+        - name: desde
+          in: query
+          required: false
+          description: "Primer dia del rango de emision, inclusive. La pantalla dibuja una sola «Fecha»; el rango es del backend, porque quien perdio el recibo recuerda la semana y no el dia"
+          schema: { type: string }
+        - name: hasta
+          in: query
+          required: false
+          description: "Ultimo dia del rango, inclusive"
+          schema: { type: string }
+        - name: estado
+          in: query
+          required: false
+          description: "Columna «Estado» de la grilla, usada como filtro. Se DERIVA del movimiento de anulacion (V30): el recibo no guarda ninguna columna de estado, porque no se actualiza. Un valor fuera de las dos palabras se rechaza con 422 en vez de leerse como «todos»"
+          schema: { type: string, enum: [EMITIDO, ANULADO] }
+          example: "EMITIDO"
         - name: pagina
           in: query
           required: false

@@ -29,10 +29,46 @@ import pe.gob.sgtm.web.RespuestaPaginada;
  * convenios de fraccionamiento todavia no existe (#25 depende de el solo para esa parte). Se acepta
  * el parametro para no romper la pantalla, no se aplica —el mismo patron que {@code situacion} en
  * {@code CuentaCorrienteController}—.
+ *
+ * <h2>Y la caja tributaria lee de aqui: {@code caja_tributaria} tambien autoriza (#548)</h2>
+ *
+ * <p>Esta es la <b>unica</b> lectura que publica la deuda por obligacion, asi que es de aqui de
+ * donde la ventanilla saca las filas que se marcan para cobrar: {@code POST
+ * /tesoreria/caja/cobranza} exige {@code obligaciones[]} con tributo, ejercicio y unidad, y ninguna
+ * otra operacion las tiene una a una. Con el acceso a secas, un <b>perfil de cajero puro</b>
+ * —{@code caja_tributaria} y nada mas— podia cobrar y no ver que cobrar: la pantalla de cobro se
+ * abre y su grilla contesta 403.
+ *
+ * <p><b>La decision es que {@code consulta_deuda} deje de hacer falta ahi</b>, y no que el grupo de
+ * cajero lo incluya en la implantacion. Dos motivos, y ninguno es de comodidad:
+ *
+ * <ul>
+ *   <li><b>No hay grupo de cajero que otorgar.</b> {@code ImplantarMunicipalidad} deja exactamente
+ *       dos grupos —«Administracion del sistema» y «Seguridad»—; inventar un tercero seria inventar
+ *       la organizacion de una municipalidad, y aun asi nacen sin miembros, de modo que el usuario
+ *       que solo tiene {@code caja_tributaria} seguiria recibiendo 403.
+ *   <li><b>Es estructural, no configurable.</b> Sin la deuda marcada no hay nada que cobrar: quien
+ *       puede cobrar tiene por fuerza que poder verla. Dejarlo a que cada implantacion se acuerde
+ *       de otorgar una opcion de <b>otro modulo</b> convierte un no-negociable en algo que se
+ *       olvida, y el sintoma —una grilla en 403 dentro de la pantalla de cobro— no se parece a su
+ *       causa. Si el desarrollador no lo maneja, no puede olvidarlo (regla 2, mismo criterio).
+ * </ul>
+ *
+ * <p>Es el reparto contrario al que #366 eligio para {@code GET
+ * /catastro/predios/{predioId}/titulares}, y a proposito: alli el acceso es el del <b>padron</b>
+ * porque lo que se pide no es catastro y su publico es mas estrecho que el de la pantalla desde la
+ * que se hace clic. Aqui lo que se pide <b>es</b> la caja.
+ *
+ * <p>Lo que <b>no</b> cambia: el privilegio sigue siendo {@code LECTURA} en las dos opciones —un
+ * cajero con solo {@code REGISTRO} sobre {@code caja_tributaria} no entra—, y {@code
+ * consulta_deuda} sigue autorizando exactamente como antes.
  */
 @RestController
 @RequestMapping(Api.RAIZ + "/consultas/deuda")
-@RequiereAcceso(acceso = "consulta_deuda", privilegio = Privilegio.LECTURA)
+@RequiereAcceso(
+        acceso = "consulta_deuda",
+        oTambien = "caja_tributaria",
+        privilegio = Privilegio.LECTURA)
 public class ConsultaDeudaController {
 
     private static final String ORDEN_POR_OMISION = "ejercicio";

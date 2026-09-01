@@ -9,6 +9,7 @@ import java.time.LocalDate;
 import java.time.ZoneId;
 import java.util.ArrayList;
 import java.util.List;
+import org.jspecify.annotations.Nullable;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
@@ -43,7 +44,8 @@ class GuardiaDeAccesoTest {
                             new ControladorDePrueba(),
                             new ControladorSinDeclarar(),
                             new ControladorDeSesionPropia(),
-                            new ControladorDelCiudadano())
+                            new ControladorDelCiudadano(),
+                            new ControladorDeDosOpciones())
                     .addInterceptors(new GuardiaDeAcceso(comprobador, RELOJ))
                     .setControllerAdvice(new ManejadorDeErrores())
                     .build();
@@ -150,6 +152,68 @@ class GuardiaDeAccesoTest {
     }
 
     @Test
+    @DisplayName("#548 — con SOLO la opcion alternativa, la lectura pasa")
+    void conSoloLaAlternativaPasa() throws Exception {
+        // El perfil de cajero puro: tiene `caja_de_prueba` y no tiene `consulta_de_prueba`.
+        comprobador.soloSobre = "caja_de_prueba";
+
+        MvcResult resultado = mvc.perform(get("/api/v1/prueba/dos-opciones")).andReturn();
+
+        assertThat(resultado.getResponse().getStatus())
+                .as("sin esto, quien puede cobrar no puede ver que cobrar")
+                .isEqualTo(200);
+        assertThat(comprobador.preguntas)
+                .as("se pregunta primero por la opcion propia, y solo si niega por la otra")
+                .containsExactly(
+                        "jperez|consulta_de_prueba|LECTURA|2026-08-18",
+                        "jperez|caja_de_prueba|LECTURA|2026-08-18");
+    }
+
+    @Test
+    @DisplayName("#548 — con la opcion propia basta: la alternativa ni se pregunta")
+    void conLaOpcionPropiaNoSePreguntaLaAlternativa() throws Exception {
+        comprobador.soloSobre = "consulta_de_prueba";
+
+        MvcResult resultado = mvc.perform(get("/api/v1/prueba/dos-opciones")).andReturn();
+
+        assertThat(resultado.getResponse().getStatus()).isEqualTo(200);
+        assertThat(comprobador.preguntas)
+                .as("el caso normal sigue costando una sola consulta al catalogo")
+                .containsExactly("jperez|consulta_de_prueba|LECTURA|2026-08-18");
+    }
+
+    @Test
+    @DisplayName("#548 — sin ninguna de las dos, 403 nombrando las dos")
+    void sinNingunaDeLasDosNiega() throws Exception {
+        comprobador.soloSobre = "otra_cosa";
+
+        MvcResult resultado = mvc.perform(get("/api/v1/prueba/dos-opciones")).andReturn();
+
+        assertThat(resultado.getResponse().getStatus()).isEqualTo(403);
+        assertThat(resultado.getResponse().getContentAsString())
+                .as(
+                        "negar diciendo solo la primera dejaria al cajero leyendo el nombre de una"
+                                + " opcion que su perfil no tiene por que tener")
+                .contains("consulta_de_prueba")
+                .contains("caja_de_prueba");
+    }
+
+    @Test
+    @DisplayName("#548 — la alternativa NO relaja el privilegio: se exige el mismo")
+    void laAlternativaNoRelajaElPrivilegio() throws Exception {
+        // Un cajero con solo REGISTRO sobre la caja —puede cobrar y nada mas— no entra:
+        // `oTambien` cambia la OPCION, nunca el privilegio.
+        comprobador.soloSobre = "caja_de_prueba";
+        comprobador.autoriza = false;
+
+        mvc.perform(get("/api/v1/prueba/dos-opciones")).andReturn();
+
+        assertThat(comprobador.preguntas)
+                .as("las dos preguntas llevan LECTURA, que es lo que el endpoint declara")
+                .allMatch(pregunta -> pregunta.contains("|LECTURA|"));
+    }
+
+    @Test
     @DisplayName("un endpoint sin acceso declarado se deniega; no se deja pasar por omision")
     void sinAccesoDeclaradoSeDeniega() throws Exception {
         comprobador.autoriza = true;
@@ -192,6 +256,25 @@ class GuardiaDeAccesoTest {
         }
     }
 
+    /**
+     * Una lectura que <b>dos</b> opciones del catalogo cubren (#548).
+     *
+     * <p>Es la forma exacta de {@code ConsultaDeudaController}: la grilla de deuda es la operacion
+     * de {@code consulta_deuda} y tambien la que la caja tributaria necesita para saber que cobrar.
+     */
+    @RestController
+    @RequiereAcceso(
+            acceso = "consulta_de_prueba",
+            oTambien = "caja_de_prueba",
+            privilegio = Privilegio.LECTURA)
+    static class ControladorDeDosOpciones {
+
+        @GetMapping("/api/v1/prueba/dos-opciones")
+        String consultar() {
+            return "ok";
+        }
+    }
+
     /** Declara {@link RequiereAcceso#SESION_PROPIA}: pasa con solo un token valido. */
     @RestController
     @RequiereAcceso(acceso = RequiereAcceso.SESION_PROPIA, privilegio = Privilegio.LECTURA)
@@ -224,11 +307,17 @@ class GuardiaDeAccesoTest {
         private final List<String> preguntas = new ArrayList<>();
         private boolean autoriza;
 
+        /**
+         * Cuando no es nulo, solo autoriza sobre esta opcion: es el perfil que tiene permiso en UNA
+         * y no en la otra, que es lo que hace falta para medir {@code oTambien} (#548).
+         */
+        private @Nullable String soloSobre;
+
         @Override
         public boolean autoriza(
                 String usuario, String acceso, Privilegio privilegio, LocalDate fecha) {
             preguntas.add(usuario + "|" + acceso + "|" + privilegio + "|" + fecha);
-            return autoriza;
+            return soloSobre == null ? autoriza : soloSobre.equals(acceso);
         }
     }
 }

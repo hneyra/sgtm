@@ -2,6 +2,7 @@ package pe.gob.sgtm.tesoreria.infraestructura.web;
 
 import java.time.Clock;
 import java.time.LocalDate;
+import java.time.format.DateTimeParseException;
 import java.util.Locale;
 import org.jspecify.annotations.Nullable;
 import org.springframework.http.ContentDisposition;
@@ -23,18 +24,29 @@ import pe.gob.sgtm.autorizacion.RequiereAcceso;
 import pe.gob.sgtm.documentos.FormatoDeDocumento;
 import pe.gob.sgtm.dominio.Observacion;
 import pe.gob.sgtm.tesoreria.aplicacion.AnularRecibo;
+import pe.gob.sgtm.tesoreria.aplicacion.ConsultaDeRecibos;
 import pe.gob.sgtm.tesoreria.aplicacion.DuplicadoDeRecibo;
+import pe.gob.sgtm.tesoreria.dominio.CriterioDeRecibos;
+import pe.gob.sgtm.tesoreria.dominio.EstadoDeRecibo;
 import pe.gob.sgtm.tesoreria.dominio.MovimientoDeReciboRepository;
 import pe.gob.sgtm.tesoreria.dominio.NumeroDeRecibo;
 import pe.gob.sgtm.web.Api;
 import pe.gob.sgtm.web.CodigoDeError;
+import pe.gob.sgtm.web.ParametrosDePaginacion;
 import pe.gob.sgtm.web.ProblemaDeNegocio;
+import pe.gob.sgtm.web.RespuestaPaginada;
 
 /**
  * Lo que le pasa a un recibo despues de emitirse: su duplicado y su anulacion (RF-082, RF-083).
  *
  * <p>Ningun {@code PUT} ni {@code PATCH}, igual que en {@link CajaController} y por lo mismo: un
  * recibo no se corrige (regla 4, V29). Lo que le pasa llega como un recurso nuevo.
+ *
+ * <h2>Y como se encuentra el recibo cuando no se tiene el papel (#548)</h2>
+ *
+ * <p>{@code GET /tesoreria/recibos} lista los recibos emitidos con los filtros de la pantalla.
+ * Hasta #548 no existia, y su ausencia dejaba a este controlador sirviendo solo a quien <b>ya sabe
+ * el numero impreso</b> —que es justo lo contrario de quien viene a pedir un duplicado—.
  *
  * <h2>El numero, en la ruta</h2>
  *
@@ -71,20 +83,73 @@ public class ReciboController {
 
     static final String ACCESO_ANULACION = "anulacion_recibo";
 
+    /** Por que se ordena el listado cuando el cliente no lo dice. */
+    private static final String ORDEN_POR_OMISION = "fecha";
+
     private final DuplicadoDeRecibo duplicados;
     private final AnularRecibo anular;
+    private final ConsultaDeRecibos listado;
     private final ComprobadorDeAcceso comprobador;
     private final Clock reloj;
 
     public ReciboController(
             DuplicadoDeRecibo duplicados,
             AnularRecibo anular,
+            ConsultaDeRecibos listado,
             ComprobadorDeAcceso comprobador,
             Clock reloj) {
         this.duplicados = duplicados;
         this.anular = anular;
+        this.listado = listado;
         this.comprobador = comprobador;
         this.reloj = reloj;
+    }
+
+    /**
+     * El listado de recibos emitidos, paginado (#548, RF-082).
+     *
+     * <p><b>Es la puerta que le faltaba a la ventanilla.</b> Sin ella el unico camino a un recibo
+     * era saber su numero impreso, de modo que quien perdia el papel —que es exactamente quien
+     * viene a pedir un duplicado— no podia encontrarlo. La grilla «Recibos localizados» que el
+     * manual dibuja no tenia con que llenarse.
+     *
+     * <p><b>Sin filtro por numero de recibo, y a proposito</b>: el numero exacto ya resuelve por
+     * {@code GET /tesoreria/recibos/{nro}/duplicado}. Este listado es para quien no lo tiene.
+     *
+     * <p>El acceso es {@code duplicado_recibo} con {@code LECTURA} —la opcion del catalogo desde la
+     * que se busca—, no {@code IMPRESION}: mirar la lista no emite ningun papel.
+     *
+     * <p>Un contribuyente sin recibos devuelve una <b>pagina vacia</b> con {@code totalElementos:
+     * 0}, nunca un 404: buscar y no encontrar no es un error.
+     */
+    @GetMapping
+    @RequiereAcceso(acceso = ACCESO_DUPLICADO, privilegio = Privilegio.LECTURA)
+    public RespuestaPaginada<ReciboEnListaResource> listar(
+            @RequestParam(required = false) @Nullable String codContribuyente,
+            @RequestParam(required = false) @Nullable String caja,
+            @RequestParam(required = false) @Nullable String cajero,
+            @RequestParam(required = false) @Nullable String desde,
+            @RequestParam(required = false) @Nullable String hasta,
+            @RequestParam(required = false) @Nullable String estado,
+            ParametrosDePaginacion paginacion) {
+
+        CriterioDeRecibos criterio;
+        try {
+            criterio =
+                    new CriterioDeRecibos(
+                            vacioAnulo(codContribuyente),
+                            vacioAnulo(caja),
+                            vacioAnulo(cajero),
+                            fechaOpcional(desde, "desde"),
+                            fechaOpcional(hasta, "hasta"),
+                            estadoDe(estado));
+        } catch (IllegalArgumentException invalido) {
+            throw new ProblemaDeNegocio(CodigoDeError.VALIDACION, mensajeDe(invalido));
+        }
+
+        return RespuestaPaginada.de(
+                listado.listar(criterio, paginacion.aPaginacion(ORDEN_POR_OMISION)),
+                ReciboEnListaResource::de);
     }
 
     /**
@@ -220,6 +285,46 @@ public class ReciboController {
                             + ACCESO_ANULACION
                             + ": ese recibo lo cobro otro cajero, y anularlo toca el arqueo de su"
                             + " turno");
+        }
+    }
+
+    /**
+     * El estado pedido, o {@code null} si no se filtro por el.
+     *
+     * <p>Se rechaza lo que no sea una de las dos palabras del enumerado en vez de tratarlo como
+     * «todos»: un filtro que no se entiende y devuelve el listado entero es exactamente la lectura
+     * que quien filtra cree haber descartado (#544).
+     */
+    private static @Nullable EstadoDeRecibo estadoDe(@Nullable String texto) {
+        if (texto == null || texto.isBlank()) {
+            return null;
+        }
+        try {
+            return EstadoDeRecibo.valueOf(texto.strip().toUpperCase(Locale.ROOT));
+        } catch (IllegalArgumentException desconocido) {
+            throw new ProblemaDeNegocio(
+                    CodigoDeError.VALIDACION,
+                    "Estado de recibo desconocido: '" + texto + "'. Se admite EMITIDO o ANULADO");
+        }
+    }
+
+    /**
+     * Una fecha del rango, o {@code null} si no vino.
+     *
+     * <p>{@code DateTimeParseException} no extiende {@code IllegalArgumentException}, asi que sin
+     * este {@code catch} el manejador global la trataria como error interno en vez de como una
+     * entrada mal formada.
+     */
+    private static @Nullable LocalDate fechaOpcional(@Nullable String texto, String campo) {
+        if (texto == null || texto.isBlank()) {
+            return null;
+        }
+        try {
+            return LocalDate.parse(texto.strip());
+        } catch (DateTimeParseException invalida) {
+            throw new ProblemaDeNegocio(
+                    CodigoDeError.VALIDACION,
+                    "El campo '" + campo + "' no es una fecha ISO valida: '" + texto + "'");
         }
     }
 

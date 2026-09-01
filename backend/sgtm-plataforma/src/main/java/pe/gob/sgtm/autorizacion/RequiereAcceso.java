@@ -69,6 +69,33 @@ public @interface RequiereAcceso {
     /** Id de la opcion en el catalogo de pantallas (NEG-03), tal como esta en {@code acceso}. */
     String acceso();
 
+    /**
+     * Otras opciones del catalogo cuyo <b>mismo</b> privilegio tambien autoriza esta operacion
+     * (#548).
+     *
+     * <p>Se comprueba <b>despues</b> de {@link #acceso()} y solo si aquel niega, con el mismo
+     * {@link #privilegio()}: {@code LECTURA} sobre la opcion propia <b>o</b> {@code LECTURA} sobre
+     * la alternativa. No es una jerarquia ni un «modo permisivo»: es la lista, escrita, de las
+     * opciones que ya cubren esta lectura.
+     *
+     * <p><b>Para que existe.</b> Hay lecturas que dos opciones del catalogo necesitan por igual, y
+     * que sin esto obligan a otorgar la opcion ajena entera <b>en cada implantacion</b>. El caso
+     * que lo motivo: la grilla de deuda de {@code caja_tributaria} la sirve {@code GET
+     * /consultas/deuda}, que es la operacion de {@code consulta_deuda}; un perfil de cajero puro
+     * podia <b>cobrar y no ver que cobrar</b>, y el sintoma —una pantalla de cobro con la grilla en
+     * 403— no se parece en nada a su causa, que es un permiso que nadie otorgo en otro modulo.
+     *
+     * <p>Es lo contrario de lo que #366 decidio para los titulares de un predio: alli el acceso
+     * <b>no es</b> el de la pantalla desde la que se hace clic —lo que se pide no es catastro, es
+     * el padron, y su publico es mas estrecho—. Aqui lo que se pide <b>es</b> la caja: sin la deuda
+     * marcada no hay nada que cobrar, y quien puede cobrar tiene por fuerza que poder verla.
+     *
+     * <p><b>No se alarga sin motivo escrito.</b> Cada endpoint que lo declare esta censado en
+     * {@code AccesosCompartidosTest}, con la frase que explica por que las dos opciones cubren la
+     * misma lectura; la lista no puede crecer sin que ese censo lo diga.
+     */
+    String[] oTambien() default {};
+
     /** Cual de los siete privilegios exige. */
     Privilegio privilegio();
 }

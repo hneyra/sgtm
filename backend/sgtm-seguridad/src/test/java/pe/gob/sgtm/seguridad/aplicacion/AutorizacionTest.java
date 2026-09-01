@@ -238,6 +238,58 @@ class AutorizacionTest {
     }
 
     @Nested
+    @DisplayName("#548 — El perfil de cajero puro, contra la matriz real")
+    class ElCajeroPuro {
+
+        @Test
+        @DisplayName("un grupo de caja NO da consulta_deuda: la premisa de #548 es real")
+        void elGrupoDeCajaNoDaLaConsultaDeDeuda() throws SQLException {
+            // La premisa del issue, medida en vez de supuesta: se monta el grupo que una
+            // municipalidad crearia para su ventanilla —la opcion de la caja, con lo que
+            // hace falta para abrirla y para cobrar— y se pregunta por la opcion de OTRO
+            // modulo, que es la que sirve la grilla de deuda.
+            sembrar();
+            long cajera = crearUsuario("cajera.pura", null, null);
+            long ventanilla = crearGrupo("Caja", null, null);
+            afiliar(ventanilla, cajera, true);
+            // Los dos privilegios en la MISMA fila: `permiso` es unico por (grupo, acceso).
+            ejecutar(
+                    "INSERT INTO permiso (municipalidad_id, acceso_id, grupo_id, lectura,"
+                            + " registro, usuario_registro) SELECT"
+                            + " current_setting('app.municipalidad_id')::bigint, a.id, "
+                            + ventanilla
+                            + ", true, true, 'prueba' FROM acceso a"
+                            + " WHERE a.codigo = 'caja_tributaria'");
+
+            assertThat(autoriza("cajera.pura", "caja_tributaria", Privilegio.REGISTRO))
+                    .as("puede cobrar")
+                    .isTrue();
+            assertThat(autoriza("cajera.pura", "caja_tributaria", Privilegio.LECTURA))
+                    .as("y puede abrir su pantalla")
+                    .isTrue();
+            assertThat(autoriza("cajera.pura", "consulta_deuda", Privilegio.LECTURA))
+                    .as(
+                            "pero NO tiene la opcion que sirve la grilla de deuda: por eso"
+                                    + " ConsultaDeudaController declara `oTambien = caja_tributaria`"
+                                    + " en vez de dejarlo a que cada implantacion se acuerde")
+                    .isFalse();
+        }
+
+        @Test
+        @DisplayName("y el permiso sigue siendo por opcion: la caja no arrastra el modulo entero")
+        void laCajaNoArrastraElModuloEntero() throws SQLException {
+            sembrar();
+            long cajera = crearUsuario("cajera.acotada", null, null);
+            otorgarAUsuario(cajera, "caja_tributaria", Privilegio.LECTURA);
+
+            assertThat(autoriza("cajera.acotada", "caja_tributaria", Privilegio.LECTURA)).isTrue();
+            assertThat(autoriza("cajera.acotada", "caja_tasas", Privilegio.LECTURA))
+                    .as("la ventanilla de tasas es otra opcion, y se otorga aparte")
+                    .isFalse();
+        }
+    }
+
+    @Nested
     @DisplayName("ADR-0013 — La matriz de permisos efectivos de la sesion")
     class Matriz {
 

@@ -2,6 +2,7 @@ package pe.gob.sgtm.tesoreria.infraestructura.web;
 
 import org.jspecify.annotations.Nullable;
 import pe.gob.sgtm.tesoreria.aplicacion.DuplicadoDeRecibo;
+import pe.gob.sgtm.tesoreria.dominio.EstadoDeRecibo;
 import pe.gob.sgtm.tesoreria.dominio.MovimientoDeRecibo;
 
 /**
@@ -23,8 +24,8 @@ import pe.gob.sgtm.tesoreria.dominio.MovimientoDeRecibo;
 public record DuplicadoResource(
         String estado, long duplicados, @Nullable AnulacionBreve anulacion, ReciboResource recibo) {
 
-    /** El estado de un recibo sin anulacion. */
-    public static final String EMITIDO = "EMITIDO";
+    /** El estado de un recibo sin anulacion. Del enumerado, por lo mismo (#548). */
+    public static final String EMITIDO = EstadoDeRecibo.EMITIDO.name();
 
     public static DuplicadoResource de(DuplicadoDeRecibo.Consultado consultado) {
         MovimientoDeRecibo anulacion = consultado.anulacion();

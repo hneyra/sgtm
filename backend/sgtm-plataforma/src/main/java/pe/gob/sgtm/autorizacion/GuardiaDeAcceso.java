@@ -4,6 +4,9 @@ import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
 import java.time.Clock;
 import java.time.LocalDate;
+import java.util.ArrayList;
+import java.util.Arrays;
+import java.util.List;
 import org.springframework.core.annotation.AnnotatedElementUtils;
 import org.springframework.web.method.HandlerMethod;
 import org.springframework.web.servlet.HandlerInterceptor;
@@ -29,6 +32,13 @@ import pe.gob.sgtm.web.ProblemaDeNegocio;
  *
  * <p>Se exceptua lo que no es un metodo de controlador: recursos estaticos, el manejador de errores
  * y las rutas del propio contenedor.
+ *
+ * <h2>Una operacion que dos opciones cubren</h2>
+ *
+ * <p>{@code oTambien} declara otras opciones del catalogo cuyo <b>mismo</b> privilegio tambien
+ * autoriza (#548). Se pregunta primero por el acceso propio y solo si niega por las alternativas,
+ * asi que el caso normal sigue costando una consulta. Lo que <b>no</b> hace es relajar el
+ * privilegio: {@code LECTURA} sobre la alternativa, nunca «cualquier privilegio».
  *
  * <p>Y se exceptuan, <b>declarandolos</b>, los dos centinelas:
  *
@@ -98,17 +108,42 @@ public class GuardiaDeAcceso implements HandlerInterceptor {
         }
 
         String usuario = OrigenContext.actual().usuario();
-        if (!comprobador.autoriza(
-                usuario, requisito.acceso(), requisito.privilegio(), LocalDate.now(reloj))) {
-            // El mensaje dice que falta, no quien lo tiene ni como se configura: eso
-            // ya es informacion sobre la organizacion de la municipalidad.
-            throw new ProblemaDeNegocio(
-                    CodigoDeError.SIN_PRIVILEGIO,
-                    "No tiene el privilegio "
-                            + requisito.privilegio()
-                            + " sobre "
-                            + requisito.acceso());
+        LocalDate hoy = LocalDate.now(reloj);
+        if (autorizaAlguna(usuario, requisito, hoy)) {
+            return true;
         }
-        return true;
+        // El mensaje dice que falta, no quien lo tiene ni como se configura: eso
+        // ya es informacion sobre la organizacion de la municipalidad. Si la operacion
+        // admite otra opcion, se nombra tambien: negar diciendo solo la primera dejaria
+        // a un cajero leyendo «no tiene LECTURA sobre consulta_deuda», que es una
+        // opcion que su perfil no tiene por que tener.
+        throw new ProblemaDeNegocio(
+                CodigoDeError.SIN_PRIVILEGIO,
+                "No tiene el privilegio "
+                        + requisito.privilegio()
+                        + " sobre "
+                        + String.join(" ni sobre ", opciones(requisito)));
+    }
+
+    /**
+     * El acceso declarado, o cualquiera de sus alternativas, con el <b>mismo</b> privilegio (#548).
+     *
+     * <p>El orden importa poco —basta una— pero se pregunta primero por el acceso propio: es el que
+     * tiene casi todo el mundo, y asi el caso normal cuesta una sola consulta.
+     */
+    private boolean autorizaAlguna(String usuario, RequiereAcceso requisito, LocalDate hoy) {
+        for (String acceso : opciones(requisito)) {
+            if (comprobador.autoriza(usuario, acceso, requisito.privilegio(), hoy)) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    private static List<String> opciones(RequiereAcceso requisito) {
+        List<String> opciones = new ArrayList<>();
+        opciones.add(requisito.acceso());
+        opciones.addAll(Arrays.asList(requisito.oTambien()));
+        return opciones;
     }
 }
