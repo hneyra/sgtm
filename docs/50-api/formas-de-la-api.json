@@ -231,6 +231,13 @@
     "totalPaginas": "entero",
     "hayMas": "booleano"
   },
+  "GET /catastro/fichas/conciliacion/resumen": {
+    "ejercicio": "entero",
+    "aLaFecha": "fecha",
+    "total": "entero",
+    "conciliados": "entero",
+    "noConciliados": "entero"
+  },
   "GET /catastro/fichas/economica/{codRefCatastral}": {
     "id": "entero",
     "predioId": "entero",
