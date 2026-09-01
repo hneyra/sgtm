@@ -1,127 +1,20 @@
-/* Datos de muestra del módulo de Seguridad, copiados literalmente del artboard
-   `Seguridad.dc.html`. Nada de esto viaja a ningún backend: es la maqueta. */
-
-/* ══════════ Niveles y accesos ══════════ */
-
-/** Los siete privilegios. El rotulo que usa el manual para `ESPECIAL` es
- *  «Total», y no lo es: ver el comentario de `NIVELES`. */
-export type Nivel = 'Especial' | 'Ejecuta' | 'Consulta' | 'Ingresa' | 'Modifica' | 'Anula' | 'Imprime';
-
-/**
- * Los siete privilegios, con el nombre que el dominio les da.
+/*
+ * Lo que queda del artboard `Seguridad.dc.html`: la ESTRUCTURA de la pantalla
+ * de «Sistema» y el mapa de las once opciones del manual a los cuatro destinos.
  *
- * **No existe ninguno que se llame «Total».** El artboard lo dibuja primero y
- * como si implicara los otros seis, y en el backend es `ESPECIAL`: uno mas,
- * ni mayor ni menor. Sobre ese rotulo falso estaba construido el primer riesgo
- * del panel —«tres cuentas con privilegio Especial»—, que decia otra cosa de la que
- * parecia.
+ * <h2>Lo que se fue, y por que</h2>
+ *
+ * Este archivo tenia ademas cuatro grupos, siete usuarios, nueve accesos, sus
+ * permisos y siete filas de bitacora. La pantalla los usaba **como respaldo**:
+ * cuando la lectura del backend fallaba —un 403, un 500, la red caida— dibujaba
+ * el arbol de la maqueta sin decirlo, y quien miraba quien tiene la llave de la
+ * caja leia los permisos de una municipalidad que no existe.
+ *
+ * No se arreglo poniendo un `if` mas: se **borraron los datos**. Un respaldo que
+ * no esta en el modulo no se puede reintroducir por descuido, y una mutacion que
+ * intente volver a el ni siquiera compila. Las cifras que si son reales se leen
+ * de `api/seguridad.ts`, y las que no tiene el backend se dicen con un guion.
  */
-export const NIVELES: Nivel[] = ['Ejecuta', 'Consulta', 'Ingresa', 'Modifica', 'Anula', 'Imprime', 'Especial'];
-
-export type Acceso = {
-  id: string;
-  label: string;
-  modulo: string;
-  /** Si el acceso mueve dinero. Es lo que tiñe la fila de la matriz. */
-  sensible: boolean;
-};
-
-/** Los accesos, con el módulo del que cuelgan y si mueven dinero. */
-export const ACCESOS: Acceso[] = [
-  { id: 'caja', label: 'Caja tributaria', modulo: 'Tesorería', sensible: true },
-  { id: 'anulacion', label: 'Anulación de recibo', modulo: 'Tesorería', sensible: true },
-  { id: 'baja', label: 'Baja de deuda', modulo: 'Rentas · Registro', sensible: true },
-  { id: 'prescripcion', label: 'Prescripción', modulo: 'Valores', sensible: true },
-  { id: 'ficha', label: 'Ficha urbana individual', modulo: 'Catastro', sensible: false },
-  { id: 'aranceles', label: 'Aranceles de terreno', modulo: 'Catastro', sensible: true },
-  { id: 'acta', label: 'Acta de inspección', modulo: 'Fiscalización', sensible: false },
-  { id: 'papeleta', label: 'Papeletas de tránsito', modulo: 'Tránsito', sensible: false },
-  { id: 'permisos', label: 'Permisos y accesos', modulo: 'Seguridad', sensible: true },
-];
-
-/* ══════════ Grupos y usuarios ══════════ */
-
-/** Los niveles concedidos, por acceso. La clave es el `id` del acceso. */
-export type Permisos = Record<string, Nivel[]>;
-
-export type Grupo = { label: string; miembros: string[]; permisos: Permisos };
-
-/** Grupos con sus permisos, y usuarios con los suyos. El permiso efectivo de un
- *  usuario es la unión de los propios y los de sus grupos: es lo que las seis
- *  pantallas del sistema actual obligaban a juntar de memoria. */
-export const GRUPOS: Record<string, Grupo> = {
-  ADMINISTRADORES: {
-    label: 'ADMINISTRADORES',
-    miembros: ['jquispe', 'aayca'],
-    permisos: { permisos: ['Especial'], caja: ['Consulta'], baja: ['Consulta'], aranceles: ['Consulta'] },
-  },
-  CAJA: {
-    label: 'CAJA',
-    miembros: ['jcardenas', 'mrios'],
-    permisos: { caja: ['Ejecuta', 'Consulta', 'Ingresa', 'Imprime'], papeleta: ['Consulta'] },
-  },
-  RENTAS: {
-    label: 'RENTAS',
-    miembros: ['mrios', 'lpena'],
-    permisos: { baja: ['Consulta', 'Ingresa'], ficha: ['Consulta'], papeleta: ['Consulta', 'Imprime'] },
-  },
-  CATASTRO: {
-    label: 'CATASTRO',
-    miembros: ['vreto'],
-    permisos: { ficha: ['Consulta', 'Ingresa', 'Modifica', 'Imprime'], acta: ['Consulta'], aranceles: ['Consulta'] },
-  },
-};
-
-export type EstadoDeCuenta = 'Activa' | 'Inactiva';
-
-export type Usuario = {
-  label: string;
-  nombre: string;
-  estado: EstadoDeCuenta;
-  /** Días desde el último cambio de contraseña. Pasados 365 caducó. */
-  clave: number;
-  propios: Permisos;
-};
-
-export const USUARIOS: Record<string, Usuario> = {
-  jquispe: { label: 'jquispe', nombre: 'QUISPE PEÑA, JORGE', estado: 'Activa', clave: 12, propios: {} },
-  aayca: { label: 'aayca', nombre: 'AYCA GONZALES, ALBERTO', estado: 'Activa', clave: 384, propios: { anulacion: ['Especial'] } },
-  jcardenas: { label: 'jcardenas', nombre: 'CÁRDENAS VEGA, JOSÉ', estado: 'Activa', clave: 44, propios: { anulacion: ['Ejecuta', 'Consulta'] } },
-  mrios: { label: 'mrios', nombre: 'RÍOS MENDOZA, MARÍA', estado: 'Activa', clave: 8, propios: { prescripcion: ['Consulta', 'Ingresa'] } },
-  lpena: { label: 'lpena', nombre: 'PEÑA SANDOVAL, LUIS', estado: 'Activa', clave: 201, propios: { acta: ['Ejecuta', 'Consulta', 'Ingresa', 'Modifica'] } },
-  vreto: { label: 'vreto', nombre: 'RETO SANTOS, VÍCTOR', estado: 'Activa', clave: 96, propios: {} },
-  fruiz: { label: 'fruiz', nombre: 'RUIZ INGA, FERNANDO', estado: 'Inactiva', clave: 812, propios: { caja: ['Especial'] } },
-};
-
-/* ══════════ Auditoría ══════════ */
-
-/** Fecha y hora, usuario, módulo, acto, detalle, IP y riesgo. */
-export type FilaDeAuditoria = [string, string, string, string, string, string, string];
-
-export const AUDITORIA: FilaDeAuditoria[] = [
-  ['13/08/2026 09:41', 'jcardenas', 'Tesorería', 'Anulación de recibo', 'Recibo 0003-0041184 · S/ 1,245.00', '10.4.2.18', 'Alto'],
-  ['13/08/2026 08:12', 'jquispe', 'Seguridad', 'Cambio de permisos', 'aayca: Anulación de recibo → Especial', '10.4.2.3', 'Alto'],
-  ['12/08/2026 17:04', 'mrios', 'Rentas · Registro', 'Baja de deuda', '2 cuotas · S/ 1,613.96 · prescripción', '10.4.2.22', 'Alto'],
-  ['12/08/2026 16:48', 'lpena', 'Fiscalización', 'Cierre de acta', 'ACT-2026-00418 · diferencia +33.50 m²', '10.4.5.7', 'Medio'],
-  ['12/08/2026 11:20', 'vreto', 'Catastro', 'Modificación de ficha', '01-1042-0004 · área construida 136 → 198', '10.4.5.11', 'Medio'],
-  ['11/08/2026 08:02', 'jquispe', 'Seguridad', 'Cambio del ejercicio', '2025 → 2026 · global a la sesión', '10.4.2.3', 'Alto'],
-  ['10/08/2026 15:38', 'fruiz', 'Tesorería', 'Intento de acceso denegado', 'Caja tributaria · cuenta inactiva', '181.66.4.90', 'Alto'],
-];
-
-/** Las columnas de la bitácora. El segundo elemento dice si la celda es
- *  numérica y va a la derecha; en esta tabla ninguna lo es. */
-export const COLUMNAS_DE_AUDITORIA: [string, number][] = [
-  ['Fecha y hora', 0],
-  ['Usuario', 0],
-  ['Módulo', 0],
-  ['Acto', 0],
-  ['Detalle', 0],
-  ['IP', 0],
-  ['Riesgo', 0],
-];
-
-/** Lo que dice el pie del listado: la bitácora completa del ejercicio. */
-export const REGISTROS_DE_AUDITORIA = '84,182';
 
 /* ══════════ Sistema ══════════ */
 
@@ -136,106 +29,97 @@ export type CampoDeSistema = {
   ancho?: boolean;
 };
 
-export type TablaDeSistema = {
-  min: string;
-  cols: [string, number][];
-  filas: string[][];
-  /** El índice de la columna que se dibuja como insignia. */
-  insignia?: number;
-};
-
 export type PanelDeSistema = {
   label: string;
   titulo: string;
   nota: string;
-  aviso: string;
-  avisoTono: '' | 'warn' | 'bad';
   campos: CampoDeSistema[];
-  tabla?: TablaDeSistema;
+  /**
+   * Lo que impide ejecutar la accion primaria, cuando algo lo impide.
+   *
+   * Con texto, la primaria nace apagada y **este texto es su `title`** y la nota
+   * que se lee al lado (RNF-082): un boton apagado sin motivo obliga a
+   * adivinar. Vacio, la accion se puede hacer.
+   */
+  impedimento: string;
   pie: string;
   primaria: string;
 };
 
-/** Las cuatro pestañas de «Sistema». Las dos primeras cifras dependen del
- *  ejercicio de trabajo, que es de la sesión y no del módulo. */
+/**
+ * Las cuatro pestañas de «Sistema».
+ *
+ * <h2>Ninguna cifra tributaria se dibuja aqui</h2>
+ *
+ * El artboard rellenaba «Parametros» con la UIT en 5 350,00, el IPM en 1,0206,
+ * el interes moratorio en 0,90 % y el derecho de emision en 4,50. **Ninguna
+ * salia de ninguna parte**, y la UIT publicada del ejercicio no es esa. Una
+ * cifra tributaria no se teclea en una pantalla (regla 5): entra por el corpus
+ * verificado a doble firma y se publica al conjunto sellado del ejercicio. Los
+ * campos se quedan de solo lectura con un guion y dicen de donde vendrian.
+ */
 export const panelesDeSistema = (ejercicio: string): PanelDeSistema[] => [
   {
     label: 'Ejercicio de trabajo',
     titulo: 'Cambiar el ejercicio de trabajo',
-    nota: 'El ejercicio es global a la sesión y decide sobre qué año escriben los doce módulos. Cambiarlo con una caja abierta es lo que produce recibos con el año equivocado.',
-    aviso: 'Hay una caja abierta (C-3, turno mañana). Cambiar el ejercicio ahora afectaría a los recibos que se emitan después.',
-    avisoTono: 'warn',
+    nota: 'Cambiar el ejercicio de trabajo es un acto: lleva observación y exige el privilegio Especial sobre «cambiar_anio», porque decide sobre qué año escriben los doce módulos y hacerlo con una caja abierta produce recibos con el año equivocado. El selector de la cabecera NO es eso: sólo acota lo que las consultas piden, y vive en el navegador.',
     campos: [
       { k: 'ejActual', l: 'Ejercicio actual', t: 'ro', v: ejercicio },
       { k: 'ejNuevo', l: 'Cambiar a', t: 'sel', v: ejercicio, o: ['2026', '2025', '2024', '2023'] },
-      { k: 'ejMotivo', l: 'Motivo del cambio', t: 'text', ancho: true, v: '', ph: 'Queda en la auditoría' },
+      { k: 'ejMotivo', l: 'Motivo del cambio', t: 'ro', ancho: true, v: '—', ayuda: 'Lo llevará la petición cuando el acto se conecte (#557)' },
     ],
-    pie: 'El cambio se anota en la bitácora con tu usuario y la hora.',
+    /* El artboard avisaba aquí de «una caja abierta (C-3, turno mañana)». No hay
+       ninguna lectura de turnos abiertos en el contrato, así que el aviso no
+       podía ser más que decorado — y decorado que dice que NO cambies algo. */
+    impedimento:
+      'El acto no se puede hacer desde aquí todavía: PUT /seguridad/sesion/ejercicio existe y no lo llama nadie, ' +
+      'y conectarlo tal cual daría 403 a quien no tenga el privilegio Especial sobre «cambiar_anio» cada vez ' +
+      'que cambie de año en una lista. Separar el filtro de vista del acto registrado está en el issue #557.',
+    pie: 'El cambio se anotará en la bitácora con tu usuario, la hora y el motivo.',
     primaria: 'Cambiar el ejercicio',
   },
   {
     label: 'Parámetros',
     titulo: 'Parámetros del sistema',
-    nota: 'Los valores que los doce módulos leen. Cambiar la UIT recalcula multas, mínimos imponibles y tramos de escala en todo el sistema.',
-    aviso: '',
-    avisoTono: '',
-    campos: [
-      { k: 'pUit', l: 'UIT del ejercicio (S/)', t: 'text', v: '5,350.00', ayuda: 'Afecta a predial, vehicular, multas y CUIS' },
-      { k: 'pIpm', l: 'IPM para alcabala', t: 'text', v: '1.0206' },
-      { k: 'pInteres', l: 'Interés moratorio mensual', t: 'text', v: '0.90 %' },
-      { k: 'pFracc', l: 'Interés de fraccionamiento', t: 'text', v: '0.80 %' },
-      { k: 'pCustodia', l: 'Tasa diaria de custodia (S/)', t: 'text', v: '18.00' },
-      { k: 'pEmision', l: 'Derecho de emisión (S/)', t: 'text', v: '4.50' },
-      { k: 'pCaducidad', l: 'Caducidad de contraseña (días)', t: 'text', v: '365' },
-      { k: 'pIntentos', l: 'Intentos antes de bloquear', t: 'text', v: '5' },
-    ],
-    pie: 'Un parámetro mal puesto no da error: da cifras equivocadas en todo el sistema. El cambio queda en la auditoría.',
+    nota: 'Con qué juego de valores se emitió cada ejercicio. La UIT, el IPM, los intereses y los derechos de emisión no se teclean: se publican al conjunto del ejercicio desde el corpus normativo, con dos firmas distintas, y sellarlo lo vuelve inmutable. Esta lectura publica el conjunto y su estado, no sus cifras una a una.',
+    /* Las ocho cajas de cifras del artboard —UIT, IPM, interés moratorio, de
+       fraccionamiento, custodia, derecho de emisión, caducidad e intentos— se
+       retiran enteras. `GET /seguridad/parametros` SÍ existe y se lee (la tabla
+       de abajo), pero publica la IDENTIDAD del conjunto y no sus cifras, a
+       propósito: su javadoc dice que la pregunta que contesta esta pantalla es
+       «con qué juego de valores se emitió este ejercicio». Dibujar ocho guiones
+       con rótulo de UIT no informaría de nada; lo que informa es el conjunto. */
+    campos: [],
+    impedimento:
+      'Un parámetro tributario no entra por una pantalla: entra por el corpus verificado a doble firma y ' +
+      'se publica al conjunto del ejercicio, que una vez sellado no admite una cifra más. Aquí no hay nada ' +
+      'que guardar.',
+    pie: 'Un parámetro mal puesto no da error: da cifras equivocadas en todo el sistema.',
     primaria: 'Guardar parámetros',
   },
   {
     label: 'Mi contraseña',
     titulo: 'Cambiar mi contraseña',
-    nota: 'La contraseña es personal y caduca cada 365 días. Compartirla es lo que hace que la auditoría deje de servir: los actos aparecen firmados por quien no los hizo.',
-    aviso: 'Tu contraseña caduca en 12 días.',
-    avisoTono: 'warn',
-    campos: [
-      { k: 'cActual', l: 'Contraseña actual', t: 'clave', v: '', ph: '••••••••' },
-      { k: 'cNueva', l: 'Contraseña nueva', t: 'clave', v: '', ph: 'Mínimo 10 caracteres' },
-      { k: 'cRepetir', l: 'Repetir la nueva', t: 'clave', v: '', ph: '••••••••' },
-    ],
-    pie: 'Al cambiarla se cierran las demás sesiones abiertas con tu usuario.',
+    nota: 'La contraseña no vive en este sistema: la guarda el proveedor de identidad (ADR-0005). Lo que el backend hace es iniciar el cambio y mandarte allí; por eso su petición no lleva ningún campo de contraseña, ni la vieja ni la nueva.',
+    /* El artboard dibujaba tres cajas de contraseña —actual, nueva y repetir—.
+       `PUT /seguridad/usuarios/{id}/clave` recibe SOLO una observación: lo tecleado
+       ahí no viajaba a ninguna parte y se quedaba en el estado de React. Se
+       retiran: no hay campo porque no hay a dónde mandarlo. */
+    campos: [{ k: 'cMotivo', l: 'Motivo del cambio', t: 'ro', ancho: true, v: '—', ayuda: 'Es lo único que la petición lleva: ninguna contraseña' }],
+    impedimento:
+      'La interfaz no sabe cuál de los usuarios del padrón eres: el endpoint pide el id del usuario y la ' +
+      'sesión sólo publica el mapa de permisos. Mientras tanto, la contraseña se cambia en el proveedor de identidad.',
+    pie: 'El backend no recibe ninguna contraseña: registra el acto y te manda al proveedor de identidad.',
     primaria: 'Cambiar la contraseña',
   },
   {
     label: 'Copias de seguridad',
     titulo: 'Copias de seguridad',
-    nota: 'Una copia sin restauración probada no es una copia. La columna que importa es la última restauración verificada, no la última copia hecha.',
-    aviso: 'La última restauración verificada es de hace 94 días. Una copia que nadie ha probado a restaurar no protege nada.',
-    avisoTono: 'bad',
-    campos: [
-      {
-        k: 'bDestino',
-        l: 'Destino',
-        t: 'sel',
-        ancho: true,
-        v: 'ALMACENAMIENTO EN NUBE — REGIÓN LIMA',
-        o: ['ALMACENAMIENTO EN NUBE — REGIÓN LIMA', 'SERVIDOR LOCAL — SALA DE CÓMPUTO', 'DISCO EXTERNO'],
-      },
-      { k: 'bFrecuencia', l: 'Frecuencia', t: 'sel', v: 'DIARIA', o: ['DIARIA', 'CADA 12 HORAS', 'SEMANAL'] },
-      { k: 'bRetencion', l: 'Retención (días)', t: 'text', v: '90' },
-      { k: 'bCifrado', l: 'Cifrado en reposo', t: 'chk', v: true, ph: 'Obligatorio: la base tiene datos personales' },
-    ],
-    tabla: {
-      min: '700px',
-      cols: [['Fecha', 0], ['Tipo', 0], ['Tamaño', 0], ['Destino', 0], ['Restauración probada', 0]],
-      filas: [
-        ['13/08/2026 02:00', 'Completa', '18.4 GB', 'Nube — Lima', 'No probada'],
-        ['12/08/2026 02:00', 'Completa', '18.4 GB', 'Nube — Lima', 'No probada'],
-        ['11/08/2026 02:00', 'Completa', '18.3 GB', 'Nube — Lima', 'No probada'],
-        ['11/05/2026 02:00', 'Completa', '17.1 GB', 'Nube — Lima', 'Verificada'],
-      ],
-      insignia: 4,
-    },
+    nota: 'Una copia sin restauración probada no es una copia. La tabla es la que el backend registra; la columna que importaría —la última restauración verificada— no es un campo suyo.',
+    campos: [],
+    impedimento:
+      'La aplicación no ejecuta respaldos ni restauraciones: los hace el proceso de despliegue, y darle a ' +
+      'sgtm_app lo que haría falta sería deshacer la separación de privilegios. Aquí sólo se consulta.',
     pie: 'Probar una restauración no toca la base en producción: se restaura en un entorno aparte y se comprueba el cuadre de caja.',
     primaria: 'Probar una restauración',
   },
