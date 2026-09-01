@@ -157,14 +157,14 @@ class ControladoresDeLecturaTest {
     @Test
     @DisplayName("sin el proxy transaccional, el GET de pagos falla por falta de contexto")
     void sinProxyPagosFalla() {
-        assertThatThrownBy(() -> pagosSinProxy.pagos(CODIGO, null, null, null, paginacion()))
+        assertThatThrownBy(() -> pagosSinProxy.pagos(CODIGO, null, null, paginacion()))
                 .isInstanceOf(RuntimeException.class);
     }
 
     @Test
     @DisplayName("con @Transactional, el GET de pagos funciona")
     void conProxyPagosFunciona() {
-        var pagina = pagosConProxy.pagos(CODIGO, null, null, null, paginacion());
+        var pagina = pagosConProxy.pagos(CODIGO, null, null, paginacion());
 
         assertThat(pagina.totalElementos()).isZero();
     }
@@ -188,7 +188,7 @@ class ControladoresDeLecturaTest {
     @Test
     @DisplayName("pagos: lo mismo")
     void pagosConCodigoInventadoEs404() {
-        assertThatThrownBy(() -> pagosConProxy.pagos("NO-EXISTE", null, null, null, paginacion()))
+        assertThatThrownBy(() -> pagosConProxy.pagos("NO-EXISTE", null, null, paginacion()))
                 .isInstanceOf(ProblemaDeNegocio.class)
                 .hasMessageContaining("NO-EXISTE");
     }
@@ -202,8 +202,7 @@ class ControladoresDeLecturaTest {
                                 .totalElementos())
                 .as("es el unico caso que de verdad significa «no tiene»")
                 .isZero();
-        assertThat(pagosConProxy.pagos(CODIGO, null, null, null, paginacion()).totalElementos())
-                .isZero();
+        assertThat(pagosConProxy.pagos(CODIGO, null, null, paginacion()).totalElementos()).isZero();
     }
 
     @Test
@@ -217,14 +216,14 @@ class ControladoresDeLecturaTest {
     }
 
     @Test
-    @DisplayName("sin ninguno de los dos nombres, 422: no es una puerta al padron entero")
+    @DisplayName("sin el codigo del contribuyente, 422: no es una puerta al padron entero")
     void sinNingunNombreEs422() {
         assertThatThrownBy(
                         () ->
                                 altasBajasConProxy.altasYBajas(
                                         null, null, null, null, null, paginacion()))
                 .isInstanceOf(ProblemaDeNegocio.class);
-        assertThatThrownBy(() -> pagosConProxy.pagos(null, null, null, null, paginacion()))
+        assertThatThrownBy(() -> pagosConProxy.pagos(null, null, null, paginacion()))
                 .isInstanceOf(ProblemaDeNegocio.class);
     }
 

@@ -255,22 +255,6 @@ class ConsultaValoresControllerTest {
         assertThat(resultado.getResponse().getContentAsString()).contains("\"totalElementos\":0");
     }
 
-    @Test
-    @DisplayName("#622 — «contribuyente» es el mismo filtro con el otro nombre")
-    void admiteElOtroNombreDelMismoFiltro() throws Exception {
-        // Con un codigo que SI esta en el padron, quitar el alias deja el filtro en `null` y la
-        // consulta devuelve el listado entero —que contiene la fila esperada—, asi que la prueba
-        // pasaria en verde sin el alias. Se mide con uno que no esta: 404 si el alias llega, 200
-        // con todo si no.
-        MvcResult resultado =
-                mvc.perform(get("/api/v1/consultas/valores").param("contribuyente", "C-NO-EXISTE"))
-                        .andReturn();
-
-        assertThat(resultado.getResponse().getStatus())
-                .as("las siete lecturas del expediente mandan el codigo con dos grafias")
-                .isEqualTo(404);
-    }
-
     // ------------------------------------------------------------------
 
     private static Valor valor(String numero, TipoValor tipo, EstadoDeValor estado) {

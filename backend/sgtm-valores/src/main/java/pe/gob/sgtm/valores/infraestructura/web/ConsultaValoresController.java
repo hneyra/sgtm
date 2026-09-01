@@ -78,7 +78,6 @@ public class ConsultaValoresController {
     public RespuestaPaginada<ValorConsultadoResource> consultar(
             @RequestParam(required = false) @Nullable String nroDeValor,
             @RequestParam(required = false) @Nullable String codContribuyente,
-            @RequestParam(required = false) @Nullable String contribuyente,
             @RequestParam(required = false) @Nullable String tipo,
             @RequestParam(required = false) @Nullable String estado,
             ParametrosDePaginacion parametros) {
@@ -87,7 +86,7 @@ public class ConsultaValoresController {
         LocalDate hoy = LocalDate.now(reloj);
 
         Long contribuyenteId = null;
-        String codigo = primeroNoVacio(codContribuyente, contribuyente);
+        String codigo = limpio(codContribuyente);
         if (codigo != null) {
             Optional<ResumenDeContribuyente> encontrado = consulta.contribuyentePorCodigo(codigo);
             if (encontrado.isEmpty()) {
@@ -190,11 +189,6 @@ public class ConsultaValoresController {
                 "En el padron de esta municipalidad no hay ningun contribuyente con codigo '"
                         + codigo
                         + "'");
-    }
-
-    private static @Nullable String primeroNoVacio(@Nullable String uno, @Nullable String otro) {
-        String primero = limpio(uno);
-        return primero != null ? primero : limpio(otro);
     }
 
     private static @Nullable String limpio(@Nullable String texto) {

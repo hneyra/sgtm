@@ -84,13 +84,12 @@ public class ConsultaDeudaController {
     @GetMapping
     public RespuestaPaginada<ObligacionConDeudaResource> deuda(
             @RequestParam(required = false) @Nullable String codContribuyente,
-            @RequestParam(required = false) @Nullable String contribuyente,
             @RequestParam(required = false) @Nullable String fechaDeCorte,
             @RequestParam(required = false) @Nullable String fase,
             @RequestParam(required = false) @Nullable String incluyeConvenios,
             ParametrosDePaginacion parametros) {
 
-        String codigo = exigirContribuyente(codContribuyente, contribuyente, "contribuyente");
+        String codigo = exigirContribuyente(codContribuyente);
         if (consulta.contribuyentePorCodigo(codigo).isEmpty()) {
             throw noEstaEnElPadron(codigo);
         }
@@ -152,23 +151,14 @@ public class ConsultaDeudaController {
      * <p>Uno de los dos es <b>obligatorio</b>: sin ninguno, 422. Sin esa exigencia esto seria una
      * puerta al padron entero.
      */
-    private static String exigirContribuyente(
-            @Nullable String canonico, @Nullable String alias, String nombreDelAlias) {
-        String codigo = primeroNoVacio(canonico, alias);
+    private static String exigirContribuyente(@Nullable String canonico) {
+        String codigo = limpio(canonico);
         if (codigo == null) {
             throw new ProblemaDeNegocio(
                     CodigoDeError.VALIDACION,
-                    "Hay que decir de quien es la consulta: falta «codContribuyente» (o su otro"
-                            + " nombre, «"
-                            + nombreDelAlias
-                            + "»)");
+                    "Hay que decir de quien es la consulta: falta «codContribuyente»");
         }
         return codigo;
-    }
-
-    private static @Nullable String primeroNoVacio(@Nullable String uno, @Nullable String otro) {
-        String primero = limpio(uno);
-        return primero != null ? primero : limpio(otro);
     }
 
     private static @Nullable String limpio(@Nullable String texto) {
