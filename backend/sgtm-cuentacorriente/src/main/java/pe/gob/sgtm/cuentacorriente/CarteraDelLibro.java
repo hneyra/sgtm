@@ -59,15 +59,24 @@ public interface CarteraDelLibro {
     CargadoEnElLibro cargadoPorTributo(Ejercicio ejercicio, LocalDate aLaFecha);
 
     /**
-     * Lo que sigue pendiente en el ejercicio, desglosado por tributo.
+     * Lo que sigue pendiente en el ejercicio <b>a la fecha de corte</b>, desglosado por tributo.
      *
-     * <p>Sale de la proyeccion del saldo (#23) y es <b>insoluto</b>: ver {@link
-     * PendienteDeUnTributo}. Se cuentan solo las obligaciones con saldo <b>positivo</b>; una fila
-     * con saldo cero esta cancelada y una con saldo negativo es un pago en exceso, que es un hecho
-     * del libro pero no es cartera por cobrar y restarlo taparia deuda ajena.
+     * <p>Es <b>insoluto</b>, no deuda: ver {@link PendienteDeUnTributo}. Se cuentan solo las
+     * obligaciones con insoluto <b>positivo</b>; una en cero esta cancelada y una negativa es un
+     * pago en exceso, que es un hecho del libro pero no es cartera por cobrar y restarlo taparia
+     * deuda ajena.
+     *
+     * <p><b>{@code aLaFecha} es una fecha de corte, no un sello.</b> Hasta #639 esta cifra salia de
+     * la proyeccion del saldo (#23), que netea la obligacion entera sin fecha —no tiene ninguna
+     * columna con la que aplicarla—, asi que la cartera incluia la cuota que todavia no vence y
+     * daba lo mismo preguntando por enero que por diciembre. Medido en la municipalidad de
+     * demostracion, PREDIAL 2026 al 2026-09-01: 10 662,60 sin corte, <b>8 221,05</b> con el, y los
+     * 2 441,55 de diferencia eran las siete cuotas con fecha valor 2026-11-30. La cifra que la
+     * ventanilla lee delante del contribuyente —{@code GET /consultas/deuda}— es la segunda, y esta
+     * es su suma sobre el padron.
      *
      * @param ejercicio de que ejercicio son las obligaciones
-     * @param aLaFecha la fecha con la que se responde; viaja con la cifra (regla 9, RNF-075)
+     * @param aLaFecha la fecha de corte; ningun asiento posterior entra (regla 9, RNF-075)
      */
     CarteraPendiente pendientePorTributo(Ejercicio ejercicio, LocalDate aLaFecha);
 }

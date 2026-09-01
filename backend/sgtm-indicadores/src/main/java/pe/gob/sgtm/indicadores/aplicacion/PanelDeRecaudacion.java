@@ -35,10 +35,11 @@ import pe.gob.sgtm.tesoreria.RecaudadoEnCaja;
  * <h2>No calcula: agrega</h2>
  *
  * <p>Las cuatro lecturas que hace son de <b>APIs publicas</b> de otros modulos, y ninguna de ellas
- * es una tabla. Lo recaudado y lo cargado vienen del libro; la cartera pendiente, de la proyeccion
- * del saldo (#23); el avance del dia, de la caja (#36). Este servicio no suma asientos, no calcula
- * deuda y no consulta el esquema: si lo hiciera, la pantalla de inicio podria decir una cifra y la
- * de recaudacion otra, y no habria forma de saber cual esta mal.
+ * es una tabla. Lo recaudado, lo cargado y la cartera pendiente vienen del libro —la cartera desde
+ * #639: antes salia de la proyeccion del saldo (#23), que no sabe aplicar una fecha de corte—; el
+ * avance del dia, de la caja (#36). Este servicio no suma asientos, no calcula deuda y no consulta
+ * el esquema: si lo hiciera, la pantalla de inicio podria decir una cifra y la de recaudacion otra,
+ * y no habria forma de saber cual esta mal.
  *
  * <h2>Una sola transaccion, una sola foto</h2>
  *
@@ -59,9 +60,13 @@ import pe.gob.sgtm.tesoreria.RecaudadoEnCaja;
  * cargado» produciria un cumplimiento que nadie firmo (regla 5). Lo que si consta es contra que se
  * cobra —los cargos del libro—, y eso es lo que el panel publica.
  *
- * <p>Tampoco dice «deuda»: lo que publica como cartera es el <b>insoluto pendiente</b> de la
- * proyeccion. La deuda actualizada de un padron entero exigiria calcular interes obligacion por
- * obligacion en cada carga de la pantalla, que es exactamente lo que el AC 4 prohibe.
+ * <p>Tampoco dice «deuda»: lo que publica como cartera es el <b>insoluto pendiente a la fecha de
+ * corte</b>, que es la suma de {@code deudaActualizadaA(fecha).insoluto()} sobre el padron. La
+ * deuda actualizada entera —con su reajuste y su interes— exigiria calcularlos obligacion por
+ * obligacion en cada carga de la pantalla, que es exactamente lo que el AC 4 de #56 prohibe. Hoy
+ * las dos cifras coinciden porque la unica {@code PoliticaDeMora} implementada no acumula nada
+ * (D-02a), y por eso {@code CarteraCuadraConLaConsultaJdbcTest} compara el <b>insoluto</b> y no el
+ * total: comparar totales pasaria hoy por un motivo que dejaria de ser cierto.
  */
 @Service
 public class PanelDeRecaudacion {
@@ -176,20 +181,20 @@ public class PanelDeRecaudacion {
     }
 
     /**
-     * Cuantas obligaciones componen la cartera y desde cuando esta proyectada.
+     * Cuantas obligaciones componen la cartera y a que fecha esta cortada.
      *
-     * <p>La fecha es la de la fila <b>mas antigua</b>, y decirla es el punto: la cartera sale de un
-     * cache (ADR-0006), y sin esa fecha una cifra de hace una semana se lee como si fuera de hoy.
+     * <p>Hasta #639 esta nota decia «insoluto proyectado desde …», porque la cifra salia de un
+     * cache (ADR-0006) que podia llevar dias parado. Ahora sale del libro con la fecha de corte
+     * aplicada, asi que lo unico que hay que declarar es esa fecha —que es ademas la que hace que
+     * la cifra cambie: la cartera al 1 de junio y al 1 de diciembre no son la misma—.
      */
     private static String notaDeLaCartera(CarteraPendiente pendiente) {
-        return pendiente
-                .proyectadaDesde()
-                .map(
-                        desde ->
-                                FormatoDeCifra.cantidad(pendiente.obligaciones())
-                                        + " obligaciones · insoluto proyectado desde "
-                                        + desde)
-                .orElse("sin obligaciones pendientes en el ejercicio");
+        if (pendiente.obligaciones() == 0) {
+            return "sin obligaciones pendientes en el ejercicio";
+        }
+        return FormatoDeCifra.cantidad(pendiente.obligaciones())
+                + " obligaciones · insoluto pendiente al "
+                + pendiente.aLaFecha();
     }
 
     // ------------------------------------------------------------------

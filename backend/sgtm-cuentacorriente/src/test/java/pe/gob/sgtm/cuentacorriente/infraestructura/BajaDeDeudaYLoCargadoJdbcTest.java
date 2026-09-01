@@ -129,7 +129,7 @@ class BajaDeDeudaYLoCargadoJdbcTest {
                         new RegistrarAsiento(
                                 asientos, saldos, new AuditoriaJdbc(jdbc, RELOJ), RELOJ),
                         gestor);
-        cartera = envolver(new CarteraDelLibroCuentaCorriente(asientos, saldos), gestor);
+        cartera = envolver(new CarteraDelLibroCuentaCorriente(asientos), gestor);
         recaudacion = envolver(new RecaudacionDelLibroCuentaCorriente(asientos), gestor);
     }
 
