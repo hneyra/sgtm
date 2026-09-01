@@ -7,6 +7,7 @@ import { usarPreferencias } from '../../shell/preferencias';
 import type { PantallaProps } from '../../App';
 import {
   catalogoVial,
+  comoBbox,
   darDeBaja,
   inscribirPredio,
   listarPredios,
@@ -21,9 +22,15 @@ import {
   listarSectores,
   listarValoresUnitarios,
   listarVias,
+  marcoDe,
+  planoCatastral,
   reactivar,
   titularesDelPredio,
   type EstadoDePredio,
+  type GeometriaDelLote,
+  type LoteDelPlano,
+  type MarcoDelPlano,
+  type PoligonoGeoJson,
   type PredioDelCatastro,
   type TipoDePredio,
   type Via,
@@ -33,6 +40,7 @@ import { ErrorDeApi, fijarToken } from '../../api/cliente';
 import { FalloDeLectura } from '../../api/Fallo';
 import { Descargas } from '../../api/descarga';
 import { hayPuerta } from '../../api/sesion';
+import { Aviso } from '../../ds/componentes';
 import {
   BASE,
   CAPAS,
@@ -205,6 +213,164 @@ type SeccionResuelta = {
  */
 const CAMPOS_QUE_VIAJAN_EN_EL_ALTA = new Set(['numMun']);
 
+/* ══════════ El plano catastral: proyectar para dibujar ══════════ */
+
+/**
+ * El marco con que abre el plano: el Perú continental.
+ *
+ * **No sale de ninguna lectura, y eso es lo que hay que decir.** `bbox` es
+ * obligatorio (ADR-0022 §2) y ninguna operación del contrato publica dónde está
+ * la municipalidad —ni su extensión, ni la de un sector, ni la de una manzana—,
+ * así que la pantalla no puede encuadrar sobre sus datos antes de tenerlos. Se
+ * abre sobre el país entero, que es lo único cierto, y **el dibujo se encuadra
+ * después sobre los polígonos que vuelven**. Su consecuencia el día que haya
+ * geometría cargada está anotada en la pantalla y en #612: un marco tan ancho
+ * contestará «hay N lotes, acércate», y desde aquí no se sabe hacia dónde.
+ *
+ * Los cuatro son negativos —el Perú está al sur y al oeste— salvo el norte, que
+ * se escribe `-0.02` porque el país acaba justo antes del ecuador.
+ */
+const MARCO_INICIAL: MarcoDelPlano = { oeste: -81.4, sur: -18.4, este: -68.6, norte: -0.02 };
+
+/** Cuántos lotes se piden. El servidor no sirve más de 2 000, y lo dice él. */
+const LOTES_POR_MARCO = 2000;
+
+/** El lienzo del plano, en unidades de su `viewBox`. */
+const LIENZO = { ancho: 560, alto: 400, margen: 10 };
+
+/** Grados a radianes, que es donde vive la fórmula de Mercator. */
+const RADIANES = Math.PI / 180;
+
+/**
+ * La ordenada de Web Mercator.
+ *
+ * **Es una proyección de PANTALLA y no toca el dato** (ADR-0022 §1): el polígono
+ * llega en 4326 y en 4326 se queda; lo único que pasa aquí es que una esfera se
+ * dibuja en un rectángulo, que es lo que hace cualquier biblioteca de mapas al
+ * pintar. Dibujar la latitud como si fuera lineal deformaría los lotes, y un
+ * lote deformado se lee como un lote mal levantado.
+ */
+function mercator(latitud: number): number {
+  const acotada = Math.min(Math.max(latitud, -85.05), 85.05);
+  return Math.log(Math.tan(Math.PI / 4 + (acotada * RADIANES) / 2));
+}
+
+/** Los polígonos de un lote, venga como `Polygon` o como `MultiPolygon`. */
+function poligonosDe(g: GeometriaDelLote): PoligonoGeoJson[] {
+  if (g.type === 'MultiPolygon') return g.coordinates;
+  if (g.type === 'Polygon') return [g.coordinates];
+  return [];
+}
+
+/** Una pieza dibujable: su lote y el `path` ya proyectado. */
+type PiezaDelPlano = { lote: LoteDelPlano; d: string };
+
+/**
+ * Encuadra los lotes que volvieron y los proyecta al lienzo.
+ *
+ * **Encuadra sobre lo devuelto y no sobre el marco pedido.** El marco pedido es
+ * la consulta —hoy el Perú entero— y dibujar sobre él dejaría los lotes de un
+ * distrito en un punto de un país en blanco. Lo que se ve es lo que hay.
+ */
+function encuadrar(lotes: readonly LoteDelPlano[]): {
+  piezas: PiezaDelPlano[];
+  /** Los grados de ancho de lo dibujado, para decir la escala en metros. */
+  anchoEnGrados: number;
+  latitudMedia: number;
+} | null {
+  let oeste = Infinity;
+  let sur = Infinity;
+  let este = -Infinity;
+  let norte = -Infinity;
+  for (const l of lotes) {
+    for (const poligono of poligonosDe(l.geometria)) {
+      for (const anillo of poligono) {
+        for (const [lon, lat] of anillo) {
+          if (!Number.isFinite(lon) || !Number.isFinite(lat)) continue;
+          if (lon < oeste) oeste = lon;
+          if (lon > este) este = lon;
+          if (lat < sur) sur = lat;
+          if (lat > norte) norte = lat;
+        }
+      }
+    }
+  }
+  if (!Number.isFinite(oeste) || !Number.isFinite(sur)) return null;
+
+  /* Un solo lote —o varios sobre la misma línea— deja el encuadre sin ancho o
+     sin alto, y dividir por cero pone el plano entero en NaN: un `path` con NaN
+     no falla, no dibuja nada, que es el desenlace que esta pantalla existe para
+     no tener. Se le da un margen mínimo de un metro escaso. */
+  const MINIMO = 0.00001;
+  if (este - oeste < MINIMO) {
+    oeste -= MINIMO;
+    este += MINIMO;
+  }
+  if (norte - sur < MINIMO) {
+    sur -= MINIMO;
+    norte += MINIMO;
+  }
+
+  /* Las DOS coordenadas en unidades de Mercator, y no una en grados y otra en
+     Mercator: medido, mezclarlas achata el dibujo por el factor 180/pi —los
+     lotes salian como una raya de un pixel de alto sobre un lienzo vacio, que
+     es indistinguible de un plano roto—. La abscisa de Web Mercator es la
+     longitud EN RADIANES, no en grados. */
+  const x0 = oeste * RADIANES;
+  const y0 = mercator(norte);
+  const ancho = (este - oeste) * RADIANES;
+  const alto = mercator(norte) - mercator(sur);
+  const escala = Math.min((LIENZO.ancho - 2 * LIENZO.margen) / ancho, (LIENZO.alto - 2 * LIENZO.margen) / alto);
+  /* Centrado: lo que sobra del lienzo se reparte, para que un distrito alargado
+     no salga pegado a un borde. */
+  const dx = (LIENZO.ancho - ancho * escala) / 2;
+  const dy = (LIENZO.alto - alto * escala) / 2;
+  const px = (lon: number) => (lon * RADIANES - x0) * escala + dx;
+  const py = (lat: number) => (y0 - mercator(lat)) * escala + dy;
+
+  const piezas: PiezaDelPlano[] = [];
+  for (const lote of lotes) {
+    const trozos: string[] = [];
+    for (const poligono of poligonosDe(lote.geometria)) {
+      for (const anillo of poligono) {
+        if (anillo.length < 3) continue;
+        trozos.push(
+          anillo
+            .map(([lon, lat], i) => `${i === 0 ? 'M' : 'L'}${px(lon).toFixed(2)},${py(lat).toFixed(2)}`)
+            .join(' ') + ' Z',
+        );
+      }
+    }
+    /* Un lote cuya geometría no se pudo leer no se dibuja **y no se cuenta**:
+       aparecería como un hueco, y un hueco en un plano se lee como que ahí no
+       hay predio. Sale en la lista de abajo, con su código. */
+    if (trozos.length > 0) piezas.push({ lote, d: trozos.join(' ') });
+  }
+  return { piezas, anchoEnGrados: este - oeste, latitudMedia: (sur + norte) / 2 };
+}
+
+/**
+ * El ancho de lo dibujado, en metros o kilómetros.
+ *
+ * Sustituye al «100 %» del artboard, que sobre geometría proyectada no dice
+ * nada: lo que significa algo es la escala en el terreno. Sale del encuadre
+ * —que es del cliente— y no de ninguna cifra del backend.
+ */
+function escalaDelPlano(anchoEnGrados: number, latitudMedia: number): string {
+  const metros = anchoEnGrados * 111320 * Math.cos(latitudMedia * RADIANES);
+  if (!Number.isFinite(metros) || metros <= 0) return SIN_DATO;
+  return metros < 1000 ? `${Math.round(metros)} m de ancho` : `${(metros / 1000).toFixed(1)} km de ancho`;
+}
+
+/**
+ * Los colores con que se agrupan los lotes por manzana o por sector.
+ *
+ * No significan nada por sí mismos —no son un rango de arancel ni un estado—:
+ * sólo separan un grupo del de al lado, y la leyenda dice por cuál se agrupó.
+ */
+const COLORES_DE_GRUPO = ['#6f8cb0', '#9db3cd', '#c4d2e2', '#a8b89a', '#d4bfa0', '#b9a8c4', '#8fa8a0', '#cbb8a8'];
+
+
 export default function Catastro({ dest, onDest }: PantallaProps) {
   const { pref, toast } = usarPreferencias();
   const m = moduloDe('catastro');
@@ -262,15 +428,29 @@ export default function Catastro({ dest, onDest }: PantallaProps) {
   const [valTab, setValTab] = useState(0);
   const [sectorAbierto, setSectorAbierto] = useState('01');
   const [paginaDeManzanas, setPaginaDeManzanas] = useState(0);
+  /* Las dos que no se pueden dibujar nacen apagadas y su conmutador esta
+     bloqueado con su motivo: `via` no tiene columna de geometria y el arancel
+     no se resuelve por lote (ADR-0022 §5). Encenderlas no dibujaria nada, y una
+     capa encendida que no pinta se lee como «aqui no hay ninguna calle». */
   const [capas, setCapas] = useState<Record<string, boolean>>({
     predios: true,
-    vias: true,
     manzanas: true,
-    sectores: true,
+    sectores: false,
+    vias: false,
     aranceles: false,
   });
-  const [lote, setLote] = useState('M-06-04');
-  const [zoom, setZoom] = useState(100);
+  /* El lote elegido, por su `predioId`. Antes nacia en 'M-06-04', que es una
+     casilla del artboard y no un predio de nadie. */
+  const [loteElegido, setLoteElegido] = useState<number | null>(null);
+  /* El marco con que se pide el plano, y lo que hay tecleado en su caja: son
+     dos cosas porque un marco a medio escribir no se manda. */
+  const [marco, setMarco] = useState<MarcoDelPlano>(MARCO_INICIAL);
+  const [marcoTecleado, setMarcoTecleado] = useState(comoBbox(MARCO_INICIAL));
+  /* Los dos filtros que el plano admite, y que NO son los del padron: van a
+     `GET /catastro/predios/plano` y acotan tambien la cuenta de los que no
+     tienen poligono. */
+  const [mapaSector, setMapaSector] = useState('');
+  const [mapaManzana, setMapaManzana] = useState('');
   const [modalidades, setModalidades] = useState<Record<Modalidad, boolean>>({
     urbana: true,
     economica: true,
@@ -579,7 +759,88 @@ export default function Catastro({ dest, onDest }: PantallaProps) {
      bitácora en cada página, así que la cifra sale «—» y la petición no se hace.
      Lo que falta es del backend: issue abierto. */
   const sectoresDelPanel = useRecurso((s2) => listarSectores(s2), [], conCenso);
-  const viasDelMapa = useRecurso((s2) => listarVias({ tamano: 1 }, s2), [], dest === 'mapa');
+
+  /* ── El plano, contra `GET /api/v1/catastro/predios/plano` (#536) ──────
+     `bbox` es obligatorio y no tiene valor por omision en el servidor: sin el,
+     422. El que viaja es el del estado, y su cadena es la llave —comparar el
+     objeto haria una peticion por render—. */
+  const bbox = comoBbox(marco);
+  const plano = useRecurso(
+    (s2) =>
+      planoCatastral(
+        {
+          bbox,
+          codigoDeSector: mapaSector || undefined,
+          codigoDeManzana: mapaManzana || undefined,
+          limite: LOTES_POR_MARCO,
+        },
+        s2,
+      ),
+    [bbox, mapaSector, mapaManzana],
+    dest === 'mapa',
+  );
+
+  /* Las manzanas del sector elegido en el mapa. Se piden al elegirlo y no al
+     entrar, por lo mismo que en Territorio: un sector de Catacaos pasa de mil
+     manzanas y traerlas por si acaso es descargar el catastro para llenar un
+     desplegable. */
+  const manzanasDelMapa = useRecurso(
+    (s2) => listarManzanasDelSector(mapaSector, 0, s2),
+    [mapaSector],
+    dest === 'mapa' && mapaSector !== '',
+  );
+
+  /* Cambiar de sector deja la manzana anterior colgando: seguiria viajando, y
+     una manzana que no es de ese sector devuelve cero sin decir por que. */
+  useEffect(() => setMapaManzana(''), [mapaSector]);
+  /**
+   * El lote elegido, buscado entre los que volvieron.
+   *
+   * **Se deriva, y por eso no hay ningun efecto que lo limpie al mover el
+   * marco.** Lo habia, y medido resulto ser peor que no tenerlo: un lote que ya
+   * no vuelve se resuelve a `null` el solo —el panel dice «pulsa un lote»—,
+   * mientras que limpiarlo a mano tira tambien la eleccion que SIGUE en
+   * pantalla, que es el caso corriente al acercarse sobre el lote elegido.
+   */
+  const elegido = useMemo(
+    () => (plano.datos?.lotes ?? []).find((l) => l.predioId === loteElegido) ?? null,
+    [plano.datos, loteElegido],
+  );
+
+  const cambiarMarco = (nuevoMarco: MarcoDelPlano) => {
+    setMarco(nuevoMarco);
+    setMarcoTecleado(comoBbox(nuevoMarco));
+  };
+
+  /**
+   * Acerca o aleja el marco por su centro.
+   *
+   * Es lo que contesta al 422 de «hay N lotes, acercate»: la unica respuesta que
+   * ese rechazo admite. Se acota a las coordenadas validas —el backend rechaza
+   * fuera de rango, y un marco de 361 grados de ancho no es mas plano— y a un
+   * ancho minimo, porque partirlo indefinidamente acaba en un marco degenerado
+   * que el backend rechaza por estar del reves.
+   */
+  const escalarMarco = (factor: number) => {
+    const ANCHO_MINIMO = 0.0001;
+    const centroX = (marco.oeste + marco.este) / 2;
+    const centroY = (marco.sur + marco.norte) / 2;
+    const medioAncho = Math.max(((marco.este - marco.oeste) * factor) / 2, ANCHO_MINIMO);
+    const medioAlto = Math.max(((marco.norte - marco.sur) * factor) / 2, ANCHO_MINIMO);
+    const red = (v: number) => Number(v.toFixed(6));
+    cambiarMarco({
+      oeste: red(Math.max(centroX - medioAncho, -180)),
+      sur: red(Math.max(centroY - medioAlto, -90)),
+      este: red(Math.min(centroX + medioAncho, 180)),
+      norte: red(Math.min(centroY + medioAlto, 90)),
+    });
+  };
+  const acercarElMarco = () => escalarMarco(0.5);
+  const alejarElMarco = () => escalarMarco(2);
+  /* Con el marco ya en el inicial, «Restablecer» no restablece nada: ni pide,
+     ni cambia el dibujo, ni dice por que. Un boton que se pulsa y no hace nada
+     es peor que uno apagado, porque el apagado al menos dice que no se puede. */
+  const marcoEsElInicial = bbox === comoBbox(MARCO_INICIAL);
 
   /* La cabecera de la hoja: lo que el recurso publica y nada más. La
      calificación del contribuyente no viene, así que sale «—». */
@@ -649,59 +910,69 @@ export default function Catastro({ dest, onDest }: PantallaProps) {
     abierto !== null,
   );
 
+  /* ── Lo que el plano dibuja, ya proyectado ──────────────────── */
+
   /**
-   * Lo que cada capa cuenta, contado por el backend.
+   * El encuadre y los `path` de los lotes que volvieron.
+   *
+   * `null` cuando no hay ninguno, que hoy es SIEMPRE y en las dos
+   * municipalidades: medido contra el backend, `GET /catastro/predios/plano`
+   * contesta `{"lotes":[],"sinGeometria":24}` en la 1 y
+   * `{"lotes":[],"sinGeometria":14422}` en la 9. Por eso el lienzo no se dibuja
+   * vacio: un rectangulo en blanco sin explicacion se lee como un mapa roto.
+   */
+  const dibujo = useMemo(() => {
+    const lotes = plano.datos?.lotes ?? [];
+    return lotes.length === 0 ? null : encuadrar(lotes);
+  }, [plano.datos]);
+
+  /**
+   * Por que se agrupan los colores, o por nada.
+   *
+   * Manzana gana a sector porque es la mas fina de las dos, y las dos a la vez
+   * serian dos coloreados sobre la misma figura. La leyenda lo escribe: un
+   * color que no dice de que es no informa, decora.
+   */
+  const agrupadoPor: 'manzanas' | 'sectores' | null = capas.manzanas
+    ? 'manzanas'
+    : capas.sectores
+      ? 'sectores'
+      : null;
+
+  const claveDeGrupo = (l: LoteDelPlano): string =>
+    (agrupadoPor === 'manzanas' ? l.codigoDeManzana : agrupadoPor === 'sectores' ? l.codigoDeSector : null) ?? '';
+
+  /** Los grupos presentes entre lo dibujado, ordenados: el color es estable. */
+  const gruposDibujados = useMemo(() => {
+    if (dibujo === null || agrupadoPor === null) return [];
+    return [...new Set(dibujo.piezas.map((p) => claveDeGrupo(p.lote)))].sort();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [dibujo, agrupadoPor]);
+
+  /**
+   * Lo que cada capa PONE en el plano.
    *
    * Los llevaba dentro `CAPAS` —«18,412», «2,184», «1,096», «5», «4 rangos»— y
-   * eran los del artboard: el carril de al lado enseñaba a la vez 14 422 y 1 110,
-   * y las dos cifras del mismo dato convivían sin que nada dijera cuál era la
-   * buena. Los aranceles siguen sin cifra a propósito: la capa colorea por
-   * «rangos» que ninguna lectura publica.
+   * eran los del artboard. Luego pasaron a ser los del padron, que ya era cierto
+   * pero decia otra cosa: «1,110» al lado de «Vias y calles» promete 1 110 calles
+   * dibujadas, y esa capa **no dibuja ninguna** porque `via` no tiene columna de
+   * geometria. Lo que cuenta ahora es lo que la capa pinta sobre este marco.
    */
   const conteoDeLaCapa = (clave: string): string => {
-    const total = (r: { datos: { totalElementos: number } | null; cargando: boolean }) =>
-      r.cargando ? '…' : r.datos ? r.datos.totalElementos.toLocaleString('es-PE') : SIN_DATO;
-    if (clave === 'predios') return total(censoActivos);
-    if (clave === 'vias') return total(viasDelMapa);
-    if (clave === 'sectores') return total(sectoresDelPanel);
-    if (clave === 'manzanas') {
-      if (sectoresDelPanel.cargando) return '…';
-      if (!sectoresDelPanel.datos) return SIN_DATO;
-      return (sectoresDelPanel.datos.contenido ?? [])
-        .reduce((a, x) => a + (x.manzanas ?? 0), 0)
-        .toLocaleString('es-PE');
+    if (plano.cargando) return '…';
+    if (plano.datos === null) return SIN_DATO;
+    if (clave === 'predios') return (dibujo?.piezas.length ?? 0).toLocaleString('es-PE');
+    if (clave === 'manzanas' || clave === 'sectores') {
+      const lotes = plano.datos.lotes;
+      const codigos = new Set(
+        lotes.map((l) => (clave === 'manzanas' ? l.codigoDeManzana : l.codigoDeSector)).filter((c) => c !== null),
+      );
+      return codigos.size.toLocaleString('es-PE');
     }
-    /* «4 rangos» era del artboard: los tramos de color del plano no salen de
-       ningún arancel —hoy no hay ni uno publicado— sino de la fila del dibujo. */
+    /* Vias y aranceles: no hay con que dibujarlas, asi que no cuentan nada. Una
+       cifra ahi seria la promesa de un dibujo que no existe. */
     return SIN_DATO;
   };
-
-  /* ── El plano esquemático: 4×3 manzanas con sus lotes ────────── */
-  const plano = useMemo(() => {
-    const manzanas: { x: number; y: number; w: number; h: number }[] = [];
-    const lotes: { id: string; x: number; y: number; w: number; h: number; fila: number }[] = [];
-    const etiquetas: { x: number; y: number; txt: string }[] = [];
-    const vias: { x1: number; y1: number; x2: number; y2: number }[] = [];
-    for (let r = 0; r < 3; r++) {
-      for (let c = 0; c < 4; c++) {
-        const x = 30 + c * 132;
-        const y = 26 + r * 124;
-        const w = 108;
-        const h = 96;
-        const cod = 'M-' + String(r * 4 + c + 1).padStart(2, '0');
-        manzanas.push({ x, y, w, h });
-        etiquetas.push({ x: x + w / 2, y: y + h + 13, txt: cod });
-        for (let i = 0; i < 10; i++) {
-          const lx = x + (i % 5) * (w / 5);
-          const ly = y + Math.floor(i / 5) * (h / 2);
-          lotes.push({ id: cod + '-' + String(i + 1).padStart(2, '0'), x: lx + 1, y: ly + 1, w: w / 5 - 2, h: h / 2 - 2, fila: r });
-        }
-      }
-    }
-    for (let c = 0; c <= 4; c++) vias.push({ x1: 22 + c * 132, y1: 10, x2: 22 + c * 132, y2: 390 });
-    for (let r = 0; r <= 3; r++) vias.push({ x1: 14, y1: 18 + r * 124, x2: 546, y2: 18 + r * 124 });
-    return { manzanas, lotes, etiquetas, vias };
-  }, []);
 
   /* La pestaña activa, con su lectura. Del artboard ya no queda ni el rótulo:
      `tablasDeValores` describía OTRA tabla —seis tramos de arancel, siete
@@ -2599,172 +2870,279 @@ export default function Catastro({ dest, onDest }: PantallaProps) {
         {dest === 'mapa' && (
           <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
             <p style={ENTRADILLA}>
-              El plano catastral con las capas de predios, vías, manzanas, sectores y aranceles sobre la misma base. Al seleccionar un lote
-              se ven sus datos y el camino a su ficha.
+              El plano catastral: los lotes de un marco, con su polígono, tal como están en el padrón. Al seleccionar uno se ven sus datos
+              y el camino a su ficha.
             </p>
-            {/* Sin esta franja, el dibujo de abajo se lee como el plano de esta
-                municipalidad: doce manzanas de 4×3 con diez lotes cada una, que
-                es el esquema del artboard y no la geometría de nadie. Y el carril
-                de la izquierda decía a la vez «14 422 en el padrón» mientras las
-                capas contaban «18,412 predios» y «2,184 vías» —dos cifras del
-                mismo dato, sin que nada dijera cuál era la del sistema—. */}
-            <div
-              role="note"
-              style={{
-                display: 'flex',
-                gap: 11,
-                padding: '12px 14px',
-                borderRadius: 8,
-                background: 'var(--warn-bg)',
-                color: 'var(--warn-fg)',
-                border: '1px solid color-mix(in srgb, var(--warn-fg) 22%, transparent)',
-              }}
-            >
-              <Icono d={ICO.aviso} tam={16} grosor={1.8} style={{ flex: '0 0 auto', marginTop: 1 }} />
-              <span style={{ flex: 1, minWidth: 0, fontSize: 12.5, lineHeight: 1.55, textWrap: 'pretty' }}>
-                <strong style={{ display: 'block', fontWeight: 600, marginBottom: 2 }}>
-                  Este plano es un esquema, no el catastro de esta municipalidad.
-                </strong>
-                Las doce manzanas y sus lotes están dibujados a medida fija: ninguna operación de esta API publica geometría, así que
-                aquí no hay ni un vértice del territorio real. Los conteos de las capas sí salen del backend. Para encontrar un predio,
-                el padrón lo busca por su código de referencia catastral.
-              </span>
-            </div>
+
+            {/* Aquí decía que «ninguna operación de esta API publica geometría»,
+                y desde #536 no es cierto: `GET /catastro/predios/plano` la
+                publica. Lo que sigue siendo cierto —y hay que decir— es lo otro:
+                que no hay ni un polígono cargado, que el plano no lleva base
+                cartográfica, y que el marco con que abre no sale de ninguna
+                lectura. Las tres se dicen donde se notan, no aquí en bloque. */}
+
             <div style={{ display: 'grid', gridTemplateColumns: 'minmax(0,1fr) 318px', gap: 14, alignItems: 'start' }}>
               <section style={{ ...TARJETA, minWidth: 0 }}>
                 <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap', padding: '11px 14px', borderBottom: '1px solid var(--line)' }}>
-                  {/* Los tres estaban vivos y ninguno hacía nada: el desplegable
-                      ofrecía S-01…S-05 —los del artboard, no los seis sectores que
-                      esta municipalidad tiene—, la caja no buscaba y «Ubicar»
-                      encuadraba el lote que ya estaba encuadrado. Un control que no
-                      hace nada se pulsa igual y nada lo delata. */}
-                  <select
-                    disabled
-                    value=""
-                    aria-label="Sector"
-                    title="El plano no está acotado por sector: es un esquema"
-                    style={{ border: '1px solid var(--line-2)', borderRadius: 6, padding: '7px 9px', background: 'var(--bg-elev)', fontSize: 12.5, opacity: 0.55 }}
-                  >
-                    <option value="">
-                      {sectoresDelPanel.datos
-                        ? sectoresDelPanel.datos.totalElementos + ' sectores en el padrón'
-                        : 'Sectores'}
-                    </option>
-                  </select>
-                  <input
-                    disabled
-                    placeholder="El plano no busca: el padrón sí, por código"
-                    title="Ninguna operación resuelve un código sobre este esquema"
-                    style={{ flex: 1, minWidth: 150, border: '1px solid var(--line-2)', borderRadius: 6, padding: '7px 10px', background: 'var(--bg-elev)', fontSize: 12.5, opacity: 0.55 }}
-                  />
-                  <button
-                    onClick={() => irA('predios')}
-                    className="hov-linea"
-                    style={BOTON_LINEA}
-                  >
+                  {/* Los tres controles de aquí estaban vivos y ninguno hacía
+                      nada: el desplegable ofrecía S-01…S-05 —los del artboard—,
+                      la caja no buscaba y «Ubicar» encuadraba lo ya encuadrado.
+                      Ahora los dos primeros son los DOS filtros que
+                      `PlanoCatastralController` admite, y acotan también la
+                      cuenta de predios sin polígono (medido: sector «01» de
+                      Catacaos deja `sinGeometria` en 1, de 14 422). */}
+                  <label style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 12, color: 'var(--ink-3)' }}>
+                    Sector
+                    <select
+                      value={mapaSector}
+                      onChange={(e) => setMapaSector(e.target.value)}
+                      disabled={sectoresDelPanel.datos === null}
+                      title={sectoresDelPanel.datos === null ? 'No se pudieron leer los sectores de esta municipalidad' : undefined}
+                      style={{ border: '1px solid var(--line-2)', borderRadius: 6, padding: '7px 9px', background: 'var(--bg-elev)', fontSize: 12.5 }}
+                    >
+                      <option value="">Todos</option>
+                      {(sectoresDelPanel.datos?.contenido ?? []).map((sec) => (
+                        <option key={sec.codigo} value={sec.codigo}>
+                          {sec.codigo} — {sec.nombre}
+                        </option>
+                      ))}
+                    </select>
+                  </label>
+                  <label style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 12, color: 'var(--ink-3)' }}>
+                    Manzana
+                    <select
+                      value={mapaManzana}
+                      onChange={(e) => setMapaManzana(e.target.value)}
+                      disabled={mapaSector === '' || manzanasDelMapa.datos === null}
+                      title={mapaSector === '' ? 'Elige antes un sector: la manzana se numera dentro de él' : undefined}
+                      style={{ border: '1px solid var(--line-2)', borderRadius: 6, padding: '7px 9px', background: 'var(--bg-elev)', fontSize: 12.5, opacity: mapaSector === '' ? 0.55 : 1 }}
+                    >
+                      <option value="">Todas</option>
+                      {(manzanasDelMapa.datos?.contenido ?? []).map((mz) => (
+                        <option key={mz.id} value={mz.codigo}>
+                          {mz.codigo}
+                        </option>
+                      ))}
+                    </select>
+                  </label>
+                  <button onClick={() => irA('predios')} className="hov-linea" style={BOTON_LINEA}>
                     Buscar en el padrón
                   </button>
-                  <span style={{ display: 'flex', alignItems: 'center', gap: 6, marginLeft: 'auto' }}>
-                    <button
-                      onClick={() => setZoom((z) => Math.max(z - 25, 75))}
-                      aria-label="Alejar"
-                      style={{ width: 30, height: 30, display: 'grid', placeItems: 'center', border: '1px solid var(--line-2)', borderRadius: 6, background: 'var(--bg-elev)', cursor: 'pointer' }}
-                    >
-                      <Icono d={['M5 12h14']} tam={14} grosor={1.8} />
-                    </button>
-                    <span style={{ fontFamily: 'var(--font-mono)', fontSize: 11, color: 'var(--ink-3)', minWidth: 46, textAlign: 'center' }}>{zoom} %</span>
-                    <button
-                      onClick={() => setZoom((z) => Math.min(z + 25, 175))}
-                      aria-label="Acercar"
-                      style={{ width: 30, height: 30, display: 'grid', placeItems: 'center', border: '1px solid var(--line-2)', borderRadius: 6, background: 'var(--bg-elev)', cursor: 'pointer' }}
-                    >
-                      <Icono d={ICO.mas} tam={14} grosor={1.8} />
-                    </button>
+                  <span style={{ display: 'flex', alignItems: 'center', gap: 6, marginLeft: 'auto', fontSize: 11.5, color: 'var(--ink-3)' }}>
+                    {/* El «100 %» del artboard se fue con el esquema: sobre
+                        geometría proyectada un porcentaje no dice nada, y lo que
+                        significa algo es la escala en el terreno. Sale del
+                        encuadre —que lo calcula esta pantalla— y no de ninguna
+                        cifra del backend, así que sin lotes no hay escala. */}
+                    <Icono d={ICO.mapa} tam={13} grosor={1.7} />
+                    {dibujo === null ? 'Sin escala: no hay nada dibujado' : escalaDelPlano(dibujo.anchoEnGrados, dibujo.latitudMedia)}
                   </span>
                 </div>
-                <div style={{ overflow: 'auto', background: 'var(--bg-elev)', maxHeight: '66vh' }}>
-                  <div style={{ position: 'relative', width: `${zoom}%`, minWidth: 520 }}>
-                    <svg viewBox="0 0 560 400" preserveAspectRatio="xMidYMid meet" style={{ display: 'block', width: '100%', height: 'auto' }}>
-                      <rect x="0" y="0" width="560" height="400" fill="#f1ece0" />
-                      {capas.vias && (
-                        <g>
-                          {plano.vias.map((v, i) => (
-                            <line key={i} x1={v.x1} y1={v.y1} x2={v.x2} y2={v.y2} stroke="#fbfaf6" strokeWidth={15} />
-                          ))}
-                        </g>
+
+                {/* El marco. Se teclea porque no hay de dónde sacarlo: ninguna
+                    operación del contrato publica dónde está la municipalidad
+                    —ni su extensión, ni la de un sector—, y `bbox` es
+                    obligatorio. Se dice aquí y no en una franja de arriba
+                    porque es exactamente aquí donde se nota. */}
+                <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap', padding: '9px 14px', borderBottom: '1px solid var(--line)', background: 'var(--bg-elev)' }}>
+                  <label htmlFor="marco-del-plano" style={{ fontSize: 11.5, color: 'var(--ink-3)' }}>
+                    Marco
+                  </label>
+                  <input
+                    id="marco-del-plano"
+                    value={marcoTecleado}
+                    onChange={(e) => setMarcoTecleado(e.target.value)}
+                    onBlur={() => {
+                      const leido = marcoDe(marcoTecleado);
+                      if (leido !== null) setMarco(leido);
+                      else setMarcoTecleado(comoBbox(marco));
+                    }}
+                    onKeyDown={(e) => {
+                      if (e.key === 'Enter') e.currentTarget.blur();
+                    }}
+                    aria-describedby="marco-nota"
+                    spellCheck={false}
+                    style={{ flex: 1, minWidth: 230, border: '1px solid var(--line-2)', borderRadius: 6, padding: '6px 9px', background: 'var(--bg-card)', fontFamily: 'var(--font-mono)', fontSize: 11.5 }}
+                  />
+                  <button onClick={() => acercarElMarco()} className="hov-linea" style={{ ...BOTON_LINEA, padding: '6px 12px', fontSize: 12 }}>
+                    Acercar
+                  </button>
+                  <button onClick={() => alejarElMarco()} className="hov-linea" style={{ ...BOTON_LINEA, padding: '6px 12px', fontSize: 12 }}>
+                    Alejar
+                  </button>
+                  <button
+                    onClick={() => cambiarMarco(MARCO_INICIAL)}
+                    disabled={marcoEsElInicial}
+                    title={marcoEsElInicial ? 'El marco ya es el inicial' : undefined}
+                    className="hov-linea"
+                    style={{ ...BOTON_LINEA, padding: '6px 12px', fontSize: 12, opacity: marcoEsElInicial ? 0.5 : 1 }}
+                  >
+                    Restablecer
+                  </button>
+                  <span id="marco-nota" style={{ width: '100%', fontSize: 11, color: 'var(--ink-4)', lineHeight: 1.5, textWrap: 'pretty' }}>
+                    <code style={{ fontFamily: 'var(--font-mono)' }}>oeste,sur,este,norte</code> en grados. Abre sobre el Perú entero
+                    porque ninguna lectura publica dónde está esta municipalidad (#612): el dibujo se encuadra después, sobre los
+                    polígonos que vuelvan.
+                  </span>
+                </div>
+
+                {plano.cargando && (
+                  <div style={{ padding: 14 }}>
+                    <div data-esq="1" style={{ height: 220 }} />
+                  </div>
+                )}
+
+                {/* El 422 del marco lleno NO es un error, es una respuesta: hay
+                    más lotes de los que se sirven y hay que acercarse (ADR-0022
+                    §2). Comparte el código `VALIDACION` con «el marco está del
+                    revés», que sí es un defecto de esta pantalla, y **no se
+                    separan leyendo el texto**: reaccionar al mensaje es lo que
+                    esta interfaz no hace en ninguna parte. Así que se enseña el
+                    mensaje del servidor tal cual —él dice cuántos hay— y se
+                    ofrece acercar, que sirve en el primer caso y no estorba en
+                    el segundo. Separarlos por contrato es #611. */}
+                {plano.error !== null && plano.error.codigo === 'VALIDACION' && (
+                  <div style={{ padding: 14, display: 'flex', flexDirection: 'column', gap: 10 }}>
+                    <Aviso tono="warn" titulo="El servidor no sirve este marco">
+                      {plano.error.mensaje}
+                    </Aviso>
+                    <div style={{ display: 'flex', gap: 8 }}>
+                      <button onClick={() => acercarElMarco()} className="hov-acento-2" style={{ border: 0, borderRadius: 6, padding: '9px 14px', background: 'var(--accent)', color: '#fff', fontSize: 12.5, fontWeight: 500, cursor: 'pointer' }}>
+                        Acercar el marco
+                      </button>
+                      <button
+                        onClick={() => cambiarMarco(MARCO_INICIAL)}
+                        disabled={marcoEsElInicial}
+                        title={marcoEsElInicial ? 'El marco ya es el inicial: lo que hay que hacer es acercarlo' : undefined}
+                        className="hov-linea"
+                        style={{ ...BOTON_LINEA, opacity: marcoEsElInicial ? 0.5 : 1 }}
+                      >
+                        Restablecer
+                      </button>
+                    </div>
+                  </div>
+                )}
+
+                {plano.error !== null && plano.error.codigo !== 'VALIDACION' && (
+                  <div style={{ padding: 14 }}>
+                    <FalloDeLectura error={plano.error} que="el plano catastral" acceso="consulta_fichas" alReintentar={plano.reintentar} />
+                  </div>
+                )}
+
+                {/* **El estado de hoy, y el primero que esta pantalla tiene que
+                    saber dibujar** (ADR-0022 §3): el plano contesta bien y no
+                    trae ni un lote, porque no hay ni un polígono cargado. Un
+                    lienzo vacío aquí se leería como un mapa roto, o peor: como
+                    un distrito sin predios. */}
+                {plano.error === null && !plano.cargando && dibujo === null && (
+                  <div style={{ padding: '22px 18px 26px', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 10, textAlign: 'center' }}>
+                    <Icono d={ICO.mapa} tam={30} grosor={1.3} style={{ color: 'var(--ink-4)' }} />
+                    <p style={{ margin: 0, fontFamily: 'var(--font-serif)', fontSize: 16, fontWeight: 600 }}>
+                      No hay ni un lote que dibujar en este marco
+                    </p>
+                    <p style={{ margin: 0, maxWidth: 520, fontSize: 12.5, lineHeight: 1.6, color: 'var(--ink-3)', textWrap: 'pretty' }}>
+                      {plano.datos !== null && plano.datos.sinGeometria > 0 ? (
+                        <>
+                          <strong style={{ color: 'var(--ink-2)' }}>{plano.datos.sinGeometria.toLocaleString('es-PE')}</strong> predios
+                          del padrón{mapaSector !== '' || mapaManzana !== '' ? ' que alcanzan estos filtros' : ''} no tienen ningún
+                          polígono cargado. No es un fallo de la consulta ni de la sesión: el levantamiento cartográfico de esos predios
+                          no se ha hecho, y hasta que se haga no hay plano que dibujar.
+                        </>
+                      ) : (
+                        <>
+                          Ningún predio del padrón{mapaSector !== '' || mapaManzana !== '' ? ' que alcance estos filtros' : ''} se queda
+                          sin polígono, así que lo que no hay es ningún lote dentro de este marco: mueve el marco o quita los filtros.
+                        </>
                       )}
-                      {capas.manzanas && (
-                        <g>
-                          {plano.manzanas.map((mz, i) => (
-                            <rect key={i} x={mz.x} y={mz.y} width={mz.w} height={mz.h} fill="none" stroke="var(--ink-3)" strokeWidth={1} />
-                          ))}
-                        </g>
-                      )}
-                      {capas.predios && (
-                        <g>
-                          {plano.lotes.map((l) => {
-                            const sel = l.id === lote;
-                            const aran = capas.aranceles;
-                            return (
-                              <rect
-                                key={l.id}
-                                x={l.x}
-                                y={l.y}
-                                width={l.w}
-                                height={l.h}
-                                fill={sel ? 'var(--accent)' : aran ? (l.fila === 0 ? '#6f8cb0' : l.fila === 1 ? '#9db3cd' : '#c4d2e2') : '#fbfaf6'}
-                                stroke={sel ? 'var(--accent-ink)' : 'var(--line-2)'}
-                                strokeWidth={sel ? 1.6 : 0.8}
-                                onClick={() => setLote(l.id)}
-                                style={{ cursor: 'pointer' }}
-                              />
-                            );
-                          })}
-                        </g>
-                      )}
-                      {capas.sectores && (
-                        <g>
-                          {[
-                            { x: 18, y: 14, w: 528, h: 252 },
-                            { x: 18, y: 266, w: 528, h: 128 },
-                          ].map((s, i) => (
-                            <rect key={i} x={s.x} y={s.y} width={s.w} height={s.h} fill="none" stroke="var(--accent)" strokeWidth={1.4} strokeDasharray="7 5" opacity=".6" />
-                          ))}
-                        </g>
-                      )}
-                      <g>
-                        {plano.etiquetas.map((e) => (
-                          <text key={e.txt} x={e.x} y={e.y} fontFamily="JetBrains Mono, monospace" fontSize={9} fill="#6b6258" textAnchor="middle">
-                            {e.txt}
-                          </text>
-                        ))}
-                      </g>
+                    </p>
+                  </div>
+                )}
+
+                {dibujo !== null && (
+                  <div style={{ overflow: 'auto', background: 'var(--bg-elev)', maxHeight: '66vh' }}>
+                    <svg
+                      viewBox={`0 0 ${LIENZO.ancho} ${LIENZO.alto}`}
+                      preserveAspectRatio="xMidYMid meet"
+                      role="img"
+                      aria-label={`Plano catastral: ${dibujo.piezas.length} lotes dibujados`}
+                      style={{ display: 'block', width: '100%', height: 'auto' }}
+                    >
+                      {/* El fondo del plano, y NO una base cartográfica: no hay
+                          teselas ni las va a haber sin salida a internet, que es
+                          lo corriente en una municipalidad. El pie lo dice. */}
+                      <rect x="0" y="0" width={LIENZO.ancho} height={LIENZO.alto} fill="#f1ece0" />
+                      {capas.predios &&
+                        dibujo.piezas.map(({ lote: l, d: trazo }) => {
+                          const elegido = l.predioId === loteElegido;
+                          const grupo = gruposDibujados.indexOf(claveDeGrupo(l));
+                          return (
+                            <path
+                              key={l.predioId}
+                              d={trazo}
+                              fill={elegido ? 'var(--accent)' : agrupadoPor !== null && grupo >= 0 ? COLORES_DE_GRUPO[grupo % COLORES_DE_GRUPO.length] : '#fbfaf6'}
+                              stroke={elegido ? 'var(--accent-ink)' : 'var(--line-2)'}
+                              strokeWidth={elegido ? 1.6 : 0.6}
+                              onClick={() => setLoteElegido(l.predioId)}
+                              style={{ cursor: 'pointer' }}
+                            >
+                              <title>{`${l.codRefCatastral} — ${l.direccion}`}</title>
+                            </path>
+                          );
+                        })}
                     </svg>
                   </div>
-                </div>
+                )}
+
                 <div style={{ display: 'flex', alignItems: 'center', gap: 14, flexWrap: 'wrap', padding: '9px 14px', borderTop: '1px solid var(--line)', background: 'var(--bg-elev)' }}>
                   {/* Decía «0 — 50 — 100 m · UTM 17S · WGS 84» y «actualización
                       2026-I»: una escala, una proyección y una fecha de un dibujo
-                      sin coordenadas ni procedencia. */}
-                  <span style={{ fontFamily: 'var(--font-mono)', fontSize: 10, color: 'var(--ink-3)' }}>Sin escala: el dibujo no está georreferenciado</span>
-                  <span style={{ fontSize: 11, color: 'var(--ink-4)', marginLeft: 'auto' }}>Esquema del prototipo — sin fecha de actualización</span>
+                      sin coordenadas ni procedencia. Ahora hay coordenadas —4326,
+                      no UTM: el Perú abarca tres zonas (ADR-0021)— y sigue sin
+                      haber fecha, porque ninguna lectura publica cuándo se
+                      levantó nada. */}
+                  <span style={{ fontFamily: 'var(--font-mono)', fontSize: 10, color: 'var(--ink-3)' }}>WGS 84 (EPSG:4326) · Mercator al dibujar</span>
+                  <span style={{ fontSize: 11, color: 'var(--ink-4)' }}>Sin base cartográfica: sólo los polígonos del padrón</span>
+                  <span style={{ fontSize: 11, color: 'var(--ink-4)', marginLeft: 'auto' }}>Sin fecha de levantamiento: no se publica</span>
                 </div>
               </section>
 
               <div style={{ display: 'flex', flexDirection: 'column', gap: 14, minWidth: 0 }}>
+                {/* **`sinGeometria` sale SIEMPRE, cero incluido**, y por eso no
+                    vive dentro del estado vacío: con lotes dibujados es cuando
+                    más engaña que falte —doscientos lotes en pantalla y
+                    ochocientos predios sin levantar se leen como «este sector
+                    tiene doscientos lotes»—. Y no es «los de este marco» aunque
+                    el contrato lo diga así: `prediosSinGeometria` consulta sin el
+                    marco a propósito. Medido: la misma cifra con el marco de
+                    Piura y con el mundo entero. */}
+                <section style={{ background: 'var(--bg-card)', border: '1px solid var(--line)', borderRadius: 10, padding: '12px 14px' }}>
+                  <p style={{ margin: 0, fontSize: 10, fontWeight: 500, textTransform: 'uppercase', letterSpacing: '.14em', color: 'var(--ink-3)' }}>
+                    Predios sin polígono
+                  </p>
+                  <p style={{ margin: '6px 0 0', fontFamily: 'var(--font-mono)', fontSize: 22, color: plano.datos !== null && plano.datos.sinGeometria > 0 ? 'var(--warn-fg)' : 'var(--ink)' }}>
+                    {plano.cargando ? '…' : plano.datos === null ? SIN_DATO : plano.datos.sinGeometria.toLocaleString('es-PE')}
+                  </p>
+                  <p style={{ margin: '4px 0 0', fontSize: 11.5, lineHeight: 1.5, color: 'var(--ink-3)', textWrap: 'pretty' }}>
+                    En el padrón entero{mapaSector !== '' ? ', dentro del sector elegido' : ''}, no en este marco: un predio sin polígono
+                    no está en ningún sitio del plano.
+                  </p>
+                </section>
+
                 <section style={{ background: 'var(--bg-card)', border: '1px solid var(--line)', borderRadius: 10, overflow: 'hidden' }}>
                   <p style={{ margin: 0, padding: '11px 14px', borderBottom: '1px solid var(--line)', fontSize: 10, fontWeight: 500, textTransform: 'uppercase', letterSpacing: '.14em', color: 'var(--ink-3)' }}>
                     Capas
                   </p>
                   {CAPAS.map((c) => {
-                    const on = capas[c[0]] === true;
+                    const on = capas[c.k] === true;
                     return (
                       <button
-                        key={c[0]}
-                        onClick={() => setCapas((x) => ({ ...x, [c[0]]: !on }))}
+                        key={c.k}
+                        onClick={() => setCapas((x) => ({ ...x, [c.k]: !on }))}
                         aria-pressed={on}
-                        className="hov-elev"
-                        style={{ display: 'flex', alignItems: 'center', gap: 10, width: '100%', padding: '10px 14px', border: 0, borderBottom: '1px solid var(--line)', background: 'transparent', cursor: 'pointer', textAlign: 'left' }}
+                        disabled={!c.dibujable}
+                        title={c.nota}
+                        className={c.dibujable ? 'hov-elev' : undefined}
+                        style={{ display: 'flex', alignItems: 'flex-start', gap: 10, width: '100%', padding: '10px 14px', border: 0, borderBottom: '1px solid var(--line)', background: 'transparent', cursor: c.dibujable ? 'pointer' : 'not-allowed', textAlign: 'left', opacity: c.dibujable ? 1 : 0.6 }}
                       >
                         <span
                           style={{
@@ -2774,6 +3152,7 @@ export default function Catastro({ dest, onDest }: PantallaProps) {
                             height: 17,
                             borderRadius: 4,
                             flex: '0 0 auto',
+                            marginTop: 1,
                             border: `1px solid ${on ? 'var(--accent)' : 'var(--line-2)'}`,
                             background: on ? 'var(--accent)' : 'var(--bg-card)',
                           }}
@@ -2784,11 +3163,23 @@ export default function Catastro({ dest, onDest }: PantallaProps) {
                             </svg>
                           )}
                         </span>
-                        <span style={{ flex: 1, fontSize: 13, color: 'var(--ink-2)' }}>{c[1]}</span>
-                        <span style={{ fontFamily: 'var(--font-mono)', fontSize: 10.5, color: 'var(--ink-4)' }}>{conteoDeLaCapa(c[0])}</span>
+                        <span style={{ flex: 1, minWidth: 0 }}>
+                          <span style={{ display: 'block', fontSize: 13, color: 'var(--ink-2)' }}>{c.label}</span>
+                          {/* El motivo, escrito y no sólo en el `title`: un dato
+                              que sólo se alcanza con el ratón no lo tiene quien
+                              navega con teclado (RNF-082). */}
+                          <span style={{ display: 'block', marginTop: 2, fontSize: 11, lineHeight: 1.45, color: 'var(--ink-4)', textWrap: 'pretty' }}>{c.nota}</span>
+                        </span>
+                        <span style={{ fontFamily: 'var(--font-mono)', fontSize: 10.5, color: 'var(--ink-4)', flex: '0 0 auto' }}>{conteoDeLaCapa(c.k)}</span>
                       </button>
                     );
                   })}
+                  {agrupadoPor !== null && dibujo !== null && (
+                    <p style={{ margin: 0, padding: '9px 14px', fontSize: 11, lineHeight: 1.5, color: 'var(--ink-3)' }}>
+                      Los lotes están coloreados por {agrupadoPor === 'manzanas' ? 'manzana' : 'sector'}. El color separa un grupo del de
+                      al lado y no significa nada más: no es un rango de arancel ni un estado.
+                    </p>
+                  )}
                 </section>
 
                 {/* Aquí iba la ficha del lote: «Código predial 01-1042-0004»,
@@ -2796,27 +3187,61 @@ export default function Catastro({ dest, onDest }: PantallaProps) {
                     m²», «Arancel de la vía S/ 198.40 / m²» —nueve renglones del
                     artboard, los mismos para cualquier lote que se pulsara— y dos
                     botones, uno de los cuales abría ese predio inventado por la
-                    puerta donde el aviso no se dibuja. El esquema no identifica
-                    ningún predio: no hay nada que enseñar de él. */}
+                    puerta donde el aviso no se dibuja. De esos nueve, el recurso
+                    publica cuatro; los otros cinco no se inventan y se dice de
+                    dónde salen. */}
                 <section style={{ background: 'var(--bg-card)', border: '1px solid var(--line)', borderRadius: 10, overflow: 'hidden' }}>
                   <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8, padding: '11px 14px', borderBottom: '1px solid var(--line)' }}>
                     <span style={{ fontSize: 10, fontWeight: 500, textTransform: 'uppercase', letterSpacing: '.14em', color: 'var(--ink-3)' }}>Lote seleccionado</span>
-                    <span style={{ fontFamily: 'var(--font-mono)', fontSize: 11, color: 'var(--accent-ink)', background: 'var(--accent-soft)', borderRadius: 999, padding: '3px 9px' }}>{lote}</span>
+                    {elegido !== null && (
+                      <span style={{ fontFamily: 'var(--font-mono)', fontSize: 11, color: 'var(--accent-ink)', background: 'var(--accent-soft)', borderRadius: 999, padding: '3px 9px' }}>
+                        {elegido.codRefCatastral}
+                      </span>
+                    )}
                   </div>
-                  <p style={{ margin: 0, padding: '13px 14px', fontSize: 12.5, lineHeight: 1.55, color: 'var(--ink-3)', textWrap: 'pretty' }}>
-                    <strong style={{ color: 'var(--ink-2)' }}>{lote}</strong> es una casilla del esquema, no un predio: no tiene código
-                    de referencia catastral, ni titular, ni área, ni arancel, porque no hay ninguna lectura que ate el dibujo al padrón.
-                    Los datos de un predio salen de abrirlo en el padrón.
-                  </p>
-                  <div style={{ display: 'flex', gap: 8, padding: '0 14px 14px' }}>
-                    <button
-                      onClick={() => irA('predios')}
-                      className="hov-acento-2"
-                      style={{ flex: 1, border: 0, borderRadius: 6, padding: '9px 14px', background: 'var(--accent)', color: '#fff', fontSize: 12.5, fontWeight: 500, cursor: 'pointer' }}
-                    >
-                      Ir al padrón
-                    </button>
-                  </div>
+                  {elegido === null ? (
+                    <p style={{ margin: 0, padding: '13px 14px', fontSize: 12.5, lineHeight: 1.55, color: 'var(--ink-3)', textWrap: 'pretty' }}>
+                      {dibujo === null
+                        ? 'No hay ningún lote dibujado que seleccionar. Los datos de un predio salen de abrirlo en el padrón, que lo busca por su código de referencia catastral.'
+                        : 'Pulsa un lote del plano para ver lo que el padrón publica de él.'}
+                    </p>
+                  ) : (
+                    <>
+                      <div style={{ padding: '4px 14px 10px' }}>
+                        {(
+                          [
+                            ['Código de referencia catastral', elegido.codRefCatastral, 1],
+                            ['Dirección', elegido.direccion, 0],
+                            ['Sector', elegido.codigoDeSector ?? SIN_DATO, 1],
+                            ['Manzana', elegido.codigoDeManzana ?? SIN_DATO, 1],
+                            ['Lote', elegido.lote ?? SIN_DATO, 1],
+                            ['Estado', elegido.estado, 0],
+                          ] as [string, string, 0 | 1][]
+                        ).map(([rot, val, mono]) => (
+                          <div key={rot} style={{ display: 'flex', justifyContent: 'space-between', gap: 12, padding: '7px 0', borderBottom: '1px solid var(--line)' }}>
+                            <span style={{ fontSize: 12, color: 'var(--ink-3)' }}>{rot}</span>
+                            <span style={{ fontSize: 12, textAlign: 'right', fontFamily: mono ? 'var(--font-mono)' : undefined }}>{val}</span>
+                          </div>
+                        ))}
+                      </div>
+                      <p style={{ margin: 0, padding: '0 14px 12px', fontSize: 11.5, lineHeight: 1.5, color: 'var(--ink-3)', textWrap: 'pretty' }}>
+                        El plano no publica titular, área ni arancel, y no es un olvido: quien puede listar predios no puede cosechar
+                        predio→persona de toda la municipalidad. El titular se resuelve al abrir el predio, de uno en uno.
+                      </p>
+                      <div style={{ display: 'flex', gap: 8, padding: '0 14px 14px' }}>
+                        <button
+                          onClick={() => {
+                            setQ(elegido.codRefCatastral);
+                            irA('predios');
+                          }}
+                          className="hov-acento-2"
+                          style={{ flex: 1, border: 0, borderRadius: 6, padding: '9px 14px', background: 'var(--accent)', color: '#fff', fontSize: 12.5, fontWeight: 500, cursor: 'pointer' }}
+                        >
+                          Abrir en el padrón
+                        </button>
+                      </div>
+                    </>
+                  )}
                 </section>
               </div>
             </div>
