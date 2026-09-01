@@ -174,8 +174,9 @@ ciclo que `verificarArquitectura` rechaza.
          La mitad de catastro es un puerto nuevo y mínimo, `TitularesDelPredio` →
          `TitularDelPredio` (identificador del titular, condición y porcentaje). Que ahí viaje
          un `contribuyenteId` no contradice a `FichaDelPadron`: `PredioDelPadron` ya lo hacía
-         para la detección de omisos (#49). Lo que no cruza es la frontera **HTTP** de un
-         listado.
+         para la detección de omisos (#49) —y desde #545, que lo retiró, ese puerto **es** el
+         que la detección usa, con su método por lote—. Lo que no cruza es la frontera **HTTP**
+         de un listado.
 
       **Lo que queda prohibido, y esta decisión no abre:**
 

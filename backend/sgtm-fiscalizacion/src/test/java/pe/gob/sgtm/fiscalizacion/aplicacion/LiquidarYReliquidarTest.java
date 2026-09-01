@@ -11,7 +11,6 @@ import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Nested;
 import org.junit.jupiter.api.Test;
-import pe.gob.sgtm.catastro.PredioDelPadron;
 import pe.gob.sgtm.dominio.AreaM2;
 import pe.gob.sgtm.dominio.Ejercicio;
 import pe.gob.sgtm.dominio.Observacion;
@@ -77,17 +76,7 @@ class LiquidarYReliquidarTest {
                         .conFicha(FICHA_DECLARADA, AreaM2.de("120.00"))
                         .conFicha(FICHA_VIGENTE, AreaM2.de("300.00"))
                         .conCaracteristicas(
-                                PREDIO, "CASA_HABITACION", AreaM2.de("300.00"), FICHA_VIGENTE)
-                        .con(
-                                new PredioDelPadron(
-                                        PREDIO,
-                                        "000000000000000020",
-                                        "Jr. Union 100",
-                                        "S-01",
-                                        CONTRIBUYENTE,
-                                        AreaM2.de("300.00"),
-                                        "CASA_HABITACION",
-                                        FICHA_VIGENTE));
+                                PREDIO, "CASA_HABITACION", AreaM2.de("300.00"), FICHA_VIGENTE);
         rentas =
                 new DeclaracionesDeMentira()
                         .con(
@@ -256,8 +245,8 @@ class LiquidarYReliquidarTest {
             // AC 4 de #49: «nada de esto escribe en catastro ni en rentas». Se comprueba en el
             // TIPO: los cuatro puertos que la liquidacion usa no declaran un solo metodo que
             // escriba, asi que no hay camino desde aqui al padron ni a las declaraciones.
-            assertThat(metodosDe(pe.gob.sgtm.catastro.PadronDePredios.class))
-                    .containsExactly("porSector");
+            assertThat(metodosDe(pe.gob.sgtm.catastro.TitularesDelPredio.class))
+                    .containsExactlyInAnyOrder("de", "deVarios");
             assertThat(metodosDe(pe.gob.sgtm.catastro.LectorDeFichas.class))
                     .containsExactlyInAnyOrder("fichaVigenteEn", "areaDeLaVersion");
             assertThat(metodosDe(pe.gob.sgtm.catastro.LectorDeCaracteristicas.class))

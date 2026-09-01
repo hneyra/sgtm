@@ -53,16 +53,6 @@ final class CatastroEnMemoria
                 DirectorioDeContribuyentes {
 
     @Override
-    public pe.gob.sgtm.compartido.Pagina<pe.gob.sgtm.catastro.PredioDelPadron> padron(
-            @org.jspecify.annotations.Nullable String sectorCodigo,
-            java.time.LocalDate aLaFecha,
-            pe.gob.sgtm.compartido.Paginacion paginacion) {
-        // El padron con su titular vigente (#49) solo lo recorre la deteccion de omisos, que se
-        // prueba contra PostgreSQL.
-        throw new UnsupportedOperationException("esta prueba no recorre el padron");
-    }
-
-    @Override
     public java.util.Optional<FichaCatastral> porId(long fichaId) {
         throw new UnsupportedOperationException("esta prueba no lee una version por id");
     }
@@ -250,6 +240,19 @@ final class CatastroEnMemoria
     @Override
     public List<Titularidad> titularesDe(long predioId, LocalDate fecha) {
         return titularidades.values().stream().filter(t -> t.predioId() == predioId).toList();
+    }
+
+    @Override
+    public java.util.Map<Long, List<Titularidad>> titularesDeVarios(
+            java.util.Collection<Long> predioIds, LocalDate fecha) {
+        java.util.Map<Long, List<Titularidad>> porPredio = new LinkedHashMap<>();
+        for (Long predioId : predioIds) {
+            List<Titularidad> cuotas = titularesDe(predioId, fecha);
+            if (!cuotas.isEmpty()) {
+                porPredio.put(predioId, cuotas);
+            }
+        }
+        return porPredio;
     }
 
     @Override

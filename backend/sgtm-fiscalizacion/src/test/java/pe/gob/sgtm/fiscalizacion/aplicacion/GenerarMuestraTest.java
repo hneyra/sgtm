@@ -16,19 +16,19 @@ import org.jspecify.annotations.Nullable;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import pe.gob.sgtm.auditoria.RegistroDeAuditoria;
-import pe.gob.sgtm.catastro.PredioDelPadron;
 import pe.gob.sgtm.compartido.Pagina;
 import pe.gob.sgtm.compartido.Paginacion;
 import pe.gob.sgtm.dominio.AreaM2;
 import pe.gob.sgtm.dominio.Ejercicio;
 import pe.gob.sgtm.dominio.Observacion;
 import pe.gob.sgtm.fiscalizacion.dobles.ActasEnMemoria;
-import pe.gob.sgtm.fiscalizacion.dobles.DeclaracionesDeMentira;
-import pe.gob.sgtm.fiscalizacion.dobles.PadronDeMentira;
+import pe.gob.sgtm.fiscalizacion.dobles.DeteccionDeMentira;
+import pe.gob.sgtm.fiscalizacion.dobles.TitularesDeMentira;
 import pe.gob.sgtm.fiscalizacion.dominio.ActaFiscalizacion;
 import pe.gob.sgtm.fiscalizacion.dominio.CondicionFiscalizada;
 import pe.gob.sgtm.fiscalizacion.dominio.CriterioDeProgramas;
 import pe.gob.sgtm.fiscalizacion.dominio.EstadoDePrograma;
+import pe.gob.sgtm.fiscalizacion.dominio.FilaDeOmisos;
 import pe.gob.sgtm.fiscalizacion.dominio.Hallazgo;
 import pe.gob.sgtm.fiscalizacion.dominio.MuestraDelPrograma;
 import pe.gob.sgtm.fiscalizacion.dominio.MuestraDelProgramaRepository;
@@ -132,6 +132,23 @@ class GenerarMuestraTest {
     }
 
     @Test
+    @DisplayName("un predio SIN TITULAR se detecta pero no se sortea: no hay a quien visitar")
+    void noSorteaUnPredioSinTitular() {
+        long programaId = programas.sembrar(programa(CondicionFiscalizada.OMISO));
+
+        // Desde #545 la deteccion los enseña —son el predio que nadie reclama—, pero
+        // `programa_muestra.contribuyente_id` es NOT NULL (V60) y una visita se dirige a alguien.
+        int cuantos =
+                servicio(new TitularesDeMentira().con(OMISO_DOS, 100L + OMISO_DOS))
+                        .generar(programaId, OBSERVACION);
+
+        assertThat(cuantos).isEqualTo(1);
+        assertThat(muestras.prediosDe(programaId))
+                .as("el que no tiene titular no entra, y el que lo tiene si")
+                .containsExactly(OMISO_DOS);
+    }
+
+    @Test
     @DisplayName("un programa sin criterio no puede sortear, y el 422 dice cual le falta")
     void unProgramaSinCriterioNoSortea() {
         long programaId =
@@ -182,31 +199,25 @@ class GenerarMuestraTest {
     // ------------------------------------------------------------------
 
     private GenerarMuestra servicio() {
-        PadronDeMentira catastro =
-                new PadronDeMentira()
-                        .conFicha(FICHA, AreaM2.de("120.00"))
-                        .con(predio(OMISO_UNO))
-                        .con(predio(OMISO_DOS))
-                        .con(predio(CONFORME));
+        return servicio(
+                new TitularesDeMentira()
+                        .con(OMISO_UNO, 100L + OMISO_UNO)
+                        .con(OMISO_DOS, 100L + OMISO_DOS)
+                        .con(CONFORME, 100L + CONFORME));
+    }
 
-        DeclaracionesDeMentira rentas =
-                new DeclaracionesDeMentira()
-                        .con(
-                                CONFORME,
-                                new pe.gob.sgtm.rentas.DeclaracionDelEjercicio(
-                                        1L,
-                                        "DJ-0001",
-                                        E2026,
-                                        100L + CONFORME,
-                                        LocalDate.of(2026, 2, 1),
-                                        false,
-                                        FICHA));
+    private GenerarMuestra servicio(TitularesDeMentira titulares) {
+        DeteccionDeMentira deteccion =
+                new DeteccionDeMentira()
+                        .con(fila(OMISO_UNO, CondicionFiscalizada.OMISO))
+                        .con(fila(OMISO_DOS, CondicionFiscalizada.OMISO))
+                        .con(fila(CONFORME, CondicionFiscalizada.CONFORME));
 
         return new GenerarMuestra(
                 programas,
                 muestras,
                 actas,
-                new DeteccionDeOmisos(catastro, catastro, rentas),
+                new DeteccionDeOmisos(deteccion, titulares),
                 auditados::add,
                 RELOJ);
     }
@@ -224,16 +235,21 @@ class GenerarMuestraTest {
                 "R. MENDOZA CRUZ");
     }
 
-    private static PredioDelPadron predio(long id) {
-        return new PredioDelPadron(
-                id,
-                String.format("%018d", id),
-                "Jr. Union " + id,
+    /** Una fila detectada, sin titulares: los pone {@code DeteccionDeOmisos} al leer la pagina. */
+    private static FilaDeOmisos fila(long predioId, CondicionFiscalizada condicion) {
+        return new FilaDeOmisos(
+                predioId,
+                String.format("%018d", predioId),
                 "S-01",
-                100L + id,
+                List.of(),
+                E2026,
+                condicion,
+                false,
                 AreaM2.de("120.00"),
-                "CASA_HABITACION",
-                FICHA);
+                condicion == CondicionFiscalizada.OMISO ? null : AreaM2.de("120.00"),
+                null,
+                null,
+                null);
     }
 
     /** Programas en memoria: sólo lo que el sorteo pide. */

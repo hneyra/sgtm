@@ -89,6 +89,18 @@ violan: una que usa el puerto sin ser la transferencia, y otra que cruza el lím
 nadie clasificó —esta segunda es la que sostiene a la primera, porque sin ella bastaría con publicar
 un puerto nuevo para rodearla—.
 
+**Y desde [#545](https://github.com/hneyra/sgtm/issues/545) hay una consulta que cruza la frontera
+por SQL, y sólo una.** `fisc_omisos` es el cruce del padrón de predios con las declaraciones
+juradas de un ejercicio, y su columna «Condición» es un **derivado** de ese cruce que la pantalla
+filtra. Un derivado filtrable se escribe una sola vez y en SQL —es lo que #397 decidió para el
+«Estado» de la infracción administrativa—, y esa consulta no puede vivir en `catastro` (tendría
+que leer `declaracion_jurada`, y `rentas` ya depende de él: es el ciclo que `ConsultaDeConciliacion`
+descartó por escrito) ni en `rentas` (la condición es vocabulario de fiscalización, y traducirla
+sería una segunda copia de la regla). Vive en `DeteccionRepositoryJdbc`, lee cuatro tablas ajenas
+—`predio`, `sector`, `ficha_catastral` y `declaracion_jurada`—, **sólo lee**, y que su transcripción
+no se separe de `ComparacionHalladoDeclarado` lo sostiene una prueba que las compara caso por caso.
+Los titulares no entran ahí: salen del puerto público `catastro.TitularesDelPredio`.
+
 **Y escribe en `catastro` y en el libro, no en `rentas`.** El nombre es el de RF-054 y el del manual.
 Lo que `rentas` guarda de un ejercicio es la **declaración jurada**, que es el acto del contribuyente
 y la administración no reescribe; lo que la sustituye es la determinación de oficio, cuya cifra

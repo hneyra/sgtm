@@ -293,6 +293,20 @@ class TitularesDelPredioControllerTest {
             }
             return List.of();
         }
+
+        /** No lo usa esta pantalla —resuelve un predio al clic—, pero el puerto lo declara. */
+        @Override
+        public java.util.Map<Long, List<TitularDelPredio>> deVarios(
+                java.util.Collection<Long> predioIds, LocalDate fecha) {
+            java.util.Map<Long, List<TitularDelPredio>> porPredio = new java.util.LinkedHashMap<>();
+            for (Long predioId : predioIds) {
+                List<TitularDelPredio> cuotas = de(predioId, fecha);
+                if (!cuotas.isEmpty()) {
+                    porPredio.put(predioId, cuotas);
+                }
+            }
+            return porPredio;
+        }
     }
 
     /** Solo lo que el caso de uso llama; el resto no se implementa porque no se usa. */

@@ -22,9 +22,22 @@ import pe.gob.sgtm.web.ProblemaDeNegocio;
 /**
  * Impuesto de alcabala: {@code POST /api/v1/rentas/alcabala} (RF-026, #32).
  *
- * <p>{@code autoavaluoAjustado} llega en el cuerpo porque el ajuste por el IPM no está resuelto
+ * <p>{@code autovaluoAjustado} llega en el cuerpo porque el ajuste por el IPM no está resuelto
  * todavía (D-11): quien complete esta pantalla lo trae ya calculado, igual que {@code
  * TransferenciaPredioController} recibe el valor de transferencia en vez de inventarlo.
+ *
+ * <h2>Se llamaba {@code autoavaluoAjustado}, con una «a» de más (#541)</h2>
+ *
+ * <p>El resto del sistema dice <b>autovalúo</b>: la columna, el rótulo del prototipo ({@code
+ * autovaluoAjustadoS}), los otros dos controladores de determinación y 186 apariciones del backend
+ * frente a las cinco de alcabala. Se renombró, y no había contrato que proteger: los cuerpos del
+ * contrato se declaran {@code schema: { type: object }}, así que <b>ningún nombre de campo de
+ * cuerpo está publicado</b>, y el único cliente que podría mandarlo no lo manda —{@code alcabala}
+ * está en {@code ACTOS_SIN_CAMPO} desde #385: esa pantalla no escribe—.
+ *
+ * <p>Que la decisión no se deshaga por descuido lo sostiene una prueba que compara los componentes
+ * del {@code record} con los esperados, y no un comentario: cambiar el nombre vuelve a ser una
+ * decisión que alguien toma, con su prueba en rojo delante.
  *
  * <h2>Lo que falta publicar se dice, y no es un 500 (#540)</h2>
  *
@@ -54,11 +67,11 @@ public class AlcabalaController {
     public DeterminacionAlcabalaResource determinar(@RequestBody PeticionDeAlcabala peticion) {
         Observacion observacion = observacionDe(peticion.observacion());
         long transferenciaId = exigirId(peticion.transferenciaId(), "transferenciaId");
-        Dinero autoavaluoAjustado = dineroDe(peticion.autoavaluoAjustado(), "autoavaluoAjustado");
+        Dinero autovaluoAjustado = dineroDe(peticion.autovaluoAjustado(), "autovaluoAjustado");
 
         try {
             return DeterminacionAlcabalaResource.de(
-                    servicio.determinar(transferenciaId, autoavaluoAjustado, observacion));
+                    servicio.determinar(transferenciaId, autovaluoAjustado, observacion));
         } catch (RegistrarAlcabala.TransferenciaInexistente inexistente) {
             throw new ProblemaDeNegocio(CodigoDeError.NO_ENCONTRADO, mensajeDe(inexistente));
         } catch (RegistrarAlcabala.NoGravaAlcabala noGrava) {
@@ -120,5 +133,5 @@ public class AlcabalaController {
     public record PeticionDeAlcabala(
             @Nullable String observacion,
             @Nullable Long transferenciaId,
-            @Nullable String autoavaluoAjustado) {}
+            @Nullable String autovaluoAjustado) {}
 }
