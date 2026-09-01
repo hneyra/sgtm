@@ -63,6 +63,16 @@ class PlanoCatastralFronteraTest {
     private static final String MARCO = "-80.690,-5.270,-80.670,-5.250";
 
     /**
+     * Un marco disjunto del anterior, y del distrito: el Titicaca.
+     *
+     * <p>Existe para el AC 2 de #613. Sin el, la igualdad de {@code sinGeometria} entre dos
+     * peticiones podria salir por casualidad —comparar el marco consigo mismo no demuestra nada—;
+     * lo que demuestra que el marco no acota la cuenta es que una peticion que no devuelve ni un
+     * lote devuelva la misma cifra que la que los devuelve todos.
+     */
+    private static final String MARCO_VACIO = "-69.500,-16.200,-69.400,-16.100";
+
+    /**
      * El poligono que se siembra y el que tiene que salir, vertice a vertice.
      *
      * <p>Se escribe con pocos decimales a proposito: asi la comparacion contra lo que devuelve
@@ -341,6 +351,34 @@ class PlanoCatastralFronteraTest {
                         "contar los del padron entero daria 3, que es la cifra plausible y"
                                 + " equivocada: dos de ellos no son de este sector")
                 .isEqualTo(1);
+    }
+
+    @Test
+    @DisplayName("el marco NO acota la cuenta: dos marcos disjuntos dan la misma cifra (#613)")
+    void elMarcoNoAcotaLaCuentaDeLosQueNoTienenPoligono() throws Exception {
+        sembrar(municipalidadA, "20010500000000000000001", "CALLE 1", LOTE_DE_DENTRO);
+        sembrar(municipalidadA, "20010500000000000000002", "CALLE 2", null);
+        sembrar(municipalidadA, "20010500000000000000003", "CALLE 3", null);
+
+        JsonNode dondeEstaElDistrito = pedir(MARCO);
+        JsonNode alOtroLadoDelPais = pedir(MARCO_VACIO);
+
+        assertThat(dondeEstaElDistrito.get("lotes").size())
+                .as("el primer marco tiene que contener el lote: sin eso los dos son el mismo caso")
+                .isEqualTo(1);
+        assertThat(alOtroLadoDelPais.get("lotes").size())
+                .as("el segundo marco tiene que estar vacio de verdad")
+                .isZero();
+
+        assertThat(alOtroLadoDelPais.get("sinGeometria").asLong())
+                .as(
+                        "«sinGeometria» cuenta el padron con los mismos filtros, no el marco: si"
+                                + " alguien «arregla» prediosSinGeometria metiendole EN_EL_MARCO,"
+                                + " las cuatro columnas marco_* de un predio sin poligono son"
+                                + " nulas, ninguna desigualdad se cumple y esto cae a 0 — la cifra"
+                                + " se apagaria justo cuando mas hace falta (#613)")
+                .isEqualTo(dondeEstaElDistrito.get("sinGeometria").asLong())
+                .isEqualTo(2);
     }
 
     @Test

@@ -24,9 +24,31 @@ public record BusquedaDeFichas(
         @Nullable String contribuyente,
         @Nullable String manzana,
         @Nullable String lote,
-        @Nullable String tipo) {
+        @Nullable String tipo,
+        AcotacionPorPredio acotacion) {
+
+    /** Los cinco filtros de la pantalla, sin acotar por predio. */
+    public BusquedaDeFichas(
+            @Nullable String codRefCatastral,
+            @Nullable String contribuyente,
+            @Nullable String manzana,
+            @Nullable String lote,
+            @Nullable String tipo) {
+        this(codRefCatastral, contribuyente, manzana, lote, tipo, AcotacionPorPredio.ninguna());
+    }
 
     public static BusquedaDeFichas ninguna() {
         return new BusquedaDeFichas(null, null, null, null, null);
+    }
+
+    /**
+     * El mismo criterio, acotado a un conjunto de predios (#631).
+     *
+     * <p>Es como {@code rentas} pide «solo los que declararon» o «solo los que no» sin que catastro
+     * tenga que saber que es una declaracion jurada: la acotacion es un conjunto de
+     * identificadores, y quien lo compone es quien conoce el predicado.
+     */
+    public BusquedaDeFichas acotadaA(AcotacionPorPredio otra) {
+        return new BusquedaDeFichas(codRefCatastral, contribuyente, manzana, lote, tipo, otra);
     }
 }

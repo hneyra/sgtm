@@ -267,15 +267,19 @@ class MovimientosDeDeudaControllerTest {
         private @Nullable String codigo;
 
         MovimientosEspiados() {
-            super(null, null, null, null, null);
+            super(null, null, null, null, null, null);
         }
+
+        private @Nullable ComprobacionDeUnidad ultimaComprobacion;
 
         @Override
         public Registro registrar(
                 MovimientoDeDeuda movimiento,
                 RangoDeCuotas cuotas,
+                ComprobacionDeUnidad comprobacion,
                 String codigoContribuyente,
                 Observacion observacion) {
+            ultimaComprobacion = comprobacion;
             registros++;
             ultimo = movimiento;
             ultimasCuotas = cuotas;
@@ -287,6 +291,13 @@ class MovimientosDeDeudaControllerTest {
                 asentados.addAll(deLaCuota.enAsientos());
             }
             return new Registro(List.copyOf(asentados), "NC-2026-000001");
+        }
+
+        ComprobacionDeUnidad ultimaComprobacion() {
+            if (ultimaComprobacion == null) {
+                throw new AssertionError("No se registro ningun movimiento");
+            }
+            return ultimaComprobacion;
         }
 
         RangoDeCuotas ultimasCuotas() {

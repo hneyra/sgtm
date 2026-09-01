@@ -2688,6 +2688,24 @@
     "totalPaginas": "entero",
     "hayMas": "booleano"
   },
+  "GET /seguridad/grupos/{grupo}/miembros": {
+    "contenido": [
+      {
+        "id": "entero",
+        "cuenta": "texto",
+        "nombre": "texto",
+        "correo": "texto",
+        "habilitado": "booleano",
+        "vigenciaDesde": "fecha",
+        "vigenciaHasta": "fecha"
+      }
+    ],
+    "pagina": "entero",
+    "tamano": "entero",
+    "totalElementos": "entero",
+    "totalPaginas": "entero",
+    "hayMas": "booleano"
+  },
   "GET /seguridad/grupos/{id}/permisos": [
     {
       "id": "entero",
