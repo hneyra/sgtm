@@ -1,5 +1,6 @@
 package pe.gob.sgtm.catastro.infraestructura.web;
 
+import java.util.List;
 import org.jspecify.annotations.Nullable;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.RequestMapping;
@@ -75,8 +76,14 @@ public class PlanoCatastralController {
         try {
             return PlanoCatastralResource.de(plano.lotesDe(filtro, topeDe(limite)));
         } catch (ConsultaDelPlanoCatastral.MarcoConDemasiadosLotes noCabe) {
+            // Su propio codigo, y las dos cifras como dato (#611). Los otros tres 422 de este
+            // controlador dicen «corrige la peticion»; este dice «la peticion esta bien, acercate»,
+            // y son lo unico que el plano puede ofrecer resolver solo. Con `VALIDACION` en los
+            // cuatro, separarlos exigia leer el mensaje — y un mensaje se reescribe.
             throw new ProblemaDeNegocio(
-                    CodigoDeError.VALIDACION, DeclaracionDeFicha.mensajeDe(noCabe));
+                    CodigoDeError.MARCO_CON_DEMASIADOS_LOTES,
+                    DeclaracionDeFicha.mensajeDe(noCabe),
+                    List.of("lotes=" + noCabe.cuantos(), "tope=" + noCabe.tope()));
         }
     }
 
