@@ -203,6 +203,31 @@ public class CatastroRepositoryJdbc extends RepositorioJdbc implements CatastroR
     private static final String VIGENTE_A_LA_FECHA =
             " vigencia_desde <= :fecha AND (vigencia_hasta IS NULL OR vigencia_hasta >= :fecha)";
 
+    /**
+     * «De quien es este predio a esta fecha», la de {@link #titularesDe}.
+     *
+     * <p>Es una constante, y visible en el paquete, para que {@code TitularesEnElIndiceTest} pueda
+     * pedirle el plan a <b>esta</b> cadena y no a una copia suya. Una prueba de plan escrita sobre
+     * una transcripcion mide el plan de la transcripcion: el dia que el repositorio cambie la
+     * consulta, la prueba seguira verde hablando de otra (#397).
+     */
+    static final String TITULARES_DE_UN_PREDIO =
+            "SELECT "
+                    + COLUMNAS_TITULARIDAD
+                    + " FROM titularidad"
+                    + " WHERE predio_id = :predio AND"
+                    + VIGENTE_A_LA_FECHA
+                    + " ORDER BY porcentaje DESC, id";
+
+    /** La misma pregunta para un lote de predios, la de {@link #titularesDeVarios}. */
+    static final String TITULARES_DE_VARIOS_PREDIOS =
+            "SELECT "
+                    + COLUMNAS_TITULARIDAD
+                    + " FROM titularidad"
+                    + " WHERE predio_id = ANY(:predios) AND"
+                    + VIGENTE_A_LA_FECHA
+                    + " ORDER BY predio_id, porcentaje DESC, id";
+
     public CatastroRepositoryJdbc(JdbcClient jdbc) {
         super(jdbc);
     }
@@ -740,13 +765,7 @@ public class CatastroRepositoryJdbc extends RepositorioJdbc implements CatastroR
     @Override
     public List<Titularidad> titularesDe(long predioId, LocalDate fecha) {
         Objects.requireNonNull(fecha, "De quien es el predio se pregunta a una fecha (regla 9)");
-        return jdbc().sql(
-                        "SELECT "
-                                + COLUMNAS_TITULARIDAD
-                                + " FROM titularidad"
-                                + " WHERE predio_id = :predio AND"
-                                + VIGENTE_A_LA_FECHA
-                                + " ORDER BY porcentaje DESC, id")
+        return jdbc().sql(TITULARES_DE_UN_PREDIO)
                 .param("predio", predioId)
                 .param("fecha", fecha)
                 .query(CatastroRepositoryJdbc::mapearTitularidad)
@@ -764,6 +783,15 @@ public class CatastroRepositoryJdbc extends RepositorioJdbc implements CatastroR
      * <p>El orden es el de {@link #titularesDe}: mayor porcentaje primero. Quien tenga que elegir
      * uno —la muestra de un programa, que solo puede visitar a alguien— toma el primero, y esa es
      * la misma eleccion que {@code TitularPrincipalRepository} hace para el arbitrio.
+     *
+     * <p><b>Una consulta no es una consulta barata</b> (#561). Hasta {@code V69} esta leia la
+     * titularidad entera del inquilino en cada pagina: {@code titularidad_predio_vigente_ix} es
+     * PARCIAL —solo la cuota abierta— y no puede servir a una pregunta por fecha, asi que el plan
+     * caia en {@code titularidad_pk}, cuya unica columna util bajo RLS es {@code municipalidad_id}.
+     * Con el padron de Catacaos eso son 14 402 filas descartadas por el {@code Filter} para
+     * devolver veinte, y cuesta lo mismo pedir un titular que doscientos. Que {@code predio_id} sea
+     * condicion del indice y no filtro lo sostiene {@code TitularesEnElIndiceTest}, no este
+     * parrafo.
      */
     @Override
     public Map<Long, List<Titularidad>> titularesDeVarios(
@@ -774,13 +802,7 @@ public class CatastroRepositoryJdbc extends RepositorioJdbc implements CatastroR
         }
         Map<Long, List<Titularidad>> porPredio = new HashMap<>();
         List<Titularidad> filas =
-                jdbc().sql(
-                                "SELECT "
-                                        + COLUMNAS_TITULARIDAD
-                                        + " FROM titularidad"
-                                        + " WHERE predio_id = ANY(:predios) AND"
-                                        + VIGENTE_A_LA_FECHA
-                                        + " ORDER BY predio_id, porcentaje DESC, id")
+                jdbc().sql(TITULARES_DE_VARIOS_PREDIOS)
                         .param("predios", predioIds.toArray(Long[]::new))
                         .param("fecha", fecha)
                         .query(CatastroRepositoryJdbc::mapearTitularidad)
