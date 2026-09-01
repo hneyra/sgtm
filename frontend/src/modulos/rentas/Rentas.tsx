@@ -1,6 +1,8 @@
 import { useEffect, useRef, useState, type CSSProperties, type ReactNode } from 'react';
 import { Shell, type Contexto, type EntradaDePaleta } from '../../shell/Shell';
 import type { PantallaProps } from '../../App';
+import { buscarContribuyentes } from '../../api/rentas';
+import { useRebote, useRecurso } from '../../api/useRecurso';
 import { Icono } from '../../ds/Icono';
 import { ICO } from '../../ds/iconos';
 import { Insignia, type Tono } from '../../ds/componentes';
@@ -9,8 +11,6 @@ import { soles, usarPreferencias } from '../../shell/preferencias';
 import {
   CAMPOS_DEL_ALTA,
   CAMPOS_DE_LA_BAJA,
-  CHIPS_DEL_PADRON,
-  COLS_DEL_PADRON,
   COLS_DE_LA_BAJA,
   DEFECTOS,
   DETERMINACIONES,
@@ -24,7 +24,6 @@ import {
   FILAS_DE_LA_BAJA,
   KPIS_DEL_PANEL,
   OPCIONES_DE_RENTAS,
-  PADRON,
   RESUMEN_DEL_EXPEDIENTE,
   TIPOS_DE_DETERMINACION,
   TRANSFERENCIAS,
@@ -386,9 +385,27 @@ export default function Rentas({ dest, onDest }: PantallaProps) {
   const [cerradas, setCerradas] = useState<Record<string, boolean>>({});
   const [sujeto, setSujeto] = useState<string | null>(null);
   const [q, setQ] = useState('');
-  const [cargando, setCargando] = useState(false);
-  const [vacio, setVacio] = useState(false);
-  const [chips, setChips] = useState<Record<string, boolean>>({ conDeuda: false, sinConciliar: false, pensionista: false, juridica: false });
+  const [paginaPadron, setPaginaPadron] = useState(0);
+
+  /**
+   * El padrón, contra `GET /api/v1/rentas/contribuyentes`.
+   *
+   * Un solo campo para cuatro filtros: lo tecleado se manda por `dNI` si son
+   * ocho dígitos, por `rUC` si son once, por `codigo` si es todo dígitos, y por
+   * `nombreRazonSocial` en cualquier otro caso. Es lo que el buscador del
+   * artboard promete —«Nombre, DNI, RUC, código»— y el backend no tiene un
+   * campo único que lo haga.
+   */
+  const criterio = useRebote(q.trim());
+  useEffect(() => setPaginaPadron(0), [criterio]);
+  const padron = useRecurso(
+    (senal) => buscarContribuyentes(filtroDelPadron(criterio), { pagina: paginaPadron, tamano: 20 }, senal),
+    [criterio, paginaPadron],
+    dest === 'padron' && sujeto === null,
+  );
+  const filasDelPadron = padron.datos?.contenido ?? [];
+  const cargando = padron.cargando;
+  const vacio = !padron.cargando && padron.error === null && padron.datos !== null && filasDelPadron.length === 0;
   const [tipo, setTipo] = useState<ClaveDeDeterminacion>('predial');
   const [filtros, setFiltros] = useState<Record<string, string>>({});
   const [trTipo, setTrTipo] = useState<ClaveDeTransferencia>('predio');
@@ -589,31 +606,16 @@ export default function Rentas({ dest, onDest }: PantallaProps) {
                   placeholder="Nombre, DNI, RUC, código o placa"
                   style={{ flex: 1, border: 0, background: 'transparent', fontSize: 15, padding: '3px 0', outline: 'none' }}
                 />
-                <button
-                  onClick={() => {
-                    const sinNada = q.trim().length > 5 && /^[a-zA-Z\s]+$/.test(q.trim());
-                    setCargando(true);
-                    setVacio(false);
-                    setTimeout(() => {
-                      setCargando(false);
-                      setVacio(sinNada);
-                    }, 850);
-                  }}
-                  className="hov-acento-2"
-                  style={{
-                    border: 0,
-                    borderRadius: 6,
-                    padding: '9px 20px',
-                    background: 'var(--accent)',
-                    color: '#fff',
-                    fontSize: 13.5,
-                    fontWeight: 500,
-                    cursor: 'pointer',
-                    flex: '0 0 auto',
-                  }}
-                >
-                  Buscar
-                </button>
+                {q !== '' && (
+                  <button
+                    onClick={() => setQ('')}
+                    aria-label="Limpiar la búsqueda"
+                    className="hov-linea"
+                    style={{ border: '1px solid var(--line-2)', borderRadius: 6, width: 30, height: 30, display: 'grid', placeItems: 'center', background: 'var(--bg-card)', cursor: 'pointer', flex: '0 0 auto' }}
+                  >
+                    <Icono d={ICO.cerrar} tam={13} grosor={1.9} />
+                  </button>
+                )}
               </div>
               <div
                 style={{
@@ -626,28 +628,16 @@ export default function Rentas({ dest, onDest }: PantallaProps) {
                   padding: '9px 16px',
                 }}
               >
-                <span style={{ fontSize: 11.5, color: 'var(--ink-3)' }}>Filtros rápidos</span>
-                {CHIPS_DEL_PADRON.map((c) => {
-                  const on = chips[c[0]] === true;
-                  return (
-                    <button
-                      key={c[0]}
-                      onClick={() => setChips((x) => ({ ...x, [c[0]]: !on }))}
-                      aria-pressed={on}
-                      style={{
-                        border: `1px solid ${on ? 'var(--accent)' : 'var(--line-2)'}`,
-                        borderRadius: 999,
-                        padding: '4px 12px',
-                        cursor: 'pointer',
-                        fontSize: 12,
-                        background: on ? 'var(--accent-soft)' : 'var(--bg-card)',
-                        color: on ? 'var(--accent-ink)' : 'var(--ink-3)',
-                      }}
-                    >
-                      {c[1]}
-                    </button>
-                  );
-                })}
+                {/* Los cuatro filtros rápidos del artboard —con deuda vencida,
+                    predio sin conciliar, con beneficio, persona jurídica— no
+                    existen en `ContribuyenteController`, que acota por código,
+                    nombre, DNI y RUC y por nada más. Un chip que se pulsa y no
+                    filtra es peor que no tenerlo, así que se dice dónde vive
+                    cada uno. */}
+                <span style={{ fontSize: 11.5, color: 'var(--ink-3)', textWrap: 'pretty' }}>
+                  El padrón acota por código, nombre, DNI y RUC. Quién tiene deuda vencida se pregunta en Consultas, quién no concilia en
+                  Catastro, y el beneficio en su propia consulta: no son filtros de esta lista.
+                </span>
               </div>
             </section>
 
@@ -709,16 +699,15 @@ export default function Rentas({ dest, onDest }: PantallaProps) {
               <section style={TARJETA}>
                 <div style={CABECERA}>
                   <h2 style={H2}>Contribuyentes encontrados</h2>
-                  <span style={META}>4 de 62,418</span>
-                  <button className="hov-linea" style={BOTON_DE_TABLA}>
-                    Exportar Excel
-                  </button>
+                  <span style={META}>
+                    {filasDelPadron.length} de {(padron.datos?.totalElementos ?? 0).toLocaleString('es-PE')}
+                  </span>
                 </div>
                 <div style={{ overflowX: 'auto' }}>
                   <table style={{ width: '100%', borderCollapse: 'collapse', minWidth: 820 }}>
                     <thead>
                       <tr>
-                        {COLS_DEL_PADRON.map((c) => (
+                        {COLUMNAS_DEL_PADRON.map((c) => (
                           <th key={c[0]} style={c[1] ? THN : TH}>
                             {c[0]}
                           </th>
@@ -726,44 +715,63 @@ export default function Rentas({ dest, onDest }: PantallaProps) {
                       </tr>
                     </thead>
                     <tbody>
-                      {PADRON.map((r) => (
+                      {filasDelPadron.map((r) => (
                         <tr
-                          key={r.codigo}
+                          key={r.id}
                           onClick={() => abrirExpediente(r.codigo)}
                           className="hov-acento"
                           style={{ borderTop: '1px solid var(--line)', cursor: 'pointer' }}
                         >
                           <td style={{ padding: '11px 14px' }}>
-                            <Insignia tono={r.tono as Tono}>{r.estado}</Insignia>
+                            <Insignia tono={r.activo ? 'ok' : 'bad'}>{r.activo ? 'A' : 'I'}</Insignia>
                           </td>
                           <td style={{ padding: '11px 14px', fontFamily: 'var(--font-mono)', fontSize: 12.5, color: 'var(--ink)', whiteSpace: 'nowrap' }}>
                             {r.codigo}
                           </td>
-                          <td style={{ padding: '11px 14px', fontSize: 13, color: 'var(--ink)', fontWeight: 500, whiteSpace: 'nowrap' }}>
-                            {r.nombre}
-                          </td>
+                          <td style={{ padding: '11px 14px', fontSize: 13, color: 'var(--ink)', fontWeight: 500 }}>{r.nombreRazonSocial}</td>
                           <td style={{ padding: '11px 14px', fontFamily: 'var(--font-mono)', fontSize: 12.5, color: 'var(--ink-2)', whiteSpace: 'nowrap' }}>
-                            {r.doc}
+                            {r.tipoDocumento} {r.numeroDocumento}
                           </td>
-                          <td style={{ padding: '11px 14px', fontSize: 13, color: 'var(--ink-2)', whiteSpace: 'nowrap' }}>{r.dir}</td>
-                          <td style={{ padding: '11px 14px', fontSize: 12.5, color: 'var(--ink-2)', whiteSpace: 'nowrap' }}>{r.unidades}</td>
-                          <td
-                            style={{
-                              padding: '11px 14px',
-                              fontFamily: 'var(--font-mono)',
-                              fontSize: 12.5,
-                              textAlign: 'right',
-                              color: r.deudaRoja ? 'var(--bad-fg)' : 'var(--ink-2)',
-                              whiteSpace: 'nowrap',
-                            }}
-                          >
-                            {r.deuda}
+                          <td style={{ padding: '11px 14px', fontSize: 13, color: 'var(--ink-2)', whiteSpace: 'nowrap' }}>
+                            {r.tipoPersona === 'JURIDICA' ? 'Jurídica' : 'Natural'}
+                          </td>
+                          <td style={{ padding: '11px 14px', fontSize: 12.5, color: 'var(--ink-2)', whiteSpace: 'nowrap' }}>
+                            {r.condicionEspecial ?? '—'}
                           </td>
                         </tr>
                       ))}
                     </tbody>
                   </table>
                 </div>
+                {(padron.datos?.totalPaginas ?? 0) > 1 && (
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '10px 16px', borderTop: '1px solid var(--line)' }}>
+                    <button
+                      onClick={() => setPaginaPadron((n) => Math.max(0, n - 1))}
+                      disabled={paginaPadron === 0}
+                      className="hov-linea"
+                      style={{ ...BOTON_DE_TABLA, opacity: paginaPadron === 0 ? 0.45 : 1, cursor: paginaPadron === 0 ? 'not-allowed' : 'pointer' }}
+                    >
+                      Anterior
+                    </button>
+                    <span style={{ fontFamily: 'var(--font-mono)', fontSize: 12, color: 'var(--ink-3)' }}>
+                      {(padron.datos?.pagina ?? 0) + 1} de {padron.datos?.totalPaginas}
+                    </span>
+                    <button
+                      onClick={() => setPaginaPadron((n) => n + 1)}
+                      disabled={!padron.datos?.hayMas}
+                      className="hov-linea"
+                      style={{ ...BOTON_DE_TABLA, opacity: padron.datos?.hayMas ? 1 : 0.45, cursor: padron.datos?.hayMas ? 'pointer' : 'not-allowed' }}
+                    >
+                      Siguiente
+                    </button>
+                  </div>
+                )}
+                {/* Por que faltan tres columnas del artboard, dicho donde se
+                    echan en falta. */}
+                <p style={{ margin: 0, padding: '11px 16px', borderTop: '1px solid var(--line)', background: 'var(--bg-elev)', fontSize: 12, lineHeight: 1.5, color: 'var(--ink-3)', textWrap: 'pretty' }}>
+                  El domicilio fiscal, las unidades y la deuda no salen en esta lista: `ContribuyenteResource` no los publica. Los tres se
+                  ven al abrir el expediente, que es donde se piden de uno en uno.
+                </p>
                 <p style={PIE}>
                   La deuda es a la fecha de hoy e incluye reajuste, interés y gastos. Cambia cada día: no se guarda, se calcula.
                 </p>
@@ -1610,3 +1618,46 @@ export default function Rentas({ dest, onDest }: PantallaProps) {
     </Shell>
   );
 }
+
+
+/**
+ * A que filtro va lo tecleado.
+ *
+ * El backend acota por cuatro campos distintos y la pantalla tiene un solo
+ * campo, asi que hay que elegir. La forma decide: ocho digitos es un DNI, once
+ * un RUC, y todo digitos sin esas longitudes es el codigo del padron —que en
+ * Catacaos son once posiciones con ceros por delante—. Lo demas es un nombre,
+ * que ademas se busca por parecido.
+ */
+function filtroDelPadron(criterio: string): {
+  codigo?: string;
+  nombreRazonSocial?: string;
+  dNI?: string;
+  rUC?: string;
+} {
+  if (criterio === '') return {};
+  const soloDigitos = /^[0-9]+$/.test(criterio);
+  if (soloDigitos && criterio.length === 8) return { dNI: criterio };
+  if (soloDigitos && criterio.length === 11) return { rUC: criterio };
+  if (soloDigitos) return { codigo: criterio };
+  return { nombreRazonSocial: criterio };
+}
+
+/**
+ * Las columnas del padron, en la forma que `ContribuyenteResource` publica.
+ *
+ * El artboard dibuja ademas «Domicilio fiscal», «Unidades» y «Deuda hoy S/», y
+ * el recurso no trae ninguna de las tres: el domicilio vive en la ficha, las
+ * unidades hay que contarlas en catastro y en el padron vehicular, y la deuda
+ * es de cuenta corriente —componerla aqui es lo que RNF-083 prohibe—. En su
+ * sitio van «Persona» y «Condicion especial», que si vienen y decidian dos
+ * cosas del calculo.
+ */
+const COLUMNAS_DEL_PADRON: ColDef[] = [
+  ['Est.', 0],
+  ['Codigo', 0],
+  ['Nombre / razon social', 0],
+  ['Documento', 0],
+  ['Persona', 0],
+  ['Condicion especial', 0],
+];
