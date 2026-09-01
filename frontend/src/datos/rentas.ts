@@ -1083,12 +1083,16 @@ export const CAMPOS_DEL_ALTA: CampoDef[] = [
   /* El valor por omision es el primero de la lista a proposito: un desplegable que
      ensena «2026» y manda «2024» es el defecto de #331.
 
-     Los cinco anios se quedan como el manual los dibuja, y la ayuda dice lo
-     medido: `cuenta_corriente_asiento` esta particionada por ejercicio y `V2`
-     declara solo 2026 y 2027, asi que los otros cuatro revientan con un 500
-     opaco. **No se recortan a «2026»**: seria escribir a mano el conjunto de
-     particiones de hoy, que quedaria viejo en silencio el dia que alguien anada
-     2028 —el mismo modo de fallo que el issue describe, con otro nombre—. */
+     Los cinco anios se quedan como el manual los dibuja. **No se recortan a los
+     que hoy registran**: seria escribir a mano el conjunto de particiones de la
+     cuenta corriente, que quedaria viejo en silencio el dia que alguien anada
+     otra —el mismo modo de fallo que #597 describe, con otro nombre—.
+
+     Y la nota que documentaba la medicion se retira con #597 cerrado: los
+     ejercicios que la cuenta corriente no tiene abiertos ya no contestan un 500
+     opaco con incidencia, sino un 422 que nombra el anio y dice cuales lo estan.
+     Ese mensaje lo escribe el servidor y llega entero a la pantalla; repetirlo
+     aqui seria volver a congelar en un texto el conjunto de hoy. */
   {
     k: 'altaAnio',
     l: 'Año',
@@ -1096,7 +1100,7 @@ export const CAMPOS_DEL_ALTA: CampoDef[] = [
     v: '2026',
     o: ['2026', '2025', '2024', '2023', '2022'],
     ayuda:
-      'Medido el 2026-09-01: de estos cinco ejercicios sólo 2026 registra; los otros cuatro contestan un error interno del servidor, porque la cuenta corriente sólo tiene abiertos 2026 y 2027 (#597).',
+      'El ejercicio de la obligación. La cuenta corriente sólo asienta en los ejercicios que tiene abiertos; si éste no lo está, el servidor lo rechaza nombrándolo, dice cuáles sí lo están y no se escribe nada (#597).',
   },
   /* Las dos cajas del manual, y las tres formas que el backend admite desde
      #538. Hasta entonces «Cuota hasta» se dibujaba y NO viajaba: Jackson la

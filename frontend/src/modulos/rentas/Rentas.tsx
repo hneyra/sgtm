@@ -1302,6 +1302,20 @@ export default function Rentas({ dest, onDest }: PantallaProps) {
    * enseñar, y anunciar «no existe» sobre un código a medio escribir es el
    * defecto que #296 midió en la pantalla de inicio.
    */
+  /**
+   * Lo último que el servidor rechazó de estas dos hojas, **en pantalla y no en
+   * un aviso que se va** (#597).
+   *
+   * El aviso flotante dura 3,2 s y se lo lleva cualquier navegación. Para
+   * «Transferencia registrada» sobra; para un 422 no: el del ejercicio sin
+   * partición son tres líneas —nombra el año, dice cuáles están abiertos y que
+   * añadir uno es una migración— y quien atiende necesita releerlo con el
+   * formulario delante para saber qué cambiar. Se limpia al mandar bien y
+   * cuando cambia algo de lo que lo produjo.
+   */
+  const [rechazoDelActo, setRechazoDelActo] = useState<ErrorDeApi | null>(null);
+  useEffect(() => setRechazoDelActo(null), [hoja, sujetoDeDeuda?.codigo]);
+
   const unidadEscrita = useRebote(texto('altaUnidad').trim());
   const unidadTecleada = texto('altaUnidad').trim();
   const resolucionDeLaUnidad = useRecurso(
@@ -1434,7 +1448,7 @@ export default function Rentas({ dest, onDest }: PantallaProps) {
          quien atiende acababa de elegir de un desplegable. */
       const tipoDelActo = tipoDeTransferenciaDelBackend(texto(esPredio ? 'tipoActo' : 'vTipo'));
       if (tipoDelActo === null) {
-        toast(`El sistema no reconoce el tipo de acto «${texto(esPredio ? 'tipoActo' : 'vTipo')}». No se registró nada.`);
+        toast(`El sistema no reconoce el tipo de acto «${texto(esPredio ? 'tipoActo' : 'vTipo')}». No se registró nada.`, 'mal');
         setRegistrando(false);
         return;
       }
@@ -1444,7 +1458,7 @@ export default function Rentas({ dest, onDest }: PantallaProps) {
         const encontrados = await listarPredios({ codRefCatastral: codigo }, { tamano: 2 });
         const exacto = encontrados.contenido.find((x) => x.codRefCatastral === codigo);
         if (!exacto) {
-          toast(`No hay ningún predio con el código ${codigo} en el padrón.`);
+          toast(`No hay ningún predio con el código ${codigo} en el padrón.`, 'mal');
           return;
         }
         await transferirPredio({
@@ -1483,7 +1497,7 @@ export default function Rentas({ dest, onDest }: PantallaProps) {
       setObservacionDelActo('');
       toast('Transferencia registrada.');
     } catch (error) {
-      toast(error instanceof ErrorDeApi ? error.mensaje : 'No se pudo registrar la transferencia.');
+      toast(error instanceof ErrorDeApi ? error.mensaje : 'No se pudo registrar la transferencia.', 'mal');
     } finally {
       setRegistrando(false);
     }
@@ -1589,14 +1603,14 @@ export default function Rentas({ dest, onDest }: PantallaProps) {
     try {
       const unidad = unidadDelAlta();
       if (unidad === null) {
-        toast(`«${unidadTecleada}» no es ninguna unidad del padrón: no se mandó nada.`);
+        toast(`«${unidadTecleada}» no es ninguna unidad del padrón: no se mandó nada.`, 'mal');
         return;
       }
       /* `impedimentoDelAlta` ya apago el boton si lo escrito no era una
          pregunta entera; esto es la guarda de programa, no la de pantalla. */
       const cuotas = cuotasDelAlta();
       if (cuotas === null) {
-        toast('Las cuotas no se entienden: revisa «Cuota desde» y «Cuota hasta».');
+        toast('Las cuotas no se entienden: revisa «Cuota desde» y «Cuota hasta».', 'mal');
         return;
       }
       const cuerpo: PeticionDeMovimientoDeDeuda = {
@@ -1613,6 +1627,7 @@ export default function Rentas({ dest, onDest }: PantallaProps) {
         documentoOrigen: texto('altaNumDoc').trim(),
       };
       const registrado = await altaDeDeuda(cuerpo);
+      setRechazoDelActo(null);
       setSucio(false);
       setObservacionDelActo('');
       /* Cuantas obligaciones se movieron y por cuanto, contado sobre lo que
@@ -1624,7 +1639,8 @@ export default function Rentas({ dest, onDest }: PantallaProps) {
         `Alta registrada: ${n} ${n === 1 ? 'asiento' : 'asientos'} por S/ ${registrado.total.importe} al ${registrado.total.actualizadoA} · ${registrado.numeroDeDocumento}.`,
       );
     } catch (error) {
-      toast(error instanceof ErrorDeApi ? error.mensaje : 'No se pudo registrar el alta.');
+      setRechazoDelActo(error instanceof ErrorDeApi ? error : null);
+      toast(error instanceof ErrorDeApi ? error.mensaje : 'No se pudo registrar el alta.', 'mal');
     } finally {
       setRegistrando(false);
     }
@@ -1670,13 +1686,15 @@ export default function Rentas({ dest, onDest }: PantallaProps) {
         documentoOrigen: texto('numRes').trim(),
       };
       await bajaDeDeuda(cuerpo);
+      setRechazoDelActo(null);
       setSucio(false);
       setObservacionDelActo('');
       setObligacionMarcada(null);
       deudaParaLaBaja.reintentar();
       toast('Baja registrada.');
     } catch (error) {
-      toast(error instanceof ErrorDeApi ? error.mensaje : 'No se pudo registrar la baja.');
+      setRechazoDelActo(error instanceof ErrorDeApi ? error : null);
+      toast(error instanceof ErrorDeApi ? error.mensaje : 'No se pudo registrar la baja.', 'mal');
     } finally {
       setRegistrando(false);
     }
@@ -3311,6 +3329,23 @@ export default function Rentas({ dest, onDest }: PantallaProps) {
               >
                 {impedimentoDeLaHoja}
               </p>
+            )}
+            {/* Lo que el servidor contestó al último intento, y se queda (#597).
+                Un 422 dice qué cambiar y por qué; en un aviso que se va a los
+                3,2 s no se puede releer con el formulario delante. `alert` y no
+                `status`: es un acto que no se registró, no una nota al margen. */}
+            {rechazoDelActo !== null && (
+              <div role="alert">
+                <Aviso tono="bad" titulo={`El servidor no registró ${hoja === 'alta' ? 'el alta' : 'la baja'}`}>
+                  {rechazoDelActo.mensaje}
+                  {rechazoDelActo.incidencia !== undefined && (
+                    <>
+                      {' '}
+                      <span style={{ fontFamily: 'var(--font-mono)', fontSize: 11.5 }}>Incidencia {rechazoDelActo.incidencia}</span>
+                    </>
+                  )}
+                </Aviso>
+              </div>
             )}
             <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>
               <p style={{ margin: 0, flex: 1, minWidth: 180, fontSize: 12, color: 'var(--ink-3)', textWrap: 'pretty' }}>
