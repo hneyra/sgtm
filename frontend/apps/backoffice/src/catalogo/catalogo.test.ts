@@ -12,6 +12,7 @@ import {
   todasLasPantallas,
 } from './index';
 import type { PantallasDeUnModulo } from './index';
+import { censoDeAportes } from '../pantallas/aportes-de-modulo';
 
 /**
  * El catalogo portado es completo y coherente.
@@ -559,18 +560,39 @@ describe('el catalogo y el contrato hablan de las mismas operaciones', () => {
     }
   });
 
-  it('cada filtro de una pantalla es un parametro que su operacion declara', () => {
+  it('cada filtro que la pantalla dibuja es un parametro que su operacion declara', async () => {
     // El nombre del filtro lo calculan **dos** generadores que viven en arboles
     // distintos: el portador del catalogo y el del contrato. Si se separan, la
     // interfaz manda `?nombreDeCalle=` y el backend espera otra cosa; aqui se
     // ponen de acuerdo o se pone rojo.
+    //
+    // Lo que se mide es lo que **se dibuja**, no lo que el catalogo trae: una
+    // opcion puede sustituir un filtro suyo por el del servicio o anadir uno que
+    // el prototipo no dibuja (`filtrosDelBackend`, #544). Ese relevo cuenta por
+    // los dos lados —el que entra tiene que estar declarado, y el que sale deja
+    // de exigirse—, y sin el la bitacora seguiria dibujando el `accion` que el
+    // contrato retiro por no filtrar nada.
+    //
+    // El censo carga **sin registrar** (#433): esta prueba no monta ninguna
+    // pantalla, y registrarlas aqui taparia a las que comprueban la carga
+    // diferida.
+    const { composiciones } = await censoDeAportes();
+
     for (const opcion of OPCIONES) {
       const pantalla = PANTALLAS[opcion.id];
       const operacion = OPERACIONES[opcion.id as keyof typeof OPERACIONES];
       if (!pantalla?.filtros || !operacion) continue;
       const declarados = new Set<string>(operacion.parametrosDeConsulta);
       const deLaRuta = new Set<string>(operacion.parametrosDeRuta);
-      for (const filtro of pantalla.filtros) {
+      const delServicio = composiciones[opcion.id]?.filtrosDelBackend ?? [];
+      const relevados = new Set(
+        delServicio.map((filtro) => filtro.enVezDe).filter((clave) => clave !== undefined),
+      );
+
+      for (const filtro of [
+        ...pantalla.filtros.filter((filtro) => !relevados.has(filtro.clave)),
+        ...delServicio.map((filtro) => filtro.campo),
+      ]) {
         expect(
           declarados.has(filtro.clave) || deLaRuta.has(filtro.clave),
           `${opcion.id}: el filtro «${filtro.clave}» no es parametro de su operacion`,

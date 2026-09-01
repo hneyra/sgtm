@@ -167,7 +167,18 @@ const CARGADORES: Readonly<Record<string, () => Promise<AporteDeModulo>>> = {
        estatico que este issue retira. */
     composiciones: (await import('./licencias/composicion')).COMPOSICION_DE_LICENCIAS,
   }),
-  seguridad: async () => ({ conexiones: (await import('./seguridad')).CONEXIONES_DE_SEGURIDAD }),
+  seguridad: async () => {
+    /* La novena composicion, llegada con #544: los dos filtros que la bitacora
+       acota de verdad, uno de ellos en el sitio del que no acotaba ninguno. */
+    const [registro, composicion] = await Promise.all([
+      import('./seguridad'),
+      import('./seguridad/composicion'),
+    ]);
+    return {
+      conexiones: registro.CONEXIONES_DE_SEGURIDAD,
+      composiciones: composicion.COMPOSICION_DE_SEGURIDAD,
+    };
+  },
 };
 
 /**

@@ -550,8 +550,9 @@ function Bloques({
   const { moduloId = '', ranura = '', codigo } = useParams();
 
   const busquedaActiva = leerBusqueda(busqueda);
-  // El bloque de busqueda: el del catalogo, o el que esta opcion compone
-  // cuando el catalogo no trae ninguno (`filtrosPropios`, ver `composicion.ts`).
+  // El bloque de busqueda: el del catalogo, o el que esta opcion compone cuando
+  // el catalogo no trae ninguno (`filtrosPropios`), mas los que el servicio
+  // acota y el prototipo no dibuja (`filtrosDelBackend`, ver `composicion.ts`).
   const filtrosDeLaPantalla = filtrosDe(estructura.id, estructura.filtros);
   const operacion = operacionDe(estructura.id);
   // Una operacion que escribe no se pide al abrir la pantalla: abrir «Copias de

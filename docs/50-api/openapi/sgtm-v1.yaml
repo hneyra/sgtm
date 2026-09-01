@@ -8349,11 +8349,25 @@ paths:
           required: false
           description: "Filtro «Usuario» de la pantalla"
           schema: { type: string }
-        - name: accion
+        - name: operacion
           in: query
           required: false
-          description: "Filtro «Acción» de la pantalla"
+          description: >-
+            Que clase de acto se registro. El vocabulario es el del enumerado «Operacion» y el
+            del CHECK de «auditoria.operacion» (V5), letra por letra; cualquier otra palabra se
+            rechaza con 422 en vez de devolver una pagina vacia. No hay ELIMINACION: la
+            aplicacion no borra (RNF-051, regla 4), y lo que parece un borrado es una BAJA, una
+            ANULACION o una REVERSION.
+          schema: { type: string, enum: [ALTA, MODIFICACION, BAJA, ANULACION, REVERSION, PERMISO, ACCESO] }
+          example: "ANULACION"
+        - name: tabla
+          in: query
+          required: false
+          description: >-
+            Sobre que tabla se actuo, tal como la bitacora la nombra —«recibo», «predio»,
+            «sesion»—. Es lo que la grilla dibuja en la columna «Opción».
           schema: { type: string }
+          example: "recibo"
         - name: desde
           in: query
           required: false

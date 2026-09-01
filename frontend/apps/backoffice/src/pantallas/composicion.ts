@@ -12,13 +12,16 @@ import type { CampoDePantalla } from '../catalogo';
  * dentro de `Pantalla`, que es como se bifurca un renderizador que da servicio a
  * 134 pantallas.
  *
- * Once opt-in, y ninguno cambia el dibujo de las otras opciones:
+ * Doce opt-in, y ninguno cambia el dibujo de las otras opciones:
  *
  *   widgetsDeFiltro  un campo de busqueda con control propio, por clave de
  *                    campo. Sin declaracion, `Filtros` dibuja su `Campo` de
  *                    texto de siempre
  *   filtrosBloqueados un campo de busqueda que se ve y no se manda, con su
  *                    motivo: el que el servidor rechaza con 422
+ *   filtrosDelBackend un filtro que el servicio acota y el prototipo no dibuja
+ *                    —o dibuja con otro nombre—: se anade al final, o sustituye
+ *                    en su sitio al que releva (#544)
  *   resolutores      lo mismo, **para un campo de seccion**: el que resuelve un
  *                    codigo, una placa o un RUC contra el identificador interno
  *                    que el backend pide. Sin declaracion, `Formulario` dibuja
@@ -91,6 +94,13 @@ export interface WidgetDeFiltroProps {
   readonly etiqueta: string;
   readonly valor: string;
   readonly onCambio: (valor: string) => void;
+}
+
+/** Un filtro que el servicio acota y el catalogo no dibuja igual (ver `filtrosDelBackend`). */
+export interface FiltroDelBackend {
+  readonly campo: CampoDePantalla;
+  /** La clave del filtro del catalogo al que sustituye, en su sitio. Sin ella, va al final. */
+  readonly enVezDe?: string;
 }
 
 export interface WidgetDeFiltro {
@@ -667,6 +677,31 @@ export interface ComposicionDeOpcion {
    * lista esta vacia del todo.
    */
   readonly filtrosPropios?: readonly CampoDePantalla[];
+  /**
+   * Filtros que **el servicio acota y el prototipo no dibuja** —o dibuja con
+   * otro nombre— (#544).
+   *
+   * Es el gemelo, en el bloque de busqueda, de lo que `controles` (#422) hace
+   * en una seccion: el manual capturo una pantalla de 2008 y el backend de hoy
+   * sabe hacer algo mas, o lo mismo con otro vocabulario. La diferencia con
+   * `filtrosPropios` es que este entra **con el catalogo puesto**: no sustituye
+   * la barra, la completa.
+   *
+   * Cada entrada dibuja su campo, y `enVezDe` dice a que filtro del catalogo
+   * **sustituye en su sitio**; sin `enVezDe`, se anade al final.
+   *
+   * El caso que lo estrena es «Acción» de la auditoria: el prototipo lo llama
+   * asi y el contrato publica `operacion` —el mismo dato con el nombre del
+   * backend—, con **su** vocabulario, que no es el del desplegable del manual.
+   * Sustituirlo en su sitio conserva el rotulo (RNF-080) y cambia lo unico que
+   * estaba mal: que se tecleaba y no filtraba.
+   *
+   * **No es una puerta para inventar filtros.** Lo que se declara aqui tiene
+   * que existir en el contrato: si no, `parametrosDeBusqueda` lo descarta y el
+   * campo se dibuja sin viajar, que es el defecto de #331. Hay una prueba que
+   * lo exige.
+   */
+  readonly filtrosDelBackend?: readonly FiltroDelBackend[];
   readonly widgetsDeFiltro?: Readonly<Record<string, WidgetDeFiltro>>;
   /**
    * Claves de filtros que la pantalla **dibuja pero no manda**.
@@ -857,16 +892,33 @@ export const composicionDe = (opcion: string): ComposicionDeOpcion =>
 
 /**
  * Los filtros del bloque de busqueda: los del catalogo, o los que esta opcion
- * compone cuando el catalogo no trae ninguno (`filtrosPropios`, arriba).
+ * compone cuando el catalogo no trae ninguno (`filtrosPropios`, arriba), y
+ * sobre esos, los que el servicio acota y el prototipo no dibuja
+ * (`filtrosDelBackend`, #544).
  *
- * `undefined` en los dos sitios significa lo mismo que siempre: sin bloque de
+ * `undefined` en los tres sitios significa lo mismo que siempre: sin bloque de
  * busqueda. Una opcion con `filtros: []` en el catalogo —ninguna hoy— tampoco
  * caeria en `filtrosPropios`: el `??` solo mira `undefined`, no vacio.
  */
 export const filtrosDe = (
   opcion: string,
   declarados: readonly CampoDePantalla[] | undefined,
-): readonly CampoDePantalla[] | undefined => declarados ?? composicionDe(opcion).filtrosPropios;
+): readonly CampoDePantalla[] | undefined => {
+  const base = declarados ?? composicionDe(opcion).filtrosPropios;
+  const delBackend = composicionDe(opcion).filtrosDelBackend;
+  if (base === undefined || delBackend === undefined) return base;
+
+  // El que sustituye se dibuja **en el sitio del que sustituye**: la barra de
+  // busqueda del manual no se reordena por un cambio de nombre.
+  const sustituidos = base.map((campo) => {
+    const relevo = delBackend.find((filtro) => filtro.enVezDe === campo.clave);
+    return relevo === undefined ? campo : relevo.campo;
+  });
+  return [
+    ...sustituidos,
+    ...delBackend.filter((filtro) => filtro.enVezDe === undefined).map((filtro) => filtro.campo),
+  ];
+};
 
 /**
  * Si hay **algo** que resumir, preguntado antes de pedir el trozo de la cabecera.

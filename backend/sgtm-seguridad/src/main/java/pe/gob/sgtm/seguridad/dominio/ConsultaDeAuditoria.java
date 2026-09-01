@@ -2,6 +2,7 @@ package pe.gob.sgtm.seguridad.dominio;
 
 import java.time.LocalDate;
 import org.jspecify.annotations.Nullable;
+import pe.gob.sgtm.auditoria.Operacion;
 import pe.gob.sgtm.dominio.Ejercicio;
 
 /**
@@ -15,10 +16,16 @@ import pe.gob.sgtm.dominio.Ejercicio;
  *
  * <p>Los demas filtros son opcionales y se combinan con Y.
  *
+ * <p>La <b>operacion es un {@link Operacion}, no una cadena</b> (#544): su vocabulario es cerrado
+ * —el mismo que el CHECK de {@code auditoria.operacion}— y con un texto libre una palabra que no
+ * existe no da error, da una pagina vacia, que se lee como «no hubo ninguna». El prototipo llama a
+ * este filtro «Acción» y ofrece ademas ELIMINACIÓN, que no puede ocurrir: la aplicacion no borra
+ * (RNF-051, regla 4).
+ *
  * @param ejercicio clave de particion; obligatorio
  * @param usuario quien hizo el cambio, si se filtra por el
  * @param tabla sobre que tabla, si se filtra por ella
- * @param operacion que clase de acto, si se filtra por el
+ * @param operacion que clase de acto, si se filtra por ella
  * @param desde primer dia del rango, inclusive
  * @param hasta ultimo dia del rango, inclusive
  */
@@ -26,7 +33,7 @@ public record ConsultaDeAuditoria(
         Ejercicio ejercicio,
         @Nullable String usuario,
         @Nullable String tabla,
-        @Nullable String operacion,
+        @Nullable Operacion operacion,
         @Nullable LocalDate desde,
         @Nullable LocalDate hasta) {
 

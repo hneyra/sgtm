@@ -9,6 +9,7 @@ import java.util.Optional;
 import org.jspecify.annotations.Nullable;
 import org.springframework.jdbc.core.simple.JdbcClient;
 import org.springframework.stereotype.Repository;
+import pe.gob.sgtm.auditoria.Operacion;
 import pe.gob.sgtm.auditoria.Origen;
 import pe.gob.sgtm.auditoria.OrigenContext;
 import pe.gob.sgtm.compartido.Pagina;
@@ -120,9 +121,13 @@ public class SesionRepositoryJdbc extends RepositorioJdbc implements SesionRepos
             donde.append(" AND tabla = :tabla");
             parametros.put("tabla", consulta.tabla());
         }
-        if (consulta.operacion() != null) {
+        Operacion operacion = consulta.operacion();
+        if (operacion != null) {
+            // El vocabulario es el del enumerado, que es el del CHECK de la tabla: aqui
+            // no puede llegar una palabra que no exista, y por eso la comparacion es
+            // por igualdad y no una busqueda tolerante (#544).
             donde.append(" AND operacion = :operacion");
-            parametros.put("operacion", consulta.operacion());
+            parametros.put("operacion", operacion.name());
         }
         if (consulta.desde() != null) {
             donde.append(" AND fecha >= :desde");
