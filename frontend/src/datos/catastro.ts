@@ -436,11 +436,23 @@ export const BASE: ValoresDeFicha = {
   entrada: '01', piso: '02', unidad: '001',
 };
 
-/** Lo que la municipalidad ya sabe de una ficha nueva: el territorio del sector
- *  y las marcas que arrancan apagadas. Todo lo demás queda en blanco para que
- *  la cuenta de pendientes cuente de verdad lo que falta. */
+/**
+ * Lo que la municipalidad ya sabe de una ficha nueva: hoy, nada de territorio.
+ *
+ * **Aquí venían `distrito: '200104'`, `dep`, `prov` y `dist`**, y el padrón real
+ * de Catacaos es el ubigeo **200105**: un alta hecha sin tocar ese tramo entraba
+ * con el ubigeo de otro distrito, y un ubigeo equivocado no se ve —el código
+ * queda completo, con sus veintitrés dígitos, y el predio nace en el distrito de
+ * al lado—. No hay ninguna lectura que publique el ubigeo de la municipalidad,
+ * así que el tramo va **en blanco y se exige**; lo rellena la vía elegida del
+ * catálogo, que sí trae el suyo.
+ *
+ * Los nombres del departamento, la provincia y el distrito salen «—» por lo
+ * mismo: este producto atiende a muchas municipalidades y ninguna operación
+ * publica el nombre del distrito de la que está en sesión.
+ */
 export const DEFECTOS_DE_FICHA_NUEVA: ValoresDeFicha = {
-  dep: 'PIURA', prov: 'PIURA', dist: 'CATACAOS', distrito: '200104',
+  dep: '—', prov: '—', dist: '—',
   fuente: 'INSPECCIÓN DE CAMPO', valBC: '—', arancelHa: '—', valTerRus: '—', autoRural: '—',
 };
 
@@ -490,13 +502,21 @@ export const PREDIOS: readonly (readonly [string, string, string, string, string
 ];
 
 /* ══════════ Mapa catastral ══════════ */
-/** `[clave, rótulo, conteo]`. */
-export const CAPAS: readonly [string, string, string][] = [
-  ['predios', 'Predios (lotes)', '18,412'],
-  ['vias', 'Vías y calles', '2,184'],
-  ['manzanas', 'Manzanas', '1,096'],
-  ['sectores', 'Sectores', '5'],
-  ['aranceles', 'Aranceles por zona', '4 rangos'],
+/**
+ * `[clave, rótulo]`.
+ *
+ * **Sin conteo.** Los llevaba dentro —«18,412» predios, «2,184» vías, «1,096»
+ * manzanas, «5» sectores— y eran los del artboard: el carril de al lado decía
+ * 14 422 y 1 110 en cuanto alguna lectura los había contado, y las dos cifras se
+ * leían a la vez sin que nada dijera cuál era la del sistema. El conteo lo pone
+ * ahora la pantalla, de lo que el backend acaba de contar.
+ */
+export const CAPAS: readonly [string, string][] = [
+  ['predios', 'Predios (lotes)'],
+  ['vias', 'Vías y calles'],
+  ['manzanas', 'Manzanas'],
+  ['sectores', 'Sectores'],
+  ['aranceles', 'Aranceles por zona'],
 ];
 
 export const SECTORES_DEL_MAPA = ['S-01', 'S-02', 'S-03', 'S-04', 'S-05'];

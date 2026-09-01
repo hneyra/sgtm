@@ -190,6 +190,39 @@ export function listarVias(paginacion: Paginacion, senal?: AbortSignal): Promise
   return solicitar('/catastro/vias', { parametros: { ...paginacion }, senal });
 }
 
+/** Lo que `Paginacion` del backend admite por pagina. Mas que esto es un 422. */
+const TAMANO_MAXIMO_DE_PAGINA = 500;
+
+/** Tope de peticiones del catalogo. Con 500 por pagina son 3 000 vias. */
+const PAGINAS_MAXIMAS_DEL_CATALOGO = 6;
+
+/**
+ * El catalogo vial ENTERO, en tantas peticiones como paginas haga falta.
+ *
+ * Existe porque `ViaController.listar` **no busca por nombre**: solo recibe la
+ * paginacion. Un buscador de vias, entonces, no lo puede resolver el servidor —o
+ * se trae el catalogo y se filtra aqui, o no hay buscador—, y sin buscador la
+ * unica salida que quedaba era el desplegable de cinco calles del prototipo, que
+ * es lo que metia en el padron una via que no existe.
+ *
+ * `completo` dice si se trajo todo. Un catalogo mas grande que el tope se corta y
+ * la pantalla lo dice: buscar sobre una parte y llamarlo «el catalogo» es
+ * exactamente la clase de mentira que esto viene a quitar.
+ */
+export async function catalogoVial(
+  senal?: AbortSignal,
+): Promise<{ vias: Via[]; total: number; completo: boolean }> {
+  const vias: Via[] = [];
+  let total = 0;
+  for (let pagina = 0; pagina < PAGINAS_MAXIMAS_DEL_CATALOGO; pagina++) {
+    const r = await listarVias({ pagina, tamano: TAMANO_MAXIMO_DE_PAGINA }, senal);
+    total = r.totalElementos;
+    vias.push(...r.contenido);
+    if (!r.hayMas) return { vias, total, completo: true };
+  }
+  return { vias, total, completo: vias.length >= total };
+}
+
 
 /* ══════════ Las tres tablas con que se valoriza un predio ══════════
    Devuelven una LISTA suelta, no el sobre paginado: son cuadros completos de un
@@ -250,6 +283,14 @@ export function listarDepreciacion(anio: number, senal?: AbortSignal): Promise<D
  *
  * `conciliadaConRentas=No` exige ademas el permiso de fiscalizacion: es la lista
  * de quien tiene ficha y no declara, y esa lista no la ve cualquiera.
+ *
+ * **Su `totalElementos` NO cuenta lo que el filtro dice.** El filtro se aplica
+ * sobre la pagina ya devuelta y el total sigue siendo el del padron sin filtrar
+ * —lo dice el javadoc de `ConsultaDeConciliacion`—, asi que
+ * `contarFichas({conciliadaConRentas:'No'}).totalElementos` es el padron entero:
+ * en Catacaos, 14 422 «sin conciliar» sobre 14 422 predios. Por eso el panel de
+ * catastro **no la llama** y dice «—» con su motivo. Sirve para RECORRER la lista
+ * pagina a pagina; para contarla, no.
  */
 export function contarFichas(
   parametros: { conciliadaConRentas?: 'Si' | 'No' },
@@ -279,9 +320,13 @@ export type FichaDelContribuyente = {
     direccion: string;
     condicion: string;
     porcentaje: string;
-    areaTerreno: string;
-    uso: string;
-    version: number;
+    /* Los tres pueden venir nulos, y significan «predio registrado y todavia
+       SIN ficha». Estaban declarados no-nulos, asi que la hoja dibujaba la celda
+       vacia: un hueco se lee como «no se dibujo el dato» y no como «este predio
+       no tiene con que valorizarse», que es lo que el nulo dice. */
+    areaTerreno: string | null;
+    uso: string | null;
+    version: number | null;
   }[];
 };
 
