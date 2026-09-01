@@ -401,6 +401,163 @@ class AltaDeDeudaPorRangoFronteraTest {
                 .isEmpty();
     }
 
+    // ------------------------------- el ejercicio sin particion (#597)
+
+    @Test
+    @DisplayName("un alta de un ejercicio sin particion es 422 nombrando el ano, no 500 opaco")
+    void unAltaDeEjercicioSinParticionEs422() throws Exception {
+        String codigo = crearContribuyente("R-0601", "70200601");
+
+        MvcResult resultado = altaDelAno(codigo, "2022", "RES-2026-1101");
+
+        assertThat(resultado.getResponse().getStatus())
+                .as(
+                        "el desplegable «Ano» de la pantalla ofrece 2026, 2025, 2024, 2023 y 2022,"
+                                + " y cuatro de los cinco contestaban «No se pudo completar la"
+                                + " operacion · Incidencia 2b1f…», que dice «vuelve a intentarlo»"
+                                + " sobre algo que no va a cambiar hasta que alguien escriba una"
+                                + " migracion")
+                .isEqualTo(422);
+        String cuerpo = resultado.getResponse().getContentAsString();
+        assertThat(cuerpo).contains("2022");
+        assertThat(cuerpo)
+                .as("y dice cuales SI, que es lo que convierte el rechazo en una respuesta")
+                .contains("2026");
+        assertThat(cuerpo)
+                .as("ni tabla, ni restriccion, ni SQL (RNF-033)")
+                .doesNotContain("cuenta_corriente_asiento")
+                .doesNotContain("partition");
+    }
+
+    @Test
+    @DisplayName("una baja de un ejercicio sin particion contesta lo mismo que el alta")
+    void unaBajaDeEjercicioSinParticionEs422() throws Exception {
+        String codigo = crearContribuyente("R-0602", "70200602");
+
+        MvcResult resultado =
+                mvc.perform(
+                                post("/api/v1/rentas/deuda/bajas")
+                                        .contentType(MediaType.APPLICATION_JSON)
+                                        .content(cuerpoDelAno(codigo, "2023", "RES-2026-1102")))
+                        .andReturn();
+
+        assertThat(resultado.getResponse().getStatus())
+                .as(
+                        "arreglar solo el alta dejaria la baja en 500: la guarda vive en la unica"
+                                + " puerta de escritura del libro, no en cada operacion")
+                .isEqualTo(422);
+        assertThat(resultado.getResponse().getContentAsString()).contains("2023");
+    }
+
+    @Test
+    @DisplayName("y no escribe ninguna incidencia de nivel ERROR: no es un fallo del servidor")
+    void noEnsuciaElRegistroDeErrores() throws Exception {
+        String codigo = crearContribuyente("R-0603", "70200603");
+        ch.qos.logback.classic.Logger registro =
+                (ch.qos.logback.classic.Logger)
+                        org.slf4j.LoggerFactory.getLogger(ManejadorDeErrores.class);
+        ch.qos.logback.core.read.ListAppender<ch.qos.logback.classic.spi.ILoggingEvent> anotados =
+                new ch.qos.logback.core.read.ListAppender<>();
+        anotados.start();
+        registro.addAppender(anotados);
+        try {
+            altaDelAno(codigo, "2024", "RES-2026-1103");
+            altaDelAno(codigo, "2025", "RES-2026-1104");
+        } finally {
+            registro.detachAppender(anotados);
+        }
+
+        assertThat(
+                        anotados.list.stream()
+                                .filter(
+                                        evento ->
+                                                evento.getLevel()
+                                                        == ch.qos.logback.classic.Level.ERROR)
+                                .toList())
+                .as(
+                        "cada ano que el desplegable ofrece dejaba un ERROR con su UUID en el"
+                                + " registro; asi el registro deja de servir para encontrar"
+                                + " defectos de verdad (#486)")
+                .isEmpty();
+    }
+
+    @Test
+    @DisplayName("un ejercicio que SI tiene particion sigue asentando: la guarda no cierra 2027")
+    void elEjercicioConParticionSigueAsentando() throws Exception {
+        String codigo = crearContribuyente("R-0604", "70200604");
+
+        MvcResult resultado = altaDelAno(codigo, "2027", "RES-2026-1105");
+
+        assertThat(resultado.getResponse().getStatus())
+                .as("2027 tiene particion desde V2 y el desplegable ni siquiera lo ofrece")
+                .isEqualTo(201);
+        assertThat(periodosGuardados("RES-2026-1105")).isNotEmpty();
+    }
+
+    @Test
+    @DisplayName("los ejercicios asentables se leen del catalogo, no de una lista escrita en Java")
+    void losEjerciciosAsentablesSalenDelCatalogo() throws SQLException {
+        TenantContext.fijar(new MunicipalidadId(municipalidad));
+
+        assertThat(asentables(new AsientoRepositoryJdbc(jdbcDelPool())))
+                .containsExactly(2026, 2027);
+
+        // Y ahora se declara una particion mas, con un lector NUEVO —el otro ya memorizo
+        // la lista, ver su javadoc—. Sin esto, una constante «2026, 2027» escrita en Java
+        // pasaria esta prueba igual, y quedaria vieja en silencio el dia que una migracion
+        // anada un ejercicio: el mismo modo de fallo que este issue describe, con otro
+        // nombre.
+        declararParticion(2031);
+        try {
+            assertThat(asentables(new AsientoRepositoryJdbc(jdbcDelPool())))
+                    .as("la lista sale del catalogo, y por eso se mueve con el")
+                    .containsExactly(2026, 2027, 2031);
+        } finally {
+            retirarParticion(2031);
+        }
+    }
+
+    private static List<Integer> asentables(AsientoRepositoryJdbc lector) {
+        List<Integer> leidos =
+                transaccion.execute(
+                        estado ->
+                                lector.ejerciciosAsentables().stream()
+                                        .map(ejercicio -> ejercicio.valor())
+                                        .toList());
+        assertThat(leidos).isNotNull();
+        return leidos;
+    }
+
+    private static JdbcClient jdbcDelPool() {
+        DriverManagerDataSource pool = new DriverManagerDataSource();
+        pool.setUrl(base.url());
+        pool.setUsername(BaseDeDatosDePrueba.APP);
+        pool.setPassword(base.clave(BaseDeDatosDePrueba.APP));
+        return JdbcClient.create(pool);
+    }
+
+    /** Como lo haria una migracion. La escribe {@code sgtm_owner}: la aplicacion no hace DDL. */
+    private static void declararParticion(int ejercicio) throws SQLException {
+        ejecutarComoOwner(
+                "CREATE TABLE cuenta_corriente_asiento_"
+                        + ejercicio
+                        + " PARTITION OF cuenta_corriente_asiento FOR VALUES IN ("
+                        + ejercicio
+                        + ")");
+    }
+
+    private static void retirarParticion(int ejercicio) throws SQLException {
+        ejecutarComoOwner("DROP TABLE cuenta_corriente_asiento_" + ejercicio);
+    }
+
+    private static void ejecutarComoOwner(String sentenciaSql) throws SQLException {
+        try (Connection owner = base.conexion(BaseDeDatosDePrueba.OWNER);
+                PreparedStatement sentencia = owner.prepareStatement(sentenciaSql)) {
+            sentencia.execute();
+            owner.commit();
+        }
+    }
+
     // ------------------------------------------------------------------
 
     /** El {@code NA-2026-000007} de la respuesta. */
@@ -423,6 +580,21 @@ class AltaDeDeudaPorRangoFronteraTest {
                                 .contentType(MediaType.APPLICATION_JSON)
                                 .content(cuerpo(codigo, cuotas, documento)))
                 .andReturn();
+    }
+
+    private static MvcResult altaDelAno(String codigo, String ano, String documento)
+            throws Exception {
+        return mvc.perform(
+                        post("/api/v1/rentas/deuda/altas")
+                                .contentType(MediaType.APPLICATION_JSON)
+                                .content(cuerpoDelAno(codigo, ano, documento)))
+                .andReturn();
+    }
+
+    /** El mismo cuerpo del resto del archivo, cambiando solo el ano. */
+    private static String cuerpoDelAno(String codigo, String ano, String documento) {
+        return cuerpo(codigo, "\"cuota\":9,", documento)
+                .replace("\"ano\":\"2026\"", "\"ano\":\"" + ano + "\"");
     }
 
     private static String cuerpo(String codigo, String cuotas, String documento) {
