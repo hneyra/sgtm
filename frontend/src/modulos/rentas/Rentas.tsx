@@ -10,6 +10,7 @@ import {
   determinarPredial,
   indicadores,
   ultimaCorridaPredial,
+  tipoDeTransferenciaDelBackend,
   transferirPredio,
   transferirVehiculo,
   type CalculoVehicular,
@@ -1014,6 +1015,22 @@ export default function Rentas({ dest, onDest }: PantallaProps) {
       const codigoDelAdquirente = adquirente.datos!.codigo;
       const valor = importeQueViaja(texto(esPredio ? 'valorTransf' : 'vValor'))!;
 
+      /* El rotulo del desplegable NO es lo que el backend admite (#542).
+         El manual imprime «COMPRA-VENTA», «DACIÓN EN PAGO», «SUCESIÓN» —con su
+         guion y su tilde— y `TipoTransferencia` declara `COMPRA_VENTA`,
+         `DACION_EN_PAGO`, `SUCESION`. Se traduce con una tabla y no quitando
+         signos: quitarlos haria entrar cualquier rotulo parecido, y lo que queda
+         registrado es el acto por el que un predio cambia de dueño.
+         De los doce rotulos de las dos pantallas, nueve llevan tilde o guion:
+         antes de esto casi todos se llevaban un 422 que nombraba un valor que
+         quien atiende acababa de elegir de un desplegable. */
+      const tipoDelActo = tipoDeTransferenciaDelBackend(texto(esPredio ? 'tipoActo' : 'vTipo'));
+      if (tipoDelActo === null) {
+        toast(`El sistema no reconoce el tipo de acto «${texto(esPredio ? 'tipoActo' : 'vTipo')}». No se registró nada.`);
+        setRegistrando(false);
+        return;
+      }
+
       if (esPredio) {
         const codigo = texto('codPredial').trim();
         const encontrados = await listarPredios({ codRefCatastral: codigo }, { tamano: 2 });
@@ -1027,7 +1044,7 @@ export default function Rentas({ dest, onDest }: PantallaProps) {
           predioId: exacto.predioId,
           codTransferente: codigoDelTransferente!,
           codAdquiriente: codigoDelAdquirente,
-          tipoTransferencia: texto('tipoActo'),
+          tipoTransferencia: tipoDelActo!,
           fechaTransferencia: texto('fechaActo'),
           valorTransferencia: valor,
           porcentajeTransferido: texto('pctTransf').trim(),
@@ -1043,7 +1060,7 @@ export default function Rentas({ dest, onDest }: PantallaProps) {
           observacion: observacionDelActo.trim(),
           placa: placaDelActo,
           codAdquiriente: codigoDelAdquirente,
-          tipoTransferencia: texto('vTipo'),
+          tipoTransferencia: tipoDelActo!,
           fechaTransferencia: texto('vFecha'),
           valorTransferencia: valor,
           /* La alcabala grava la transferencia de INMUEBLES (art. 21 de la Ley de

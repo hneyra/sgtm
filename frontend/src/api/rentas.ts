@@ -48,6 +48,50 @@ export function buscarContribuyentes(
    Las cuatro exigen `observacion` (regla 10, RNF-052): sin motivo no se
    guarda, y el backend lo comprueba tambien de su lado. */
 
+/**
+ * Los nueve tipos de acto que el backend admite, y como se llama cada uno en la
+ * pantalla (#542).
+ *
+ * **Es una tabla y no una funcion, a proposito.** `TipoTransferencia.de` del
+ * backend no hace lectura tolerante —no quita tildes, ni guiones, ni espacios—
+ * y su javadoc dice por que le toca a la interfaz decidir: quitar los signos
+ * con una expresion regular haria entrar cualquier rotulo parecido, y lo que
+ * queda registrado en el padron es el acto por el que un predio cambia de
+ * dueño. Una tabla no puede acertar por casualidad.
+ *
+ * A la izquierda va **lo que el manual imprime** —con su tilde y su guion—,
+ * porque eso es lo que la pantalla dibuja y no se toca (RNF-080); a la derecha,
+ * el nombre del enumerado.
+ *
+ * `SUCESION` y `HERENCIA` nombran el mismo hecho y **no se funden**: son dos
+ * rotulos que el manual dibuja en dos pantallas distintas —predio y vehiculo—,
+ * y decidir aqui que uno es el otro cambiaria en silencio lo que quedo
+ * registrado. Es la misma razon por la que #427 se nego a traducir «ACTIVA» a
+ * `VIGENTE`.
+ */
+export const TIPO_DE_TRANSFERENCIA_DEL_BACKEND: Readonly<Record<string, string>> = {
+  'COMPRA-VENTA': 'COMPRA_VENTA',
+  'DONACIÓN': 'DONACION',
+  PERMUTA: 'PERMUTA',
+  'ANTICIPO DE LEGÍTIMA': 'ANTICIPO_DE_LEGITIMA',
+  'ADJUDICACIÓN': 'ADJUDICACION',
+  'DACIÓN EN PAGO': 'DACION_EN_PAGO',
+  'SUCESIÓN': 'SUCESION',
+  REMATE: 'REMATE',
+  HERENCIA: 'HERENCIA',
+};
+
+/**
+ * El rotulo de la pantalla, traducido al vocabulario del backend.
+ *
+ * Devuelve `null` cuando el rotulo no esta en la tabla, y quien llama tiene que
+ * pararse: mandarlo tal cual da un 422 que nombra un valor que quien atiende
+ * acaba de elegir de un desplegable, y eso se lee como que el sistema esta roto.
+ */
+export function tipoDeTransferenciaDelBackend(rotulo: string): string | null {
+  return TIPO_DE_TRANSFERENCIA_DEL_BACKEND[rotulo.trim()] ?? null;
+}
+
 /** El cuerpo de `POST /rentas/transferencias/predio`. Lista blanca del backend. */
 export type PeticionDeTransferenciaDePredio = {
   observacion: string;
