@@ -8,7 +8,9 @@ import java.time.Instant;
 import java.time.LocalDate;
 import java.time.ZoneId;
 import java.util.List;
+import java.util.Map;
 import java.util.Optional;
+import java.util.Set;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
@@ -25,6 +27,8 @@ import pe.gob.sgtm.autorizacion.GuardiaDeAcceso;
 import pe.gob.sgtm.autorizacion.Privilegio;
 import pe.gob.sgtm.compartido.Pagina;
 import pe.gob.sgtm.compartido.Paginacion;
+import pe.gob.sgtm.contribuyentes.DirectorioDeContribuyentes;
+import pe.gob.sgtm.contribuyentes.ResumenDeContribuyente;
 import pe.gob.sgtm.cuentacorriente.ConsultaDeDeudaPublica;
 import pe.gob.sgtm.cuentacorriente.ObligacionPublica;
 import pe.gob.sgtm.dominio.Dinero;
@@ -79,11 +83,14 @@ class VehiculosDelContribuyenteControllerTest {
 
     private final ComprobadorDePrueba comprobador = new ComprobadorDePrueba();
     private final PadronDePrueba padron = new PadronDePrueba();
+    private final DirectorioDePrueba directorio = new DirectorioDePrueba();
 
     private final MockMvc mvc =
             MockMvcBuilders.standaloneSetup(
                             new VehiculoController(
-                                    new ConsultaDeVehiculos(padron, new DeudaDePrueba()), RELOJ))
+                                    new ConsultaDeVehiculos(padron, new DeudaDePrueba()),
+                                    directorio,
+                                    RELOJ))
                     .addInterceptors(new GuardiaDeAcceso(comprobador, RELOJ))
                     .setControllerAdvice(new ManejadorDeErrores())
                     .setMessageConverters(
@@ -200,12 +207,115 @@ class VehiculosDelContribuyenteControllerTest {
         assertThat(resultado.getResponse().getContentAsString()).doesNotContain("1020.00");
     }
 
+    @Test
+    @DisplayName("un codigo que no esta en el padron es 404 nombrandolo, no una pagina vacia")
+    void codigoFueraDelPadronEs404() throws Exception {
+        MvcResult resultado = mvc.perform(deQuien("NO-EXISTE")).andReturn();
+
+        assertThat(resultado.getResponse().getStatus())
+                .as(
+                        "un 200 con cero filas se lee como «esta persona no tiene ningun"
+                                + " vehiculo», y sobre un codigo que no existe eso es falso: es la"
+                                + " misma frase que su hermana de predios cerro en #541")
+                .isEqualTo(404);
+        assertThat(resultado.getResponse().getContentAsString()).contains("NO-EXISTE");
+        assertThat(padron.buscado).as("y no se llega a preguntar al padron vehicular").isNull();
+    }
+
+    @Test
+    @DisplayName("un contribuyente del padron SIN vehiculos sigue siendo 200 con cero filas")
+    void sinVehiculosSigueSiendo200() throws Exception {
+        padron.vacio = true;
+
+        MvcResult resultado = mvc.perform(deQuien("C-000501")).andReturn();
+
+        assertThat(resultado.getResponse().getStatus())
+                .as("es el unico caso que de verdad significa «no tiene»")
+                .isEqualTo(200);
+        assertThat(resultado.getResponse().getContentAsString()).contains("\"totalElementos\":0");
+    }
+
+    @Test
+    @DisplayName("«codContribuyente» es el mismo filtro con el otro nombre")
+    void codContribuyenteEsElOtroNombre() throws Exception {
+        MvcResult resultado =
+                mvc.perform(get("/api/v1/rentas/vehiculos").param("codContribuyente", "C-000501"))
+                        .andReturn();
+
+        assertThat(resultado.getResponse().getStatus())
+                .as(
+                        "quien conecta esta lectura copiando la de predios escribe"
+                                + " «codContribuyente», y hasta #595 recibia un 422 que nombra un"
+                                + " parametro que la pantalla no dibuja")
+                .isEqualTo(200);
+        assertThat(padron.buscado).isNotNull();
+        assertThat(padron.buscado.contribuyente()).isEqualTo("C-000501");
+    }
+
+    @Test
+    @DisplayName("sin ninguno de los dos nombres sigue sin listar nada")
+    void sinNingunoDeLosDosNombres() throws Exception {
+        MvcResult resultado = mvc.perform(get("/api/v1/rentas/vehiculos")).andReturn();
+
+        assertThat(resultado.getResponse().getStatus())
+                .as("el alias no puede ser una puerta al padron vehicular entero")
+                .isEqualTo(422);
+        assertThat(padron.buscado).isNull();
+    }
+
+    @Test
+    @DisplayName("el codigo que viaja al padron es el canonico, no el tecleado")
+    void elCodigoQueViajaEsElCanonico() throws Exception {
+        mvc.perform(deQuien("c-000501")).andReturn();
+
+        assertThat(directorio.preguntado)
+                .as("se pregunta en mayusculas, como hace su hermana de predios")
+                .isEqualTo("C-000501");
+        assertThat(padron.buscado).isNotNull();
+        assertThat(padron.buscado.contribuyente()).isEqualTo("C-000501");
+    }
+
     // ---------------------------------------------------------------- dobles
+
+    /** El padron de contribuyentes: solo C-000501 esta en el. */
+    private static final class DirectorioDePrueba implements DirectorioDeContribuyentes {
+
+        private String preguntado;
+
+        @Override
+        public List<ResumenDeContribuyente> buscar(String texto, int maximo) {
+            return List.of();
+        }
+
+        @Override
+        public Optional<ResumenDeContribuyente> porCodigo(String codigo) {
+            preguntado = codigo;
+            return "C-000501".equals(codigo)
+                    ? Optional.of(
+                            new ResumenDeContribuyente(
+                                    CONTRIBUYENTE,
+                                    "C-000501",
+                                    "MEDINA MEDINA, RUFINA",
+                                    "DNI 03593174"))
+                    : Optional.empty();
+        }
+
+        @Override
+        public Map<Long, ResumenDeContribuyente> porIds(Set<Long> ids) {
+            return Map.of();
+        }
+
+        @Override
+        public Optional<String> domicilioFiscalDe(long contribuyenteId, LocalDate fecha) {
+            return Optional.empty();
+        }
+    }
 
     /** El padron vehicular en memoria, que ademas recuerda con que criterio se le pregunto. */
     private static final class PadronDePrueba implements VehiculoRepository {
 
         private CriterioDeVehiculo buscado;
+        private boolean vacio;
 
         @Override
         public Optional<Vehiculo> findByPlaca(Placa placa) {
@@ -222,7 +332,11 @@ class VehiculosDelContribuyenteControllerTest {
                 CriterioDeVehiculo criterio, Paginacion paginacion) {
             buscado = criterio;
             List<VehiculoEncontrado> filas =
-                    List.of(new VehiculoEncontrado(SUYO, "MEDINA MEDINA, RUFINA", "C-000501"));
+                    vacio
+                            ? List.<VehiculoEncontrado>of()
+                            : List.of(
+                                    new VehiculoEncontrado(
+                                            SUYO, "MEDINA MEDINA, RUFINA", "C-000501"));
             return new Pagina<>(filas, 0, 20, filas.size());
         }
 
