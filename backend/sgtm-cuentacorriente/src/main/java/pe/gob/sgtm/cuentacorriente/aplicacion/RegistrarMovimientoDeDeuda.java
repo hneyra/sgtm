@@ -469,13 +469,16 @@ public class RegistrarMovimientoDeDeuda {
             return;
         }
         ClaveDeSaldo clave = movimiento.clave();
+        // La baja se corrige aunque la unidad ya no exista (#660). Ver `comprobar`.
+        boolean exigirQueLaUnidadExista = movimiento.sentido() == SentidoDelMovimiento.ALTA;
         if (clave.predioId() != null) {
             comprobar(
                     "predio",
                     clave.predioId(),
                     titulares.delPredio(clave.predioId(), movimiento.fechaValor()),
                     clave.contribuyenteId(),
-                    comprobacion);
+                    comprobacion,
+                    exigirQueLaUnidadExista);
         }
         if (clave.vehiculoId() != null) {
             comprobar(
@@ -483,18 +486,43 @@ public class RegistrarMovimientoDeDeuda {
                     clave.vehiculoId(),
                     titulares.delVehiculo(clave.vehiculoId(), movimiento.fechaValor()),
                     clave.contribuyenteId(),
-                    comprobacion);
+                    comprobacion,
+                    exigirQueLaUnidadExista);
         }
     }
 
+    /**
+     * La comprobacion de una unidad, con la asimetria que #660 encontro.
+     *
+     * <p><b>Un alta</b> escribe deuda nueva: si el identificador no apunta a nada, el cargo queda
+     * sobre una clave que ninguna consulta va a mirar —invisible desde la ficha del predio, sin
+     * sumarse a la deuda de quien paga— y por eso se rechaza.
+     *
+     * <p><b>Una baja</b> extingue deuda que <b>ya esta escrita</b>. Exigirle que la unidad siga en
+     * el padron es pedirle a la correccion el requisito que el error no tuvo: los asientos con un
+     * {@code predioId} colgado existen —nada lo impedia, porque V2 no declara clave foranea sobre
+     * {@code predio} ni sobre {@code vehiculo}—, no se pueden borrar (regla 4, RNF-051) ni
+     * reescribir desde el migrador (RLS con {@code FORCE}, DAT-01 §0), asi que rechazarla dejaba
+     * esa deuda <b>viva y sin forma de extinguirla por el circuito normal</b>, que es peor que el
+     * defecto original. Lo que la baja necesita comprobar es que la obligacion exista, y de eso ya
+     * se ocupa {@link #verificarQueNoExcedeLaDeuda}: sobre una clave inventada no se debe nada y la
+     * baja se rechaza por su propio motivo.
+     *
+     * <p>Lo que <b>no</b> cambia es la otra mitad: si la unidad existe y es de otro, la baja sigue
+     * pidiendo la declaracion igual que el alta.
+     */
     private static void comprobar(
             String unidad,
             long unidadId,
             List<TitularesDeLaUnidad.TitularDeLaUnidad> deLaUnidad,
             long contribuyenteId,
-            ComprobacionDeUnidad comprobacion) {
+            ComprobacionDeUnidad comprobacion,
+            boolean exigirQueLaUnidadExista) {
 
         if (deLaUnidad.isEmpty()) {
+            if (!exigirQueLaUnidadExista) {
+                return;
+            }
             throw new UnidadAjena(
                     "El "
                             + unidad
