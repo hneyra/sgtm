@@ -108,39 +108,72 @@ export type FiltroDeOmisos = {
 };
 
 /**
- * El UNICO campo por el que la deteccion se deja ordenar, y esta medido.
+ * Los TRES campos por los que la deteccion se deja ordenar, y estan medidos.
  *
- * `ordenarPor` viaja en `Paginacion`, asi que el endpoint lo acepta desde
- * siempre; lo que #546 arreglo es que el nombre publico —el que el recurso
- * dibuja— y el nombre interno del repositorio eran distintos, de modo que
- * pedir la columna que se ve en pantalla daba 422. Medido contra el backend de
- * hoy, en las dos municipalidades:
+ * Es el unico sitio donde vive esa lista. Escribirla aqui como tipo y no como
+ * cadena suelta es lo que hace que una cabecera no pueda ofrecer un orden que
+ * el backend no admite: `listarOmisos` solo acepta uno de los tres, asi que
+ * `orden: 'titular'` en una columna **no compila**. Sin eso, el error sale en
+ * produccion y sale tarde —`GuardiaDeParametros` y `OrdenSeguro` contestan
+ * 422 (#539, #546)— y quien pulsa la cabecera ve el listado desaparecer sin
+ * poder saber por que.
+ *
+ * <h2>El contrato no publica esta lista, asi que se mide (#312)</h2>
+ *
+ * `docs/50-api/openapi/sgtm-v1.yaml` declara `ordenarPor` como
+ * `{ type: string }` con la descripcion «Campo por el que se ordena, en
+ * camelCase», sin `enum`: la lista blanca vive en `OrdenSeguro` del backend y
+ * no cruza la frontera. De modo que esto no se deriva del contrato ni se
+ * supone del recurso —los siete campos que la fila publica NO son siete
+ * ordenes—: se pregunta. Medido contra el backend de hoy, con `?ejercicio=2026`:
  *
  * ```
- * ordenarPor=codRefCatastral     → 200   (el que el recurso publica)
- * ordenarPor=codigoRefCatastral  → 422   (el nombre interno, y hace bien)
- * ordenarPor=sector | titular | condicion | areaCatastral | areaDeclarada
- *            | diferenciaDeArea | impuestoOmitidoS | valorCatastralS
- *            | codigoDelTitular | declaroFueraDePlazo | predio | codigo → 422
+ * ordenarPor=codRefCatastral    → 200      ordenarPor=titular             → 422
+ * ordenarPor=sector             → 200      ordenarPor=condicion           → 422
+ * ordenarPor=diferenciaDeArea   → 200      ordenarPor=areaCatastral       → 422
+ *                                          ordenarPor=areaDeclarada       → 422
+ * ordenarPor=codigoRefCatastral → 422      ordenarPor=impuestoOmitidoS    → 422
+ * ordenarPor=sectorCodigo       → 422      ordenarPor=codigoDelTitular    → 422
+ *                                          ordenarPor=declaroFueraDePlazo → 422
+ *                                          ordenarPor=predio | codigo     → 422
  * ```
  *
- * Por eso la pantalla ofrece ordenar por UNA columna y no por siete: un
- * encabezado que se pulsa y contesta «orden no admitido» es peor que uno que
- * no se pulsa. Los tres campos que el manual propone en su «Ordenar por»
- * —impuesto omitido, diferencia de valor, sector— siguen sin admitirse, y por
- * eso ese desplegable sigue sin dibujarse.
+ * El 422 es `ORDEN_NO_ADMITIDO` y nombra lo pedido: `{"codigo":
+ * "ORDEN_NO_ADMITIDO", "detalles": ["Campo pedido: titular"]}`.
  *
- * De los diez rechazados, dos no piden ningun dato nuevo —`sector`, que la
- * consulta ya filtra, y `diferenciaDeArea`, que es lo unico cuantificado que
- * hoy distingue a un subvaluador—: abierto en #608. Cuando lleguen, esto pasa a
- * ser una lista y la pantalla ofrece una cabecera por cada uno, computada de
- * aqui y no escrita a mano tres veces.
+ * Los dos primeros de la columna derecha son los nombres INTERNOS del
+ * repositorio, y que sigan dando 422 es lo correcto: son los que #546 retiro
+ * para que la operacion no tuviera dos nombres del mismo dato. La forma
+ * `snake_case` —`codigo_ref_catastral`, `sector_codigo`, `diferencia_de_area`—
+ * tambien contesta 200, porque `OrdenSeguro.sobre(...)` admite la columna cruda
+ * para un cliente que ya conozca la tabla; **no se usa**: aqui se pide con el
+ * nombre que la fila publica, que es el unico que un lector de esta pantalla
+ * puede ver.
+ *
+ * <h2>Los tres del manual, y por que estos no son aquellos</h2>
+ *
+ * El «Ordenar por» del artboard ofrece impuesto omitido, diferencia de valor y
+ * sector. De esos tres solo **sector** se admite. Los otros dos son cifras de
+ * dinero —`impuestoOmitidoS` y la diferencia de valuacion— y llegan `null` en
+ * todas las filas mientras D-02a siga abierta: ordenar por una columna que no
+ * tiene ni un valor no ordena nada, y las dos direcciones devolverian la misma
+ * primera fila. `diferenciaDeArea` **no es** «diferencia de valor»: son metros,
+ * no soles, y es lo unico cuantificado que hoy distingue a un subvaluador.
  */
-export const ORDEN_DE_OMISOS = 'codRefCatastral';
+export type OrdenDeOmisos = 'codRefCatastral' | 'sector' | 'diferenciaDeArea';
+
+/**
+ * La paginacion de la deteccion, con `ordenarPor` acotado a lo que admite.
+ *
+ * `Paginacion` lo declara `string` porque cada listado admite lo suyo; aqui se
+ * estrecha, que es lo que convierte «pedir un orden que no existe» de un 422 en
+ * ventanilla a un error de compilacion.
+ */
+export type PaginacionDeOmisos = Omit<Paginacion, 'ordenarPor'> & { ordenarPor?: OrdenDeOmisos };
 
 export function listarOmisos(
   filtro: FiltroDeOmisos,
-  paginacion: Paginacion,
+  paginacion: PaginacionDeOmisos,
   senal?: AbortSignal,
 ): Promise<RespuestaPaginada<FilaDeOmisos>> {
   return solicitar('/fiscalizacion/omisos', { parametros: { ...filtro, ...paginacion }, senal });
