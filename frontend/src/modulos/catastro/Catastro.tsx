@@ -25,6 +25,7 @@ import {
   marcoDe,
   planoCatastral,
   reactivar,
+  resumenDeConciliacion,
   titularesDelPredio,
   type EstadoDePredio,
   type GeometriaDelLote,
@@ -753,17 +754,23 @@ export default function Catastro({ dest, onDest }: PantallaProps) {
   const censoActivos = useRecurso((s2) => listarPredios({ estado: 'ACTIVO' }, { tamano: 1 }, s2), [], conCenso);
   const censoSinFicha = useRecurso((s2) => listarPredios({ fichado: false }, { tamano: 1 }, s2), [], enPanel);
   const censoDeBaja = useRecurso((s2) => listarPredios({ estado: 'DADO_DE_BAJA' }, { tamano: 1 }, s2), [], enPanel);
-  /* **«Sin conciliar» no se cuenta, y no es que falte permiso.** `GET
-     /catastro/fichas/conciliacion?conciliadaConRentas=No` filtra sobre la página
-     y deja el total SIN filtrar —su propio javadoc lo dice
-     (`ConsultaDeConciliacion.java`, «El filtro se aplica sobre la pagina y el
-     total sigue siendo el del padron filtrado por catastro»)—, de modo que su
-     `totalElementos` es el padrón entero: en Catacaos decía «14 422 predios sin
-     conciliar» encima de un padrón de 14 422 predios. Contarlo de verdad exigiría
-     recorrer las 14 422 filas por una operación que además deja rastro en la
-     bitácora en cada página, así que la cifra sale «—» y la petición no se hace.
-     Lo que falta es del backend: issue abierto. */
   const sectoresDelPanel = useRecurso((s2) => listarSectores(s2), [], conCenso);
+  /* **«Sin conciliar» ya se cuenta**, desde que el backend publica
+     `GET /catastro/fichas/conciliacion/resumen` (#564). No se cuenta con la
+     grilla: allí el filtro se aplica sobre la página ya devuelta y el
+     `totalElementos` sigue siendo el del padrón SIN filtrar, así que
+     `conciliadaConRentas=No` decía «14 422 sin conciliar» encima de un padrón de
+     14 422 predios. El resumen lo resuelve en una consulta agregada, trae su
+     ejercicio y su fecha de corte —y las dos se dibujan, porque no existe «sin
+     conciliar», existe «sin conciliar a 2026»—, y a diferencia de aquella no
+     exige el permiso de fiscalización ni deja fila en la bitácora: cuenta, no
+     nombra. El ejercicio que viaja es el de la barra; el que se dibuja es el que
+     contesta el servidor. */
+  const conciliacion = useRecurso(
+    (s2) => resumenDeConciliacion({ ejercicio: pref.ejercicio }, s2),
+    [pref.ejercicio],
+    enPanel,
+  );
 
   /* ── El plano, contra `GET /api/v1/catastro/predios/plano` (#536) ──────
      `bbox` es obligatorio y no tiene valor por omision en el servidor: sin el,
@@ -1064,14 +1071,36 @@ export default function Catastro({ dest, onDest }: PantallaProps) {
       dest: 'predios',
     },
     {
+      /* La cifra es `noConciliados` del resumen y **no una resta hecha aquí**: el
+         servidor la lee y la resta en la misma consulta, y recomponerla contra el
+         total de otra lectura es el defecto que #564 cerró. Va con su ejercicio y
+         su fecha de corte porque sin ellos no significa nada: el padrón afecto se
+         rehace cada año, y quien declaró 2024 no concilia 2026. */
       tipo: 'Rentas',
       titulo: 'Predios sin conciliar con el padrón de rentas',
-      detalle:
-        'Ninguna lectura los cuenta: el filtro «sin conciliar» se aplica sobre la página y el total ' +
-        'que devuelve sigue siendo el del padrón entero, así que decía 14 422 sobre un padrón de 14 422. ' +
-        'La lista se recorre desde Rentas; la cifra se queda sin decir hasta que el backend la publique.',
-      conteo: SIN_DATO,
-      tono: 'warn' as Tono,
+      detalle: conciliacion.cargando
+        ? 'Contando los predios con ficha vigente que no declararon el ejercicio…'
+        : conciliacion.error !== null
+          ? /* El mensaje del backend no siempre acaba en punto, y sin el las dos
+               frases se leen como una sola: «…no trae un token valido Mientras
+               no se lea…». */
+            'No se pudo contar: ' +
+            conciliacion.error.mensaje.replace(/\.?$/, '.') +
+            (conciliacion.error.codigo === 'SIN_PRIVILEGIO'
+              ? ' El recuento pide el mismo acceso que la consulta de fichas.'
+              : '') +
+            ' Mientras no se lea, la cifra no se dice: la de la grilla no sirve para contar.'
+          : conciliacion.datos
+            ? `${conciliacion.datos.noConciliados.toLocaleString('es-PE')} de ${conciliacion.datos.total.toLocaleString('es-PE')} predios con ficha vigente al ` +
+              `${conciliacion.datos.aLaFecha} no declararon ${conciliacion.datos.ejercicio}. ` +
+              `Tienen ficha catastral y no generan deuda predial; la lista se recorre desde Rentas.`
+            : 'Tienen ficha catastral y no generan deuda predial. La lista se recorre desde Rentas.',
+      conteo: conciliacion.cargando
+        ? '…'
+        : conciliacion.datos
+          ? conciliacion.datos.noConciliados.toLocaleString('es-PE')
+          : SIN_DATO,
+      tono: (conciliacion.datos && conciliacion.datos.noConciliados === 0 ? 'ok' : 'warn') as Tono,
       dest: 'predios',
     },
     {

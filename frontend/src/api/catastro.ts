@@ -451,28 +451,51 @@ export function listarDepreciacion(anio: number, senal?: AbortSignal): Promise<D
 
 
 /**
- * La conciliacion catastro↔rentas (ADR-0015).
+ * El recuento de la conciliacion catastro↔rentas. Es
+ * `ResumenDeConciliacionResource`, campo por campo (#564).
+ *
+ * Los tres numeros vienen con sus dos referencias y ninguna sobra: **no existe
+ * «sin conciliar», existe «sin conciliar a 2026»** (regla 9, RNF-075) —el padron
+ * afecto se rehace cada ejercicio, y declarar 2024 no concilia 2026—, y
+ * `aLaFecha` porque la poblacion es la de las fichas vigentes ESE dia.
+ *
+ * `noConciliados` **llega restado del servidor y no se recompone aqui**: es una
+ * cifra, componerla en la pantalla es lo que RNF-083 prohibe, y restarla contra
+ * el total de otra lectura es exactamente el defecto que este endpoint cierra.
+ */
+export type ResumenDeConciliacion = {
+  ejercicio: number;
+  aLaFecha: string;
+  total: number;
+  conciliados: number;
+  noConciliados: number;
+};
+
+/**
+ * La conciliacion catastro↔rentas, contada (ADR-0015, #564).
  *
  * **Vive bajo `/catastro/fichas/conciliacion` y la sirve `rentas`**: el dato que
  * distingue una ficha conciliada —si el predio declaro— es de rentas, y catastro
  * no puede depender de el sin cerrar un ciclo de modulos.
  *
- * `conciliadaConRentas=No` exige ademas el permiso de fiscalizacion: es la lista
- * de quien tiene ficha y no declara, y esa lista no la ve cualquiera.
+ * **Esta es la unica forma de contar la conciliacion, y hace falta una aparte
+ * porque la grilla no sirve para eso**: en `GET /catastro/fichas/conciliacion` el
+ * filtro se aplica sobre la pagina ya devuelta y su `totalElementos` sigue siendo
+ * el del padron SIN filtrar, asi que con `conciliadaConRentas=No` decia 14 422
+ * «sin conciliar» sobre un padron de 14 422 predios en Catacaos. Aquella sirve
+ * para RECORRER la lista; para contarla, esta.
  *
- * **Su `totalElementos` NO cuenta lo que el filtro dice.** El filtro se aplica
- * sobre la pagina ya devuelta y el total sigue siendo el del padron sin filtrar
- * —lo dice el javadoc de `ConsultaDeConciliacion`—, asi que
- * `contarFichas({conciliadaConRentas:'No'}).totalElementos` es el padron entero:
- * en Catacaos, 14 422 «sin conciliar» sobre 14 422 predios. Por eso el panel de
- * catastro **no la llama** y dice «—» con su motivo. Sirve para RECORRER la lista
- * pagina a pagina; para contarla, no.
+ * Y a diferencia de aquella con `No`, esta **no exige el permiso de
+ * fiscalizacion** (`fisc_omisos`) y **no deja fila en la bitacora**: aquella
+ * nombra —es la lista de a quien no le va a llegar recibo— y esta cuenta. Sigue
+ * pidiendo el acceso de la pantalla, `consulta_fichas`, que es lo que puede
+ * contestar `403` en un perfil que no la tenga.
  */
-export function contarFichas(
-  parametros: { conciliadaConRentas?: 'Si' | 'No' },
+export function resumenDeConciliacion(
+  parametros: { ejercicio?: string; fecha?: string },
   senal?: AbortSignal,
-): Promise<RespuestaPaginada<unknown>> {
-  return solicitar('/catastro/fichas/conciliacion', { parametros: { ...parametros, tamano: 1 }, senal });
+): Promise<ResumenDeConciliacion> {
+  return solicitar('/catastro/fichas/conciliacion/resumen', { parametros, senal });
 }
 
 
