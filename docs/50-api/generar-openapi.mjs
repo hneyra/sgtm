@@ -1482,6 +1482,50 @@ const OPERACIONES_ADICIONALES = {
   // correlativo de `dj_correlativo` y la plantilla parametrizada de D-09.
   declaracion_jurada: [
     {
+      operationId: 'hoja_de_declaracion_jurada',
+      metodo: 'get',
+      ruta: '/api/v1/rentas/declaraciones/{djNro}/hoja',
+      titulo: 'Hoja resumen de la declaración jurada',
+      parametros: [
+        { nombre: 'djNro', en: 'path', requerido: true, descripcion: 'Número de la declaración' },
+        {
+          nombre: 'ano',
+          requerido: true,
+          ejemplo: '2026',
+          descripcion: 'Ejercicio de la declaración',
+        },
+        {
+          nombre: 'fecha',
+          ejemplo: '2026-03-01',
+          descripcion:
+            'Fecha de corte a la que se resuelven el domicilio y la titularidad (regla 9); si' +
+            ' falta, hoy',
+        },
+      ],
+      descripcion: bloque(`
+        Lo que la hoja resumen consigna: el **declarante** —código, nombre, documento y domicilio
+        fiscal **vigente a la fecha**—, sus **predios** con su % de propiedad, y las **cifras** de
+        la última determinación predial del ejercicio (#563).
+
+        Es el único documento del módulo pensado para **imprimirse y firmarse** —termina en
+        «Declaro bajo juramento…» y dos líneas de firma— y todo lo que consignaba venía del juego
+        de datos de la maqueta: el nombre y el DNI de otra persona, dos predios que no son suyos y
+        un «total a pagar». Una vez impresa y firmada, una hoja así **no se distingue de una
+        correcta**, y a diferencia de una pantalla nadie la vuelve a mirar contra la base.
+
+        **Un campo nulo es un campo que no hay.** Sin determinación del ejercicio no hay autovalúo,
+        ni valúo afecto, ni impuesto: publicar cero sería escribir «no debe nada» en un papel que
+        alguien firma. Y ni siquiera con determinación viajan el **derecho de emisión** y el
+        **total a pagar**: la determinación guarda la base y el impuesto, no el derecho, que es
+        \`DERECHO_EMISION_PREDIAL\` del conjunto sellado —cifra de ordenanza local, D-02b—.
+
+        \`faltan\` es una **lista de motivos**, no un booleano: «no se puede imprimir» sin decir por
+        qué es lo que hace que alguien lo imprima igual desde otro sitio.
+
+        Una declaración que no existe es **404**, no una hoja vacía.
+      `),
+    },
+    {
       operationId: 'presentar_declaracion_jurada',
       metodo: 'post',
       ruta: '/api/v1/rentas/declaraciones',

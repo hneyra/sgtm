@@ -19,6 +19,7 @@ import pe.gob.sgtm.autorizacion.RequiereAcceso;
 import pe.gob.sgtm.dominio.Ejercicio;
 import pe.gob.sgtm.dominio.Observacion;
 import pe.gob.sgtm.parametros.LectorDeParametros;
+import pe.gob.sgtm.rentas.aplicacion.ConsultaDeLaHojaDeDeclaracion;
 import pe.gob.sgtm.rentas.aplicacion.ConsultasDeRentas;
 import pe.gob.sgtm.rentas.aplicacion.RegistrarDeclaracionJurada;
 import pe.gob.sgtm.rentas.dominio.DeclaracionJurada;
@@ -56,11 +57,70 @@ public class DeclaracionJuradaController {
 
     private final ConsultasDeRentas consultas;
     private final RegistrarDeclaracionJurada actos;
+    private final ConsultaDeLaHojaDeDeclaracion hoja;
+    private final java.time.Clock reloj;
 
     public DeclaracionJuradaController(
-            ConsultasDeRentas consultas, RegistrarDeclaracionJurada actos) {
+            ConsultasDeRentas consultas,
+            RegistrarDeclaracionJurada actos,
+            ConsultaDeLaHojaDeDeclaracion hoja,
+            java.time.Clock reloj) {
         this.consultas = consultas;
         this.actos = actos;
+        this.hoja = hoja;
+        this.reloj = reloj;
+    }
+
+    /**
+     * La hoja resumen que se imprime y se firma (#563).
+     *
+     * <p>Es el <b>unico documento del modulo pensado para salir en papel</b>, y todo lo que
+     * consignaba venia del juego de datos de la maqueta: el nombre y el DNI de otra persona, dos
+     * predios que no son suyos y un «total a pagar». Una vez impresa y firmada, una hoja asi no se
+     * distingue de una correcta, y a diferencia de una pantalla nadie la vuelve a mirar contra la
+     * base.
+     *
+     * <p>Devuelve lo que el sistema <b>tiene</b> —el declarante con su domicilio vigente a la
+     * fecha, sus predios con su {@code %} de propiedad, y las cifras de la ultima determinacion del
+     * ejercicio— y una lista {@code faltan} con lo que no puede consignar todavia, cada cosa con su
+     * motivo. Un campo nulo es un campo que no hay: publicar cero seria escribir «no debe nada» en
+     * un papel que alguien firma.
+     *
+     * <p>Una DJ que no existe es <b>404</b>, no una hoja vacia.
+     */
+    @GetMapping("/{djNro}/hoja")
+    @Transactional(readOnly = true)
+    public HojaDeDeclaracionResource hoja(
+            @PathVariable String djNro,
+            @RequestParam String ano,
+            @RequestParam(required = false) @Nullable String fecha) {
+        return hoja.de(djNro, ejercicioDe(ano), fechaDeCorteDe(fecha))
+                .map(HojaDeDeclaracionResource::de)
+                .orElseThrow(
+                        () ->
+                                new ProblemaDeNegocio(
+                                        CodigoDeError.NO_ENCONTRADO,
+                                        "No hay ninguna declaracion jurada con ese numero en ese"
+                                                + " año"));
+    }
+
+    /**
+     * La fecha de corte de la hoja; ausente, hoy.
+     *
+     * <p>No es {@code fechaDe}: aquella exige el campo —es la fecha de presentacion, que sin ella
+     * no hay acto— y esta admite que falte, porque «a que dia se lee» tiene una respuesta por
+     * omision razonable y la otra no.
+     */
+    private LocalDate fechaDeCorteDe(@Nullable String texto) {
+        if (texto == null || texto.isBlank()) {
+            return LocalDate.now(reloj);
+        }
+        try {
+            return LocalDate.parse(texto.strip());
+        } catch (DateTimeParseException malFormada) {
+            throw new ProblemaDeNegocio(
+                    CodigoDeError.VALIDACION, "La fecha va en formato AAAA-MM-DD: '" + texto + "'");
+        }
     }
 
     /**

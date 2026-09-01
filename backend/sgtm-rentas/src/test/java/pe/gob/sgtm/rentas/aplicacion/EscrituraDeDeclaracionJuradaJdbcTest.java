@@ -62,6 +62,7 @@ import pe.gob.sgtm.rentas.aplicacion.ConsultaDeConciliacion.FichaConciliada;
 import pe.gob.sgtm.rentas.dominio.PlantillaDeNumeroDeDeclaracion;
 import pe.gob.sgtm.rentas.infraestructura.ConciliacionRepositoryJdbc;
 import pe.gob.sgtm.rentas.infraestructura.DeclaracionJuradaRepositoryJdbc;
+import pe.gob.sgtm.rentas.infraestructura.DeterminacionRepositoryJdbc;
 import pe.gob.sgtm.rentas.infraestructura.web.DeclaracionJuradaController;
 import pe.gob.sgtm.web.ConfiguracionDeJson;
 import pe.gob.sgtm.web.ManejadorDeErrores;
@@ -165,7 +166,14 @@ class EscrituraDeDeclaracionJuradaJdbcTest {
                                         envolver(
                                                 new ConsultasDeRentas(
                                                         null, null, null, declaraciones)),
-                                        actos))
+                                        actos,
+                                        envolver(
+                                                new ConsultaDeLaHojaDeDeclaracion(
+                                                        declaraciones,
+                                                        padron,
+                                                        new PrediosDeLaHoja(),
+                                                        new DeterminacionRepositoryJdbc(jdbc))),
+                                        RELOJ))
                         .setControllerAdvice(new ManejadorDeErrores())
                         .setMessageConverters(
                                 new JacksonJsonHttpMessageConverter(
@@ -351,6 +359,135 @@ class EscrituraDeDeclaracionJuradaJdbcTest {
     }
 
     @Nested
+    @DisplayName("La hoja resumen que se imprime y se firma (#563)")
+    class LaHoja {
+
+        @Test
+        @DisplayName("consigna el declarante, sus predios y las cifras de la determinacion")
+        void consignaLoQueLaHojaDice() throws Exception {
+            String codigo = nuevoCodigoCatastral();
+            long predio = crearPredioConFicha(municipalidad, codigo);
+            String contribuyente = nuevoContribuyente(municipalidad);
+            long contribuyenteId = idDeContribuyente(contribuyente);
+            PrediosDeLaHoja.del(contribuyenteId, predio, codigo, "CALLE SANTA ROSA 116");
+            domicilioFiscal(contribuyenteId, "URB. SANTA ROSA - EL ALTO 116");
+            String numero = numeroDe(presentar(contribuyente, predio));
+            determinar(contribuyenteId, predio, "132196.75", "587.44");
+
+            String hoja = hojaDe(numero);
+
+            assertThat(hoja)
+                    .as("el declarante sale del padron, no de la maqueta")
+                    .contains("\"codigo\":\"" + contribuyente + "\"")
+                    .contains("\"nombre\":\"TITULAR, CIRCUITO\"")
+                    .contains("\"domicilioFiscal\":\"URB. SANTA ROSA - EL ALTO 116\"");
+            assertThat(hoja)
+                    .as("y sus predios de catastro, con su codigo y su direccion")
+                    .contains("\"codRefCatastral\":\"" + codigo + "\"")
+                    .contains("\"direccion\":\"CALLE SANTA ROSA 116\"");
+            assertThat(hoja)
+                    .as(
+                            "las cifras son las de la determinacion del ejercicio: el sistema no"
+                                    + " sabe valorizar un predio (#395), asi que el autovaluo se"
+                                    + " declara y de ahi sale")
+                    .contains("\"autovaluo\":\"132196.75\"")
+                    .contains("\"valuoAfectoTotal\":\"132196.75\"")
+                    .contains("\"impuestoInsoluto\":\"587.44\"");
+            assertThat(hoja)
+                    .as("y toda la hoja dice a que dia se leyo (regla 9)")
+                    .contains("\"aLaFecha\":");
+        }
+
+        @Test
+        @DisplayName("sin determinacion del ejercicio no inventa cifras: las nombra como ausentes")
+        void sinDeterminacionNoInventaCifras() throws Exception {
+            String codigo = nuevoCodigoCatastral();
+            long predio = crearPredioConFicha(municipalidad, codigo);
+            String contribuyente = nuevoContribuyente(municipalidad);
+            PrediosDeLaHoja.del(
+                    idDeContribuyente(contribuyente), predio, codigo, "CALLE SIN CIFRAS 1");
+            String numero = numeroDe(presentar(contribuyente, predio));
+
+            String hoja = hojaDe(numero);
+
+            assertThat(hoja)
+                    .as(
+                            "un cero se leeria como «no debe nada» en un papel que alguien firma,"
+                                    + " y una celda en blanco tambien")
+                    .contains("\"autovaluo\":null")
+                    .contains("\"valuoAfectoTotal\":null")
+                    .contains("\"impuestoInsoluto\":null");
+            assertThat(hoja)
+                    .as("y la hoja dice QUE falta y donde se resuelve")
+                    .contains("No hay determinacion del impuesto predial del ejercicio 2026");
+            assertThat(hoja)
+                    .as("el predio sigue saliendo, con su % de titularidad: eso si es un dato")
+                    .contains("\"codRefCatastral\":\"" + codigo + "\"");
+        }
+
+        @Test
+        @DisplayName("el derecho de emision y el total a pagar no se publican, y se dice por que")
+        void elDerechoDeEmisionNoSePublica() throws Exception {
+            String codigo = nuevoCodigoCatastral();
+            long predio = crearPredioConFicha(municipalidad, codigo);
+            String contribuyente = nuevoContribuyente(municipalidad);
+            long contribuyenteId = idDeContribuyente(contribuyente);
+            PrediosDeLaHoja.del(contribuyenteId, predio, codigo, "CALLE CON CIFRAS 2");
+            String numero = numeroDe(presentar(contribuyente, predio));
+            determinar(contribuyenteId, predio, "100000.00", "400.00");
+
+            String hoja = hojaDe(numero);
+
+            assertThat(hoja)
+                    .as(
+                            "la determinacion guarda la base y el impuesto, no el derecho: es una"
+                                    + " cifra de ordenanza local y sumarla con un cero inventado es"
+                                    + " lo que este issue existe para impedir")
+                    .contains("DERECHO_EMISION_PREDIAL")
+                    .doesNotContain("totalAPagar")
+                    .doesNotContain("derechoDeEmision\":");
+        }
+
+        @Test
+        @DisplayName("una DJ que no existe es 404, no una hoja vacia")
+        void unaDeclaracionQueNoExisteEs404() throws Exception {
+            MvcResult resultado =
+                    mvc.perform(
+                                    org.springframework.test.web.servlet.request
+                                            .MockMvcRequestBuilders.get(
+                                                    "/api/v1/rentas/declaraciones/DJ-2026-999999/hoja")
+                                            .param("ano", "2026"))
+                            .andReturn();
+
+            assertThat(resultado.getResponse().getStatus()).isEqualTo(404);
+        }
+
+        @Test
+        @DisplayName("el domicilio es el VIGENTE a la fecha de corte, no el ultimo")
+        void elDomicilioEsElVigenteALaFecha() throws Exception {
+            String codigo = nuevoCodigoCatastral();
+            long predio = crearPredioConFicha(municipalidad, codigo);
+            String contribuyente = nuevoContribuyente(municipalidad);
+            long contribuyenteId = idDeContribuyente(contribuyente);
+            PrediosDeLaHoja.del(contribuyenteId, predio, codigo, "CALLE QUE SE MUDA 3");
+            domicilioFiscalConVigencia(
+                    contribuyenteId, "DONDE VIVIA EN MARZO 1", "2026-01-01", "2026-08-31");
+            domicilioFiscalConVigencia(
+                    contribuyenteId, "DONDE VIVE DESDE SETIEMBRE 2", "2026-09-01", null);
+            String numero = numeroDe(presentar(contribuyente, predio));
+
+            assertThat(hojaDe(numero, "2026-03-15"))
+                    .as(
+                            "la hoja de una DJ de marzo tiene que poder reimprimirse como se"
+                                    + " imprimio: resolver «el ultimo» la firmaria con la direccion"
+                                    + " de setiembre")
+                    .contains("DONDE VIVIA EN MARZO 1")
+                    .doesNotContain("DONDE VIVE DESDE SETIEMBRE 2");
+            assertThat(hojaDe(numero, "2026-09-15")).contains("DONDE VIVE DESDE SETIEMBRE 2");
+        }
+    }
+
+    @Nested
     @DisplayName("Lo que el endpoint rechaza")
     class LoQueRechaza {
 
@@ -458,6 +595,121 @@ class EscrituraDeDeclaracionJuradaJdbcTest {
                 .andReturn();
     }
 
+    private static String hojaDe(String numero) throws Exception {
+        return hojaDe(numero, null);
+    }
+
+    private static String hojaDe(String numero, @org.jspecify.annotations.Nullable String fecha)
+            throws Exception {
+        var peticion =
+                org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get(
+                                "/api/v1/rentas/declaraciones/{djNro}/hoja", numero)
+                        .param("ano", "2026");
+        if (fecha != null) {
+            peticion = peticion.param("fecha", fecha);
+        }
+        return mvc.perform(peticion).andReturn().getResponse().getContentAsString();
+    }
+
+    private static long idDeContribuyente(String codigo) throws SQLException {
+        try (Connection app = base.conexion(BaseDeDatosDePrueba.APP)) {
+            ContextoDeTenant.fijar(app, municipalidad);
+            try (PreparedStatement sentencia =
+                    app.prepareStatement(
+                            "SELECT id FROM contribuyente WHERE codigo_contribuyente = ?")) {
+                sentencia.setString(1, codigo);
+                try (ResultSet fila = sentencia.executeQuery()) {
+                    fila.next();
+                    return fila.getLong(1);
+                }
+            }
+        }
+    }
+
+    private static void domicilioFiscal(long contribuyenteId, String direccion)
+            throws SQLException {
+        domicilioFiscalConVigencia(contribuyenteId, direccion, "2026-01-01", null);
+    }
+
+    private static void domicilioFiscalConVigencia(
+            long contribuyenteId,
+            String direccion,
+            String desde,
+            @org.jspecify.annotations.Nullable String hasta)
+            throws SQLException {
+        try (Connection app = base.conexion(BaseDeDatosDePrueba.APP)) {
+            ContextoDeTenant.fijar(app, municipalidad);
+            try (PreparedStatement sentencia =
+                    app.prepareStatement(
+                            "INSERT INTO domicilio (municipalidad_id, contribuyente_id, tipo,"
+                                    + " direccion, vigencia_desde, vigencia_hasta,"
+                                    + " documento_origen)"
+                                    + " VALUES (?, ?, 'FISCAL', ?, CAST(? AS date),"
+                                    + "         CAST(? AS date), 'siembra')")) {
+                sentencia.setLong(1, municipalidad);
+                sentencia.setLong(2, contribuyenteId);
+                sentencia.setString(3, direccion);
+                sentencia.setString(4, desde);
+                sentencia.setString(5, hasta);
+                sentencia.executeUpdate();
+                app.commit();
+            }
+        }
+    }
+
+    /**
+     * Una determinacion predial del ejercicio, con su detalle por predio.
+     *
+     * <p>Se siembra por SQL y no por el caso de uso a proposito: lo que la hoja mide es que LEE la
+     * determinacion, y hacerla pasar por el calculo obligaria a sellar un conjunto con el cuadro
+     * entero — que es D-02a y no es lo que esta prueba examina.
+     */
+    private static void determinar(
+            long contribuyenteId, long predioId, String autovaluo, String impuesto)
+            throws SQLException {
+        try (Connection app = base.conexion(BaseDeDatosDePrueba.APP)) {
+            ContextoDeTenant.fijar(app, municipalidad);
+            long determinacion;
+            try (PreparedStatement cabecera =
+                    app.prepareStatement(
+                            "INSERT INTO determinacion (municipalidad_id, ejercicio, tributo,"
+                                    + " contribuyente_id, conjunto_id, base_imponible,"
+                                    + " monto_determinado, reglas_aplicadas, usuario_calculo)"
+                                    + " SELECT ?, 2026, 'PREDIAL', ?, c.id, CAST(? AS dinero),"
+                                    + "        CAST(? AS dinero), ARRAY['RT-011'], 'siembra'"
+                                    + "   FROM conjunto_parametros c"
+                                    + "  WHERE c.municipalidad_id = ? AND c.ejercicio = 2026"
+                                    + "  ORDER BY c.id DESC LIMIT 1"
+                                    + " RETURNING id")) {
+                cabecera.setLong(1, municipalidad);
+                cabecera.setLong(2, contribuyenteId);
+                cabecera.setString(3, autovaluo);
+                cabecera.setString(4, impuesto);
+                cabecera.setLong(5, municipalidad);
+                try (ResultSet fila = cabecera.executeQuery()) {
+                    fila.next();
+                    determinacion = fila.getLong(1);
+                }
+            }
+            try (PreparedStatement detalle =
+                    app.prepareStatement(
+                            "INSERT INTO determinacion_predio_detalle (municipalidad_id,"
+                                    + " ejercicio, determinacion_id, predio_id, autovaluo,"
+                                    + " valuo_exonerado, porcentaje_propiedad,"
+                                    + " base_imponible_predio)"
+                                    + " VALUES (?, 2026, ?, ?, CAST(? AS dinero), 0, 100,"
+                                    + "         CAST(? AS dinero))")) {
+                detalle.setLong(1, municipalidad);
+                detalle.setLong(2, determinacion);
+                detalle.setLong(3, predioId);
+                detalle.setString(4, autovaluo);
+                detalle.setString(5, autovaluo);
+                detalle.executeUpdate();
+            }
+            app.commit();
+        }
+    }
+
     private static MvcResult acto(String numero, String verbo, String observacion)
             throws Exception {
         return mvc.perform(
@@ -543,14 +795,46 @@ class EscrituraDeDeclaracionJuradaJdbcTest {
                     .optional();
         }
 
+        /** Lee la base de verdad: la hoja de #563 resuelve por aqui quien declara. */
         @Override
         public Map<Long, ResumenDeContribuyente> porIds(Set<Long> ids) {
-            return Map.of();
+            if (ids.isEmpty()) {
+                return Map.of();
+            }
+            Map<Long, ResumenDeContribuyente> encontrados = new java.util.LinkedHashMap<>();
+            jdbc.sql(
+                            "SELECT id, codigo_contribuyente, nombre_razon_social,"
+                                    + " tipo_documento, numero_documento"
+                                    + "  FROM contribuyente WHERE id = ANY(:ids)")
+                    .param("ids", ids.toArray(Long[]::new))
+                    .query(
+                            (fila, numero) ->
+                                    new ResumenDeContribuyente(
+                                            fila.getLong("id"),
+                                            fila.getString("codigo_contribuyente"),
+                                            fila.getString("nombre_razon_social"),
+                                            fila.getString("tipo_documento")
+                                                    + " "
+                                                    + fila.getString("numero_documento")))
+                    .list()
+                    .forEach(quien -> encontrados.put(quien.id(), quien));
+            return encontrados;
         }
 
+        /** El VIGENTE a la fecha, no el ultimo: la hoja de marzo se reimprime como se imprimio. */
         @Override
         public Optional<String> domicilioFiscalDe(long contribuyenteId, LocalDate fecha) {
-            return Optional.empty();
+            return jdbc.sql(
+                            "SELECT direccion FROM domicilio"
+                                    + " WHERE contribuyente_id = :contribuyente"
+                                    + "   AND tipo = 'FISCAL'"
+                                    + "   AND vigencia_desde <= :fecha"
+                                    + "   AND (vigencia_hasta IS NULL OR vigencia_hasta >= :fecha)"
+                                    + " ORDER BY vigencia_desde DESC LIMIT 1")
+                    .param("contribuyente", contribuyenteId)
+                    .param("fecha", fecha)
+                    .query(String.class)
+                    .optional();
         }
     }
 
@@ -773,6 +1057,42 @@ class EscrituraDeDeclaracionJuradaJdbcTest {
                 sentencia.executeUpdate();
                 app.commit();
             }
+        }
+    }
+
+    /**
+     * Los predios del contribuyente, en memoria.
+     *
+     * <p>Es un puerto de <b>catastro</b> y este archivo mide lo que rentas guarda: la DJ y la
+     * determinacion se leen de PostgreSQL de verdad, y de catastro se toma lo que la hoja necesita
+     * —el codigo, la direccion y el % de titularidad— sin arrastrar su esquema a esta prueba. Que
+     * la lectura de catastro funcione lo mide {@code PrediosDelContribuyenteCatastroTest}.
+     */
+    private static final class PrediosDeLaHoja
+            implements pe.gob.sgtm.catastro.PrediosDelContribuyente {
+
+        private static final Map<Long, List<pe.gob.sgtm.catastro.PredioDelContribuyente>> SUYOS =
+                new java.util.LinkedHashMap<>();
+
+        static void del(long contribuyenteId, long predioId, String codigo, String direccion) {
+            SUYOS.computeIfAbsent(contribuyenteId, quien -> new java.util.ArrayList<>())
+                    .add(
+                            new pe.gob.sgtm.catastro.PredioDelContribuyente(
+                                    predioId,
+                                    codigo,
+                                    "URBANO",
+                                    direccion,
+                                    pe.gob.sgtm.dominio.Porcentaje.total()));
+        }
+
+        static void limpiar() {
+            SUYOS.clear();
+        }
+
+        @Override
+        public List<pe.gob.sgtm.catastro.PredioDelContribuyente> de(
+                long contribuyenteId, LocalDate fecha) {
+            return List.copyOf(SUYOS.getOrDefault(contribuyenteId, List.of()));
         }
     }
 }
