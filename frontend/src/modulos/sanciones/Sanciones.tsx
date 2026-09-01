@@ -683,6 +683,14 @@ export default function Sanciones({ dest, onDest }: PantallaProps) {
     }
   };
 
+    /* El motivo del acto, en un solo sitio: lo lee el parrafo de al lado y lo
+     lleva el `title` del boton. Con dos copias, arreglar una y no la otra deja
+     al boton diciendo algo distinto de lo que se ve. */
+  const motivoDeLaCorrida = faltaObservacion
+    ? 'Falta la observación: sin ella el servidor no guarda nada.'
+    : texto('valDesde') === '' || texto('valHasta') === ''
+      ? 'Faltan las dos fechas del rango: el servidor exige exactamente uno de los dos caminos, y este es el del rango.'
+      : 'Registrar la corrida no emite ningún valor todavía.';
   const registrarLaCorrida = async () => {
     setEnviando(true);
     setFalloDelActo(null);
@@ -1242,17 +1250,23 @@ export default function Sanciones({ dest, onDest }: PantallaProps) {
               </p>
             </section>
 
+            {/* El motivo sale una vez y se usa dos: en el parrafo que se lee y en
+                el `title` del boton. Con dos copias, arreglar una y no la otra
+                deja al boton diciendo algo distinto de lo que hay al lado. */}
             <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>
-              <p style={{ margin: 0, flex: 1, minWidth: 180, fontSize: 12, color: 'var(--ink-3)', textWrap: 'pretty' }}>
-                {faltaObservacion
-                  ? 'Falta la observación: sin ella el servidor no guarda nada.'
-                  : texto('valDesde') === '' || texto('valHasta') === ''
-                    ? 'Faltan las dos fechas del rango: el servidor exige exactamente uno de los dos caminos, y este es el del rango.'
-                    : 'Registrar la corrida no emite ningún valor todavía.'}
+              {/* El motivo se enlaza con `aria-describedby`, no se deja sólo al
+                  lado: quien navega con teclado llega al botón y oye «Registrar
+                  la corrida, atenuado» sin nada más, y este párrafo se queda a
+                  la espalda del foco (RNF-082). El `title` cubre al que pasa el
+                  ratón por encima. */}
+              <p id="motivo-de-la-corrida" style={{ margin: 0, flex: 1, minWidth: 180, fontSize: 12, color: 'var(--ink-3)', textWrap: 'pretty' }}>
+                {motivoDeLaCorrida}
               </p>
               <button
                 onClick={registrarLaCorrida}
                 disabled={faltaObservacion || texto('valDesde') === '' || texto('valHasta') === '' || enviando}
+                aria-describedby="motivo-de-la-corrida"
+                title={faltaObservacion || texto('valDesde') === '' || texto('valHasta') === '' ? motivoDeLaCorrida : undefined}
                 className={!faltaObservacion && texto('valDesde') !== '' && texto('valHasta') !== '' && !enviando ? 'hov-acento-2' : undefined}
                 style={{ border: 0, borderRadius: 6, padding: '11px 22px', background: 'var(--accent)', color: '#fff', fontSize: 13.5, fontWeight: 500, cursor: !faltaObservacion && texto('valDesde') !== '' && texto('valHasta') !== '' && !enviando ? 'pointer' : 'not-allowed', opacity: !faltaObservacion && texto('valDesde') !== '' && texto('valHasta') !== '' && !enviando ? 1 : 0.5 }}
               >
