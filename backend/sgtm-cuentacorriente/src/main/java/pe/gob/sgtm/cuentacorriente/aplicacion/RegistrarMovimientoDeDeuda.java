@@ -1,12 +1,16 @@
 package pe.gob.sgtm.cuentacorriente.aplicacion;
 
 import java.util.ArrayList;
+import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Map;
+import org.jspecify.annotations.Nullable;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import pe.gob.sgtm.cuentacorriente.dominio.Asiento;
 import pe.gob.sgtm.cuentacorriente.dominio.AsientoRepository;
 import pe.gob.sgtm.cuentacorriente.dominio.CalculoDeDeuda;
+import pe.gob.sgtm.cuentacorriente.dominio.ClaveDeObligacion;
 import pe.gob.sgtm.cuentacorriente.dominio.ClaveDeSaldo;
 import pe.gob.sgtm.cuentacorriente.dominio.DeudaActualizada;
 import pe.gob.sgtm.cuentacorriente.dominio.MovimientoDeDeuda;
@@ -17,6 +21,8 @@ import pe.gob.sgtm.documentos.FormatoDeDocumento;
 import pe.gob.sgtm.dominio.Dinero;
 import pe.gob.sgtm.dominio.Observacion;
 import pe.gob.sgtm.dominio.PoliticaDeRedondeo;
+import pe.gob.sgtm.web.CodigoDeError;
+import pe.gob.sgtm.web.ProblemaDeNegocio;
 
 /**
  * Altas (nota de abono) y bajas (nota de cargo) de deuda (RF-043, RF-044, #24).
@@ -133,11 +139,84 @@ public class RegistrarMovimientoDeDeuda {
         // equivocada— sobre una deuda que ni siquiera se puede escribir (#597).
         registrarAsiento.exigirEjercicioAsentable(movimiento.clave().ejercicio());
 
-        List<Asiento> guardados = new ArrayList<>();
-        for (MovimientoDeDeuda deLaCuota : movimiento.enCadaCuota(cuotas)) {
+        List<MovimientoDeDeuda> porCuota = movimiento.enCadaCuota(cuotas);
+        for (MovimientoDeDeuda deLaCuota : porCuota) {
             if (deLaCuota.sentido() == SentidoDelMovimiento.BAJA) {
                 verificarQueNoExcedeLaDeuda(deLaCuota);
             }
+        }
+        return asentarYEmitir(
+                movimiento, porCuota, cuotas.etiqueta(), codigoContribuyente, observacion);
+    }
+
+    /**
+     * La baja de <b>una fila de la grilla</b>, repartida entre los periodos que la componen (#598).
+     *
+     * <h2>Por que hacia falta, y por que repartir es cosa del servidor</h2>
+     *
+     * <p>Las filas de {@code consulta_deuda} <b>agregan varios periodos</b>: {@code
+     * periodoDesde}/{@code periodoHasta} son el minimo y el maximo del grupo, no una obligacion. Un
+     * contribuyente aparece como «PREDIAL 2026 · periodos 0 - 9 · S/ 444,90» cuando la deuda esta
+     * en las cuotas 1, 2 y 3 a 148,30 cada una y las demas deben 0,00.
+     *
+     * <p>Con lo que habia, esa fila <b>no se podia dar de baja</b>:
+     *
+     * <ul>
+     *   <li>mandar {@code cuota = periodoDesde} con el importe agregado carga los 444,90 sobre la
+     *       cuota 0, que suele deber 0,00, y el servidor contesta «solo se deben 0.00» — un mensaje
+     *       que habla de importes cuando la causa es que la fila es un agregado;
+     *   <li>y el rango de #538 no sirve: el desglose se <b>repite</b> en cada cuota, no se reparte,
+     *       asi que «cuotas 0 a 9 por 444,90» intentaria extinguir 444,90 <b>diez veces</b>.
+     * </ul>
+     *
+     * <p>Repartir en la pantalla tampoco se puede: {@code ObligacionConDeudaResource} publica el
+     * total del grupo y <b>no el importe de cada periodo</b>, asi que quien atiende tendria que
+     * adivinar el reparto de un acto que extingue deuda del municipio. Lo sabe el servidor, y solo
+     * el, porque el reparto depende de cuanto queda vivo en cada cuota a la fecha valor.
+     *
+     * <p>Lo que se declara es el <b>total del acto</b>. Se recorren las cuotas de la primera a la
+     * ultima y a cada una se le asigna, por cada parte del desglose, lo menor entre lo que queda
+     * por repartir y lo que esa cuota debe. Las que no deben nada no producen asiento: un abono de
+     * cero deja el papel con lineas vacias y no dice nada. Y si al terminar sobra algo, el acto
+     * <b>no se hace</b>: es la misma guarda de {@link #verificarQueNoExcedeLaDeuda} un escalon mas
+     * arriba, con el mismo mensaje.
+     *
+     * @param cuotas acota el reparto a un tramo de la fila; {@code null} es la fila entera, que es
+     *     lo que la pantalla necesita — y lo unico que puede expresar cuando el grupo empieza en la
+     *     obligacion anual, porque {@link RangoDeCuotas} rechaza a proposito un rango que empiece
+     *     en 0
+     */
+    @Transactional
+    public Registro registrarRepartido(
+            MovimientoDeDeuda movimiento,
+            @Nullable RangoDeCuotas cuotas,
+            String codigoContribuyente,
+            Observacion observacion) {
+
+        if (movimiento.sentido() != SentidoDelMovimiento.BAJA) {
+            throw new ProblemaDeNegocio(
+                    CodigoDeError.VALIDACION,
+                    "Un alta no se reparte: incorporar deuda que no estaba no tiene tope contra el"
+                            + " que repartir. El reparto es de la baja de una fila que agrega varios"
+                            + " periodos");
+        }
+        registrarAsiento.exigirEjercicioAsentable(movimiento.clave().ejercicio());
+        List<MovimientoDeDeuda> partes = repartir(movimiento, cuotas);
+        return asentarYEmitir(
+                movimiento, partes, etiquetaDe(partes), codigoContribuyente, observacion);
+    }
+
+    // ------------------------------------------------------------------
+
+    private Registro asentarYEmitir(
+            MovimientoDeDeuda movimiento,
+            List<MovimientoDeDeuda> porCuota,
+            String etiquetaDeLasCuotas,
+            String codigoContribuyente,
+            Observacion observacion) {
+
+        List<Asiento> guardados = new ArrayList<>();
+        for (MovimientoDeDeuda deLaCuota : porCuota) {
             for (Asiento asiento : deLaCuota.enAsientos()) {
                 guardados.add(registrarAsiento.asentar(asiento, observacion));
             }
@@ -149,11 +228,127 @@ public class RegistrarMovimientoDeDeuda {
                         FormatoDelMovimiento.tipoDe(movimiento.sentido()),
                         movimiento.clave().ejercicio(),
                         movimiento.documentoOrigen(),
-                        FormatoDelMovimiento.de(movimiento, cuotas, asentados, codigoContribuyente),
+                        FormatoDelMovimiento.de(
+                                movimiento, etiquetaDeLasCuotas, asentados, codigoContribuyente),
                         FormatoDeDocumento.PDF,
                         observacion);
 
         return new Registro(asentados, emision.registro().numero());
+    }
+
+    /**
+     * El reparto, cuota por cuota y parte por parte.
+     *
+     * <p>La deuda de <b>todos</b> los periodos se lee en una sola consulta y se agrupa en memoria:
+     * una consulta por cuota serian doce por acto, y doce mil en una corrida.
+     */
+    private List<MovimientoDeDeuda> repartir(
+            MovimientoDeDeuda movimiento, @Nullable RangoDeCuotas cuotas) {
+
+        Dinero insoluto = movimiento.insoluto();
+        Dinero reajuste = movimiento.reajuste();
+        Dinero interes = movimiento.interes();
+        Dinero gasto = movimiento.gasto();
+
+        List<MovimientoDeDeuda> partes = new ArrayList<>();
+        for (Map.Entry<Integer, DeudaActualizada> cuota : deudaPorCuota(movimiento).entrySet()) {
+            int periodo = cuota.getKey();
+            if (cuotas != null && (periodo < cuotas.desde() || periodo > cuotas.hasta())) {
+                continue;
+            }
+            DeudaActualizada debe = cuota.getValue();
+            Dinero deInsoluto = loMenor(insoluto, debe.insoluto());
+            Dinero deReajuste = loMenor(reajuste, debe.reajuste());
+            Dinero deInteres = loMenor(interes, debe.interes());
+            Dinero deGasto = loMenor(gasto, debe.gasto());
+            if (deInsoluto.esCero()
+                    && deReajuste.esCero()
+                    && deInteres.esCero()
+                    && deGasto.esCero()) {
+                continue;
+            }
+            insoluto = insoluto.menos(deInsoluto);
+            reajuste = reajuste.menos(deReajuste);
+            interes = interes.menos(deInteres);
+            gasto = gasto.menos(deGasto);
+            partes.add(
+                    new MovimientoDeDeuda(
+                            movimiento.sentido(),
+                            new ClaveDeSaldo(
+                                    movimiento.clave().contribuyenteId(),
+                                    movimiento.clave().tributo(),
+                                    movimiento.clave().ejercicio(),
+                                    periodo,
+                                    movimiento.clave().predioId(),
+                                    movimiento.clave().vehiculoId()),
+                            deInsoluto,
+                            deReajuste,
+                            deInteres,
+                            deGasto,
+                            movimiento.fase(),
+                            movimiento.fechaValor(),
+                            movimiento.documentoOrigen(),
+                            movimiento.referenciaExterna()));
+        }
+
+        sinRepartir("insoluto", insoluto, movimiento.insoluto());
+        sinRepartir("reajuste", reajuste, movimiento.reajuste());
+        sinRepartir("interes", interes, movimiento.interes());
+        sinRepartir("gasto", gasto, movimiento.gasto());
+        return List.copyOf(partes);
+    }
+
+    /** Lo que debe cada cuota de la obligacion a la fecha valor, de la primera a la ultima. */
+    private Map<Integer, DeudaActualizada> deudaPorCuota(MovimientoDeDeuda movimiento) {
+        Map<Integer, List<Asiento>> porCuota = new LinkedHashMap<>();
+        for (Asiento asiento :
+                asientos.deTodosLosPeriodosDe(ClaveDeObligacion.de(movimiento.clave()))) {
+            porCuota.computeIfAbsent(
+                            asiento.periodo() == null ? 0 : asiento.periodo(),
+                            cual -> new ArrayList<>())
+                    .add(asiento);
+        }
+        Map<Integer, DeudaActualizada> deudas = new LinkedHashMap<>();
+        porCuota.forEach(
+                (periodo, delPeriodo) ->
+                        deudas.put(
+                                periodo,
+                                calculo.deudaActualizadaA(
+                                        delPeriodo, movimiento.fechaValor(), redondeo)));
+        return deudas;
+    }
+
+    /**
+     * Que cuotas cubrio el acto, como se escribe en el papel.
+     *
+     * <p>Las que de verdad recibieron importe, no el rango que se pidio: la fila decia «periodos 0
+     * - 9» y lo que se extinguio fueron las cuotas 1, 2 y 3. Un papel que dijera «0 a 9» prometeria
+     * diez obligaciones movidas donde se movieron tres.
+     */
+    private static String etiquetaDe(List<MovimientoDeDeuda> partes) {
+        if (partes.isEmpty()) {
+            return RangoDeCuotas.ANUAL.etiqueta();
+        }
+        List<String> cuotas = new ArrayList<>();
+        for (MovimientoDeDeuda parte : partes) {
+            int periodo = parte.clave().periodo();
+            cuotas.add(periodo == 0 ? RangoDeCuotas.ANUAL.etiqueta() : Integer.toString(periodo));
+        }
+        return String.join(", ", cuotas);
+    }
+
+    private static Dinero loMenor(Dinero uno, Dinero otro) {
+        return uno.esMayorQue(otro) ? otro : uno;
+    }
+
+    /**
+     * Lo que no cupo en ninguna cuota. Se dice con el mismo mensaje que la baja de una sola: lo que
+     * se intento extinguir y lo que de verdad habia.
+     */
+    private static void sinRepartir(String parte, Dinero sobrante, Dinero declarado) {
+        if (!sobrante.esCero()) {
+            throw new BajaMayorQueLaDeuda(parte, declarado, declarado.menos(sobrante));
+        }
     }
 
     /**

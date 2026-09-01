@@ -208,12 +208,34 @@ public class MovimientosDeDeudaController {
 
         RegistrarMovimientoDeDeuda.Registro registro;
         try {
-            registro = movimientos.registrar(movimiento, cuotas, codigoContribuyente, observacion);
+            registro =
+                    Boolean.TRUE.equals(peticion.repartir())
+                            ? movimientos.registrarRepartido(
+                                    movimiento,
+                                    declaraSusCuotas(peticion) ? cuotas : null,
+                                    codigoContribuyente,
+                                    observacion)
+                            : movimientos.registrar(
+                                    movimiento, cuotas, codigoContribuyente, observacion);
         } catch (RegistrarMovimientoDeDeuda.BajaMayorQueLaDeuda excede) {
             throw new ProblemaDeNegocio(CodigoDeError.VALIDACION, mensajeDe(excede));
         }
         return MovimientoDeDeudaResource.de(
                 sentido.name(), registro.asientos(), registro.numeroDeDocumento());
+    }
+
+    /**
+     * Si la peticion dijo <b>ella</b> que cuotas cubre, o si lo dejo abierto (#598).
+     *
+     * <p>Hace falta porque {@link #cuotasDe} devuelve {@link RangoDeCuotas#ANUAL} en los dos casos
+     * —«cuota 0» y «sin cuota»— y con {@code repartir} no significan lo mismo: sin cuota, el acto
+     * cubre <b>la fila entera</b>, que es lo que la pantalla necesita y lo unico que se puede
+     * expresar cuando el grupo empieza en la obligacion anual.
+     */
+    private static boolean declaraSusCuotas(PeticionDeMovimiento peticion) {
+        return peticion.cuota() != null
+                || peticion.cuotaDesde() != null
+                || peticion.cuotaHasta() != null;
     }
 
     /**
@@ -385,6 +407,7 @@ public class MovimientosDeDeudaController {
             @Nullable Integer cuota,
             @Nullable Integer cuotaDesde,
             @Nullable Integer cuotaHasta,
+            @Nullable Boolean repartir,
             @Nullable Long predioId,
             @Nullable Long vehiculoId,
             @Nullable String insoluto,

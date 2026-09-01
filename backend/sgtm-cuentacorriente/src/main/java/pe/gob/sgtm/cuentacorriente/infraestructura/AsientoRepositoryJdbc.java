@@ -16,6 +16,7 @@ import pe.gob.sgtm.compartido.Paginacion;
 import pe.gob.sgtm.cuentacorriente.dominio.Asiento;
 import pe.gob.sgtm.cuentacorriente.dominio.AsientoRepository;
 import pe.gob.sgtm.cuentacorriente.dominio.CargoAgregado;
+import pe.gob.sgtm.cuentacorriente.dominio.ClaveDeObligacion;
 import pe.gob.sgtm.cuentacorriente.dominio.ClaveDeSaldo;
 import pe.gob.sgtm.cuentacorriente.dominio.Concepto;
 import pe.gob.sgtm.cuentacorriente.dominio.CriterioDeAltasBajas;
@@ -166,6 +167,33 @@ public class AsientoRepositoryJdbc extends RepositorioJdbc implements AsientoRep
                 .param("tributo", clave.tributo())
                 .param("ejercicio", clave.ejercicio().valor())
                 .param("periodo", clave.periodo())
+                .param("predio", clave.predioId() == null ? 0L : clave.predioId())
+                .param("vehiculo", clave.vehiculoId() == null ? 0L : clave.vehiculoId())
+                .query(AsientoRepositoryJdbc::mapear)
+                .list();
+    }
+
+    /**
+     * Igual que {@link #deLaObligacion}, sin la condicion del periodo (#598).
+     *
+     * <p>El orden es por periodo y despues por identificador: el reparto de una baja recorre las
+     * cuotas de la primera a la ultima, y ese orden es parte de lo que la prueba comprueba.
+     */
+    @Override
+    public List<Asiento> deTodosLosPeriodosDe(ClaveDeObligacion clave) {
+        return jdbc().sql(
+                        "SELECT "
+                                + COLUMNAS
+                                + DESDE
+                                + " WHERE a.contribuyente_id = :contribuyente"
+                                + "   AND a.tributo = :tributo"
+                                + "   AND a.ejercicio = :ejercicio"
+                                + "   AND COALESCE(a.predio_id, 0) = :predio"
+                                + "   AND COALESCE(a.vehiculo_id, 0) = :vehiculo"
+                                + " ORDER BY COALESCE(a.periodo, 0), a.id")
+                .param("contribuyente", clave.contribuyenteId())
+                .param("tributo", clave.tributo())
+                .param("ejercicio", clave.ejercicio().valor())
                 .param("predio", clave.predioId() == null ? 0L : clave.predioId())
                 .param("vehiculo", clave.vehiculoId() == null ? 0L : clave.vehiculoId())
                 .query(AsientoRepositoryJdbc::mapear)
