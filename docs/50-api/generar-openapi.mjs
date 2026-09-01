@@ -795,6 +795,30 @@ const OPERACIONES_ADICIONALES = {
         ' sector y no cambia.',
     },
     {
+      operationId: 'listado_de_manzanas',
+      metodo: 'get',
+      ruta: '/api/v1/catastro/sectores/{codigo}/manzanas',
+      paginacion: true,
+      titulo: 'Manzanas del sector',
+      descripcion:
+        'Las manzanas del sector que identifica el código de la ruta, con lo que cuelga de cada' +
+        ' una: `predios` —los **activos** de ese sector que la declaran— y `lotes` —cuántos' +
+        ' valores de lote distintos hay entre ellos—. Que `lotes` sea menor que `predios` es lo' +
+        ' normal: tres departamentos de un mismo lote son tres predios y **un** lote. Hasta #537 el' +
+        ' backend sólo publicaba **cuántas** manzanas tiene un sector (`SectorResource.manzanas`) y' +
+        ' el alta de una, así que el árbol territorial no podía enumerarlas. **Pagina como el resto' +
+        ' de listados**, y hace falta: un sector de una municipalidad grande pasa de mil manzanas.' +
+        ' Un código de sector que no existe es **404**, no una página vacía: cero filas significa' +
+        ' «ese sector todavía no tiene manzanas», que es lo contrario. Exige LECTURA sobre' +
+        ' `sectores`, el mismo acceso que el listado de sectores —las manzanas no tienen pantalla' +
+        ' propia en el manual—. **No publica ningún `activa`**: `manzana` no tiene columna de' +
+        ' estado, porque una manzana no se edita ni se da de baja (su código es un tramo del código' +
+        ' catastral de sus predios), y un `true` constante sería un filtro que no filtra nada.',
+      descripcionesDeRuta: {
+        codigo: 'El sector, por su código; el mismo que identifica el sector en `PUT` y en el alta',
+      },
+    },
+    {
       operationId: 'registrar_manzana',
       metodo: 'post',
       ruta: '/api/v1/catastro/sectores/{codigo}/manzanas',

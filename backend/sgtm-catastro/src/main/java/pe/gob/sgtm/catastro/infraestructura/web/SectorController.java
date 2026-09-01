@@ -20,7 +20,9 @@ import pe.gob.sgtm.autorizacion.RequiereAcceso;
 import pe.gob.sgtm.catastro.aplicacion.ConsultaDeSectores;
 import pe.gob.sgtm.catastro.aplicacion.RegistrarManzana;
 import pe.gob.sgtm.catastro.aplicacion.RegistrarSector;
+import pe.gob.sgtm.catastro.dominio.ManzanaConConteos;
 import pe.gob.sgtm.catastro.dominio.Sector;
+import pe.gob.sgtm.compartido.Pagina;
 import pe.gob.sgtm.dominio.Observacion;
 import pe.gob.sgtm.web.Api;
 import pe.gob.sgtm.web.CodigoDeError;
@@ -30,7 +32,8 @@ import pe.gob.sgtm.web.RespuestaPaginada;
 
 /**
  * Catalogo territorial: {@code GET/POST /api/v1/catastro/sectores}, {@code PUT
- * /api/v1/catastro/sectores/{codigo}} y {@code POST /api/v1/catastro/sectores/{codigo}/manzanas}.
+ * /api/v1/catastro/sectores/{codigo}} y {@code GET/POST
+ * /api/v1/catastro/sectores/{codigo}/manzanas}.
  *
  * <p>Es la operacion {@code sectores} del contrato —«Sectores, manzanas y lotes»—. Se publicaba
  * solo el listado (#16); con #290 gana el lado de escritura que el manual pide en su pantalla de
@@ -80,6 +83,13 @@ public class SectorController {
 
     /** Por codigo: el codigo del sector es un tramo del codigo catastral, y se lee en ese orden. */
     private static final String ORDEN_POR_OMISION = "codigo";
+
+    /**
+     * Y las manzanas, tambien por codigo: es otro tramo del mismo codigo, y es como se recorre una
+     * manzana tras otra al sanear una zona. Ademas es unico dentro del sector, asi que ordena de
+     * forma total y dos paginas consecutivas no pueden repetir una fila ni saltarse otra.
+     */
+    private static final String ORDEN_DE_MANZANAS = "codigo";
 
     private final ConsultaDeSectores consulta;
     private final RegistrarSector registrarSector;
@@ -187,6 +197,36 @@ public class SectorController {
     }
 
     /**
+     * Las manzanas de un sector, con <b>los conteos de cada una</b>: predios activos y lotes
+     * (#537).
+     *
+     * <p><b>Pagina como el resto de listados</b>, y no es una formalidad: un sector de una
+     * municipalidad grande pasa de mil manzanas, y devolverlas todas obligaria a la interfaz a
+     * dibujarlas todas para poder ensenar las diez primeras del arbol.
+     *
+     * <p><b>Un sector que no existe es {@code 404}, no una pagina vacia.</b> Las dos cosas se
+     * parecen mucho —cero filas— y significan lo contrario: «ese codigo no esta en el catalogo» y
+     * «ese sector todavia no tiene manzanas». La diferencia la lleva el {@link java.util.Optional}
+     * que devuelve {@link ConsultaDeSectores#manzanasDelSector}, para que no se pueda perder por el
+     * camino.
+     *
+     * <p><b>Exige {@code LECTURA} sobre {@code sectores}</b>, el mismo acceso que el listado de
+     * sectores y por la misma razon que el alta de manzana: las manzanas no tienen pantalla propia
+     * en el manual —cuelgan del arbol territorial de «Sectores, manzanas y lotes»—, asi que no hay
+     * de donde sacar otro id de opcion. Lo hereda de la clase, que declara ese acceso con ese
+     * privilegio; no se repite aqui porque repetirlo no anadiria nada y la regla de ArchUnit admite
+     * la anotacion «en la clase o en cada endpoint».
+     */
+    @GetMapping("/{codigo}/manzanas")
+    public RespuestaPaginada<ManzanaResource> listarManzanas(
+            @PathVariable String codigo, ParametrosDePaginacion paginacion) {
+        Pagina<ManzanaConConteos> pagina =
+                consulta.manzanasDelSector(codigo, paginacion.aPaginacion(ORDEN_DE_MANZANAS))
+                        .orElseThrow(() -> sectorInexistente(codigo));
+        return RespuestaPaginada.de(pagina, ManzanaResource::de);
+    }
+
+    /**
      * Alta de una manzana dentro de un sector.
      *
      * <p><b>No hay {@code PUT}: una manzana no se edita.</b> Es la misma razon que {@link
@@ -214,11 +254,12 @@ public class SectorController {
         // El 404 se decide con el sector leido, y no traduciendo la excepcion del caso de uso:
         // esa misma excepcion la lanza tambien un codigo de manzana fuera de rango, que si es un
         // 422. Distinguirlas por el texto del mensaje seria atarse a como esta redactado.
-        exigirSector(codigo);
+        Sector sector = exigirSector(codigo);
         try {
             return ManzanaResource.de(
                     registrarManzana.registrarPorCodigoDeSector(
-                            codigo, codigoDeManzana, observacion));
+                            codigo, codigoDeManzana, observacion),
+                    sector.codigo());
         } catch (DuplicateKeyException repetido) {
             throw new ProblemaDeNegocio(
                     CodigoDeError.CONFLICTO,
@@ -233,14 +274,14 @@ public class SectorController {
     // ------------------------------------------------------------------
 
     private Sector exigirSector(String codigo) {
-        return consulta.buscarPorCodigo(codigo)
-                .orElseThrow(
-                        () ->
-                                new ProblemaDeNegocio(
-                                        CodigoDeError.NO_ENCONTRADO,
-                                        "No hay ningun sector con codigo '"
-                                                + codigo
-                                                + "' en esta municipalidad"));
+        return consulta.buscarPorCodigo(codigo).orElseThrow(() -> sectorInexistente(codigo));
+    }
+
+    /** Un solo texto para el 404 del sector, lo pida el listado de manzanas o el alta de una. */
+    private static ProblemaDeNegocio sectorInexistente(String codigo) {
+        return new ProblemaDeNegocio(
+                CodigoDeError.NO_ENCONTRADO,
+                "No hay ningun sector con codigo '" + codigo + "' en esta municipalidad");
     }
 
     /**
