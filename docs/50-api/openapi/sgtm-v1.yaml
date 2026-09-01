@@ -3404,12 +3404,27 @@ paths:
     get:
       operationId: resolucion_determinacion_fisc
       summary: "Resolución de determinación de fiscalización"
-      description: "Valor emitido al cierre de un procedimiento de fiscalización: determina la diferencia de tributo por ejercicio y la multa tributaria que corresponde."
+      description: >-
+        El valor que cierra un procedimiento de fiscalización: determina por ejercicio la diferencia
+        de tributo y la multa tributaria, y es lo que arranca el plazo del art. 137 para reclamar
+        (#52, RF-057). Las cifras salen **nulas** mientras D-02a siga abierta, y eso no es un cero:
+        lo que no se puede determinar todavía no se dibuja como «no debe nada» (#198).
+
+        Con `?formato=PDF|XLS|RTF` la respuesta es el **documento**; sin él, el JSON que la pantalla
+        pinta (#593, RF-132). El papel **no se emite aquí**: la resolución ya se numeró y se guardó al
+        transferirla, así que esta ruta entrega los datos guardados dibujados en el formato pedido
+        —no recompone nada con datos vivos, que daría otro papel con el mismo número— y no registra
+        ninguna reimpresión.
       tags: ["Fiscalización"]
       parameters:
         - name: numero
           in: path
           required: true
+          schema: { type: string }
+        - name: formato
+          in: query
+          required: false
+          description: "PDF, XLS o RTF; sin el, la respuesta es JSON (RF-132)"
           schema: { type: string }
       responses:
         200:
