@@ -11,6 +11,7 @@ import pe.gob.sgtm.catastro.GestorDeTitularidad;
 import pe.gob.sgtm.dominio.Dinero;
 import pe.gob.sgtm.dominio.Observacion;
 import pe.gob.sgtm.dominio.Porcentaje;
+import pe.gob.sgtm.rentas.dominio.TipoTransferencia;
 import pe.gob.sgtm.rentas.dominio.Transferencia;
 import pe.gob.sgtm.rentas.dominio.TransferenciaRepository;
 import pe.gob.sgtm.rentas.dominio.Vehiculo;
@@ -66,7 +67,7 @@ public class RegistrarTransferencia {
             long predioId,
             long transferenteId,
             long adquirienteId,
-            String tipoTransferencia,
+            TipoTransferencia tipoTransferencia,
             LocalDate fecha,
             Dinero valorTransferencia,
             Porcentaje porcentajeTransferido,
@@ -113,7 +114,7 @@ public class RegistrarTransferencia {
     public Transferencia transferirVehiculo(
             long vehiculoId,
             long adquirienteId,
-            String tipoTransferencia,
+            TipoTransferencia tipoTransferencia,
             LocalDate fecha,
             Dinero valorTransferencia,
             boolean afectaAlcabala,

@@ -1,7 +1,6 @@
 package pe.gob.sgtm.rentas.dominio;
 
 import java.time.LocalDate;
-import java.util.Locale;
 import java.util.Objects;
 import org.jspecify.annotations.Nullable;
 import pe.gob.sgtm.dominio.Dinero;
@@ -28,8 +27,8 @@ import pe.gob.sgtm.dominio.Porcentaje;
  * @param vehiculoId el vehiculo, si {@code objeto} es VEHICULO
  * @param transferenteId quien sale
  * @param adquirienteId quien entra
- * @param tipoTransferencia compraventa, donacion, anticipo, sucesion... decide la afectacion a
- *     alcabala
+ * @param tipoTransferencia que acto fue, de los nueve que el manual dibuja ({@link
+ *     TipoTransferencia})
  * @param fechaTransferencia cuando ocurrio el acto
  * @param valorTransferencia el valor declarado del acto
  * @param porcentajeTransferido cuanto cambia de manos; en un vehiculo siempre el total
@@ -45,7 +44,7 @@ public record Transferencia(
         @Nullable Long vehiculoId,
         long transferenteId,
         long adquirienteId,
-        String tipoTransferencia,
+        TipoTransferencia tipoTransferencia,
         LocalDate fechaTransferencia,
         Dinero valorTransferencia,
         Porcentaje porcentajeTransferido,
@@ -54,17 +53,11 @@ public record Transferencia(
         Observacion observacion,
         @Nullable String usuarioRegistro) {
 
-    private static final int TIPO_MAXIMO = 40;
     private static final int DOCUMENTO_MAXIMO = 80;
 
     public Transferencia {
         Objects.requireNonNull(objeto, "La transferencia necesita que se diga que se transfiere");
         Objects.requireNonNull(tipoTransferencia, "La transferencia necesita su tipo");
-        tipoTransferencia = tipoTransferencia.strip().toUpperCase(Locale.ROOT);
-        if (tipoTransferencia.isEmpty() || tipoTransferencia.length() > TIPO_MAXIMO) {
-            throw new IllegalArgumentException(
-                    "El tipo de transferencia va de 1 a " + TIPO_MAXIMO + " caracteres");
-        }
         Objects.requireNonNull(fechaTransferencia, "La transferencia necesita su fecha");
         Objects.requireNonNull(valorTransferencia, "La transferencia necesita su valor declarado");
         if (valorTransferencia.esNegativo()) {
@@ -114,7 +107,7 @@ public record Transferencia(
             long predioId,
             long transferenteId,
             long adquirienteId,
-            String tipoTransferencia,
+            TipoTransferencia tipoTransferencia,
             LocalDate fecha,
             Dinero valorTransferencia,
             Porcentaje porcentajeTransferido,
@@ -143,7 +136,7 @@ public record Transferencia(
             long vehiculoId,
             long transferenteId,
             long adquirienteId,
-            String tipoTransferencia,
+            TipoTransferencia tipoTransferencia,
             LocalDate fecha,
             Dinero valorTransferencia,
             boolean afectaAlcabala,

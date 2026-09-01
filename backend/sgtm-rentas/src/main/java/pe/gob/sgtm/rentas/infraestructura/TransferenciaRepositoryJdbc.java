@@ -12,6 +12,7 @@ import pe.gob.sgtm.dominio.Observacion;
 import pe.gob.sgtm.dominio.Porcentaje;
 import pe.gob.sgtm.persistencia.RepositorioJdbc;
 import pe.gob.sgtm.rentas.dominio.ObjetoDeTransferencia;
+import pe.gob.sgtm.rentas.dominio.TipoTransferencia;
 import pe.gob.sgtm.rentas.dominio.Transferencia;
 import pe.gob.sgtm.rentas.dominio.TransferenciaRepository;
 
@@ -53,7 +54,7 @@ public class TransferenciaRepositoryJdbc extends RepositorioJdbc
                         .param("vehiculoId", transferencia.vehiculoId())
                         .param("transferenteId", transferencia.transferenteId())
                         .param("adquirienteId", transferencia.adquirienteId())
-                        .param("tipo", transferencia.tipoTransferencia())
+                        .param("tipo", transferencia.tipoTransferencia().name())
                         .param("fecha", transferencia.fechaTransferencia())
                         .param("valor", transferencia.valorTransferencia().valor())
                         .param("porcentaje", transferencia.porcentajeTransferido().valor())
@@ -110,6 +111,17 @@ public class TransferenciaRepositoryJdbc extends RepositorioJdbc
                 .optional();
     }
 
+    /**
+     * De la fila a la transferencia.
+     *
+     * <p>{@code tipo_transferencia} se lee con {@link TipoTransferencia#de}, que <b>lanza</b> si el
+     * texto no es uno de los nueve. Es deliberado: {@code V64} anade el {@code CHECK} como {@code
+     * NOT VALID}, de modo que una fila anterior a #542 con el vocabulario libre —{@code
+     * COMPRAVENTA}, sin ir mas lejos, que es lo que sembraba {@code ejemplos/transferencias.csv}—
+     * <b>sigue en la tabla, sin tocar</b> (regla 4) y al leerla dice que valor tiene en vez de
+     * devolver un tipo inventado. Una lectura tolerante la haria pasar por otra cosa, que es
+     * exactamente lo que este issue vino a impedir.
+     */
     private static Transferencia mapear(ResultSet fila, int numeroDeFila) throws SQLException {
         long predio = fila.getLong("predio_id");
         Long predioId = fila.wasNull() ? null : predio;
@@ -123,7 +135,7 @@ public class TransferenciaRepositoryJdbc extends RepositorioJdbc
                 vehiculoId,
                 fila.getLong("transferente_id"),
                 fila.getLong("adquiriente_id"),
-                fila.getString("tipo_transferencia"),
+                TipoTransferencia.de(fila.getString("tipo_transferencia")),
                 fila.getDate("fecha_transferencia").toLocalDate(),
                 new Dinero(fila.getBigDecimal("valor_transferencia")),
                 new Porcentaje(fila.getBigDecimal("porcentaje_transferido")),
