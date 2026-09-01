@@ -5,9 +5,16 @@
  * permite cambiar el origen, el token o el trato de los errores en un sitio.
  *
  * El backend contesta RFC 9457 (`ProblemDetail`) con dos extensiones propias,
- * `codigo` y `mensaje`, y en un fallo interno además `incidencia`. La interfaz
- * reacciona al **código**, nunca al texto: el texto se reescribe en cuanto
- * alguien lo lee en voz alta, y el código es estable por contrato.
+ * `codigo` y `mensaje`, en un fallo interno además `incidencia`, y en unos pocos
+ * rechazos `detalles`. La interfaz reacciona al **código**, nunca al texto: el
+ * texto se reescribe en cuanto alguien lo lee en voz alta, y el código es
+ * estable por contrato.
+ *
+ * Las cuatro extensiones llegan **al primer nivel del cuerpo**, no anidadas:
+ * `ManejadorDeErrores` las pone con `ProblemDetail.setProperty`, y así se midió
+ * contra el backend en marcha —`{"detail":…,"status":422,"codigo":"VALIDACION",
+ * "mensaje":…}`—. En las pruebas del backend salen bajo `properties` porque ahí
+ * lo que se serializa es el objeto Java, no la respuesta.
  */
 
 /** El catálogo de errores del backend, tal como lo declara `CodigoDeError`. */
@@ -18,6 +25,14 @@ export type CodigoDeError =
   | 'SIN_PRIVILEGIO'
   | 'VALIDACION'
   | 'ORDEN_NO_ADMITIDO'
+  /* El marco pedido tiene dentro más lotes de los que el servidor dibuja (#611).
+     **No es un error de quien pregunta ni un fallo del servidor: es la
+     respuesta**, y la resuelve acercar el marco. Nació compartiendo `VALIDACION`
+     con «el marco está del revés», que sí es un defecto de lo pedido, y con eso
+     lo único que las separaba era el texto en castellano —que es justo lo que
+     esta interfaz no lee—. Trae en `detalles` las dos cifras que hacen falta
+     para saber cuánto acercarse: `lotes=N` y `tope=T`. */
+  | 'MARCO_CON_DEMASIADOS_LOTES'
   | 'NO_ENCONTRADO'
   | 'CONFLICTO'
   /* El verbo no se admite en esa ruta (#556). Llega con la cabecera `Allow`.
@@ -38,6 +53,15 @@ export class ErrorDeApi extends Error {
     readonly mensaje: string,
     readonly estado: number,
     readonly incidencia?: string,
+    /**
+     * Las cifras del rechazo, como dato y no dentro de la frase.
+     *
+     * Llegan en la forma `clave=valor`, y **sólo cuando hay alguna**: medido
+     * contra el backend, los siete rechazos del plano que no son «acércate»
+     * llegan sin este campo, porque `ManejadorDeErrores` no lo escribe cuando la
+     * lista está vacía. Quien las lea tiene que admitir que no estén: la
+     * ausencia es «este rechazo no publica cifras», nunca un cero.
+     */
     readonly detalles?: string[],
   ) {
     super(mensaje);

@@ -199,7 +199,8 @@ export type LoteDelPlano = {
  *
  * **No hay sobre paginado y no hay marca de recorte**, y las dos ausencias son
  * la misma decisión (ADR-0022 §2): si en el marco caben más lotes que el tope,
- * la respuesta es un **422 con la cuenta**, nunca una página con los primeros.
+ * la respuesta es un **422 `MARCO_CON_DEMASIADOS_LOTES` con la cuenta**, nunca
+ * una página con los primeros.
  * Un plano al que le faltan lotes no se ve recortado —se ve como un plano donde
  * ahí no hay lotes—, así que quien lo dibuja no puede tener la opción de
  * ignorar una marca.
@@ -266,17 +267,60 @@ export type FiltroDelPlano = {
 /**
  * El plano catastral de un marco (#536, ADR-0022).
  *
- * **Su 422 no siempre es un error.** «En este marco hay N lotes y el máximo que
- * se sirve son T» es una respuesta que se puede obedecer —acercarse— y comparte
- * el código `VALIDACION` con «el marco está del revés», que sí es un defecto de
- * quien pregunta. La interfaz no los separa leyendo el texto: enseña el mensaje
- * del servidor tal cual y ofrece acercar, que es lo honesto en los dos casos.
- * Separarlos por contrato es #611.
+ * **Su 422 no siempre es un error, y desde #611 se sabe cuál es cuál por el
+ * código.** «En este marco hay N lotes y el máximo que se sirve son T» llega con
+ * `MARCO_CON_DEMASIADOS_LOTES`: la petición está bien y lo que la resuelve es
+ * acercarse. Los demás rechazos llegan con `VALIDACION` y dicen lo contrario
+ * —«corrige lo que pediste»—: `PlanoCatastralController` los lanza en cinco
+ * sitios, y medidos contra el backend en marcha son «Falta 'bbox'…», «El marco
+ * 'bbox' se escribe como 'oeste,sur,este,norte'…», «El marco esta del reves o es
+ * degenerado…», «La latitud norte tiene que estar entre -90 y 90 grados…», «La
+ * longitud oeste tiene que estar entre -180 y 180 grados…» y los tres de
+ * `limite` —no numérico, no positivo, y por encima del tope del servidor—.
+ *
+ * Antes los compartían todos, y lo único que los separaba era el texto en
+ * castellano, que se reescribe.
  */
 export function planoCatastral(filtro: FiltroDelPlano, senal?: AbortSignal): Promise<PlanoCatastral> {
   return solicitar('/catastro/predios/plano', { parametros: { ...filtro }, senal });
 }
 
+/**
+ * Las dos cifras del «acércate», leídas de `detalles` y no de la frase.
+ *
+ * `PlanoCatastralController` las manda como dato —`["lotes=3","tope=2"]`— por lo
+ * mismo que manda el código: la frase se reescribe. La prueba de frontera del
+ * backend lo fija con un `containsExactly`, así que reescribir el mensaje sin
+ * tocar las cifras tiene que dejar esto funcionando.
+ *
+ * **Devuelve `null` en cada cifra que no venga, y ninguna se inventa.** Un tope
+ * ausente no es `LOTES_POR_MARCO` aunque sea lo que se pidió —el servidor tiene
+ * el suyo y es él quien lo dice—, y unos lotes ausentes no son cero: cero lotes
+ * es exactamente lo contrario de lo que este rechazo significa. Quien las dibuje
+ * tiene que saber quedarse sin ellas.
+ *
+ * No suma, ni resta, ni compara: publicar «faltan N» sería componer una cifra
+ * que el servidor no publica (RNF-083 tiene la misma forma para el dinero).
+ */
+export function cifrasDelMarcoLleno(detalles: readonly string[] | undefined): {
+  lotes: number | null;
+  tope: number | null;
+} {
+  return { lotes: enteroDe(detalles, 'lotes'), tope: enteroDe(detalles, 'tope') };
+}
+
+/**
+ * Un `clave=valor` de `detalles`, y sólo si el valor es un entero entero.
+ *
+ * Con `Number.parseInt` un «2 000» se leería como 2 y nadie lo notaría (#342 lo
+ * midió con las cuotas), así que la forma se exige entera antes de convertir.
+ */
+function enteroDe(detalles: readonly string[] | undefined, clave: string): number | null {
+  const fila = (detalles ?? []).find((d) => d.startsWith(clave + '='));
+  if (fila === undefined) return null;
+  const valor = fila.slice(clave.length + 1);
+  return /^\d+$/.test(valor) ? Number(valor) : null;
+}
 
 /**
  * Un sector del catastro. Es `SectorResource`.

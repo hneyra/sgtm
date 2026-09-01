@@ -7,6 +7,7 @@ import { usarPreferencias } from '../../shell/preferencias';
 import type { PantallaProps } from '../../App';
 import {
   filtroDeViaPorCriterio,
+  cifrasDelMarcoLleno,
   comoBbox,
   darDeBaja,
   inscribirPredio,
@@ -864,6 +865,15 @@ export default function Catastro({ dest, onDest }: PantallaProps) {
      ni cambia el dibujo, ni dice por que. Un boton que se pulsa y no hace nada
      es peor que uno apagado, porque el apagado al menos dice que no se puede. */
   const marcoEsElInicial = bbox === comoBbox(MARCO_INICIAL);
+
+  /* Las dos cifras del «acercate», leidas del propio rechazo (#611).
+     Se leen SIEMPRE, tambien cuando el codigo es otro, y entonces salen las dos
+     nulas: lo que dibuja el bloque de arriba es cada una si vino, y `SIN_DATO`
+     si no. Ninguna se supone —el tope no es LOTES_POR_MARCO aunque sea lo que
+     esta pantalla pidio: el servidor tiene el suyo y es el quien lo dice—, y la
+     resta no se hace, que es la que convertiria dos cifras publicadas en una
+     inventada. */
+  const marcoLleno = cifrasDelMarcoLleno(plano.error?.detalles);
 
   /* La cabecera de la hoja: lo que el recurso publica y nada más. La
      calificación del contribuyente no viene, así que sale «—». */
@@ -3045,42 +3055,96 @@ export default function Catastro({ dest, onDest }: PantallaProps) {
                   </div>
                 )}
 
-                {/* El 422 del marco lleno NO es un error, es una respuesta: hay
-                    más lotes de los que se sirven y hay que acercarse (ADR-0022
-                    §2). Comparte el código `VALIDACION` con «el marco está del
-                    revés», que sí es un defecto de esta pantalla, y **no se
-                    separan leyendo el texto**: reaccionar al mensaje es lo que
-                    esta interfaz no hace en ninguna parte. Así que se enseña el
-                    mensaje del servidor tal cual —él dice cuántos hay— y se
-                    ofrece acercar, que sirve en el primer caso y no estorba en
-                    el segundo. Separarlos por contrato es #611. */}
-                {plano.error !== null && plano.error.codigo === 'VALIDACION' && (
-                  <div style={{ padding: 14, display: 'flex', flexDirection: 'column', gap: 10 }}>
-                    <Aviso tono="warn" titulo="El servidor no sirve este marco">
-                      {plano.error.mensaje}
-                    </Aviso>
-                    <div style={{ display: 'flex', gap: 8 }}>
-                      <button onClick={() => acercarElMarco()} className="hov-acento-2" style={{ border: 0, borderRadius: 6, padding: '9px 14px', background: 'var(--accent)', color: '#fff', fontSize: 12.5, fontWeight: 500, cursor: 'pointer' }}>
-                        Acercar el marco
-                      </button>
-                      <button
-                        onClick={() => cambiarMarco(MARCO_INICIAL)}
-                        disabled={marcoEsElInicial}
-                        title={marcoEsElInicial ? 'El marco ya es el inicial: lo que hay que hacer es acercarlo' : undefined}
-                        className="hov-linea"
-                        style={{ ...BOTON_LINEA, opacity: marcoEsElInicial ? 0.5 : 1 }}
-                      >
-                        Restablecer
-                      </button>
+                {/* Los 422 de esta operación son dos cosas opuestas, y desde
+                    #611 el código las separa: `MARCO_CON_DEMASIADOS_LOTES` dice
+                    «la petición está bien, hay demasiado dentro» —y lo resuelve
+                    acercarse—, y `VALIDACION` dice «corrige lo que pediste».
+                    Hasta aquí compartían código y lo único que las distinguía
+                    era el texto en castellano, así que la pantalla ofrecía
+                    acercar también ante un marco del revés y titulaba «el
+                    servidor no sirve este marco» a una respuesta que sí sirve.
+                    El orden importa: el caso propio va delante del genérico. */}
+                {plano.error !== null &&
+                  (plano.error.codigo === 'MARCO_CON_DEMASIADOS_LOTES' ? (
+                    <div style={{ padding: 14, display: 'flex', flexDirection: 'column', gap: 10 }}>
+                      {/* Tono de aviso y no de error, como el «ese código no
+                          está en el padrón» de Consultas (#622): la lectura se
+                          hizo, el servidor contestó lo que sabía, y reintentar
+                          devolvería exactamente esto. Por eso tampoco hay
+                          «Reintentar» —`reintentable` es falso para este
+                          código— y sí las dos acciones que sí lo resuelven. */}
+                      <Aviso tono="warn" titulo="Hay más lotes en este marco de los que se dibujan">
+                        Dentro de este marco hay{' '}
+                        <strong>{marcoLleno.lotes === null ? SIN_DATO : marcoLleno.lotes.toLocaleString('es-PE')}</strong> lotes, y el
+                        máximo que este servidor dibuja de una vez son{' '}
+                        <strong>{marcoLleno.tope === null ? SIN_DATO : marcoLleno.tope.toLocaleString('es-PE')}</strong>. No es un fallo
+                        ni un rechazo de lo que pediste: el marco está bien escrito y lo que no cabe es lo que tiene dentro. Y no se
+                        dibujan «los primeros», porque un plano al que le faltan lotes no se ve recortado —se ve como un plano donde ahí
+                        no hay lotes— (ADR-0022 §2). Acércalo, o acota por sector y manzana con los dos desplegables de arriba.
+                        {(marcoLleno.lotes === null || marcoLleno.tope === null) && (
+                          <span style={{ display: 'block', marginTop: 6, opacity: 0.85 }}>
+                            Las cifras que salen con «{SIN_DATO}» no vinieron en esta respuesta. La línea de abajo es el texto del
+                            servidor tal cual, y es lo único que queda para saberlas.
+                          </span>
+                        )}
+                      </Aviso>
+                      {/* El texto del servidor baja a la línea técnica, como en
+                          #622: ahí vale de evidencia y no compite con el titular
+                          —que lo escribe la pantalla, porque el mensaje se
+                          reescribe y el código no—. */}
+                      <p style={{ margin: 0, fontFamily: 'var(--font-mono)', fontSize: 10.5, color: 'var(--ink-4)' }}>
+                        GET /catastro/predios/plano · {plano.error.estado} · «{plano.error.mensaje}»
+                      </p>
+                      <div style={{ display: 'flex', gap: 8 }}>
+                        <button onClick={() => acercarElMarco()} className="hov-acento-2" style={{ border: 0, borderRadius: 6, padding: '9px 14px', background: 'var(--accent)', color: '#fff', fontSize: 12.5, fontWeight: 500, cursor: 'pointer' }}>
+                          Acercar el marco
+                        </button>
+                        <button
+                          onClick={() => cambiarMarco(MARCO_INICIAL)}
+                          disabled={marcoEsElInicial}
+                          title={marcoEsElInicial ? 'El marco ya es el inicial: lo que hay que hacer es acercarlo' : undefined}
+                          className="hov-linea"
+                          style={{ ...BOTON_LINEA, opacity: marcoEsElInicial ? 0.5 : 1 }}
+                        >
+                          Restablecer
+                        </button>
+                      </div>
                     </div>
-                  </div>
-                )}
-
-                {plano.error !== null && plano.error.codigo !== 'VALIDACION' && (
-                  <div style={{ padding: 14 }}>
-                    <FalloDeLectura error={plano.error} que="el plano catastral" acceso="consulta_fichas" alReintentar={plano.reintentar} />
-                  </div>
-                )}
+                  ) : plano.error.codigo === 'VALIDACION' ? (
+                    <div style={{ padding: 14, display: 'flex', flexDirection: 'column', gap: 10 }}>
+                      {/* Aquí sí es un defecto de lo que se pidió, y en esta
+                          pantalla sólo puede ser el marco: `limite` viaja fijo
+                          en LOTES_POR_MARCO —que es el tope del propio
+                          servidor—, así que sus tres rechazos no son
+                          alcanzables desde aquí. El mensaje del servidor sale
+                          entero y arriba porque es lo único que dice CUÁL de
+                          los cuatro números está mal: medido, «el oeste (-80.67)
+                          tiene que ser menor que el este (-80.69)» y «La latitud
+                          norte tiene que estar entre -90 y 90 grados». */}
+                      <Aviso tono="bad" titulo="El marco que se pidió no es un marco">
+                        {plano.error.mensaje}
+                        <span style={{ display: 'block', marginTop: 6, opacity: 0.85 }}>
+                          Se corrige en la caja «Marco» de aquí arriba, que son esos cuatro números en grados, o restableciendo el
+                          inicial. No se ofrece acercar: acercar parte de estos mismos cuatro y lo que hay que cambiar son ellos.
+                        </span>
+                      </Aviso>
+                      <div style={{ display: 'flex', gap: 8 }}>
+                        <button
+                          onClick={() => cambiarMarco(MARCO_INICIAL)}
+                          disabled={marcoEsElInicial}
+                          title={marcoEsElInicial ? 'El marco ya es el inicial: corrígelo en la caja de arriba' : undefined}
+                          className="hov-acento-2"
+                          style={{ border: 0, borderRadius: 6, padding: '9px 14px', background: 'var(--accent)', color: '#fff', fontSize: 12.5, fontWeight: 500, cursor: marcoEsElInicial ? 'default' : 'pointer', opacity: marcoEsElInicial ? 0.5 : 1 }}
+                        >
+                          Restablecer el marco
+                        </button>
+                      </div>
+                    </div>
+                  ) : (
+                    <div style={{ padding: 14 }}>
+                      <FalloDeLectura error={plano.error} que="el plano catastral" acceso="consulta_fichas" alReintentar={plano.reintentar} />
+                    </div>
+                  ))}
 
                 {/* **El estado de hoy, y el primero que esta pantalla tiene que
                     saber dibujar** (ADR-0022 §3): el plano contesta bien y no
