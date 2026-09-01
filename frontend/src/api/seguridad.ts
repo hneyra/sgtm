@@ -247,6 +247,51 @@ export const gruposDelUsuario = (usuarioId: number, p: Paginacion, s?: AbortSign
   });
 
 /**
+ * Quien esta DENTRO de un grupo (#582). La pregunta inversa de
+ * `gruposDelUsuario`, y hasta #646 no se podia hacer: de esta ruta solo existia
+ * el `POST` que afilia, asi que contestar «quien esta dentro» obligaba a
+ * recorrer el padron de cuentas preguntando por cada una.
+ *
+ * <h2>Solo las pertenencias activas</h2>
+ *
+ * Una baja no borra la fila —sigue ahi con `activo` en falso (RNF-051)— pero
+ * quien salio del grupo ya no esta dentro, y el `JOIN ... AND m.activo` del
+ * repositorio lo deja fuera. Lo que si devuelve son las cuentas
+ * **deshabilitadas** que siguen afiliadas: cada fila trae su `habilitado`, y esa
+ * separacion es la que permite contestar que cuenta sin poder entrar conserva
+ * permisos sin una segunda lectura. Estar en el grupo y poder entrar son cosas
+ * distintas.
+ *
+ * <h2>Cero miembros y no existir son dos respuestas</h2>
+ *
+ * Un grupo sin nadie es una pagina vacia con 200; un grupo que no existe **en
+ * esta municipalidad** es 404 nombrandolo. La segunda no se puede decir
+ * callando: cero filas se leeria como «a este grupo no pertenece nadie», que es
+ * lo contrario de lo que hay que contestarle a quien administra. Es la misma
+ * decision que el `Optional.empty()` frente a la pagina vacia del listado de
+ * manzanas (#537).
+ *
+ * <h2>Lo que hay que pedir para poder contar los deshabilitados</h2>
+ *
+ * El sobre publica `totalElementos`, asi que **cuantos son** lo dice el servidor
+ * sobre el grupo entero y no hace falta traerlos todos. **Cuantos de ellos estan
+ * deshabilitados**, en cambio, solo se puede contar sobre las filas que
+ * llegaron: con mas de una pagina, contar la primera y presentarlo como del
+ * grupo da un numero mas pequeno que el real, o sea el que nadie sabria
+ * distinguir del bueno. Quien lo dibuje tiene que mirar `hayMas` antes de decir
+ * esa segunda cifra.
+ *
+ * Ordena por `cuenta` si no se pide otra cosa, y ese orden ya desempata por `id`
+ * en el backend: sin desempate, dos cuentas homonimas dejan de tener un orden
+ * total y dos paginas consecutivas pueden repetir a una y omitir a otra (#548).
+ */
+export const miembrosDelGrupo = (grupoId: number, p: Paginacion, s?: AbortSignal) =>
+  solicitar<RespuestaPaginada<Usuario>>(`/seguridad/grupos/${grupoId}/miembros`, {
+    parametros: { ...p },
+    senal: s,
+  });
+
+/**
  * La matriz efectiva de un usuario, con el origen de cada fila (#543).
  *
  * Devuelve lista suelta, no el sobre paginado, y **sin filas** para los accesos

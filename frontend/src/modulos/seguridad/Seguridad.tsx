@@ -12,6 +12,7 @@ import {
   listarModulos,
   listarRespaldos,
   listarUsuarios,
+  miembrosDelGrupo,
   permisosDelGrupo,
   permisosEfectivosDelUsuario,
   OPERACIONES,
@@ -124,6 +125,61 @@ const DESTINOS: [string, string][] = [
 /** Lo que se dibuja donde el backend no publica el dato. Nunca un cero. */
 const SIN_DATO = '—';
 
+/**
+ * «N miembros», escrito en un solo sitio (#582).
+ *
+ * Lo dicen dos: el nodo del arbol y la cabecera del grupo elegido. Salen de la
+ * MISMA cifra, asi que escribirlo dos veces es dejar que uno diga «0 miembros»
+ * donde el otro dice «sin miembros» por la misma respuesta del servidor —y el
+ * cero es justo el que hay que decir con palabras, porque «0» al lado de un
+ * grupo se lee igual que un dato que no llego—.
+ */
+function cuantosMiembros(n: number): string {
+  if (n === 0) return 'Sin miembros';
+  return n === 1 ? '1 miembro' : n + ' miembros';
+}
+
+/**
+ * Lo que la cabecera dice de un grupo elegido (#582).
+ *
+ * Va aparte del JSX porque son **cinco** estados y ninguno se puede confundir
+ * con otro: todavia leyendo, caido, sin nadie, leido entero y leido a medias.
+ * Los dos ultimos son los que importan, y su diferencia no se ve en la cifra:
+ * `total` lo cuenta el servidor sobre el grupo entero —viaja en el sobre
+ * paginado— y `sinPoderEntrar` lo cuenta la pantalla sobre las filas que
+ * llegaron. Con mas de una pagina esa segunda cuenta seria la de la pagina
+ * presentada como la del grupo: un numero mas pequeno que el real, y ninguna
+ * pantalla lo distinguiria del bueno. Por eso ahi entra `null` y se dice «—»
+ * con el motivo, en vez de un cero que se leeria como «todos pueden entrar».
+ *
+ * Y «no se pudo leer» no se dice callando ni con un cero: quien administra
+ * necesita distinguir un grupo sin miembros de un grupo cuyos miembros no se
+ * han podido consultar, que es lo que separa «nadie hereda esto» de «no lo
+ * sabemos». El detalle —403 sin permiso, 404 grupo inexistente— lo dice el
+ * aviso de debajo, que sale de la misma lectura.
+ */
+function loQueSeSabeDelGrupo(
+  cargando: boolean,
+  fallo: boolean,
+  total: number | null,
+  sinPoderEntrar: number | null,
+): string {
+  if (fallo) return 'Grupo · no se pudo leer quién está dentro';
+  if (total === null) return cargando ? 'Grupo · leyendo quién está dentro…' : 'Grupo';
+  /* Cero miembros es una respuesta del backend, no una falta de dato: el grupo
+     existe —si no existiera seria 404— y no lo tiene nadie. Lo que se dice es
+     la consecuencia, que es lo que hace falta saber al mirar su matriz: sus
+     permisos no se los hereda nadie. Y ahi no cabe la segunda cifra, porque
+     «ninguno deshabilitado» sobre cero personas es cierto y no dice nada. */
+  if (total === 0) return cuantosMiembros(0) + ' · nadie hereda lo que concede';
+  const cuantos = cuantosMiembros(total);
+  if (sinPoderEntrar === null) {
+    return cuantos + ' · cuántos deshabilitados: ' + SIN_DATO + ' (no caben en una página)';
+  }
+  if (sinPoderEntrar === 0) return cuantos + ' · ninguno deshabilitado';
+  return cuantos + ' · ' + sinPoderEntrar + (sinPoderEntrar === 1 ? ' deshabilitado' : ' deshabilitados');
+}
+
 type Seleccion = { tipo: 'usuario' | 'grupo'; id: number };
 
 type CeldaDeMatriz = { privilegio: Privilegio; on: boolean };
@@ -200,6 +256,39 @@ export default function Seguridad({ dest, onDest }: PantallaProps) {
     [sel?.id],
     enAccesos && esGrupo,
   );
+
+  /* ── Quienes estan DENTRO del grupo elegido (#582) ──────────────
+     Se pide **solo del grupo seleccionado**, no de cada nodo del arbol. Un
+     recuento al lado de cada grupo cuesta una peticion por grupo al abrir la
+     pantalla, que es exactamente lo que #583 esta abierto para evitar en el
+     panel, y `listarGrupos` de aqui arriba pide hasta 100: la cuenta no la
+     acota el dato sino la paginacion. Asi son cero peticiones de mas —esta es
+     la que la cabecera necesita igual— y todo numero que se dibuja es uno que
+     se pidio.
+
+     `tamano: 200` es el mismo que el padron de cuentas, y no es holgura: los
+     deshabilitados solo se pueden contar sobre las filas que llegaron, asi que
+     hace falta que quepan todas. Cuando no quepan, `hayMas` lo dice y esa
+     segunda cifra no se da. */
+  const miembrosDelGrupoElegido = useRecurso(
+    (s) => miembrosDelGrupo(sel!.id, { tamano: 200 }, s),
+    [sel?.id],
+    enAccesos && esGrupo,
+  );
+
+  /* Las dos cifras salen de la MISMA lectura y **no de la misma forma**, y esa
+     diferencia es la que hay que respetar: `totalElementos` lo cuenta el
+     servidor sobre el grupo entero, y los deshabilitados los cuenta esta
+     pantalla sobre la pagina. Con mas de una pagina, contar la primera y
+     presentarlo como del grupo daria un numero mas pequeno que el real —el que
+     nadie sabria distinguir del bueno—, asi que ahi vale `null` y la cabecera
+     dice «—» con su motivo. Es la misma guarda que `usuariosCompletos` del
+     panel, sobre otra lectura. */
+  const nMiembros = miembrosDelGrupoElegido.datos?.totalElementos ?? null;
+  const nMiembrosSinPoderEntrar =
+    miembrosDelGrupoElegido.datos !== null && !miembrosDelGrupoElegido.datos.hayMas
+      ? miembrosDelGrupoElegido.datos.contenido.filter((u) => !u.habilitado).length
+      : null;
 
   /* ── Y las dos de un USUARIO, que antes no existian (#543) ──────
      `permisosEfectivosDelUsuario` trae la matriz YA resuelta —una fila por
@@ -343,11 +432,15 @@ export default function Seguridad({ dest, onDest }: PantallaProps) {
         tipo: 'grupo',
         id: g.id,
         label: g.nombre,
-        /* No hay lectura de miembros —`/grupos/{id}/miembros` es sólo POST—, así
-           que aquí va la descripción del grupo y nunca un recuento. Derivarlo
-           costaría una petición POR USUARIO y sólo sería exacto con la página de
-           usuarios completa: pedido en #582. */
-        nota: g.descripcion ?? 'Sin descripción',
+        /* «N miembros» **sólo en el grupo elegido**, que es el único cuyo
+           recuento se ha pedido (#582, #646). Ponerlo en todos costaría una
+           petición por grupo nada más abrir —lo que #583 existe para evitar— y
+           ponerlo sin pedirlo sería dibujar una cifra que nadie contestó. El
+           resto se quedan con su descripción, que es lo que ya decían. */
+        nota:
+          sel?.tipo === 'grupo' && sel.id === g.id && nMiembros !== null
+            ? cuantosMiembros(nMiembros)
+            : (g.descripcion ?? 'Sin descripción'),
         marca: g.habilitado ? '' : 'Deshabilitado',
       }),
     );
@@ -364,7 +457,7 @@ export default function Seguridad({ dest, onDest }: PantallaProps) {
     return lista.filter(
       (n) => filtro === '' || n.label.toLowerCase().indexOf(filtro) >= 0 || n.nota.toLowerCase().indexOf(filtro) >= 0,
     );
-  }, [q, grupos, usuarios]);
+  }, [q, grupos, usuarios, sel?.tipo, sel?.id, nMiembros]);
 
   /* ── Los hallazgos del panel: los que SÍ se pueden calcular ─────
      El artboard listaba cuatro y ninguno se podía. Con #543 uno cambió de
@@ -950,9 +1043,15 @@ export default function Seguridad({ dest, onDest }: PantallaProps) {
                         </p>
                         <p style={{ margin: '3px 0 0', fontSize: 12.5, color: 'var(--ink-3)', textWrap: 'pretty' }}>
                           {esGrupo
-                            ? /* Nunca «N miembros»: `/grupos/{id}/miembros` es sólo
-                                 POST, así que ese recuento no existe (#582). */
-                              'Grupo · el backend no publica quién está dentro (#582)'
+                            ? /* Desde #646 la ruta tiene su `GET` y el recuento se puede
+                                 decir. Las dos cifras salen de la misma lectura y no de la
+                                 misma forma: ver `loQueSeSabeDelGrupo`. */
+                              loQueSeSabeDelGrupo(
+                                miembrosDelGrupoElegido.cargando,
+                                miembrosDelGrupoElegido.error !== null,
+                                nMiembros,
+                                nMiembrosSinPoderEntrar,
+                              )
                             : 'Cuenta ' + (usuarioElegido?.cuenta ?? SIN_DATO) + (usuarioElegido?.correo ? ' · ' + usuarioElegido.correo : '')}
                         </p>
                       </div>
@@ -988,6 +1087,31 @@ export default function Seguridad({ dest, onDest }: PantallaProps) {
                           ],
                         ]}
                       />
+                    )}
+                    {/* El fallo de ESTA lectura se dice aquí y no arriba con los
+                        de la página: los de arriba son de listados que valen
+                        para toda la pantalla, y éste es de un grupo concreto.
+
+                        El 404 no es un fallo que reintentar sino una respuesta
+                        —ese grupo no existe en esta municipalidad, y desde el
+                        árbol sólo se llega ahí si alguien lo dio de baja entre
+                        las dos lecturas—. No hace falta separarlo a mano:
+                        `FalloDeLectura` decide por CÓDIGO, y `NO_ENCONTRADO` no
+                        es `reintentable`, así que no ofrece el botón de volver a
+                        intentar e imprime el mensaje del servidor, que es el que
+                        nombra el grupo. Un 403 tampoco lo ofrece —lo que dice
+                        ahí es qué acceso hace falta—, y `alReintentar` se pasa
+                        igual porque una red caída o un 500 sí se arreglan
+                        insistiendo, y ésos son los dos únicos que lo pintan. */}
+                    {esGrupo && miembrosDelGrupoElegido.error !== null && (
+                      <div style={{ padding: '13px 16px 0' }}>
+                        <FalloDeLectura
+                          error={miembrosDelGrupoElegido.error}
+                          que="la lista de miembros del grupo"
+                          acceso="grupos"
+                          alReintentar={miembrosDelGrupoElegido.reintentar}
+                        />
+                      </div>
                     )}
                     {/* Las de una CUENTA, y la tercera es la que este arreglo
                         hizo posible: cuantos de sus permisos son excepcion
