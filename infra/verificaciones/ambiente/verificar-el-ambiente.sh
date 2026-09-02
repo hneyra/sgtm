@@ -13,7 +13,16 @@
 #      puede es que la base tenga MENOS migraciones que las que trae la version
 #      declarada: eso significa que el Job de migracion de esa version no corrio, y el
 #      sintoma de esa situacion no es un error sino una carga que termina en verde sin
-#      escribir nada (PR #244).
+#      escribir nada (PR #244). **Ni MAS**, desde #675: hasta entonces ese caso caia en
+#      el «al dia» y se declaraba verde, de modo que declarar una version con
+#      migraciones de menos —revertir esa linea, o apuntarla al sha equivocado— no lo
+#      veia nadie.
+#
+#      Lo que este guion NO puede ver, y por eso no es toda la comprobacion: si la
+#      version DECLARADA lleva meses sin moverse, aqui todo sale «al dia» y el ambiente
+#      corre un esquema viejo. Ese tercer numero —lo que declara `origin/main`— lo mide
+#      `infra/verificaciones/deriva-de-migraciones.test.ts`, que corre sin clúster.
+#      Medido el 2026-09-01 contra stg: «48 · 48 · OK», con `main` en 61.
 #   2. Lo sembrado por la implantacion (#120): municipalidad, grupo, usuario, miembro y
 #      permiso. `count(*) = 0` es exactamente el sintoma silencioso que el issue nombra.
 #   3. **El aislamiento, como `sgtm_app` y contra esta instancia.** Un superusuario omite
@@ -122,6 +131,25 @@ elif [ "$APLICADAS" -lt "$ESPERADAS" ]; then
     mal "la base va POR DETRAS de la version declarada ($APLICADAS < $ESPERADAS)."
     mal "El Job sgtm-${AMBIENTE}-migracion-${DECLARADA:0:12} no ha corrido, o fallo."
     mal "Sintoma tipico: una carga batch termina en verde y no escribe ninguna fila."
+elif [ "$APLICADAS" -gt "$ESPERADAS" ]; then
+    # La otra direccion, desde #675. Antes caia en el `else` y se declaraba «al dia»: el
+    # `-lt` dejaba pasar en VERDE precisamente la mutacion que este issue pide medir
+    # —declarar en el ambiente una version con migraciones de menos—, que es lo que pasa
+    # al revertir esa linea o al apuntarla al `sha` equivocado.
+    #
+    # No es simetrico del caso de arriba, y por eso el mensaje es otro: aqui el esquema
+    # no va a medias, va POR DELANTE de la imagen que la version declara. Un VPS
+    # reconstruido desde cero con esa version arrancaria una aplicacion mas vieja que la
+    # base que ya existe, y una columna que la aplicacion no conoce no da error: da una
+    # lectura que no la incluye.
+    echo "  migraciones aplicadas: $APLICADAS · las que trae la version declarada: $ESPERADAS"
+    mal "la base va POR DELANTE de la version declarada ($APLICADAS > $ESPERADAS)."
+    # Sin acentos graves en el texto: dentro de comillas dobles bash los ejecuta como
+    # orden, y eso ya costo una errata en este mismo guion (#434).
+    mal "applicationBootstrapVersion de Pulumi.$AMBIENTE.yaml apunta a $DECLARADA, que"
+    mal "trae MENOS esquema del que la base ya tiene: o se revirtio esa linea, o apunta"
+    mal "al sha equivocado. Las migraciones no se deshacen (regla 4), asi que lo que hay"
+    mal "que corregir es la version declarada, no la base."
 else
     echo "  migraciones aplicadas: $APLICADAS · las que trae la version declarada: $ESPERADAS"
     bien "el esquema esta al dia con la version declarada"

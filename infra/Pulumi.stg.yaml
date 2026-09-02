@@ -65,7 +65,24 @@ config:
   #
   # Ver el comentario largo de `Pulumi.prod.yaml`: subir esta línea CREA un Job de
   # migración nuevo —lleva la versión en el nombre— y vuelve a implantar la municipalidad.
-  sgtm:applicationBootstrapVersion: 5fc02f3a44931d69ac3012e55b17f02dc616eac8
+  #
+  # **Y no subirla también hace algo, aunque no lo parezca (issue #675).** Medido el
+  # 2026-09-02: esta línea llevaba desde el 2026-08-29 en `5fc02f3` —que trae **48**
+  # migraciones— mientras `main` declaraba **61**, así que `stg` corría 48 de 61 y le
+  # faltaban `V58`…`V71`, entre ellas la `V68` que añade `cuenta_corriente_asiento.acto`.
+  # Nada lo delataba: el único Job del namespace era `sgtm-stg-migracion-5fc02f3a4493`,
+  # `Complete`, y `verificar-el-ambiente.sh` decía «48 · 48 · OK» con toda la razón,
+  # porque compara la base con **esta** línea y no con `main`. Ese tercer número lo mide
+  # ahora `infra/verificaciones/deriva-de-migraciones.test.ts`, que corre sin clúster.
+  #
+  # `cb4c1482` (2026-09-02T05:49Z, `publicar-imagenes.yml` en verde para las tres
+  # imágenes) es el `sha` de `main` al que se sube, y trae **62**.
+  #
+  # Se subió dos veces en el mismo PR, y la segunda la pidió la guarda nueva: se había
+  # puesto en `6ce252c0` —61 migraciones— y mientras se medía entró `V73` en `main`;
+  # `deriva-de-migraciones.test.ts` se puso roja sola, sin provocarla, diciendo «declara
+  # 61, origin/main declara 62: le faltan 1 (V73…)». Es exactamente el aviso que faltaba.
+  sgtm:applicationBootstrapVersion: cb4c1482565f5e7c2842aec878cdb730c2c7a41a
   sgtm:webReplicas: "1"
   # La municipalidad de ensayo. El ubigeo es el de Catacaos, igual que en prod (D-01,
   # 2026-08-24), porque stg restaura los respaldos de prod anonimizados (INF-03 §2 y
