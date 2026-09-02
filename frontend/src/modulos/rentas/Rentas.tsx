@@ -4449,8 +4449,33 @@ export default function Rentas({ dest, onDest }: PantallaProps) {
                 `status`: es un acto que no se registró, no una nota al margen. */}
             {rechazoDelActo !== null && (
               <div role="alert">
-                <Aviso tono="bad" titulo={`El servidor no registró ${hoja === 'alta' ? 'el alta' : 'la baja'}`}>
+                {/* El 409 NO es un fallo, y decirlo importa (#588). Desde `V75`
+                    hay un índice único que ata el alta a su obligación y a su
+                    documento de sustento, así que mandar dos veces lo mismo
+                    responde «ya está» — que es exactamente lo que tiene que
+                    pasar—. Con el título de un rechazo cualquiera, quien atiende
+                    puede leerlo como «no entró» y volver a mandarlo cambiando el
+                    documento de origen, que es el duplicado que la guarda existe
+                    para impedir: dos cargos de la misma deuda al mismo
+                    contribuyente, sin ninguna cifra que parezca mal. */}
+                <Aviso
+                  tono={rechazoDelActo.codigo === 'CONFLICTO' ? 'warn' : 'bad'}
+                  titulo={
+                    rechazoDelActo.codigo === 'CONFLICTO'
+                      ? hoja === 'alta'
+                        ? 'Esta deuda ya estaba dada de alta'
+                        : 'Esta baja ya estaba registrada'
+                      : `El servidor no registró ${hoja === 'alta' ? 'el alta' : 'la baja'}`
+                  }
+                >
                   {rechazoDelActo.mensaje}
+                  {rechazoDelActo.codigo === 'CONFLICTO' && hoja === 'alta' && (
+                    <>
+                      {' '}
+                      <strong>No se ha cargado dos veces</strong>, y volver a mandarlo con otro documento de origen sí la cargaría:
+                      comprueba en la consulta de deuda si el alta que buscabas ya está.
+                    </>
+                  )}
                   {rechazoDelActo.incidencia !== undefined && (
                     <>
                       {' '}
@@ -4467,7 +4492,7 @@ export default function Rentas({ dest, onDest }: PantallaProps) {
                     por cuota no hay nada que repartir. Dejar la de repartir para
                     las dos diría de un acto lo que hace el otro. */}
                 {hoja === 'alta'
-                  ? 'Un alta manual entra en la cuenta corriente y se cobra como cualquier otra deuda. Queda en la bitácora con tu usuario. Con «Cuota desde» y «Cuota hasta» se registra una obligación por cuota, y el desglose se repite en cada una.'
+                  ? 'Un alta manual entra en la cuenta corriente y se cobra como cualquier otra deuda. Queda en la bitácora con tu usuario. Con «Cuota desde» y «Cuota hasta» se registra una obligación por cuota, y el desglose se repite en cada una. Mandar dos veces la misma con el mismo documento de origen no la carga dos veces: el servidor contesta que ya está (#588).'
                   : bajaPorCuota
                     ? 'Elige arriba la cuota que se extingue: una por acto. El importe que se da de baja es el que el servidor publicó para esa cuota a la fecha de la resolución, y viaja tal cual —no se reparte nada—; la causal se antepone a la observación, porque el cuerpo no tiene campo propio para ella.'
                     : 'Elige arriba la obligación que se extingue: una por acto. El importe que se da de baja es el que el servidor publicó para ella a la fecha de la resolución, y si la fila agrupa varias cuotas es él quien lo reparte entre ellas; la causal se antepone a la observación, porque el cuerpo no tiene campo propio para ella.'}
