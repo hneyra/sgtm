@@ -125,6 +125,45 @@ class DiscriminadorDeLoQueFaltaPublicarTest {
     }
 
     @Test
+    @DisplayName("el hallazgo nombra el METODO, no la anotacion que lo precede")
+    void elHallazgoNombraElMetodoYNoLaAnotacion() {
+        // Lo encontro la primera medicion de la guarda: con la mutacion puesta sobre
+        // `PredialController`, el hallazgo decia «PredialController.PostMapping». La anotacion
+        // `@PostMapping("/calculo-individual")` casa con el patron de un metodo y se come la firma
+        // de su propio metodo hasta la llave del cuerpo, asi que el nombre util desaparecia.
+        String fuente =
+                """
+                @RestController
+                class EjemploController {
+                    @PostMapping("/calculo-individual")
+                    @ResponseStatus(HttpStatus.CREATED)
+                    @RequiereAcceso(acceso = "predial_individual", privilegio = Privilegio.REGISTRO)
+                    public Recurso calcularIndividual(
+                            @RequestParam(required = false) @Nullable String ejercicio,
+                            @RequestBody Peticion peticion) {
+                        try {
+                            return determinar(peticion);
+                        } catch (LectorDeParametros.EjercicioSinSellar sinSellar) {
+                            throw new ProblemaDeNegocio(CodigoDeError.VALIDACION, "falta");
+                        }
+                    }
+                }
+                """;
+        assertThat(
+                        RevisorDelDiscriminador.revisar(
+                                "EjemploController.java", fuente, Set.of("EjercicioSinSellar")))
+                .singleElement()
+                .satisfies(
+                        hallazgo ->
+                                assertThat(hallazgo.fragmento())
+                                        .as(
+                                                "«el catch de la linea 400» no dice que endpoint quedo mudo")
+                                        .isEqualTo(
+                                                "EjemploController.calcularIndividual captura"
+                                                        + " EjercicioSinSellar"));
+    }
+
+    @Test
     @DisplayName("un comentario que mencione el ayudante no deja pasar un catch mudo")
     void elComentarioNoCuenta() {
         String fuente =

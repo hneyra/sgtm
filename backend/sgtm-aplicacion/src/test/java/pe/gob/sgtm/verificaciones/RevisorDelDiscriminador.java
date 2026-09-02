@@ -79,7 +79,7 @@ public final class RevisorDelDiscriminador {
      * dice a nadie que endpoint se quedo mudo.
      */
     private static final Pattern METODO =
-            Pattern.compile("\\b(\\w+)\\s*\\([^;{}]*\\)\\s*(?:throws\\s[\\w\\s,.]+)?\\{");
+            Pattern.compile("(?<!@)\\b(\\w+)\\s*\\([^;{}]*\\)\\s*(?:throws\\s[\\w\\s,.]+)?\\{");
 
     private static final Set<String> NO_SON_METODOS =
             Set.of(
@@ -178,13 +178,25 @@ public final class RevisorDelDiscriminador {
         return archivo.replace(".java", "");
     }
 
+    /**
+     * El metodo que envuelve al {@code catch}, para poder nombrarlo en el hallazgo.
+     *
+     * <p>«El catch de la linea 400» no le dice a nadie que endpoint se quedo mudo.
+     *
+     * <p><b>Y una anotacion no es un metodo</b>: sin el {@code (?<!@)} del patron, la primera
+     * medicion de la guarda nombro {@code PredialController.PostMapping} en vez de {@code
+     * calcularIndividual}. {@code @PostMapping("/calculo-individual")} casa con el patron y <b>se
+     * come</b> la firma de su propio metodo hasta la llave del cuerpo, asi que descartarla despues
+     * de casarla no basta: hay que impedir que el patron empiece ahi.
+     */
     private static String metodoQueContiene(String contenido, int posicion) {
         String encontrado = "‹metodo desconocido›";
         Matcher metodo = METODO.matcher(contenido);
         while (metodo.find() && metodo.start() < posicion) {
-            if (!NO_SON_METODOS.contains(metodo.group(1))) {
-                encontrado = metodo.group(1);
+            if (NO_SON_METODOS.contains(metodo.group(1))) {
+                continue;
             }
+            encontrado = metodo.group(1);
         }
         return encontrado;
     }
