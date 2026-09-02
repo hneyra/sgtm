@@ -241,7 +241,14 @@ class ParametrosDeLaConsultaTest {
                     // cualquiera de ellos al contrato ponga la prueba en rojo NOMBRANDOLO. Sin
                     // esto, la comprobacion no distingue «lo lee» de «no hay nada que leer».
                     "POST /rentas/predial/calculo-individual",
-                    "POST /rentas/espectaculos");
+                    "POST /rentas/espectaculos",
+                    // #674 — la relacion de prescripciones declaradas. Estrena controlador
+                    // con esta promesa puesta desde el primer dia, por lo mismo que el plano
+                    // catastral: sus cuatro filtros son exactamente los cuatro que el
+                    // contrato declara, y comprometerlos cuando la operacion nace no cuesta
+                    // nada. `resultado` se RECHAZA con 422 si no es uno de los tres, que
+                    // tambien es leerlo.
+                    "GET /coactiva/prescripcion");
 
     /**
      * Cuantas operaciones arrastran hoy cada mitad del desajuste. Medido, no estimado (#544).
