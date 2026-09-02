@@ -24,6 +24,7 @@ import pe.gob.sgtm.sanciones.dominio.Familia;
 import pe.gob.sgtm.sanciones.dominio.LineaDelResumen;
 import pe.gob.sgtm.sanciones.dominio.PadronDePapeletasRepository;
 import pe.gob.sgtm.sanciones.dominio.PapeletaDelPadron;
+import pe.gob.sgtm.sanciones.dominio.RecuentoDelPadron;
 
 /**
  * Los padrones, los records y los resúmenes de papeletas contra PostgreSQL (#53, V47 §5).
@@ -109,6 +110,34 @@ public class PadronDePapeletasRepositoryJdbc extends RepositorioJdbc
                 paginacion,
                 ORDEN,
                 PadronDePapeletasRepositoryJdbc::mapear);
+    }
+
+    /**
+     * El recuento y la suma, con el mismo {@code DESDE} y el mismo {@code donde(...)} que {@link
+     * #buscar} (#549).
+     *
+     * <p>Es literalmente el {@code conteo} que {@code paginar} ejecuta, con un {@code sum} al lado:
+     * no hay una segunda transcripción del predicado que pueda envejecer aparte. El {@code
+     * coalesce} no es adorno — {@code sum} sobre cero filas devuelve {@code NULL}, y un importe
+     * ausente donde la respuesta es «no hay ninguna» se leería como «no se pudo cifrar».
+     */
+    @Override
+    public RecuentoDelPadron contar(CriterioDePadron criterio) {
+        Map<String, Object> parametros = new HashMap<>();
+        String donde = donde(criterio, parametros);
+
+        return jdbc().sql(
+                        "SELECT count(*) AS cuantas,"
+                                + " coalesce(sum(p.importe_a_pagar), 0) AS importe"
+                                + DESDE
+                                + donde)
+                .params(parametros)
+                .query(
+                        (fila, numeroDeFila) ->
+                                new RecuentoDelPadron(
+                                        fila.getLong("cuantas"),
+                                        new Dinero(fila.getBigDecimal("importe"))))
+                .single();
     }
 
     @Override
