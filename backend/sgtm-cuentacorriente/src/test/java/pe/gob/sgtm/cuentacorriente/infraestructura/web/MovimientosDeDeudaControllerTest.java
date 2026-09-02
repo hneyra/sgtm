@@ -12,6 +12,7 @@ import java.util.Map;
 import java.util.Optional;
 import org.jspecify.annotations.Nullable;
 import org.junit.jupiter.api.DisplayName;
+import org.junit.jupiter.api.Nested;
 import org.junit.jupiter.api.Test;
 import org.springframework.http.MediaType;
 import org.springframework.http.converter.json.JacksonJsonHttpMessageConverter;
@@ -20,6 +21,7 @@ import org.springframework.test.web.servlet.MvcResult;
 import org.springframework.test.web.servlet.setup.MockMvcBuilders;
 import pe.gob.sgtm.compartido.Pagina;
 import pe.gob.sgtm.compartido.Paginacion;
+import pe.gob.sgtm.cuentacorriente.CausalDeBaja;
 import pe.gob.sgtm.cuentacorriente.aplicacion.ConsultasDelLibro;
 import pe.gob.sgtm.cuentacorriente.aplicacion.RegistrarMovimientoDeDeuda;
 import pe.gob.sgtm.cuentacorriente.dominio.Asiento;
@@ -97,11 +99,11 @@ class MovimientosDeDeudaControllerTest {
                                         .param("tributo", "ARBITRIO")
                                         .param("ano", "2024")
                                         .contentType(MediaType.APPLICATION_JSON)
-                                        .content(
+                                        .content(conCausal(
                                                 "{\"cuota\":2,\"insoluto\":\"100.00\","
                                                         + "\"fechaValor\":\"2026-03-16\","
                                                         + "\"documentoOrigen\":\"RES-0001\","
-                                                        + "\"observacion\":\"Prescripcion declarada\"}"))
+                                                        + "\"observacion\":\"Prescripcion declarada\"}")))
                         .andReturn();
 
         assertThat(resultado.getResponse().getStatus()).isEqualTo(201);
@@ -122,13 +124,13 @@ class MovimientosDeDeudaControllerTest {
                                         .param("tributo", "ARBITRIO")
                                         .param("ano", "2024")
                                         .contentType(MediaType.APPLICATION_JSON)
-                                        .content(
+                                        .content(conCausal(
                                                 "{\"codContribuyente\":\"C-0007\","
                                                         + "\"tributo\":\"PREDIAL\",\"ano\":\"2025\","
                                                         + "\"cuota\":1,\"insoluto\":\"100.00\","
                                                         + "\"fechaValor\":\"2026-03-16\","
                                                         + "\"documentoOrigen\":\"RES-0002\","
-                                                        + "\"observacion\":\"Prescripcion declarada\"}"))
+                                                        + "\"observacion\":\"Prescripcion declarada\"}")))
                         .andReturn();
 
         assertThat(resultado.getResponse().getStatus()).isEqualTo(201);
@@ -143,11 +145,11 @@ class MovimientosDeDeudaControllerTest {
                 mvc.perform(
                                 post("/api/v1/rentas/deuda/bajas")
                                         .contentType(MediaType.APPLICATION_JSON)
-                                        .content(
+                                        .content(conCausal(
                                                 "{\"cuota\":1,\"insoluto\":\"100.00\","
                                                         + "\"fechaValor\":\"2026-03-16\","
                                                         + "\"documentoOrigen\":\"RES-0003\","
-                                                        + "\"observacion\":\"Prescripcion declarada\"}"))
+                                                        + "\"observacion\":\"Prescripcion declarada\"}")))
                         .andReturn();
 
         assertThat(resultado.getResponse().getStatus()).isEqualTo(422);
@@ -236,16 +238,147 @@ class MovimientosDeDeudaControllerTest {
                                         .param("tributo", "ARBITRIO")
                                         .param("ano", "2024")
                                         .contentType(MediaType.APPLICATION_JSON)
-                                        .content(
+                                        .content(conCausal(
                                                 "{\"cuotaDesde\":2,\"cuotaHasta\":3,"
                                                         + "\"insoluto\":\"100.00\","
                                                         + "\"fechaValor\":\"2026-03-16\","
                                                         + "\"documentoOrigen\":\"RES-0005\","
-                                                        + "\"observacion\":\"Prescripcion declarada\"}"))
+                                                        + "\"observacion\":\"Prescripcion declarada\"}")))
                         .andReturn();
 
         assertThat(resultado.getResponse().getStatus()).isEqualTo(201);
         assertThat(movimientos.ultimasCuotas()).isEqualTo(new RangoDeCuotas(2, 3));
+    }
+
+    // ------------------------------------------------------------------
+    //  #684 — la causal de la baja tiene campo propio, y no es la observacion
+    // ------------------------------------------------------------------
+
+    @Nested
+    @DisplayName("#684 — la causal es un campo, con vocabulario cerrado")
+    class LaCausal {
+
+        @Test
+        @DisplayName("la baja la declara y llega al movimiento, sin tocar la observacion")
+        void laCausalLlegaAlMovimiento() throws Exception {
+            MvcResult resultado = baja("\"causal\":\"PRESCRIPCION_DECLARADA\",");
+
+            assertThat(resultado.getResponse().getStatus()).isEqualTo(201);
+            assertThat(movimientos.ultimaCausal())
+                    .as("el sustento juridico del acto, en su columna (V77)")
+                    .isEqualTo(CausalDeBaja.PRESCRIPCION_DECLARADA);
+            assertThat(movimientos.ultimaObservacion())
+                    .as(
+                            "AC 4: hasta #684 la pantalla anteponia «PRESCRIPCIÓN DECLARADA. » a"
+                                    + " este texto. La observacion es del usuario (regla 10) y la"
+                                    + " causal no se mete dentro")
+                    .isEqualTo("Deshace el cargo del expediente 118-2026");
+        }
+
+        @Test
+        @DisplayName("sin causal, 422 nombrando el campo y las seis que hay")
+        void sinCausalEs422() throws Exception {
+            MvcResult resultado = baja("");
+
+            assertThat(resultado.getResponse().getStatus()).isEqualTo(422);
+            assertThat(resultado.getResponse().getContentAsString())
+                    .contains("causal")
+                    .contains("PRESCRIPCION_DECLARADA")
+                    .contains("CONDONACION_POR_ORDENANZA");
+            assertThat(movimientos.registros)
+                    .as("y no se registra nada: no es un aviso, es un rechazo")
+                    .isZero();
+        }
+
+        @Test
+        @DisplayName("una causal fuera del vocabulario, 422 con el valor recibido y lo admitido")
+        void causalDesconocidaEs422() throws Exception {
+            MvcResult resultado = baja("\"causal\":\"PRESCRIPCION\",");
+
+            assertThat(resultado.getResponse().getStatus()).isEqualTo(422);
+            assertThat(resultado.getResponse().getContentAsString())
+                    .contains("PRESCRIPCION")
+                    .contains("ERROR_MATERIAL");
+        }
+
+        @Test
+        @DisplayName("y el rotulo del manual —con su tilde y su espacio— tampoco entra")
+        void elRotuloDelManualNoSeTraduceAqui() throws Exception {
+            // La traduccion le toca a la pantalla, con una tabla (#542). Una lectura tolerante
+            // que quitara tildes y cambiara espacios por guiones bajos haria entrar cualquier
+            // texto parecido, y lo que se clasifica aqui es el sustento de un acto que extingue
+            // deuda del municipio.
+            assertThat(baja("\"causal\":\"PRESCRIPCIÓN DECLARADA\",").getResponse().getStatus())
+                    .isEqualTo(422);
+        }
+
+        @Test
+        @DisplayName("el alta NO lleva causal: su pantalla no dibuja el desplegable")
+        void elAltaNoLlevaCausal() throws Exception {
+            MvcResult conCausal =
+                    mvc.perform(
+                                    post("/api/v1/rentas/deuda/altas")
+                                            .contentType(MediaType.APPLICATION_JSON)
+                                            .content(
+                                                    cuerpoDelMovimiento(
+                                                            "\"causal\":\"ERROR_MATERIAL\",")))
+                            .andReturn();
+
+            assertThat(conCausal.getResponse().getStatus()).isEqualTo(422);
+            assertThat(conCausal.getResponse().getContentAsString()).contains("causal");
+
+            MvcResult sinCausal =
+                    mvc.perform(
+                                    post("/api/v1/rentas/deuda/altas")
+                                            .contentType(MediaType.APPLICATION_JSON)
+                                            .content(cuerpoDelMovimiento("")))
+                            .andReturn();
+
+            assertThat(sinCausal.getResponse().getStatus())
+                    .as("el contraste: el alta sigue registrandose igual que antes de #684")
+                    .isEqualTo(201);
+            assertThat(movimientos.ultimaCausal()).isNull();
+        }
+
+        @Test
+        @DisplayName("la observacion sigue siendo obligatoria: la causal no la sustituye")
+        void laObservacionSigueSiendoObligatoria() throws Exception {
+            MvcResult resultado =
+                    mvc.perform(
+                                    post("/api/v1/rentas/deuda/bajas")
+                                            .contentType(MediaType.APPLICATION_JSON)
+                                            .content(
+                                                    "{\"codContribuyente\":\"C-0008\","
+                                                            + "\"tributo\":\"PREDIAL\","
+                                                            + "\"ano\":\"2026\",\"cuota\":1,"
+                                                            + "\"insoluto\":\"100.00\","
+                                                            + "\"fechaValor\":\"2026-03-16\","
+                                                            + "\"documentoOrigen\":\"RES-0009\","
+                                                            + "\"causal\":\"ERROR_MATERIAL\"}"))
+                            .andReturn();
+
+            assertThat(resultado.getResponse().getStatus()).isEqualTo(422);
+            assertThat(resultado.getResponse().getContentAsString())
+                    .as("son dos cosas: el sustento y el relato de quien firma (regla 10)")
+                    .contains("observacion");
+        }
+
+        private MvcResult baja(String causal) throws Exception {
+            return mvc.perform(
+                            post("/api/v1/rentas/deuda/bajas")
+                                    .contentType(MediaType.APPLICATION_JSON)
+                                    .content(cuerpoDelMovimiento(causal)))
+                    .andReturn();
+        }
+    }
+
+    /** El cuerpo comun de las dos rutas, con lo que se le quiera anteponer. */
+    private static String cuerpoDelMovimiento(String extra) {
+        return "{\"codContribuyente\":\"C-0008\",\"tributo\":\"PREDIAL\","
+                + "\"ano\":\"2026\",\"cuota\":1,\"insoluto\":\"100.00\","
+                + "\"fechaValor\":\"2026-03-16\",\"documentoOrigen\":\"RES-0008\","
+                + extra
+                + "\"observacion\":\"Deshace el cargo del expediente 118-2026\"}";
     }
 
     // ------------------------------------------------------------------
@@ -265,6 +398,7 @@ class MovimientosDeDeudaControllerTest {
         private @Nullable MovimientoDeDeuda ultimo;
         private @Nullable RangoDeCuotas ultimasCuotas;
         private @Nullable String codigo;
+        private @Nullable Observacion ultimaObservacion;
 
         MovimientosEspiados() {
             super(null, null, null, null, null, null);
@@ -284,6 +418,7 @@ class MovimientosDeDeudaControllerTest {
             ultimo = movimiento;
             ultimasCuotas = cuotas;
             codigo = codigoContribuyente;
+            ultimaObservacion = observacion;
             // La traduccion a asientos es la del propio movimiento, cuota a cuota: la respuesta
             // que sale por HTTP se compone de ella, y rehacerla aqui seria inventar otra.
             List<Asiento> asentados = new java.util.ArrayList<>();
@@ -319,6 +454,22 @@ class MovimientosDeDeudaControllerTest {
                 throw new AssertionError("No se registro ningun movimiento");
             }
             return codigo;
+        }
+
+        /** La causal que el controlador compuso; nula en un alta, que no la lleva (#684). */
+        @Nullable CausalDeBaja ultimaCausal() {
+            if (ultimo == null) {
+                throw new AssertionError("No se registro ningun movimiento");
+            }
+            return ultimo.causal();
+        }
+
+        /** El texto de la observacion, tal como llego: el AC 4 mide que no lleve la causal. */
+        String ultimaObservacion() {
+            if (ultimaObservacion == null) {
+                throw new AssertionError("No se registro ningun movimiento");
+            }
+            return ultimaObservacion.texto();
         }
     }
 
@@ -429,4 +580,17 @@ class MovimientosDeDeudaControllerTest {
                     "Esta prueba mide el borde HTTP: el controlador solo resuelve el codigo");
         }
     }
+
+    /**
+     * El mismo cuerpo, con la causal que toda baja declara desde #684.
+     *
+     * <p>La causal es el sustento juridico del acto y tiene campo propio: hasta entonces viajaba
+     * dentro del texto de la observacion y el libro no sabia por que se dio de baja. El alta no la
+     * lleva —el desplegable «Causal» es el de la baja—, y por eso se anade aqui y no en el cuerpo
+     * comun.
+     */
+    private static String conCausal(String cuerpo) {
+        return cuerpo.replace("\"observacion\"", "\"causal\":\"ERROR_MATERIAL\",\"observacion\"");
+    }
+
 }

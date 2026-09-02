@@ -40,8 +40,11 @@ async function cargar(entrada, nombre) {
   return modulo;
 }
 
-const { TRANSFERENCIAS } = await cargar('src/datos/rentas.ts', 'datos-rentas');
-const { TIPO_DE_TRANSFERENCIA_DEL_BACKEND } = await cargar('src/api/rentas.ts', 'api-rentas');
+const { TRANSFERENCIAS, CAMPOS_DE_LA_BAJA } = await cargar('src/datos/rentas.ts', 'datos-rentas');
+const { TIPO_DE_TRANSFERENCIA_DEL_BACKEND, CAUSAL_DE_BAJA_DEL_BACKEND } = await cargar(
+  'src/api/rentas.ts',
+  'api-rentas',
+);
 
 const fallos = [];
 let comprobados = 0;
@@ -72,8 +75,32 @@ for (const rotulo of Object.keys(TIPO_DE_TRANSFERENCIA_DEL_BACKEND)) {
   if (!ofrecidos.has(rotulo)) fallos.push(`la tabla traduce «${rotulo}» y ninguna pantalla lo ofrece`);
 }
 
+/* El desplegable «Causal» de la baja de deuda, contra `CausalDeBaja` (#684).
+   Mismo mecanismo y por el mismo motivo: hasta #684 la causal viajaba dentro
+   del texto de la observación y no había vocabulario que descuadrar; ahora es
+   un campo con su `CHECK`, y una entrada de menos en la tabla deja una opción
+   del manual llevándose un 422 después de rellenar el formulario. La opción
+   vacía no cuenta: nace vacía desde #636 y la primaria está apagada sin causal. */
+const causalesDelManual = (CAMPOS_DE_LA_BAJA.find((c) => c.k === 'causal')?.o ?? []).filter((o) => o !== '');
+if (!causalesDelManual.length) {
+  fallos.push('la pantalla de baja de deuda no ofrece ninguna causal: el desplegable «Causal» desapareció');
+}
+for (const rotulo of causalesDelManual) {
+  comprobados++;
+  if (CAUSAL_DE_BAJA_DEL_BACKEND[rotulo] === undefined) {
+    fallos.push(`baja de deuda · «${rotulo}» no tiene traducción al vocabulario del backend`);
+  }
+}
+for (const rotulo of Object.keys(CAUSAL_DE_BAJA_DEL_BACKEND)) {
+  if (!causalesDelManual.includes(rotulo)) {
+    fallos.push(`la tabla de causales traduce «${rotulo}» y la pantalla de baja no lo ofrece`);
+  }
+}
+
 if (!fallos.length) {
-  console.log(`${comprobados} opciones de «Tipo de acto», todas con su traducción; y ninguna traducción sobra`);
+  console.log(
+    `${comprobados} opciones de «Tipo de acto» y «Causal», todas con su traducción; y ninguna traducción sobra`,
+  );
   process.exit(0);
 }
 console.log('vocabulario descuadrado entre la pantalla y el backend:\n');

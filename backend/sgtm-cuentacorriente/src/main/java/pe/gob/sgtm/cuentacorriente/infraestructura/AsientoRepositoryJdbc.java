@@ -15,6 +15,7 @@ import org.springframework.stereotype.Repository;
 import pe.gob.sgtm.auditoria.OrigenContext;
 import pe.gob.sgtm.compartido.Pagina;
 import pe.gob.sgtm.compartido.Paginacion;
+import pe.gob.sgtm.cuentacorriente.CausalDeBaja;
 import pe.gob.sgtm.cuentacorriente.dominio.ActoDelLibro;
 import pe.gob.sgtm.cuentacorriente.dominio.Asiento;
 import pe.gob.sgtm.cuentacorriente.dominio.AsientoRepository;
@@ -58,7 +59,7 @@ public class AsientoRepositoryJdbc extends RepositorioJdbc implements AsientoRep
             "a.id, a.ejercicio, a.contribuyente_id, a.tributo, a.concepto, a.tipo, a.fase,"
                     + " a.periodo, a.predio_id, a.vehiculo_id, a.referencia_externa, a.monto,"
                     + " a.fecha_valor, a.documento_origen, a.asiento_reversado_id, a.usuario_id,"
-                    + " a.motivo, a.acto, a.unidad_de_titular_anterior";
+                    + " a.motivo, a.acto, a.unidad_de_titular_anterior, a.causal";
 
     private static final String DESDE = " FROM cuenta_corriente_asiento a";
 
@@ -259,6 +260,20 @@ public class AsientoRepositoryJdbc extends RepositorioJdbc implements AsientoRep
         if (criterio.tributo() != null) {
             condiciones.add("a.tributo = :tributo");
             parametros.put("tributo", criterio.tributo());
+        }
+        if (criterio.causal() != null) {
+            // El filtro de #684, y el que la pantalla de RF-045 no tenia: «ensename las
+            // bajas por prescripcion». Acota por la COLUMNA, no por el texto de la
+            // observacion: hasta V77 la causal viajaba ahi dentro y «PRESCRIPCION
+            // DECLARADA», «prescripción declarada» y «prescrita s/ Res. 123-2026» eran la
+            // misma causal en tres cadenas distintas.
+            //
+            // Solo una baja tiene causal (asiento_causal_del_acto_ck), asi que este filtro
+            // deja fuera las altas por si mismo — y tambien las bajas anteriores a V77, que
+            // la tienen en nulo y no se pueden reparar (V7, regla 4). Sin filtro salen
+            // todas, que es lo que la relacion hacia antes y sigue haciendo.
+            condiciones.add("a.causal = :causal");
+            parametros.put("causal", criterio.causal().name());
         }
         if (criterio.sentido() != null) {
             // Un alta incorpora deuda (CARGO) y una baja la extingue (ABONO): es la
@@ -771,14 +786,14 @@ public class AsientoRepositoryJdbc extends RepositorioJdbc implements AsientoRep
                                         + "  tributo, concepto, tipo, fase, periodo, predio_id,"
                                         + "  vehiculo_id, referencia_externa, monto, fecha_valor,"
                                         + "  documento_origen, asiento_reversado_id, usuario_id,"
-                                        + "  motivo, acto, unidad_de_titular_anterior)"
+                                        + "  motivo, acto, unidad_de_titular_anterior, causal)"
                                         + " VALUES ("
                                         + MUNICIPALIDAD_ACTUAL
                                         + ", :ejercicio, :contribuyenteId, :tributo, :concepto,"
                                         + "  :tipo, :fase, :periodo, :predioId, :vehiculoId,"
                                         + "  :referenciaExterna, :monto, :fechaValor,"
                                         + "  :documentoOrigen, :asientoReversadoId, :usuario,"
-                                        + "  :motivo, :acto, :deTitularAnterior)"
+                                        + "  :motivo, :acto, :deTitularAnterior, :causal)"
                                         + " RETURNING id")
                         .param("ejercicio", asiento.ejercicio().valor())
                         .param("contribuyenteId", asiento.contribuyenteId())
@@ -798,6 +813,9 @@ public class AsientoRepositoryJdbc extends RepositorioJdbc implements AsientoRep
                         .param("motivo", asiento.motivo())
                         .param("acto", asiento.acto() == null ? null : asiento.acto().name())
                         .param("deTitularAnterior", asiento.unidadDeTitularAnterior())
+                        .param(
+                                "causal",
+                                asiento.causal() == null ? null : asiento.causal().name())
                         .query(Long.class)
                         .single();
 
@@ -820,7 +838,8 @@ public class AsientoRepositoryJdbc extends RepositorioJdbc implements AsientoRep
                 usuario,
                 asiento.motivo(),
                 asiento.acto(),
-                asiento.unidadDeTitularAnterior());
+                asiento.unidadDeTitularAnterior(),
+                asiento.causal());
     }
 
     private static Asiento mapear(ResultSet fila, int numeroDeFila) throws SQLException {
@@ -852,7 +871,8 @@ public class AsientoRepositoryJdbc extends RepositorioJdbc implements AsientoRep
                 fila.getString("usuario_id"),
                 fila.getString("motivo"),
                 actoDe(fila.getString("acto")),
-                fila.getBoolean("unidad_de_titular_anterior"));
+                fila.getBoolean("unidad_de_titular_anterior"),
+                causalDe(fila.getString("causal")));
     }
 
     /**
@@ -861,5 +881,13 @@ public class AsientoRepositoryJdbc extends RepositorioJdbc implements AsientoRep
      */
     private static @Nullable ActoDelLibro actoDe(@Nullable String columna) {
         return columna == null ? null : ActoDelLibro.valueOf(columna);
+    }
+
+    /**
+     * La causal de la baja, si la fila la declara. Nulo es «esta fila no la declaro» —toda baja
+     * anterior a V77, y todo asiento que no es una baja—, no «se desconoce» (#684, V77).
+     */
+    private static @Nullable CausalDeBaja causalDe(@Nullable String columna) {
+        return columna == null ? null : CausalDeBaja.valueOf(columna);
     }
 }

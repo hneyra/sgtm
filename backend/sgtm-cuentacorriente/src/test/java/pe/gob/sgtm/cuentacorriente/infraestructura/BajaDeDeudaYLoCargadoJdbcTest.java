@@ -36,6 +36,7 @@ import pe.gob.sgtm.cuentacorriente.RecaudadoEnElLibro;
 import pe.gob.sgtm.cuentacorriente.aplicacion.CarteraDelLibroCuentaCorriente;
 import pe.gob.sgtm.cuentacorriente.aplicacion.RecaudacionDelLibroCuentaCorriente;
 import pe.gob.sgtm.cuentacorriente.aplicacion.RegistrarAsiento;
+import pe.gob.sgtm.cuentacorriente.CausalDeBaja;
 import pe.gob.sgtm.cuentacorriente.dominio.ActoDelLibro;
 import pe.gob.sgtm.cuentacorriente.dominio.Asiento;
 import pe.gob.sgtm.cuentacorriente.dominio.ClaveDeSaldo;
@@ -474,7 +475,11 @@ class BajaDeDeudaYLoCargadoJdbcTest {
                         Fase.ORDINARIA,
                         LocalDate.of(2026, 4, 10),
                         documento,
-                        null);
+                        null,
+                        // Toda baja declara su causal desde #684; un alta no la lleva.
+                        sentido == SentidoDelMovimiento.BAJA
+                                ? CausalDeBaja.ERROR_MATERIAL
+                                : null);
         for (Asiento asiento : movimiento.enAsientos()) {
             registrar.asentar(asiento, Observacion.de("Acto de la prueba de #601: " + sentido));
         }

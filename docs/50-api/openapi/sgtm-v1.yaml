@@ -6244,6 +6244,18 @@ paths:
           required: false
           description: "Filtro «Alta / Baja» de la pantalla"
           schema: { type: string }
+        - name: causal
+          in: query
+          required: false
+          description: >-
+            Por que se dio de baja la deuda. El vocabulario es el del desplegable «Causal» de la
+            pantalla de baja de deuda, letra por letra salvo la tilde y el espacio, que ningun
+            identificador lleva; cualquier otra palabra se rechaza con 422 nombrando lo admitido en
+            vez de devolver la relacion entera bajo un filtro que no acota. Acota a las bajas —un
+            alta no tiene causal— y deja fuera las anteriores a la migracion que estampa la
+            columna, que la tienen vacia y no se pueden reparar.
+          schema: { type: string, enum: [PRESCRIPCION_DECLARADA, RESOLUCION_QUE_DEJA_SIN_EFECTO, ERROR_MATERIAL, COMPENSACION, DEUDA_DE_COBRANZA_DUDOSA, CONDONACION_POR_ORDENANZA] }
+          example: "PRESCRIPCION_DECLARADA"
         - name: autoManual
           in: query
           required: false

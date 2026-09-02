@@ -29,6 +29,7 @@ import pe.gob.sgtm.auditoria.AuditoriaJdbc;
 import pe.gob.sgtm.auditoria.Origen;
 import pe.gob.sgtm.auditoria.OrigenContext;
 import pe.gob.sgtm.compartido.TenantContext;
+import pe.gob.sgtm.cuentacorriente.CausalDeBaja;
 import pe.gob.sgtm.cuentacorriente.dominio.Asiento;
 import pe.gob.sgtm.cuentacorriente.dominio.CalculoDeDeuda;
 import pe.gob.sgtm.cuentacorriente.dominio.ClaveDeSaldo;
@@ -377,7 +378,8 @@ class SaldoYMovimientosTest {
                                                 Fase.ORDINARIA,
                                                 FECHA,
                                                 "RES-2026-0002",
-                                                null),
+                                                null,
+                                                CausalDeBaja.ERROR_MATERIAL),
                                         codigoDe(titular),
                                         OBSERVACION))
                 .isInstanceOf(RegistrarMovimientoDeDeuda.BajaMayorQueLaDeuda.class)
@@ -403,7 +405,8 @@ class SaldoYMovimientosTest {
                                                 Fase.ORDINARIA,
                                                 FECHA,
                                                 "RES-2026-0003",
-                                                null),
+                                                null,
+                                                CausalDeBaja.ERROR_MATERIAL),
                                         codigoDe(titular),
                                         OBSERVACION))
                 .isInstanceOf(RegistrarMovimientoDeDeuda.BajaMayorQueLaDeuda.class);
@@ -537,7 +540,10 @@ class SaldoYMovimientosTest {
                 Fase.ORDINARIA,
                 FECHA,
                 "RES-2026-0002",
-                null);
+                null,
+                // Toda baja declara su causal desde #684: es el sustento juridico del acto y el
+                // constructor no admite una sin ella.
+                CausalDeBaja.ERROR_MATERIAL);
     }
 
     /** Deja la fila de saldo con una cifra que el libro no respalda. */

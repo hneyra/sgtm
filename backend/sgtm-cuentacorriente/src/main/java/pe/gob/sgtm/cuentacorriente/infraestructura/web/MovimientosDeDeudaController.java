@@ -15,6 +15,7 @@ import org.springframework.web.bind.annotation.ResponseStatus;
 import org.springframework.web.bind.annotation.RestController;
 import pe.gob.sgtm.autorizacion.Privilegio;
 import pe.gob.sgtm.autorizacion.RequiereAcceso;
+import pe.gob.sgtm.cuentacorriente.CausalDeBaja;
 import pe.gob.sgtm.cuentacorriente.aplicacion.ConsultasDelLibro;
 import pe.gob.sgtm.cuentacorriente.aplicacion.RegistrarMovimientoDeDeuda;
 import pe.gob.sgtm.cuentacorriente.dominio.AsientoRepository;
@@ -45,6 +46,20 @@ import pe.gob.sgtm.web.ProblemaDeNegocio;
  *
  * <p>El cuerpo es una <b>lista blanca</b>: un campo que la opcion no declara no entra, aunque
  * llegue en el JSON.
+ *
+ * <h2>La causal de la baja tiene campo propio desde #684</h2>
+ *
+ * <p>Hasta entonces la lista blanca declaraba diecinueve campos y <b>ninguno era la causal</b>, asi
+ * que «PRESCRIPCIÓN DECLARADA», «RESOLUCIÓN QUE DEJA SIN EFECTO» o «ERROR MATERIAL» viajaban
+ * <b>dentro de la observacion</b> —texto libre de quien atiende—. El libro guardaba el {@code acto}
+ * desde V68, que dice <b>que</b> se hizo, y nada decia <b>por que</b>: RF-045 no podia contestar
+ * «ensename las bajas por prescripcion» y la unica salida era leer la observacion de cada fila a
+ * ojo. Y no era comparable: «PRESCRIPCION DECLARADA», «prescripción declarada» y «prescrita s/ Res.
+ * 123-2026» son la misma causal en tres cadenas distintas.
+ *
+ * <p>Son <b>dos cosas y siguen siendolo</b>: la causal es el sustento juridico —vocabulario cerrado
+ * ({@link CausalDeBaja}), su columna y su {@code CHECK}— y la observacion es el relato de quien
+ * firma, que la regla 10 sigue exigiendo aparte. Ninguna sustituye a la otra.
  *
  * <h2>El rango de cuotas, y por que se declara en vez de rechazarse (#538)</h2>
  *
@@ -221,7 +236,8 @@ public class MovimientosDeDeudaController {
                             faseDe(peticion.fase()),
                             fechaDe(peticion.fechaValor()),
                             exigir(peticion.documentoOrigen(), "documentoOrigen"),
-                            peticion.referenciaExterna());
+                            peticion.referenciaExterna(),
+                            causalDe(sentido, peticion.causal()));
         } catch (IllegalArgumentException invalido) {
             throw new ProblemaDeNegocio(CodigoDeError.VALIDACION, mensajeDe(invalido));
         }
@@ -366,6 +382,66 @@ public class MovimientosDeDeudaController {
                                         "No hay ningun contribuyente con ese codigo"));
     }
 
+    /**
+     * La causal del acto: obligatoria en la baja, prohibida en el alta (#684).
+     *
+     * <h2>Obligatoria, y por que se puede exigir sin romper a nadie</h2>
+     *
+     * <p>Es el <b>sustento juridico</b> de un acto que extingue deuda del municipio, y hasta #684
+     * no tenia campo: la pantalla de RF-044 la anteponia al texto de la observacion —«PRESCRIPCIÓN
+     * DECLARADA. Deshace el alta…»— porque este {@code record} declaraba diecinueve campos y
+     * ninguno era este. Dejarla opcional habria dejado la puerta por la que volveria a colarse
+     * ahi, con el mismo aspecto de siempre y sin nada que lo dijera.
+     *
+     * <p>Exigirla no le quita nada a quien atiende: el desplegable «Causal» de esa pantalla nace
+     * <b>vacio</b> desde #636 y su primaria esta apagada mientras no se elija una, asi que por la
+     * interfaz no se puede llegar a este 422. Lo que cambia es que ahora tampoco se puede llegar
+     * por ningun otro sitio.
+     *
+     * <h2>Prohibida en el alta</h2>
+     *
+     * <p>La pantalla del alta no dibuja ningun desplegable de causal —lo que sustenta un alta es su
+     * documento de origen—, asi que una causal en {@code POST /rentas/deuda/altas} es un campo que
+     * nadie pidio; se rechaza en vez de guardarse, y ademas lo impide el {@code CHECK} de V77.
+     *
+     * <h2>Sin lectura tolerante</h2>
+     *
+     * <p>{@link CausalDeBaja#de} no normaliza tildes ni separadores a proposito (#542): con esa
+     * tolerancia «COMPENSACIÓN» y «COMPENSACION» entrarian las dos y quedarian guardadas como la
+     * misma. Lo que no es exactamente una de las seis se rechaza <b>nombrando lo recibido y lo
+     * admitido</b>, que es lo que un 422 tiene que decir.
+     */
+    private static @Nullable CausalDeBaja causalDe(
+            SentidoDelMovimiento sentido, @Nullable String texto) {
+        String declarado = texto == null || texto.isBlank() ? null : texto;
+        if (sentido == SentidoDelMovimiento.ALTA) {
+            if (declarado != null) {
+                throw new ProblemaDeNegocio(
+                        CodigoDeError.VALIDACION,
+                        "Un alta de deuda no lleva causal: el desplegable «Causal» es el de la"
+                                + " baja, y lo que sustenta el alta es su documento de origen");
+            }
+            return null;
+        }
+        if (declarado == null) {
+            throw new ProblemaDeNegocio(
+                    CodigoDeError.VALIDACION,
+                    "Falta el campo 'causal': una baja de deuda declara por que se da de baja, y"
+                            + " eso no es la observacion. Las que hay son "
+                            + CausalDeBaja.admitidas());
+        }
+        try {
+            return CausalDeBaja.de(declarado);
+        } catch (IllegalArgumentException desconocida) {
+            throw new ProblemaDeNegocio(
+                    CodigoDeError.VALIDACION,
+                    "Causal de baja desconocida: '"
+                            + texto
+                            + "'. Las que hay son "
+                            + CausalDeBaja.admitidas());
+        }
+    }
+
     private static Observacion observacionDe(@Nullable String texto) {
         if (texto == null || texto.isBlank()) {
             throw new ProblemaDeNegocio(
@@ -470,5 +546,6 @@ public class MovimientosDeDeudaController {
             @Nullable String fase,
             @Nullable String fechaValor,
             @Nullable String documentoOrigen,
-            @Nullable String referenciaExterna) {}
+            @Nullable String referenciaExterna,
+            @Nullable String causal) {}
 }

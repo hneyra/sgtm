@@ -456,7 +456,7 @@ class AltaDeDeudaRepetidaFronteraTest {
                 mvc.perform(
                                 post("/api/v1/rentas/deuda/bajas")
                                         .contentType(MediaType.APPLICATION_JSON)
-                                        .content(cuerpo(codigo, "\"cuota\":6,", "RES-2026-2009")))
+                                        .content(conCausal(cuerpo(codigo, "\"cuota\":6,", "RES-2026-2009"))))
                         .andReturn();
 
         assertThat(baja.getResponse().getStatus())
@@ -770,4 +770,17 @@ class AltaDeDeudaRepetidaFronteraTest {
                     return List.of();
                 }
             };
+
+    /**
+     * El mismo cuerpo, con la causal que toda baja declara desde #684.
+     *
+     * <p>La causal es el sustento juridico del acto y tiene campo propio: hasta entonces viajaba
+     * dentro del texto de la observacion y el libro no sabia por que se dio de baja. El alta no la
+     * lleva —el desplegable «Causal» es el de la baja—, y por eso se anade aqui y no en el cuerpo
+     * comun.
+     */
+    private static String conCausal(String cuerpo) {
+        return cuerpo.replace("\"observacion\"", "\"causal\":\"ERROR_MATERIAL\",\"observacion\"");
+    }
+
 }

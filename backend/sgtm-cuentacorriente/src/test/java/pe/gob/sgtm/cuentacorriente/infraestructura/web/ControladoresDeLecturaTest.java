@@ -142,14 +142,14 @@ class ControladoresDeLecturaTest {
         assertThatThrownBy(
                         () ->
                                 altasBajasSinProxy.altasYBajas(
-                                        CODIGO, null, null, null, null, paginacion()))
+                                        CODIGO, null, null, null, null, null, paginacion()))
                 .isInstanceOf(RuntimeException.class);
     }
 
     @Test
     @DisplayName("con @Transactional, el GET de altas y bajas funciona")
     void conProxyAltasBajasFunciona() {
-        var pagina = altasBajasConProxy.altasYBajas(CODIGO, null, null, null, null, paginacion());
+        var pagina = altasBajasConProxy.altasYBajas(CODIGO, null, null, null, null, null, paginacion());
 
         assertThat(pagina.totalElementos()).isZero();
     }
@@ -177,7 +177,7 @@ class ControladoresDeLecturaTest {
         assertThatThrownBy(
                         () ->
                                 altasBajasConProxy.altasYBajas(
-                                        "NO-EXISTE", null, null, null, null, paginacion()))
+                                        "NO-EXISTE", null, null, null, null, null, paginacion()))
                 .as(
                         "«existe y no tiene movimientos» y «ese codigo no esta en el padron» se"
                                 + " decian igual, y una de las dos es falsa")
@@ -198,7 +198,7 @@ class ControladoresDeLecturaTest {
     void elQueExisteYNoTieneNadaSigueSiendoCeroFilas() {
         assertThat(
                         altasBajasConProxy
-                                .altasYBajas(CODIGO, null, null, null, null, paginacion())
+                                .altasYBajas(CODIGO, null, null, null, null, null, paginacion())
                                 .totalElementos())
                 .as("es el unico caso que de verdad significa «no tiene»")
                 .isZero();
@@ -210,7 +210,7 @@ class ControladoresDeLecturaTest {
     void elAliasSigueValiendo() {
         assertThat(
                         altasBajasConProxy
-                                .altasYBajas(null, CODIGO, null, null, null, paginacion())
+                                .altasYBajas(null, CODIGO, null, null, null, null, paginacion())
                                 .totalElementos())
                 .isZero();
     }
@@ -221,7 +221,7 @@ class ControladoresDeLecturaTest {
         assertThatThrownBy(
                         () ->
                                 altasBajasConProxy.altasYBajas(
-                                        null, null, null, null, null, paginacion()))
+                                        null, null, null, null, null, null, paginacion()))
                 .isInstanceOf(ProblemaDeNegocio.class);
         assertThatThrownBy(() -> pagosConProxy.pagos(null, null, null, paginacion()))
                 .isInstanceOf(ProblemaDeNegocio.class);

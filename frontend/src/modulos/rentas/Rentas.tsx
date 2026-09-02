@@ -7,6 +7,7 @@ import {
   beneficiosDelContribuyente,
   buscarContribuyentes,
   calcularVehicular,
+  causalDeBajaDelBackend,
   corregirContribuyente,
   correrPredialMasivo,
   determinarPredial,
@@ -2399,11 +2400,14 @@ export default function Rentas({ dest, onDest }: PantallaProps) {
       return `La unidad de esa obligación ${cruceDeLaBaja.datos.de}, no de ${sujetoDeDeuda.nombreRazonSocial}. Si la deuda es de cuando sí era suya, márcalo en la casilla de debajo de la tabla; si no, revisa la fila marcada`;
     if (observacionDelActo.trim() === '') return 'Falta la observación: sin motivo no se guarda';
     /* La causal no tiene valor por omision desde #636, y por eso hace falta
-       exigirla aqui: se antepone a la observacion, que es LO UNICO que se audita
-       del acto, asi que una por omision quedaria escrita sin que nadie la
-       eligiera. Y no se puede corregir despues: el libro no admite `UPDATE`. */
-    if (texto('causal').trim() === '')
-      return 'Elige la causal: es lo primero que se lee en la observación del acto, que es lo único que queda auditado de una baja, y no se puede corregir después';
+       exigirla aqui: desde #684 tiene CAMPO PROPIO y el servidor la rechaza si
+       falta, asi que una por omision quedaria escrita en el libro sin que nadie
+       la eligiera. Y no se puede corregir despues: el libro no admite `UPDATE`.
+       Se comprueba contra la tabla de traduccion, que es lo mismo que se manda:
+       un rotulo sin entrada seria un 422 con un valor que quien atiende acaba de
+       elegir de una lista. */
+    if (causalDeBajaDelBackend(texto('causal')) === null)
+      return 'Elige la causal: es el sustento jurídico de la baja, viaja en su propio campo y el servidor la exige; queda escrita en el libro y no se puede corregir después';
     if (texto('numRes').trim() === '')
       return 'Falta el Nº de resolución: sin la resolución que la aprueba, una baja no se puede defender ante nadie';
     return undefined;
@@ -2514,13 +2518,17 @@ export default function Rentas({ dest, onDest }: PantallaProps) {
     setRegistrando(true);
     try {
       const o = obligacionDeLaBaja!;
-      /* La causal no tiene campo propio en `PeticionDeMovimiento`, así que se
-         antepone a la observación —que es donde queda auditada— en vez de
-         perderse en un desplegable que no viaja. */
-      const causal = texto('causal').trim();
+      /* La causal viaja en SU CAMPO desde #684, y ya no dentro de la observación:
+         son dos cosas —el sustento jurídico del acto y el relato de quien firma
+         (regla 10)— y componerlas en una cadena dejaba al libro sin saber por
+         qué se dio de baja. El rótulo del manual no es el valor que el backend
+         admite, así que se traduce **con una tabla**, nunca quitando tildes con
+         una función (#542): un valor que no sea uno de los seis es 422. */
+      const causal = causalDeBajaDelBackend(texto('causal'));
       const cuotas = o.periodoDesde === o.periodoHasta ? { cuota: o.periodoDesde } : {};
       const cuerpo: PeticionDeMovimientoDeDeuda = {
-        observacion: causal === '' ? observacionDelActo.trim() : `${causal}. ${observacionDelActo.trim()}`,
+        observacion: observacionDelActo.trim(),
+        causal: causal ?? undefined,
         codContribuyente: sujetoDeDeuda!.codigo,
         tributo: o.tributo,
         ano: String(o.ejercicio),
@@ -4336,7 +4344,7 @@ export default function Rentas({ dest, onDest }: PantallaProps) {
               <p style={{ margin: 0, flex: 1, minWidth: 180, fontSize: 12, color: 'var(--ink-3)', textWrap: 'pretty' }}>
                 {hoja === 'alta'
                   ? 'Un alta manual entra en la cuenta corriente y se cobra como cualquier otra deuda. Queda en la bitácora con tu usuario. Con «Cuota desde» y «Cuota hasta» se registra una obligación por cuota, y el desglose se repite en cada una.'
-                  : 'Elige arriba la obligación que se extingue: una por acto. El importe que se da de baja es el que el servidor publicó para ella a la fecha de la resolución, y si la fila agrupa varias cuotas es él quien lo reparte entre ellas; la causal se antepone a la observación, porque el cuerpo no tiene campo propio para ella.'}
+                  : 'Elige arriba la obligación que se extingue: una por acto. El importe que se da de baja es el que el servidor publicó para ella a la fecha de la resolución, y si la fila agrupa varias cuotas es él quien lo reparte entre ellas; la causal viaja en su propio campo y queda escrita en el libro, aparte de la observación.'}
               </p>
               <label style={{ flex: 1, minWidth: 220 }}>
                 <span style={{ display: 'block', fontSize: 11, fontWeight: 500, color: 'var(--ink-3)', marginBottom: 4 }}>

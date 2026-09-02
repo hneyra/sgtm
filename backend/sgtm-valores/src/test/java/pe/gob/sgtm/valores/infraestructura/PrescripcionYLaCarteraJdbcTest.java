@@ -348,9 +348,10 @@ class PrescripcionYLaCarteraJdbcTest {
         comoApp(
                 "INSERT INTO cuenta_corriente_asiento (municipalidad_id, ejercicio,"
                         + " contribuyente_id, tributo, concepto, tipo, fase, predio_id, monto,"
-                        + " fecha_valor, documento_origen, usuario_id, acto)"
+                        + " fecha_valor, documento_origen, usuario_id, acto, causal)"
                         + " VALUES (?, 2026, ?, 'PREDIAL', 'INSOLUTO', 'ABONO', 'ORDINARIA', ?, ?,"
-                        + " DATE '2033-06-01', 'NC-2033-000001', 'siembra', 'BAJA_DEUDA')"
+                        + " DATE '2033-06-01', 'NC-2033-000001', 'siembra', 'BAJA_DEUDA',"
+                        + " 'PRESCRIPCION_DECLARADA')"
                         + " RETURNING id",
                 municipalidad,
                 contribuyente,

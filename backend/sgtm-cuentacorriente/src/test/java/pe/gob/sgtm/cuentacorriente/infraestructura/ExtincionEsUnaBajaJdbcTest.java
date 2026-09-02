@@ -33,6 +33,7 @@ import pe.gob.sgtm.auditoria.OrigenContext;
 import pe.gob.sgtm.compartido.Pagina;
 import pe.gob.sgtm.compartido.Paginacion;
 import pe.gob.sgtm.compartido.TenantContext;
+import pe.gob.sgtm.cuentacorriente.CausalDeBaja;
 import pe.gob.sgtm.cuentacorriente.CargadoEnElLibro;
 import pe.gob.sgtm.cuentacorriente.ExtincionDeDeuda;
 import pe.gob.sgtm.cuentacorriente.MovimientoAsentado;
@@ -341,7 +342,24 @@ class ExtincionEsUnaBajaJdbcTest {
                                 assertThat(asiento.motivo())
                                         .as("y el motivo es la observacion de quien resolvio")
                                         .isEqualTo(PORQUE.texto());
+                                assertThat(asiento.causal())
+                                        .as(
+                                                "y su causal, que la declara quien dicta la"
+                                                    + " resolucion —acaba de comprobar"
+                                                    + " dejaLaMultaSinEfecto()— y no la adivina"
+                                                    + " esta implementacion (#684). Sin ella, la"
+                                                    + " via por la que se extingue deuda con mas"
+                                                    + " consecuencias seria la unica que el filtro"
+                                                    + " por causal de RF-045 no encuentra")
+                                        .isEqualTo(CausalDeBaja.RESOLUCION_QUE_DEJA_SIN_EFECTO);
                             });
+
+            assertThat(relacionPorCausal(codigo, CausalDeBaja.RESOLUCION_QUE_DEJA_SIN_EFECTO))
+                    .as("y por eso el filtro de #684 la encuentra")
+                    .hasSize(1);
+            assertThat(relacionPorCausal(codigo, CausalDeBaja.PRESCRIPCION_DECLARADA))
+                    .as("y no la confunde con otra causal")
+                    .isEmpty();
         }
 
         @Test
@@ -513,6 +531,7 @@ class ExtincionEsUnaBajaJdbcTest {
                                         RESOLUCION,
                                         "RESOLUCION RG-2026-000123",
                                         "PT-000123",
+                                        CausalDeBaja.RESOLUCION_QUE_DEJA_SIN_EFECTO,
                                         PORQUE));
         return java.util.Objects.requireNonNull(asentado);
     }
@@ -594,7 +613,11 @@ class ExtincionEsUnaBajaJdbcTest {
                         Fase.ORDINARIA,
                         LocalDate.of(2026, 4, 10),
                         "RES-" + sentido + "-" + tributo,
-                        null);
+                        null,
+                        // Toda baja declara su causal desde #684; un alta no la lleva.
+                        sentido == SentidoDelMovimiento.BAJA
+                                ? CausalDeBaja.ERROR_MATERIAL
+                                : null);
         transaccion.execute(
                 estado -> {
                     for (Asiento asiento : movimiento.enAsientos()) {
@@ -626,6 +649,18 @@ class ExtincionEsUnaBajaJdbcTest {
                         estado ->
                                 asientos.altasYBajas(
                                         new CriterioDeAltasBajas(codigo, EJERCICIO, null, sentido),
+                                        PAGINA));
+        return java.util.Objects.requireNonNull(pagina).contenido();
+    }
+
+    /** La misma relacion, acotada por la causal de la baja (#684). */
+    private static List<Asiento> relacionPorCausal(String codigo, CausalDeBaja causal) {
+        Pagina<Asiento> pagina =
+                transaccion.execute(
+                        estado ->
+                                asientos.altasYBajas(
+                                        new CriterioDeAltasBajas(
+                                                codigo, EJERCICIO, null, null, causal),
                                         PAGINA));
         return java.util.Objects.requireNonNull(pagina).contenido();
     }

@@ -4,6 +4,7 @@ import java.time.LocalDate;
 import java.util.Locale;
 import java.util.Objects;
 import org.jspecify.annotations.Nullable;
+import pe.gob.sgtm.cuentacorriente.CausalDeBaja;
 import pe.gob.sgtm.dominio.Dinero;
 import pe.gob.sgtm.dominio.Ejercicio;
 
@@ -47,6 +48,11 @@ import pe.gob.sgtm.dominio.Ejercicio;
  *     transferencia (#635, #653). Es una <b>declaracion</b>, no un hecho derivado: lo que separa el
  *     acto legitimo del error es que alguien lo diga, y sin esta columna la fila quedaba
  *     indistinguible de un alta sobre la unidad propia
+ * @param causal por que se dio de baja la deuda: el sustento juridico del acto (#684). Solo la
+ *     lleva una baja —{@code acto = BAJA_DEUDA}—, y {@code null} es «esta fila no la declaro», que
+ *     es lo que ocurre en toda baja anterior a V77 y en todo asiento que no es una baja. No
+ *     sustituye al {@code motivo}: ese es la observacion DEL USUARIO (regla 10), y componer la
+ *     causal dentro de su texto fue el defecto que #684 cierra; ver {@link CausalDeBaja}
  */
 public record Asiento(
         @Nullable Long id,
@@ -67,7 +73,8 @@ public record Asiento(
         @Nullable String usuarioId,
         @Nullable String motivo,
         @Nullable ActoDelLibro acto,
-        boolean unidadDeTitularAnterior) {
+        boolean unidadDeTitularAnterior,
+        @Nullable CausalDeBaja causal) {
 
     /**
      * La forma anterior a #653, que deja la declaracion en {@code false}.
@@ -116,7 +123,59 @@ public record Asiento(
                 usuarioId,
                 motivo,
                 acto,
-                false);
+                false,
+                null);
+    }
+
+    /**
+     * La forma anterior a #684, que deja la baja <b>sin causal declarada</b>.
+     *
+     * <p>Existe por lo mismo que la de arriba: la causal solo la conoce quien registra la baja
+     * —quien la elige en el desplegable de RF-044, o quien dicta la resolucion que la ordena—, y
+     * ningun otro camino del libro puede declararla. {@code null} ahi no es un valor por omision de
+     * conveniencia: es que nadie la declaro.
+     */
+    public Asiento(
+            @Nullable Long id,
+            Ejercicio ejercicio,
+            long contribuyenteId,
+            String tributo,
+            Concepto concepto,
+            TipoAsiento tipo,
+            Fase fase,
+            @Nullable Integer periodo,
+            @Nullable Long predioId,
+            @Nullable Long vehiculoId,
+            @Nullable String referenciaExterna,
+            Dinero monto,
+            LocalDate fechaValor,
+            String documentoOrigen,
+            @Nullable Long asientoReversadoId,
+            @Nullable String usuarioId,
+            @Nullable String motivo,
+            @Nullable ActoDelLibro acto,
+            boolean unidadDeTitularAnterior) {
+        this(
+                id,
+                ejercicio,
+                contribuyenteId,
+                tributo,
+                concepto,
+                tipo,
+                fase,
+                periodo,
+                predioId,
+                vehiculoId,
+                referenciaExterna,
+                monto,
+                fechaValor,
+                documentoOrigen,
+                asientoReversadoId,
+                usuarioId,
+                motivo,
+                acto,
+                unidadDeTitularAnterior,
+                null);
     }
 
     /** El ancho de {@code tributo varchar(20)}. */
@@ -211,6 +270,20 @@ public record Asiento(
                             + concepto
                             + " altera la deuda sin que medie cobro y exige motivo"
                             + " (asiento_motivo_ck, RNF-052)");
+        }
+        // Solo una BAJA tiene causal (#684): el alta no la tiene y su pantalla no dibuja el
+        // desplegable. Es `asiento_causal_del_acto_ck` (V77) dicho aqui tambien, y en esta
+        // direccion nada mas. La contraria —«toda baja lleva causal»— NO se puede exigir aqui,
+        // y no por descuido: este constructor tambien RECONSTRUYE las filas que vienen de la
+        // base, y las bajas anteriores a V77 llevan `acto = BAJA_DEUDA` con la causal en nulo
+        // —no se pueden reparar (V7, regla 4)—, asi que exigirla haria que leer el libro de una
+        // instalacion con historia reventara. Quien la exige es `MovimientoDeDeuda`, que es una
+        // PETICION y no una lectura, y el CHECK `NOT VALID` de V77, que solo mira lo que entra.
+        if (causal != null && acto != ActoDelLibro.BAJA_DEUDA) {
+            throw new IllegalArgumentException(
+                    "Solo una baja de deuda tiene causal, y este asiento nace del acto "
+                            + acto
+                            + " (asiento_causal_del_acto_ck, V77)");
         }
     }
 
@@ -323,6 +396,55 @@ public record Asiento(
             String documentoOrigen,
             @Nullable ActoDelLibro acto,
             boolean unidadDeTitularAnterior) {
+        return nuevoDelActo(
+                ejercicio,
+                contribuyenteId,
+                tributo,
+                concepto,
+                tipo,
+                fase,
+                periodo,
+                predioId,
+                vehiculoId,
+                referenciaExterna,
+                monto,
+                fechaValor,
+                documentoOrigen,
+                acto,
+                unidadDeTitularAnterior,
+                null);
+    }
+
+    /**
+     * El asiento del acto que ademas declara <b>por que</b> se da de baja (#684).
+     *
+     * <p>Lo llenan los dos unicos sitios que escriben una baja de deuda: {@link
+     * MovimientoDeDeuda#enAsientos(boolean)} —la pantalla de RF-044, donde la causal se elige de un
+     * desplegable cerrado— y {@code ExtincionDeDeudaCuentaCorriente}, donde la declara quien dicta
+     * la resolucion de gerencia. Ningun otro camino del libro puede declararla, y por eso los demas
+     * siguen llamando a las sobrecargas de arriba.
+     *
+     * <p>La causal <b>no</b> sustituye al motivo: ese es la observacion del usuario (regla 10) y lo
+     * pone {@code RegistrarAsiento}. Son el sustento y el relato, y este metodo existe justamente
+     * para que la primera deje de viajar dentro del segundo.
+     */
+    public static Asiento nuevoDelActo(
+            Ejercicio ejercicio,
+            long contribuyenteId,
+            String tributo,
+            Concepto concepto,
+            TipoAsiento tipo,
+            Fase fase,
+            @Nullable Integer periodo,
+            @Nullable Long predioId,
+            @Nullable Long vehiculoId,
+            @Nullable String referenciaExterna,
+            Dinero monto,
+            LocalDate fechaValor,
+            String documentoOrigen,
+            @Nullable ActoDelLibro acto,
+            boolean unidadDeTitularAnterior,
+            @Nullable CausalDeBaja causal) {
         return new Asiento(
                 null,
                 ejercicio,
@@ -342,7 +464,8 @@ public record Asiento(
                 null,
                 null,
                 acto,
-                unidadDeTitularAnterior);
+                unidadDeTitularAnterior,
+                causal);
     }
 
     /**
@@ -422,7 +545,8 @@ public record Asiento(
                 usuarioId,
                 otroMotivo,
                 acto,
-                unidadDeTitularAnterior);
+                unidadDeTitularAnterior,
+                causal);
     }
 
     /**
@@ -469,6 +593,10 @@ public record Asiento(
                 original.acto(),
                 // Y la declaracion tambien: reversar un alta declarada de titular anterior no
                 // deshace la declaracion, la contabiliza al reves.
-                original.unidadDeTitularAnterior());
+                original.unidadDeTitularAnterior(),
+                // Y la causal, por lo mismo que el acto (#684): la reversion de una baja por
+                // prescripcion sigue siendo el rastro de aquella baja por prescripcion. Perderla
+                // aqui dejaria la fila que DESHACE el acto fuera del filtro que lo encuentra.
+                original.causal());
     }
 }

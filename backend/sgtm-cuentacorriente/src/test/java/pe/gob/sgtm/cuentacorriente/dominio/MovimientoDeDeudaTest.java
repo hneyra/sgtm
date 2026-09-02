@@ -6,6 +6,7 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import java.time.LocalDate;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
+import pe.gob.sgtm.cuentacorriente.CausalDeBaja;
 import pe.gob.sgtm.dominio.Dinero;
 import pe.gob.sgtm.dominio.Ejercicio;
 
@@ -182,6 +183,9 @@ class MovimientoDeDeudaTest {
                 Fase.ORDINARIA,
                 FECHA,
                 "RES-2026-0001",
-                null);
+                null,
+                // Una baja declara su causal y un alta no la lleva (#684): las dos direcciones
+                // las comprueba `LaCausalDelActo`, aqui solo se compone el movimiento valido.
+                sentido == SentidoDelMovimiento.BAJA ? CausalDeBaja.ERROR_MATERIAL : null);
     }
 }

@@ -1043,7 +1043,8 @@
         "documentoOrigen": "texto",
         "asientoReversadoId": "entero",
         "usuarioId": "texto",
-        "motivo": "texto"
+        "motivo": "texto",
+        "causal": "texto"
       }
     ],
     "pagina": "entero",
@@ -1110,7 +1111,8 @@
         "documentoOrigen": "texto",
         "asientoReversadoId": "entero",
         "usuarioId": "texto",
-        "motivo": "texto"
+        "motivo": "texto",
+        "causal": "texto"
       }
     ],
     "pagina": "entero",
@@ -1257,7 +1259,8 @@
         "documentoOrigen": "texto",
         "asientoReversadoId": "entero",
         "usuarioId": "texto",
-        "motivo": "texto"
+        "motivo": "texto",
+        "causal": "texto"
       }
     ],
     "pagina": "entero",
@@ -5423,7 +5426,8 @@
         "documentoOrigen": "texto",
         "asientoReversadoId": "entero",
         "usuarioId": "texto",
-        "motivo": "texto"
+        "motivo": "texto",
+        "causal": "texto"
       }
     ]
   },
@@ -5453,7 +5457,8 @@
         "documentoOrigen": "texto",
         "asientoReversadoId": "entero",
         "usuarioId": "texto",
-        "motivo": "texto"
+        "motivo": "texto",
+        "causal": "texto"
       }
     ]
   },
