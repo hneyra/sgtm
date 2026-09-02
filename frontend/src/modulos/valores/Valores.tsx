@@ -6,6 +6,7 @@ import { ICO } from '../../ds/iconos';
 import { Aviso, Dato, Entradilla, Insignia, Nota, Seccion, type Tono } from '../../ds/componentes';
 import { usarPreferencias } from '../../shell/preferencias';
 import { ErrorDeApi, fijarToken } from '../../api/cliente';
+import { causasDelRechazo } from '../../api/Fallo';
 import { cuentaActual, hayPuerta } from '../../api/sesion';
 import { useRebote, useRecurso } from '../../api/useRecurso';
 import {
@@ -142,7 +143,20 @@ function Cargando({ n = 4 }: { n?: number }) {
  * contrato, y las causas no se parecen —un permiso que falta no se arregla
  * reintentando y una red caída sí—.
  */
-function Fallo({ error, ruta, acceso, onReintentar }: { error: ErrorDeApi; ruta: string; acceso: string; onReintentar: () => void }) {
+function Fallo({
+  error,
+  ruta,
+  acceso,
+  llave,
+  onReintentar,
+}: {
+  error: ErrorDeApi;
+  ruta: string;
+  acceso: string;
+  /** La llave del conjunto sellado que ESTE acto necesita, si se sabe cuál (#562). */
+  llave?: string;
+  onReintentar: () => void;
+}) {
   const { toast } = usarPreferencias();
   const [tokenPegado, setTokenPegado] = useState('');
   const cuenta = cuentaActual();
@@ -158,7 +172,11 @@ function Fallo({ error, ruta, acceso, onReintentar }: { error: ErrorDeApi; ruta:
           : error.codigo === 'NO_ENCONTRADO'
             ? 'Eso no está en esta municipalidad'
             : error.codigo === 'VALIDACION'
-              ? 'El servidor no admite eso'
+              ? /* No dice «no admite eso»: desde #562 la notificación de un
+                   valor y la prescripción contestan 422 cuando falta publicar
+                   el plazo al conjunto sellado, y ese titular pone a corregir
+                   un formulario que está bien. */
+                'El servidor rechazó la operación'
               : error.codigo === 'CONFLICTO'
                 ? 'Eso ya estaba hecho'
                 : error.codigo === 'SIN_RESPUESTA'
@@ -192,6 +210,15 @@ function Fallo({ error, ruta, acceso, onReintentar }: { error: ErrorDeApi; ruta:
       </svg>
       <p style={{ margin: 0, fontFamily: 'var(--font-serif)', fontSize: 16, fontWeight: 600, color: 'var(--error-texto)' }}>{titulo}</p>
       <p style={{ margin: 0, maxWidth: '58ch', fontSize: 12.5, lineHeight: 1.55, color: 'var(--ink-3)', textAlign: 'center', textWrap: 'pretty' }}>{explicacion}</p>
+      {/* Las dos causas de un 422 —un campo mal puesto y una cifra normativa sin
+          publicar— llegan con el MISMO código, así que la pantalla no las
+          adivina: dice las dos y en qué se reconocen (#562). Sale sólo en el
+          422; el helper devuelve `null` en los demás. */}
+      {causasDelRechazo(error, llave) !== null && (
+        <p style={{ margin: 0, maxWidth: '58ch', fontSize: 12, lineHeight: 1.5, color: 'var(--ink-4)', textAlign: 'center', textWrap: 'pretty' }}>
+          {causasDelRechazo(error, llave)}
+        </p>
+      )}
       {error.detalles && error.detalles.length > 0 && (
         <ul style={{ margin: '2px 0 0', paddingLeft: 18, maxWidth: '58ch', fontSize: 12, color: 'var(--ink-3)' }}>
           {error.detalles.slice(0, 8).map((d, i) => (
@@ -938,7 +965,7 @@ export default function Valores({ dest, onDest }: PantallaProps) {
             </div>
 
             {falloDeEscritura && (
-              <Fallo error={falloDeEscritura} ruta="POST /api/v1/valores/…" acceso="notificacion_valores / pase_coactiva" onReintentar={() => setFalloDeEscritura(null)} />
+              <Fallo error={falloDeEscritura} ruta="POST /api/v1/valores/…" acceso="notificacion_valores / pase_coactiva" llave="PLAZO:NOTIFICACION_VALOR-RD" onReintentar={() => setFalloDeEscritura(null)} />
             )}
 
             {/* ── El valor ── */}
@@ -1513,7 +1540,7 @@ export default function Valores({ dest, onDest }: PantallaProps) {
             </Entradilla>
 
             {falloDeEscritura && (
-              <Fallo error={falloDeEscritura} ruta="POST /api/v1/coactiva/prescripcion" acceso="prescripcion" onReintentar={() => setFalloDeEscritura(null)} />
+              <Fallo error={falloDeEscritura} ruta="POST /api/v1/coactiva/prescripcion" acceso="prescripcion" llave="PLAZO:PRESCRIPCION-DECLARACION_PRESENTADA" onReintentar={() => setFalloDeEscritura(null)} />
             )}
 
             <Seccion titulo="La solicitud" meta="POST /api/v1/coactiva/prescripcion">

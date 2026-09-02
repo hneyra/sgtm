@@ -1,5 +1,6 @@
 import { descargar, solicitar, type RespuestaPaginada } from './cliente';
 import type { FormatoDeDocumento } from './descarga';
+import { buscarContribuyentes, type Contribuyente as ContribuyenteDelPadron } from './rentas';
 
 /**
  * Lo que `catastro` publica sobre predios. Los tipos son los `record` del
@@ -113,6 +114,194 @@ export function titularesDelPredio(
   });
 }
 
+/* ══════════ El alta de titularidad: el segundo acto del alta de un predio ══════════ */
+
+/**
+ * Las seis condiciones que `CondicionDeTitularidad` declara, **letra por letra**.
+ *
+ * El desplegable del manual ofrece otras seis —«PROPIETARIO ÚNICO»,
+ * «COPROPIETARIO», «POSEEDOR», «SUCESIÓN INDIVISA», «ARRENDATARIO»,
+ * «OCUPANTE»— y sólo dos coinciden carácter a carácter con el enumerado:
+ * `COPROPIETARIO` y `POSEEDOR`. De las otras cuatro, dos se parecen —«PROPIETARIO
+ * ÚNICO» a `PROPIETARIO_UNICO`, «SUCESIÓN INDIVISA» a `SUCESION`— y **dos no son
+ * titularidad en absoluto**: un arrendatario y un ocupante no son dueños de nada,
+ * son la ocupación, que tiene su propio acto —`POST
+ * /catastro/predios/{predioId}/inquilinos`— y su propia tabla.
+ *
+ * Y el enumerado tiene dos que el desplegable del manual **no ofrece**, `CONYUGE`
+ * y `USUFRUCTUARIO`; la primera es justo la que la tabla de titulares del propio
+ * prototipo pinta en su columna «Condición» —«CÓNYUGE»—, o sea que el manual
+ * enseña un valor que su propio desplegable no deja elegir.
+ *
+ * Aquí no se traduce ninguno, por lo mismo que #427 no tradujo «ACTIVA» a
+ * `VIGENTE`: parecerse no es serlo, y una tabla de equivalencias se queda vieja
+ * en silencio. Se ofrecen los seis del dominio con su nombre exacto, y la
+ * pantalla dice cuáles del manual quedan fuera y por qué.
+ */
+export const CONDICIONES_DE_TITULARIDAD = [
+  'PROPIETARIO_UNICO',
+  'COPROPIETARIO',
+  'CONYUGE',
+  'POSEEDOR',
+  'SUCESION',
+  'USUFRUCTUARIO',
+] as const;
+
+export type CondicionDeTitularidad = (typeof CONDICIONES_DE_TITULARIDAD)[number];
+
+/** La única que el dominio considera «por el total»: su porcentaje no se declara. */
+export const CONDICION_POR_EL_TOTAL: CondicionDeTitularidad = 'PROPIETARIO_UNICO';
+
+/**
+ * La cuota de titularidad recién registrada. Es `TitularidadResource`.
+ *
+ * Trae el `contribuyenteId` porque es la respuesta al acto de registrarlo —quien
+ * acaba de declarar de quién es el predio ya sabe de quién es—; la lectura de
+ * {@link titularesDelPredio} no lo publica, porque allí pregunta quien todavía no
+ * lo sabe (ADR-0015 §2.4).
+ *
+ * `porcentaje` llega como **texto** y se dibuja como texto: es un objeto de valor
+ * y pasarlo por `Number` para volver a formatearlo es como se pierde un decimal.
+ * Medido: el titular único vuelve con `"100"` y la lectura del mismo predio lo
+ * publica como `"100.0000"` — dos escalas del mismo dato, otra razón para no
+ * recomponerlo aquí.
+ */
+export type Titularidad = {
+  titularidadId: number;
+  predioId: number;
+  contribuyenteId: number;
+  condicion: string;
+  porcentaje: string;
+  vigenciaDesde: string;
+  vigenciaHasta: string | null;
+  documentoOrigen: string;
+};
+
+/**
+ * El cuerpo de `POST /catastro/predios/{predioId}/titulares`. **Lista blanca**:
+ * es `PeticionDeTitular` del backend, campo por campo.
+ *
+ * Dos nombres que sorprenden y son los que viajan: el contribuyente entra por
+ * `codContribuyente` —no `codigoContribuyente`— y el documento que sustenta la
+ * titularidad es `documentoOrigen`, **obligatorio**: medido contra el backend,
+ * sin él contesta `422 «Falta el campo 'documentoOrigen'»`. No lleva
+ * `vigenciaHasta`: la cuota que se abre está abierta, y cerrarla es lo que hace
+ * una transferencia.
+ */
+export type PeticionDeTitular = {
+  observacion: string;
+  codContribuyente: string;
+  condicion: CondicionDeTitularidad;
+  /** Sólo para las cinco condiciones parciales. Texto, no número (regla 1). */
+  porcentaje?: string;
+  /** AAAA-MM-DD. Ausente, el servidor pone hoy. */
+  vigenciaDesde?: string;
+  documentoOrigen: string;
+};
+
+/**
+ * Declara de quién es un predio (#490, RF-005).
+ *
+ * Es un acto **aparte** del alta del predio, con su propia observación: son dos
+ * peticiones y dos motivos en la bitácora. Quien puede inscribir el predio puede
+ * declararle titular —las dos exigen `REGISTRO` sobre `actualizacion_catastro`—,
+ * así que no hace falta una guarda de permiso propia.
+ *
+ * **Pasarse del 100 % es un 409 que lo dice la base**, no un `if` de aquí: la
+ * suma de cuotas vigentes la vigila un disparador *diferido*, que habla al
+ * confirmar. Comprobarlo en la interfaz obligaría a leer los titulares vigentes
+ * antes de escribir y a decidir qué hacer con la ventana en la que el total pasa
+ * de 100 legítimamente —una transferencia cierra una cuota y abre otra en la
+ * misma transacción—, que es exactamente lo que el disparador existe para no
+ * tener que decidir. Medido: la segunda cuota de un predio que ya tiene
+ * propietario único vuelve
+ * `409 «Los porcentajes de titularidad vigentes del predio 14447 suman 110.0000,
+ * no pueden exceder 100»`, sin nombrar tabla ni restricción (RNF-033).
+ */
+export function registrarTitular(predioId: number, peticion: PeticionDeTitular): Promise<Titularidad> {
+  return solicitar(`/catastro/predios/${predioId}/titulares`, { metodo: 'POST', cuerpo: peticion });
+}
+
+/**
+ * El padrón, para elegir al titular por el **código** que la escritura pide.
+ *
+ * El manual teclea un nombre y el backend quiere el código del contribuyente: es
+ * el mismo tropiezo que #427 documentó con «Solicitante», y sin esta resolución
+ * lo tecleado viajaría como código y produciría un 404 sobre una persona que sí
+ * está en el padrón.
+ *
+ * Se importa de `./rentas` y **no se copia**: es su operación —`GET
+ * /rentas/contribuyentes`—, y dos copias del mismo adaptador es como una de las
+ * dos se queda vieja sin que nada lo diga.
+ */
+export type { Contribuyente } from './rentas';
+
+/**
+ * A qué filtro va lo tecleado, y por qué a veces son dos consultas.
+ *
+ * Los cuatro filtros comparan por igualdad salvo `nombreRazonSocial`, que compara
+ * por parecido. La forma de lo tecleado decide, como en el buscador del padrón de
+ * Rentas y por lo mismo: quien atiende teclea lo que tiene delante, no elige el
+ * campo.
+ *
+ * **El código no tiene una sola forma, y por eso a veces se pregunta dos veces.**
+ * Medido: en Sullana es `C-000001` —con letra y guion— y en Catacaos es
+ * `00000000008`, once dígitos como un RUC. De ahí las dos ramas dobles: once
+ * dígitos se preguntan como código *y* como RUC —`?codigo=00000000008` devuelve a
+ * esa persona y `?rUC=00000000008` devuelve cero, así que elegir una sola deja
+ * fuera a media instalación—; y algo sin espacios con algún dígito dentro se
+ * pregunta como código *y* por nombre, que es lo que hace que `C-000001`
+ * encuentre a alguien. Sin esa segunda rama, un código de Sullana caía en la
+ * búsqueda por parecido en el nombre y contestaba «nadie del padrón responde a
+ * eso» sobre una persona que sí está registrada — se vio en el navegador antes
+ * de que ninguna prueba lo mirara.
+ */
+function filtrosDelPadron(criterio: string): { codigo?: string; nombreRazonSocial?: string; dNI?: string; rUC?: string }[] {
+  const soloDigitos = /^[0-9]+$/.test(criterio);
+  if (soloDigitos && criterio.length === 8) return [{ dNI: criterio }];
+  if (soloDigitos && criterio.length === 11) return [{ codigo: criterio }, { rUC: criterio }];
+  if (soloDigitos) return [{ codigo: criterio }];
+  if (!/\s/.test(criterio) && /[0-9]/.test(criterio)) return [{ codigo: criterio }, { nombreRazonSocial: criterio }];
+  return [{ nombreRazonSocial: criterio }];
+}
+
+/**
+ * Busca en el padrón con lo que se tecleó, con las dos lecturas del caso ambiguo
+ * ya unidas y sin repetir a nadie.
+ *
+ * **`totalElementos` de la unión es cuántas filas trae, no cuántas hay.** No se
+ * suman los dos totales —quien salga en las dos consultas se contaría dos veces—
+ * ni se hereda el de la primera —diría que hay más de lo que se enseña—, y no
+ * hay forma de saber el de verdad sin una consulta que el backend no publica.
+ * Por eso esta lista **no se pagina y su total no se dibuja en ninguna parte**:
+ * lo único que se enseña son sus filas, y `hayMas` dice si alguna de las dos
+ * consultas dejó a alguien fuera para que la pantalla lo pueda decir.
+ */
+export async function buscarEnElPadron(
+  criterio: string,
+  tamano: number,
+  senal?: AbortSignal,
+): Promise<RespuestaPaginada<ContribuyenteDelPadron>> {
+  const filtros = filtrosDelPadron(criterio.trim());
+  const respuestas = await Promise.all(filtros.map((f) => buscarContribuyentes(f, { tamano }, senal)));
+  if (respuestas.length === 1) return respuestas[0]!;
+  const vistos = new Set<number>();
+  const contenido: ContribuyenteDelPadron[] = [];
+  for (const r of respuestas)
+    for (const c of r.contenido)
+      if (!vistos.has(c.id)) {
+        vistos.add(c.id);
+        contenido.push(c);
+      }
+  return {
+    ...respuestas[0]!,
+    contenido,
+    totalElementos: contenido.length,
+    totalPaginas: contenido.length === 0 ? 0 : 1,
+    hayMas: respuestas.some((r) => r.hayMas),
+  };
+}
+
 export function inscribirPredio(peticion: {
   observacion: string;
   codRefCatastral: string;
@@ -199,19 +388,27 @@ export type LoteDelPlano = {
  *
  * **No hay sobre paginado y no hay marca de recorte**, y las dos ausencias son
  * la misma decisión (ADR-0022 §2): si en el marco caben más lotes que el tope,
- * la respuesta es un **422 con la cuenta**, nunca una página con los primeros.
+ * la respuesta es un **422 `MARCO_CON_DEMASIADOS_LOTES` con la cuenta**, nunca
+ * una página con los primeros.
  * Un plano al que le faltan lotes no se ve recortado —se ve como un plano donde
  * ahí no hay lotes—, así que quien lo dibuja no puede tener la opción de
  * ignorar una marca.
  *
  * @property sinGeometria cuántos predios **del padrón**, con los mismos filtros
  *   de sector y manzana, no tienen polígono. Sale **siempre**, cero incluido.
- *   Y no es «los de este marco», aunque la descripción del contrato lo diga:
- *   `prediosSinGeometria` consulta con `WHERE p.geometria IS NULL` y **sin** el
- *   marco a propósito —un predio sin polígono no tiene sitio en ningún marco—.
- *   Medido: con `bbox=-180,-90,180,90` y con el marco de Piura, la misma cifra
- *   (14 422 en la municipalidad 9), y con `codigoDeSector=01`, 1. La
- *   descripción del contrato dice lo otro, y eso es #613.
+ *   Y no es «los de este marco»: `prediosSinGeometria` consulta con `WHERE
+ *   p.geometria IS NULL` y **sin** el marco a propósito —un predio sin polígono
+ *   no tiene sitio en ningún marco—. Medido: con `bbox=-180,-90,180,90` y con el
+ *   marco de Piura, la misma cifra (14 422 en la municipalidad 9), y con
+ *   `codigoDeSector=01`, 1.
+ *
+ *   Esta frase se escribió **contra la medición y contra el contrato**, que decía
+ *   lo otro. #613 le dio la razón a la medición y #644 corrigió la descripción,
+ *   así que hoy los dos dicen lo mismo. Lo que ahí se descartó conviene tenerlo a
+ *   mano por si alguien quiere «arreglar» la consulta metiéndole el marco: sería
+ *   peor que el defecto, porque las cuatro columnas `marco_*` de un predio sin
+ *   polígono son nulas y la cifra caería a **cero siempre**, justo cuando más
+ *   hace falta —hoy, sin un solo lote digitalizado en ninguna municipalidad—.
  */
 export type PlanoCatastral = {
   lotes: LoteDelPlano[];
@@ -259,17 +456,60 @@ export type FiltroDelPlano = {
 /**
  * El plano catastral de un marco (#536, ADR-0022).
  *
- * **Su 422 no siempre es un error.** «En este marco hay N lotes y el máximo que
- * se sirve son T» es una respuesta que se puede obedecer —acercarse— y comparte
- * el código `VALIDACION` con «el marco está del revés», que sí es un defecto de
- * quien pregunta. La interfaz no los separa leyendo el texto: enseña el mensaje
- * del servidor tal cual y ofrece acercar, que es lo honesto en los dos casos.
- * Separarlos por contrato es #611.
+ * **Su 422 no siempre es un error, y desde #611 se sabe cuál es cuál por el
+ * código.** «En este marco hay N lotes y el máximo que se sirve son T» llega con
+ * `MARCO_CON_DEMASIADOS_LOTES`: la petición está bien y lo que la resuelve es
+ * acercarse. Los demás rechazos llegan con `VALIDACION` y dicen lo contrario
+ * —«corrige lo que pediste»—: `PlanoCatastralController` los lanza en cinco
+ * sitios, y medidos contra el backend en marcha son «Falta 'bbox'…», «El marco
+ * 'bbox' se escribe como 'oeste,sur,este,norte'…», «El marco esta del reves o es
+ * degenerado…», «La latitud norte tiene que estar entre -90 y 90 grados…», «La
+ * longitud oeste tiene que estar entre -180 y 180 grados…» y los tres de
+ * `limite` —no numérico, no positivo, y por encima del tope del servidor—.
+ *
+ * Antes los compartían todos, y lo único que los separaba era el texto en
+ * castellano, que se reescribe.
  */
 export function planoCatastral(filtro: FiltroDelPlano, senal?: AbortSignal): Promise<PlanoCatastral> {
   return solicitar('/catastro/predios/plano', { parametros: { ...filtro }, senal });
 }
 
+/**
+ * Las dos cifras del «acércate», leídas de `detalles` y no de la frase.
+ *
+ * `PlanoCatastralController` las manda como dato —`["lotes=3","tope=2"]`— por lo
+ * mismo que manda el código: la frase se reescribe. La prueba de frontera del
+ * backend lo fija con un `containsExactly`, así que reescribir el mensaje sin
+ * tocar las cifras tiene que dejar esto funcionando.
+ *
+ * **Devuelve `null` en cada cifra que no venga, y ninguna se inventa.** Un tope
+ * ausente no es `LOTES_POR_MARCO` aunque sea lo que se pidió —el servidor tiene
+ * el suyo y es él quien lo dice—, y unos lotes ausentes no son cero: cero lotes
+ * es exactamente lo contrario de lo que este rechazo significa. Quien las dibuje
+ * tiene que saber quedarse sin ellas.
+ *
+ * No suma, ni resta, ni compara: publicar «faltan N» sería componer una cifra
+ * que el servidor no publica (RNF-083 tiene la misma forma para el dinero).
+ */
+export function cifrasDelMarcoLleno(detalles: readonly string[] | undefined): {
+  lotes: number | null;
+  tope: number | null;
+} {
+  return { lotes: enteroDe(detalles, 'lotes'), tope: enteroDe(detalles, 'tope') };
+}
+
+/**
+ * Un `clave=valor` de `detalles`, y sólo si el valor es un entero entero.
+ *
+ * Con `Number.parseInt` un «2 000» se leería como 2 y nadie lo notaría (#342 lo
+ * midió con las cuotas), así que la forma se exige entera antes de convertir.
+ */
+function enteroDe(detalles: readonly string[] | undefined, clave: string): number | null {
+  const fila = (detalles ?? []).find((d) => d.startsWith(clave + '='));
+  if (fila === undefined) return null;
+  const valor = fila.slice(clave.length + 1);
+  return /^\d+$/.test(valor) ? Number(valor) : null;
+}
 
 /**
  * Un sector del catastro. Es `SectorResource`.
@@ -451,31 +691,55 @@ export function listarDepreciacion(anio: number, senal?: AbortSignal): Promise<D
 
 
 /**
- * La conciliacion catastro↔rentas (ADR-0015).
+ * El recuento de la conciliacion catastro↔rentas. Es
+ * `ResumenDeConciliacionResource`, campo por campo (#564).
+ *
+ * Los tres numeros vienen con sus dos referencias y ninguna sobra: **no existe
+ * «sin conciliar», existe «sin conciliar a 2026»** (regla 9, RNF-075) —el padron
+ * afecto se rehace cada ejercicio, y declarar 2024 no concilia 2026—, y
+ * `aLaFecha` porque la poblacion es la de las fichas vigentes ESE dia.
+ *
+ * `noConciliados` **llega restado del servidor y no se recompone aqui**: es una
+ * cifra, componerla en la pantalla es lo que RNF-083 prohibe, y restarla contra
+ * el total de otra lectura es exactamente el defecto que este endpoint cierra.
+ */
+export type ResumenDeConciliacion = {
+  ejercicio: number;
+  aLaFecha: string;
+  total: number;
+  conciliados: number;
+  noConciliados: number;
+};
+
+/**
+ * La conciliacion catastro↔rentas, contada (ADR-0015, #564).
  *
  * **Vive bajo `/catastro/fichas/conciliacion` y la sirve `rentas`**: el dato que
  * distingue una ficha conciliada —si el predio declaro— es de rentas, y catastro
  * no puede depender de el sin cerrar un ciclo de modulos.
  *
- * `conciliadaConRentas=No` exige ademas el permiso de fiscalizacion: es la lista
- * de quien tiene ficha y no declara, y esa lista no la ve cualquiera.
+ * **Esta es la unica forma de contar la conciliacion, y sigue haciendo falta una
+ * aparte aunque la grilla ya cuente bien.** Hasta #631 el motivo era que no
+ * contaba: su filtro se aplicaba sobre la pagina ya devuelta y su
+ * `totalElementos` seguia siendo el del padron SIN filtrar, asi que con
+ * `conciliadaConRentas=No` decia 14 422 «sin conciliar» sobre un padron de
+ * 14 422 predios en Catacaos. Eso quedo arreglado, y **el motivo ahora es otro**:
+ * cada consulta de la grilla con `No` deja una fila `ACCESO` en la bitacora
+ * (ADR-0015 §2.3), asi que pedirla solo para leer su total ensuciaria la
+ * auditoria con una entrada por cada pintada del panel. Aquella sirve para
+ * RECORRER la lista; para contarla, esta.
  *
- * **Su `totalElementos` ya cuenta lo que el filtro dice** (#631). Hasta entonces
- * el filtro se aplicaba sobre la pagina ya devuelta y el total seguia siendo el
- * del padron sin filtrar: con `conciliadaConRentas=Si` decia «722 paginas, 14 422
- * elementos» y devolvia cero filas en todas.
- *
- * Aun asi, **para contar sigue estando `/conciliacion/resumen`** (#564), y no es
- * un capricho: cada consulta con `conciliadaConRentas=No` deja una fila `ACCESO`
- * en la bitacora (ADR-0015 §2.3), asi que pedir la grilla solo para leer su total
- * ensucia la auditoria con una entrada por pintada de panel. Esta funcion sirve
- * para RECORRER la lista.
+ * Y a diferencia de aquella con `No`, esta **no exige el permiso de
+ * fiscalizacion** (`fisc_omisos`) y **no deja fila en la bitacora**: aquella
+ * nombra —es la lista de a quien no le va a llegar recibo— y esta cuenta. Sigue
+ * pidiendo el acceso de la pantalla, `consulta_fichas`, que es lo que puede
+ * contestar `403` en un perfil que no la tenga.
  */
-export function contarFichas(
-  parametros: { conciliadaConRentas?: 'Si' | 'No' },
+export function resumenDeConciliacion(
+  parametros: { ejercicio?: string; fecha?: string },
   senal?: AbortSignal,
-): Promise<RespuestaPaginada<unknown>> {
-  return solicitar('/catastro/fichas/conciliacion', { parametros: { ...parametros, tamano: 1 }, senal });
+): Promise<ResumenDeConciliacion> {
+  return solicitar('/catastro/fichas/conciliacion/resumen', { parametros, senal });
 }
 
 
@@ -536,4 +800,503 @@ export function descargarFichaDelContribuyente(
   fecha?: string,
 ): Promise<void> {
   return descargar(`/catastro/contribuyentes/${encodeURIComponent(codigo)}/ficha.pdf`, { formato, fecha });
+}
+
+/* ══════════ La ficha catastral: leerla antes de escribirla ══════════
+
+   Cuatro lecturas y cuatro escrituras para un solo objeto, porque el manual
+   tiene cuatro fichas y cada una es una opcion suya. Los cuatro `GET` devuelven
+   el MISMO `FichaResource` —con el bloque de detalle que le toca y los otros
+   dos en nulo— y los cuatro `PUT` reciben el mismo cuerpo. */
+
+/** Los cuatro valores de `TipoFicha`, tal como los publica la lectura. */
+export type TipoDeFicha = 'UNICA' | 'ECONOMICA' | 'BIENES_COMUNES' | 'RURAL';
+
+/** El tramo de ruta de cada tipo. No es el nombre del enumerado, y por eso hay tabla. */
+export type ModalidadDeFicha = 'urbana' | 'economica' | 'bienes-comunes' | 'rural';
+
+/**
+ * De que tipo de ficha es cada modalidad de la ruta.
+ *
+ * `UNICA` se sirve en `/urbana/`, que es la asimetria mas visible de este
+ * contrato: el manual llama «ficha urbana individual» a lo que el dominio llama
+ * ficha unica. Se respeta porque es la ruta publicada.
+ */
+export const MODALIDAD_DE_TIPO: Record<TipoDeFicha, ModalidadDeFicha> = {
+  UNICA: 'urbana',
+  ECONOMICA: 'economica',
+  BIENES_COMUNES: 'bienes-comunes',
+  RURAL: 'rural',
+};
+
+/**
+ * Lo construido en un piso. Es `FichaResource.ConstruccionResource`.
+ *
+ * `categorias` llega como el dominio la imprime —`"[CCDCCDC]"`—: siete letras
+ * en el orden muros, techos, pisos, puertas y ventanas, revestimientos, banos e
+ * instalaciones. No se parte aqui para volver a juntarla al escribir: se parte
+ * donde se dibuja, y viaja letra a letra en siete campos distintos.
+ *
+ * **`porcentajeConstruido` se lee y no se puede escribir**, y es lo que decide
+ * que esta pantalla no mande la lista: `DeclaracionDeFicha.ConstruccionDeclarada`
+ * no tiene ese campo, asi que devolver las construcciones tal como se leyeron
+ * deja el porcentaje de TODOS los pisos en nulo. Medido contra el backend: se
+ * mando una construccion completa y volvio `"porcentajeConstruido": null`.
+ */
+export type ConstruccionDeLaFicha = {
+  id: number;
+  piso: string;
+  /** Metros cuadrados, sin unidad dentro. La cabecera de la columna la pone. */
+  areaConstruida: string;
+  anioConstruccion: number | null;
+  material: string | null;
+  estadoConservacion: string | null;
+  categorias: string;
+  /** `"100.0000 %"`. Nulo es «la ficha no lo declara», que no es declarar cero. */
+  porcentajeConstruido: string | null;
+};
+
+/**
+ * Una obra complementaria. Es `FichaResource.InstalacionResource`.
+ *
+ * `cantidad` viene con su unidad dentro —`"42.00 ML"`— y `unidad` viene aparte:
+ * son el mismo dato dos veces, y la columna de una grilla usa la segunda para
+ * no tener que partir la primera.
+ */
+export type InstalacionDeLaFicha = {
+  id: number;
+  descripcion: string;
+  unidad: string;
+  cantidad: string;
+  anioConstruccion: number | null;
+  estadoConservacion: string | null;
+};
+
+/**
+ * Una actividad economica declarada. Es `FichaResource.ActividadResource`.
+ *
+ * `licenciaNumero` nulo **no es un dato que falte**: es el hallazgo —este local
+ * no tiene licencia—, y fiscalizacion sale de ahi.
+ *
+ * `vigenciaDesde` es el otro campo que se lee y no se puede escribir
+ * (`ActividadDeclarada` no lo lleva), asi que reenviar las actividades tal como
+ * se leyeron dejaria sin fecha la declaracion de todas.
+ */
+export type ActividadDeLaFicha = {
+  id: number;
+  conductor: string;
+  nombreComercial: string | null;
+  ciiu: string | null;
+  areaOcupada: string | null;
+  licenciaNumero: string | null;
+  licenciaFecha: string | null;
+  anuncioNumero: string | null;
+  anuncioFecha: string | null;
+  vigenciaDesde: string | null;
+};
+
+/** Un area comun de la edificacion. Es `FichaResource.BienResource`. */
+export type BienComunDeLaFicha = {
+  id: number;
+  descripcion: string;
+  area: string;
+  material: string | null;
+  estadoConservacion: string | null;
+  anioConstruccion: number | null;
+};
+
+/**
+ * Cuanto de lo comun le toca a una unidad. Es `FichaResource.ParticipacionResource`.
+ *
+ * La unidad se nombra por su `predioId` y no por su codigo catastral: es como
+ * la publica la lectura y como la pide la escritura, y resolver el codigo por
+ * unidad seria una consulta por fila.
+ */
+export type ParticipacionDeLaFicha = { predioId: number; porcentaje: string };
+
+/**
+ * Un grupo de tierra del predio rustico. Es `FichaResource.TierraResource`.
+ *
+ * Las superficies van **en hectareas y con su unidad dentro** —`"1.0500 HA"`—:
+ * el arancel rural es por hectarea, y leerlas como metros calcularia diez mil
+ * veces de menos.
+ */
+export type TierraDeLaFicha = {
+  id: number;
+  clasificacion: string;
+  calidadAgrologica: string | null;
+  riego: string;
+  hectareas: string;
+  hectareasComunes: string | null;
+};
+
+/** Con quien linda el predio rustico. Es `FichaResource.ColindanteResource`. */
+export type ColindanteDeLaFicha = { orientacion: string; descripcion: string };
+
+/**
+ * Una fila del historico. Es `FichaResource.VersionResource`.
+ *
+ * La observacion es la mitad util: un diff dice que el area paso de 120 a 180 y
+ * solo ella dice que fue una fiscalizacion de campo y no un error de tecleo.
+ */
+export type VersionDeLaFicha = {
+  id: number;
+  version: number;
+  areaTerreno: string;
+  uso: string;
+  vigenciaDesde: string;
+  vigenciaHasta: string | null;
+  vigente: boolean;
+  origen: string;
+  documentoOrigen: string;
+  observacion: string;
+  usuario: string;
+  registradaEn: string;
+};
+
+/**
+ * Una version de la ficha catastral. Es `FichaResource`, campo por campo.
+ *
+ * **Ni un importe.** Ni valor unitario, ni arancel, ni valor de obra
+ * complementaria, ni autovaluo: son D-02a/D-11 y viven en datos versionados
+ * (regla 5). Lo que se publica es lo que el tecnico midio y clasifico, y por eso
+ * las cuatro cifras de «Valuacion del ejercicio» del artboard no tienen de donde
+ * salir.
+ *
+ * Los tres bloques de detalle son **nulos salvo el que toca**: una ficha rural
+ * no publica un bloque economico vacio, porque «este predio no declara
+ * actividad» y «esta ficha no es de las que la declaran» no son lo mismo.
+ *
+ * `historico` nulo significa «no lo pediste»; una lista vacia no puede pasar.
+ */
+export type FichaCatastral = {
+  id: number;
+  predioId: number;
+  tipo: TipoDeFicha;
+  version: number;
+  areaTerreno: string;
+  uso: string;
+  /** Metros lineales, con su unidad dentro: `"12.50 ML"`. */
+  frontis: string | null;
+  condicionPropiedad: string | null;
+  tipoEdificacion: string | null;
+  vigenciaDesde: string;
+  vigenciaHasta: string | null;
+  vigente: boolean;
+  origen: string;
+  documentoOrigen: string;
+  /** La observacion con que se registro ESTA version, no la del acto siguiente. */
+  observacion: string;
+  denominacion: string | null;
+  construcciones: ConstruccionDeLaFicha[];
+  instalaciones: InstalacionDeLaFicha[];
+  economico: {
+    actividades: ActividadDeLaFicha[];
+    informacionComplementaria: string | null;
+    /** Cuantas de las actividades no tienen licencia. Lo cuenta el servidor. */
+    sinLicencia: number;
+  } | null;
+  bienesComunes: {
+    bienes: BienComunDeLaFicha[];
+    participaciones: ParticipacionDeLaFicha[];
+    areaComunTotal: string;
+  } | null;
+  rural: {
+    tierras: TierraDeLaFicha[];
+    colindantes: ColindanteDeLaFicha[];
+    hectareasTotales: string;
+  } | null;
+  historico: VersionDeLaFicha[] | null;
+};
+
+/**
+ * La ficha vigente de un predio, del tipo que sea.
+ *
+ * Contesta **404** cuando el predio no tiene ficha de ese tipo vigente a la
+ * fecha, y no es un fallo del sistema: lo que falta es la PRIMERA version, y esa
+ * se registra con el `POST` de su tipo. Medido: pedir `/rural/` sobre un predio
+ * con ficha unica devuelve `404 «El predio no tiene ficha RURAL vigente al …»`.
+ *
+ * Cada modalidad exige **su propio acceso** —`ficha_urbana`, `ficha_economica`,
+ * `ficha_bienes`, `ficha_rural`—, asi que un perfil puede leer unas y no otras.
+ */
+export function leerFicha(
+  modalidad: ModalidadDeFicha,
+  codigo: string,
+  opciones: { fecha?: string; historico?: boolean } = {},
+  senal?: AbortSignal,
+): Promise<FichaCatastral> {
+  return solicitar(`/catastro/fichas/${modalidad}/${encodeURIComponent(codigo)}`, {
+    parametros: { fecha: opciones.fecha, historico: opciones.historico ? 'true' : undefined },
+    senal,
+  });
+}
+
+/**
+ * Una fila de la consulta de fichas. Es `FichaEncontradaResource`.
+ *
+ * Se usa para **una sola cosa** y conviene decirlo: `GET /catastro/predios` no
+ * publica de que TIPO es la ficha de un predio —solo `fichado: true|false`—, y
+ * sin el tipo no se sabe cual de las cuatro lecturas pedir. Preguntarlo aqui
+ * cuesta una peticion; probar las cuatro costaria hasta cuatro y tres serian
+ * `404` a proposito.
+ *
+ * Exige el acceso `consulta_fichas`, que **no** es el de la ficha ni el de la
+ * actualizacion: un perfil que actualice el catastro sin poder consultar fichas
+ * recibe `403` aqui y la pantalla lo dice en vez de quedarse en blanco.
+ */
+export type FichaEncontrada = {
+  id: number;
+  predioId: number;
+  codRefCatastral: string;
+  direccion: string;
+  manzana: string | null;
+  lote: string | null;
+  tipo: TipoDeFicha;
+  version: number;
+  areaTerreno: string;
+  /** La construida del predio entero. La suma la hace el servidor, no la pantalla. */
+  areaConstruida: string | null;
+  uso: string;
+  vigenciaDesde: string;
+  titular: string | null;
+};
+
+/**
+ * De que tipo es la ficha vigente de este predio, si tiene alguna.
+ *
+ * Devuelve `null` cuando la consulta no encuentra ninguna: es lo mismo que dice
+ * `fichado: false` del padron, medido —el filtro compara el codigo por igualdad
+ * y un codigo que no esta devuelve `totalElementos: 0`—.
+ */
+export async function fichaDelPredio(codigo: string, senal?: AbortSignal): Promise<FichaEncontrada | null> {
+  const pagina = await solicitar<RespuestaPaginada<FichaEncontrada>>('/catastro/fichas', {
+    parametros: { codRefCatastral: codigo, tamano: 1 },
+    senal,
+  });
+  /* Se comprueba que la fila devuelta sea la que se pidio. El filtro es exacto
+     hoy; si dejara de serlo, la pantalla ensenaria la ficha de otro predio bajo
+     el codigo de este, que es indistinguible de lo correcto. */
+  const fila = pagina.contenido[0];
+  return fila !== undefined && fila.codRefCatastral === codigo ? fila : null;
+}
+
+/**
+ * Los cuatro valores de `OrigenDeLaFicha`, **letra por letra**.
+ *
+ * El desplegable «Fuente de la informacion» del manual ofrece otros cuatro
+ * —«DECLARACION DEL TITULAR», «INSPECCION DE CAMPO», «CONVENIO
+ * INTERINSTITUCIONAL», «BARRIDO CATASTRAL»— y **ninguno coincide** con estos:
+ * dos se parecen —«DECLARACION DEL TITULAR» a `DECLARACION_JURADA`,
+ * «INSPECCION DE CAMPO» a `FISCALIZACION`— y los otros dos no tienen
+ * equivalente, mientras `RESOLUCION` y `MIGRACION` no estan en el desplegable.
+ *
+ * Aqui no se traduce ninguno, por lo mismo que #427 no tradujo «ACTIVA» a
+ * `VIGENTE`: parecerse no es serlo, y una declaracion jurada del contribuyente
+ * no es lo mismo que una inspeccion de campo —la primera admite discusion con su
+ * documento y la segunda se sustenta en un acta—. La pantalla ofrece los cuatro
+ * del dominio y dice cuales del manual quedan fuera.
+ */
+export const ORIGENES_DE_FICHA = ['DECLARACION_JURADA', 'FISCALIZACION', 'RESOLUCION', 'MIGRACION'] as const;
+export type OrigenDeFicha = (typeof ORIGENES_DE_FICHA)[number];
+
+/**
+ * El cuerpo de `PUT /catastro/fichas/…/actualizacion`. **Lista blanca**: es
+ * `ActualizacionController.PeticionDeActualizacion`, campo por campo.
+ *
+ * <h2>Lo que este cuerpo NO lleva, y por eso no se puede escribir</h2>
+ *
+ * Ni `areaTerreno`, ni `uso`, ni `denominacion`, ni `frontis`, ni
+ * `condicionPropiedad`, ni `tipoEdificacion`. Los tres primeros solo entran en
+ * el `POST` del alta; el area y el uso los cambia ademas `actualizarEstructura`,
+ * que tiene **un solo llamador** —el puerto por el que fiscalizacion escribe en
+ * el padron— y una regla de arquitectura que lo vigila. Los tres ultimos no los
+ * lleva ningun cuerpo del contrato: se leen y no se escriben desde ninguna
+ * pantalla.
+ *
+ * <h2>Nulo es «no cambia»; presente aunque vacio es «esto es»</h2>
+ *
+ * Una lista ausente copia la de la version vigente; una lista **presente aunque
+ * vacia** la reemplaza. Confundirlas vacia las construcciones, las actividades o
+ * los grupos de tierra sin que ningun `DELETE` aparezca en ningun sitio, que es
+ * justo lo que el versionado existe para evitar. Por eso los campos son
+ * opcionales y **no se rellenan con `[]` por comodidad**.
+ */
+export type PeticionDeActualizacionDeFicha = {
+  /** Obligatoria (regla 10, RNF-052). Sin ella el backend contesta 422 y no guarda nada. */
+  observacion: string;
+  /** Obligatorio. Medido: sin el, `422 «Falta el campo 'documentoOrigen'»`. */
+  documentoOrigen: string;
+  /**
+   * De donde sale la version. **Opcional en el backend, obligatorio aqui.**
+   * Medido: sin el, la peticion entra y queda registrada como
+   * `DECLARACION_JURADA` —o sea, «lo declaro el contribuyente» dicho de una
+   * inspeccion de campo—, que es una afirmacion que nadie hizo.
+   */
+  origen: OrigenDeFicha;
+  /**
+   * Desde cuando rige la version nueva. Sin ella, hoy.
+   *
+   * Medido: **dos versiones no pueden empezar el mismo dia**. Versionar una
+   * ficha que ya se versiono hoy responde `422 «No se puede cerrar el
+   * 2026-09-01 una version que empezo a regir el 2026-09-02»`, porque la
+   * anterior se cierra el dia de antes.
+   */
+  vigenciaDesde?: string;
+  construcciones?: {
+    piso: string;
+    areaConstruida: string;
+    anioConstruccion?: number;
+    material?: string;
+    estadoConservacion?: string;
+    categoriaMuros?: string;
+    categoriaTechos?: string;
+    categoriaPisos?: string;
+    categoriaPuertas?: string;
+    categoriaRevestimientos?: string;
+    categoriaBanios?: string;
+    categoriaInstalaciones?: string;
+  }[];
+  instalaciones?: {
+    descripcion: string;
+    /** Sin unidad dentro: la unidad va en su propio campo. */
+    cantidad: string;
+    unidad: string;
+    anioConstruccion?: number;
+    estadoConservacion?: string;
+  }[];
+  economico?: {
+    actividades?: {
+      conductor: string;
+      nombreComercial?: string;
+      ciiu?: string;
+      areaOcupada?: string;
+      licenciaNumero?: string;
+      licenciaFecha?: string;
+      anuncioNumero?: string;
+      anuncioFecha?: string;
+    }[];
+    informacionComplementaria?: string;
+  };
+  bienesComunes?: {
+    bienes?: { descripcion: string; area: string; material?: string; estadoConservacion?: string; anioConstruccion?: number }[];
+    participaciones?: { predioId: number; porcentaje: string }[];
+  };
+  rural?: {
+    tierras?: { clasificacion: string; calidadAgrologica?: string; riego: string; hectareas: string; hectareasComunes?: string }[];
+    colindantes?: { orientacion: string; descripcion: string }[];
+  };
+  /**
+   * La correccion de los datos **del predio**, no de su ficha. Trivaluada
+   * tambien: ausente es «no cambia» y la cadena vacia es «se borra». El codigo
+   * de referencia catastral no esta, y no es un olvido: identifica al predio, y
+   * cambiarlo no es corregirlo sino declarar otro.
+   */
+  predio?: {
+    tipoPredio?: TipoDePredio;
+    direccion?: string;
+    codigoDeVia?: string;
+    numeroMunicipal?: string;
+    codigoDeSector?: string;
+    codigoDeManzana?: string;
+    lote?: string;
+    ubigeo?: string;
+  };
+};
+
+/**
+ * Las claves que el cuerpo admite. Se declaran aparte de su tipo porque el tipo
+ * se borra al compilar y el arnes de `verificaciones/ficha-catastral.mjs` las
+ * necesita para comprobar que ningun campo de la pantalla dice viajar por una
+ * clave que este cuerpo no tiene.
+ */
+export const CAMPOS_DEL_CUERPO_DE_ACTUALIZACION = [
+  'observacion',
+  'documentoOrigen',
+  'origen',
+  'vigenciaDesde',
+  'construcciones',
+  'instalaciones',
+  'economico',
+  'bienesComunes',
+  'rural',
+  'predio.tipoPredio',
+  'predio.direccion',
+  'predio.codigoDeVia',
+  'predio.numeroMunicipal',
+  'predio.codigoDeSector',
+  'predio.codigoDeManzana',
+  'predio.lote',
+  'predio.ubigeo',
+] as const;
+
+/**
+ * Lo que impide versionar la ficha, dicho entero, o `null` si nada lo impide.
+ *
+ * Es una funcion pura y esta aparte del componente **para que se pueda romper**:
+ * el arnes le quita la observacion, o la ficha leida, y comprueba que se niega
+ * nombrando lo que falta. Dentro de un `useEffect` no habria como.
+ *
+ * Las dos negativas que importan:
+ *
+ * 1. **Sin observacion no se guarda** (regla 10, RNF-052). No es cortesia con el
+ *    backend —que tambien contesta 422—: es que la version anterior queda en el
+ *    historico y lo unico que explica por que se cambio es esa frase.
+ * 2. **Sin haber leido la ficha no se manda nada.** Mandar sin leer es crear una
+ *    version nueva de una ficha real con lo que hubiera en pantalla, y como
+ *    versionar no borra, la buena queda cerrada debajo de la inventada sin
+ *    forma de deshacerlo.
+ */
+export function impedimentoDeActualizacion(estado: {
+  ficha: FichaCatastral | null;
+  observacion: string;
+  documentoOrigen: string;
+  vigenciaDesde: string;
+}): string | null {
+  if (estado.ficha === null) {
+    return 'La ficha de este predio no se ha podido leer, y sin leerla no se manda nada: la versión nueva se escribiría con lo que haya en pantalla y dejaría la buena cerrada debajo.';
+  }
+  if (estado.observacion.trim() === '') {
+    return 'Falta la observación: toda modificación exige el motivo de quien la hace, y es lo único que explica el cambio cuando esta versión pase al histórico.';
+  }
+  if (estado.documentoOrigen.trim() === '') {
+    return 'Falta el documento de origen: es el papel que sustenta la versión nueva, y el backend lo exige.';
+  }
+  /* La fecha tiene que ser POSTERIOR a la que rige, porque la version vigente se
+     cierra el dia de antes. Se comprueba aqui para no gastar una peticion en un
+     422 que se puede explicar mejor: el mensaje del servidor habla de cerrar una
+     version, y quien atiende necesita saber que la ficha ya se versiono hoy. */
+  if (estado.vigenciaDesde !== '' && estado.vigenciaDesde <= estado.ficha.vigenciaDesde) {
+    return (
+      'La versión ' +
+      estado.ficha.version +
+      ' rige desde el ' +
+      estado.ficha.vigenciaDesde +
+      ', así que la siguiente no puede empezar ese mismo día ni antes: se cerraría la anterior el día anterior a su propio comienzo.'
+    );
+  }
+  return null;
+}
+
+/**
+ * Versiona la ficha catastral (RF-001…RF-004).
+ *
+ * **`PUT` no significa sobrescribir**: lo que hace por debajo es crear la
+ * version siguiente y cerrar la anterior el dia antes. La ficha de ayer sigue
+ * entera y se lee con `?historico=true`.
+ *
+ * La ruta de la urbana **no lleva el tramo del tipo** —`/catastro/fichas/{codigo}/actualizacion`—
+ * y las otras tres si. Es la asimetria del contrato y se respeta: renombrarla
+ * seria renombrar una operacion publicada.
+ */
+export function actualizarFicha(
+  modalidad: ModalidadDeFicha,
+  codigo: string,
+  peticion: PeticionDeActualizacionDeFicha,
+): Promise<FichaCatastral> {
+  const tramo = modalidad === 'urbana' ? '' : `${modalidad}/`;
+  return solicitar(`/catastro/fichas/${tramo}${encodeURIComponent(codigo)}/actualizacion`, {
+    metodo: 'PUT',
+    cuerpo: peticion,
+  });
 }

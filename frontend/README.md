@@ -5,9 +5,17 @@ React 19 sobre Vite, TypeScript. **Implementa el rediseño de
 opciones del manual— resueltos como cuatro a seis *destinos* por módulo sobre un mismo
 shell.
 
-**Casi todo es maqueta.** Los datos de muestra viven en `src/datos/` y lo que escribiría
-enseña un aviso con el texto del artboard. La excepción es **Catastro · Predios**, que
-lee y escribe contra el backend de verdad — ver más abajo.
+**Lee del backend de verdad.** Medido el 2026-09-01 contra el compose local: **41 de los
+65 destinos piden al abrirse**, y los 24 restantes no son «sin conectar» sino pantallas
+que primero necesitan un sujeto —una búsqueda, un número de expediente— o que escriben.
+
+Lo que queda en `src/datos/` **no son datos**: son los rótulos, las columnas, los motivos
+por los que un filtro está apagado y las notas de cada pantalla. Ninguna cifra. Las que
+había —«MEDINA MEDINA, RUFINA (SUC.)», «S/ 214,882» de deuda determinada, los tres
+cuadros normativos de valores escritos a mano— se retiraron cuando su pantalla pasó a
+leer del backend, y hoy el censo de constantes exportadas sin usar es **cero**. Lo que
+el backend no publique sale con el guion largo y su motivo, nunca con la cifra del
+artboard: es lo que mide `yarn sin-red`.
 
 ```bash
 yarn install
@@ -18,6 +26,18 @@ yarn mirar      # recorre las 65 pantallas en Chromium y guarda una captura de
                 # cada una en .capturas/; falla si alguna da un error de consola
                 # o si el <main> se queda en blanco (que es como falla de verdad
                 # una pantalla sin conectar: en silencio)
+yarn sin-red    # las mismas CON LA RED CORTADA: ninguna puede enseñar una cifra
+yarn errores    # el catálogo de errores contra el del backend, la puerta contra
+                # respuestas fabricadas, y las pantallas ante un 405 y un 500
+yarn paleta     # la paleta de comandos se opera sólo con el teclado
+yarn impedimentos  # los 65 destinos otra vez, mirando lo que la pantalla NO hace:
+                # ningún botón apagado puede estar mudo, ni decir un relleno
+                # («no disponible»), ni prometer una fecha que nadie sostiene
+yarn vocabularios  # los desplegables, contra el enumerado del backend
+yarn ficha-catastral  # los 123 campos de la ficha del predio: cada uno dice de qué
+                # lectura sale y por qué clave del cuerpo viaja, o por qué no viaja;
+                # y el guardado, roto, se niega nombrando lo que falta
+yarn flujos     # opera los botones contra el backend real; necesita SGTM_TOKEN
 ```
 
 `yarn mirar` necesita la vista previa levantada; si no está en el 5180, se le dice con
@@ -129,6 +149,16 @@ Mientras no exista la puerta de sesión, el token sale de `VITE_SGTM_TOKEN` o de
 `localStorage['sgtm.token']`; cuando la haya, cambia una sola función —`token()` en
 `cliente.ts`—. **Caduca a los 15 minutos y no se renueva solo**: al vencer, la pantalla
 dice «La sesión no vale» y no ofrece reintentar, porque reintentar no lo arregla.
+
+Esa es la regla entera del trato de errores, y vale para todos: **«Reintentar» sólo sale
+donde reintentar puede cambiar algo**. Un permiso que falta sale igual las veces que se
+pulse; un verbo que la ruta no admite no puede funcionar nunca. Lo sujeta `yarn errores`,
+que la mide por sus tres mitades —fallan por separado—: el catálogo de `cliente.ts`
+contra el enumerado del backend, `solicitar()` contra respuestas fabricadas, y las
+pantallas en un navegador con **todas** las peticiones contestadas 405, donde ninguna
+puede ofrecer el botón, y con un 500, donde alguna tiene que ofrecerlo. Sin ese contraste,
+quitar el botón de los once sitios en que se escribe —ocho módulos con su propio aviso, más el
+compartido— dejaría la primera mitad en verde.
 
 ### Desplegado con el resto del sistema
 

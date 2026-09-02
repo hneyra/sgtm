@@ -4,10 +4,14 @@ import type { PantallaProps } from '../../App';
 import {
   altaDeDeuda,
   bajaDeDeuda,
+  beneficiosDelContribuyente,
   buscarContribuyentes,
   calcularVehicular,
+  corregirContribuyente,
   correrPredialMasivo,
   determinarPredial,
+  fichaDelContribuyente,
+  hojaDeDeclaracion,
   indicadores,
   listarPrediosDelContribuyente,
   listarVehiculosDelContribuyente,
@@ -15,15 +19,25 @@ import {
   tipoDeTransferenciaDelBackend,
   transferirPredio,
   transferirVehiculo,
+  type BeneficioDelContribuyente,
   type CalculoVehicular,
   type Contribuyente,
+  type CorreccionDeContribuyente,
   type CorridaDePredial,
   type DeterminacionPredial,
+  type FichaDelContribuyente,
+  type HojaDeDeclaracion,
   type PeticionDeMovimientoDeDeuda,
+  type PredioDeLaHoja,
   type PredioDelContribuyente,
   type VehiculoDelContribuyente,
 } from '../../api/rentas';
-import { listarPredios, listarSectores } from '../../api/catastro';
+/* `titularesDelPredio` es la MISMA fuente y la MISMA fecha que el backend usa
+   para comprobar la unidad de un movimiento (#635): `TitularesDelPredio.de(
+   predioId, fecha)`. Se usa en la baja, donde la fila trae el identificador
+   interno y no el codigo predial, y donde la fecha valor es la de la
+   resolucion y no hoy. */
+import { listarPredios, listarSectores, titularesDelPredio } from '../../api/catastro';
 /* Dos lecturas de `consultas` que este módulo necesita y no duplica: la deuda de
    un contribuyente —la que se da de baja, y la que arrastra el transferente— y el
    vehículo por placa, que es de donde sale su titular vigente. */
@@ -38,7 +52,7 @@ import { FalloDeLectura, explicacionDelFallo } from '../../api/Fallo';
 import { useRebote, useRecurso } from '../../api/useRecurso';
 import { Icono } from '../../ds/Icono';
 import { ICO } from '../../ds/iconos';
-import { Aviso, Insignia, type Tono } from '../../ds/componentes';
+import { Aviso, Insignia, Paginador, PasoAtras, type Tono } from '../../ds/componentes';
 import { moduloDe } from '../../shell/modulos';
 import { soles, usarPreferencias } from '../../shell/preferencias';
 import {
@@ -47,9 +61,6 @@ import {
   COLS_DE_LA_BAJA,
   DEFECTOS,
   DETERMINACIONES,
-  DJ_COLS,
-  DJ_META,
-  DJ_TOTALES,
   EXPEDIENTE,
   OPCIONES_DE_RENTAS,
   TIPOS_DE_DETERMINACION,
@@ -445,6 +456,479 @@ function BloqueDeTabla({ tabla, onAnadir }: { tabla: TablaDef; onAnadir: () => v
 }
 
 /** Lo que va donde el recurso no publica un dato. */
+/* ══════════ La unidad del alta, resuelta contra el padrón (#554) ══════════ */
+
+/**
+ * Lo que la caja «Unidad (predio / placa)» resolvió, y de quién es.
+ *
+ * `PeticionDeMovimiento` no acepta ni el código catastral ni la placa: acepta
+ * `predioId` y `vehiculoId`, que son los identificadores internos que
+ * `ClaveDeSaldo` compara **por igualdad exacta**. Así que lo que quien atiende
+ * escribe se resuelve antes de mandar, y lo que viaja es el identificador.
+ *
+ * El `cruce` es la otra mitad, y es la que evita el defecto caro: una obligación
+ * es de un contribuyente **sobre** una unidad, de modo que un alta con la placa
+ * de otro queda asentada sobre una clave que nadie va a mirar —ni la ficha del
+ * vehículo, que es de su titular, ni la deuda sin unidad de quien paga—.
+ *
+ * **Desde #635 el backend también lo comprueba**, y eso cambia a qué pregunta
+ * contesta este cruce. Hasta entonces era lo único que había —el controlador
+ * pasaba los dos identificadores a `ClaveDeSaldo` tal cual (#628)— y el aviso
+ * decía «revísalo». Ahora el servidor resuelve el titular a la fecha valor y
+ * rechaza con 422 el movimiento cuya unidad no es del contribuyente, así que
+ * el cruce dice **qué va a pasar** y ofrece la única respuesta que el servidor
+ * admite: `deudaDeTitularAnterior`. El aviso sigue sin bloquear por sí mismo
+ * —el caso legítimo existe—; lo que bloquea es no haberlo contestado.
+ */
+type CruceDeLaUnidad =
+  | { estado: 'suya' }
+  | { estado: 'ajena'; de: string }
+  | { estado: 'sin-comprobar'; por: string };
+
+type UnidadDelAlta =
+  | { clase: 'nada' }
+  | {
+      clase: 'predio' | 'vehiculo';
+      /** Lo único que viaja: el identificador interno, en su campo. */
+      cuerpo: { predioId?: number; vehiculoId?: number };
+      /** Cómo se llama la unidad para quien la buscó: el código o la placa. */
+      codigo: string;
+      /** Qué es, con lo que el recurso publica. */
+      detalle: string;
+      cruce: CruceDeLaUnidad;
+    };
+
+/** Una placa comparable: sin guion y en mayúsculas, que es como se teclea de las dos formas. */
+const placaComparable = (placa: string) => placa.replace(/-/g, '').toUpperCase();
+
+/** La misma frase, empezando oración: «el predio X» → «El predio X». */
+const conMayuscula = (texto: string) => texto.charAt(0).toUpperCase() + texto.slice(1);
+
+/**
+ * Del código catastral o de la placa al identificador que el cuerpo pide.
+ *
+ * Se pregunta primero por el catastro y después por el padrón vehicular, en ese
+ * orden y no a la vez: un código de referencia catastral y una placa no se
+ * parecen, así que la segunda consulta sólo sale cuando la primera no encontró
+ * nada. Como mucho son dos peticiones por unidad tecleada, y ninguna mientras la
+ * mano se mueve (`useRebote`).
+ *
+ * **El cruce con el contribuyente se hace donde se puede hacer.** El vehículo lo
+ * trae en la misma respuesta —`VehiculoEncontradoResource` publica
+ * `codigoContribuyente` y `titular`—, así que se compara por código y se puede
+ * decir a nombre de quién figura. El predio no: `PredioDelCatastroResource` no
+ * publica ningún titular, y el nombre habría que pedirlo a
+ * `/catastro/predios/{id}/titulares`, que es de otro módulo y deja fila en la
+ * bitácora por cada tecla parada. Se cruza contra el padrón del propio
+ * contribuyente —la lectura que esta pantalla ya usa— y por eso el aviso del
+ * predio dice que no está entre los suyos, sin afirmar de quién es.
+ */
+async function resolverLaUnidadDelAlta(
+  escrito: string,
+  codContribuyente: string,
+  senal: AbortSignal,
+): Promise<UnidadDelAlta> {
+  const predios = await listarPredios({ codRefCatastral: escrito }, { tamano: 2 }, senal);
+  const predio = predios.contenido.find((x) => x.codRefCatastral === escrito);
+  if (predio !== undefined) {
+    let cruce: CruceDeLaUnidad;
+    try {
+      const suyos = await listarPrediosDelContribuyente(codContribuyente, { codigoPredial: escrito }, { tamano: 20 }, senal);
+      cruce = suyos.contenido.some((p) => p.predioId === predio.predioId)
+        ? { estado: 'suya' }
+        : { estado: 'ajena', de: 'no figura entre los predios de este contribuyente' };
+    } catch {
+      /* Que no se pueda comprobar NO es que sea de otro, y tampoco que sea suya:
+         un fallo de la lectura del padrón se dice como lo que es. Y no tumba la
+         resolución, que ya está hecha: el identificador que viaja es el mismo. */
+      cruce = { estado: 'sin-comprobar', por: 'no se pudo leer el padrón de predios de este contribuyente' };
+    }
+    return {
+      clase: 'predio',
+      cuerpo: { predioId: predio.predioId },
+      codigo: predio.codRefCatastral,
+      detalle: [predio.tipo, predio.direccion].filter((x) => x !== null && x !== '').join(' · '),
+      cruce,
+    };
+  }
+
+  const vehiculos = await buscarVehiculos({ placa: escrito }, { tamano: 2 }, senal);
+  const vehiculo = vehiculos.contenido.find((v) => placaComparable(v.placa) === placaComparable(escrito));
+  if (vehiculo !== undefined) {
+    return {
+      clase: 'vehiculo',
+      cuerpo: { vehiculoId: vehiculo.vehiculoId },
+      codigo: vehiculo.placa,
+      detalle: [vehiculo.clase, vehiculo.marca, vehiculo.modelo].filter((x) => x !== null && x !== '').join(' '),
+      cruce:
+        vehiculo.codigoContribuyente === codContribuyente
+          ? { estado: 'suya' }
+          : { estado: 'ajena', de: `figura a nombre de ${vehiculo.titular} (${vehiculo.codigoContribuyente})` },
+    };
+  }
+  return { clase: 'nada' };
+}
+
+/**
+ * Cuántos vehículos se leen para cruzar la unidad de una baja.
+ *
+ * **No hay lectura de un vehículo por identificador**: medido pidiéndoles un
+ * parámetro inventado —que los enumera—, `/rentas/vehiculos` admite
+ * `codContribuyente`, `contribuyente`, `direccion`, `fecha` y la paginación, y
+ * `/consultas/vehiculos` añade `placa`, `nroMotor` y `estado`; ninguno es el
+ * identificador. Y la fila de la deuda trae el identificador y no la placa, así
+ * que la única forma de contestar «¿es suyo?» es preguntar por los suyos y
+ * buscarlo entre ellos.
+ *
+ * **Cien y no todos.** La lectura calcula del lado del servidor la deuda de
+ * cada vehículo que devuelve, así que traerse el padrón entero de una empresa
+ * de transportes para responder un sí o un no lo pagaría el servidor en cada
+ * clic. Cien cubre de sobra lo que se ha podido medir —la municipalidad 1 tiene
+ * 8 vehículos en todo el padrón y su mayor titular 3—, y de un padrón grande no
+ * hay medida: por eso lo que no quepa **se dice** («no se pudo comprobar») en
+ * vez de darse por bueno, que es el único modo de fallo que aquí importa.
+ *
+ * El `estado` no acota nada, y hace falta que no lo haga: el controlador compone
+ * el criterio **sólo** con el contribuyente, así que un vehículo dado de baja
+ * sigue saliendo. Si no saliera, la baja de su deuda quedaría bloqueada por una
+ * unidad que sí es suya.
+ */
+const VEHICULOS_QUE_SE_CRUZAN = 100;
+
+/**
+ * De quién es la unidad de la obligación que se va a dar de baja (#635).
+ *
+ * <h2>Por qué la baja también lo necesita, y por qué duele más que el alta</h2>
+ *
+ * La comprobación de #635 la hacen las **dos** rutas, y en la baja recae sobre
+ * una obligación que YA está en el libro. El caso legítimo es el corriente: la
+ * deuda de 2024 la debe quien era titular en 2024, y el predio se vendió en
+ * 2025. Sin declararlo, esa deuda **no se puede extinguir** —medido: 422, con
+ * el mismo mensaje del alta— y quien atiende no tiene con qué resolverlo.
+ *
+ * <h2>Dos unidades, dos lecturas, y no es una asimetría gratuita</h2>
+ *
+ * El **predio** se pregunta con `titularesDelPredio`, que es la misma fuente y
+ * la misma fecha que usa el servidor (`TitularesDelPredio.de(predioId,
+ * fechaValor)`) y que además publica el nombre, así que el aviso puede decir de
+ * quién es y no sólo que no es suyo. No sirve la lectura del padrón que usa el
+ * alta: la fila trae el identificador interno y no el código predial, y
+ * `GET /rentas/predios` **no admite `fecha`** —medido: «Parametro desconocido:
+ * 'fecha'»—, de modo que contestaría por hoy sobre un acto con fecha valor de
+ * la resolución.
+ *
+ * El **vehículo** se pregunta sin fecha, y no por descuido: `delVehiculo` del
+ * backend recibe la fecha y **no la usa** —lee `vehiculo.contribuyenteId`, el
+ * titular de hoy—, así que preguntar a otra fecha diría algo que el servidor no
+ * mira. Y `/rentas/vehiculos` acota igual: el listado con `fecha=2024-01-01`
+ * devuelve los mismos vehículos que sin ella, medido; esa fecha es la del corte
+ * de la deuda de cada fila, no la de la titularidad.
+ *
+ * Es **una lectura por fila marcada** y por cambio de fecha: un clic
+ * deliberado, no una tecla parada. Ésa es la diferencia con el alta, donde la
+ * unidad se resuelve mientras se teclea y por eso no se pregunta por el titular
+ * del predio —dejaría una fila de bitácora por pulsación—.
+ *
+ * Devuelve `null` cuando la obligación **no tiene unidad**: ahí el servidor no
+ * comprueba nada —medido, 201— y no hay nada que declarar.
+ *
+ * <h2>Lo que cuesta, y qué pasa si no se puede pagar</h2>
+ *
+ * La lectura del titular pide el acceso `contribuyentes` y la de vehículos
+ * `vehiculos`; quien no los tenga recibe un 403 y `useRecurso` lo deja en
+ * `error`. Eso **no apaga la baja**: la unidad ya está identificada por la fila
+ * y la comprobación de verdad la hace el servidor. Lo que se pierde es verlo
+ * venir, y se dice —con la casilla al lado, por si quien atiende ya lo sabe—.
+ */
+async function resolverElCruceDeLaBaja(
+  o: ObligacionConDeuda,
+  codContribuyente: string,
+  fechaValor: string,
+  senal: AbortSignal,
+): Promise<CruceDeLaUnidad | null> {
+  if (o.predioId !== null) {
+    const r = await titularesDelPredio(o.predioId, fechaValor, senal);
+    /* Por código y no por identificador porque es lo único que la lectura
+       publica. El `codigo` puede venir nulo —el titular que ya no está en el
+       padrón—, y eso no falsea nada aquí: el contribuyente con el que se
+       compara acaba de salir de una búsqueda del padrón, así que si fuera
+       titular saldría con su código puesto. */
+    if (r.titulares.some((t) => t.codigo === codContribuyente)) return { estado: 'suya' };
+    /* Un predio sin ningún titular a esa fecha lo rechaza el servidor igual, y
+       con razón: sin titular no se puede comprobar que la obligación sea suya.
+       Se dice como lo que es y no como «es de otro», que sería afirmar de más. */
+    if (r.titulares.length === 0) return { estado: 'ajena', de: `no tiene ningún titular al ${r.vigenteA}` };
+    const quienes = r.titulares.map((t) => `${t.nombre ?? 'sin nombre en el padrón'} (${t.codigo ?? SIN_DATO})`).join(', ');
+    return { estado: 'ajena', de: `es de ${quienes} al ${r.vigenteA}` };
+  }
+  if (o.vehiculoId !== null) {
+    const suyos = await listarVehiculosDelContribuyente(codContribuyente, { tamano: VEHICULOS_QUE_SE_CRUZAN }, senal);
+    if (suyos.contenido.some((v) => v.vehiculoId === o.vehiculoId)) return { estado: 'suya' };
+    if (suyos.hayMas)
+      return {
+        estado: 'sin-comprobar',
+        por: `este contribuyente tiene ${suyos.totalElementos} vehículos y sólo se leyeron los ${VEHICULOS_QUE_SE_CRUZAN} primeros`,
+      };
+    return { estado: 'ajena', de: 'no figura entre los vehículos de este contribuyente' };
+  }
+  return null;
+}
+
+/**
+ * La casilla con que quien atiende declara que la deuda es de un titular
+ * anterior de la unidad (#635).
+ *
+ * <h2>Dónde vive, y por qué no en la rejilla de campos</h2>
+ *
+ * Marcarla es una **afirmación sobre un hecho** —«esta persona era titular de
+ * esta unidad cuando nació esta deuda»— que se guarda con la observación del
+ * acto y queda en la bitácora. Una casilla más entre las doce del formulario
+ * estaría en pantalla también en las altas cuya unidad sí es del contribuyente,
+ * que son casi todas, y una casilla que sobra casi siempre se acaba marcando
+ * por inercia; cuando de verdad hiciera falta, ya no significaría nada. Aquí
+ * sólo existe cuando el padrón acaba de decir, dos líneas más arriba y en la
+ * misma tarjeta, que la unidad no es suya: es la respuesta a esa frase
+ * concreta, no una opción del formulario.
+ *
+ * <h2>Y el rótulo dice lo que se afirma, no lo que hace</h2>
+ *
+ * «Permitir de todas formas» o «Omitir la comprobación» describen el efecto en
+ * el servidor e invitan a marcar para seguir. Lo que se declara es otra cosa, y
+ * se escribe entera, con el nombre del contribuyente y el de la unidad dentro:
+ * quien la marca está firmando una frase, no desbloqueando un botón.
+ */
+function DeclaracionDeTitularAnterior({
+  que,
+  contribuyente,
+  marcado,
+  onCambio,
+}: {
+  /** Cómo se nombra la unidad en la frase: «el predio X», «el vehículo Y». */
+  que: string;
+  contribuyente: Contribuyente;
+  marcado: boolean;
+  onCambio: (v: boolean) => void;
+}) {
+  return (
+    <label style={{ display: 'flex', alignItems: 'flex-start', gap: 9, marginTop: 10, cursor: 'pointer' }}>
+      <input
+        type="checkbox"
+        checked={marcado}
+        onChange={(e) => onCambio(e.target.checked)}
+        style={{ accentColor: 'var(--accent)', width: 15, height: 15, flex: '0 0 auto', marginTop: 2 }}
+      />
+      <span style={{ fontSize: 12.5, lineHeight: 1.55, textWrap: 'pretty' }}>
+        {/* La frase empieza por la unidad y no por la persona, y no es sólo
+            estilo: la otra redacción —«era titular de {que}»— compone «de el
+            predio», y una contracción mal escrita en una frase que alguien
+            firma la hace leerse como plantilla y no como declaración. */}
+        Declaro que {que} era de <strong>{contribuyente.nombreRazonSocial}</strong> ({contribuyente.codigo}) cuando nació esta deuda.{' '}
+        <span style={{ opacity: 0.85 }}>
+          Queda en la bitácora con la observación del acto. Sin marcarla, el servidor rechaza el movimiento nombrando al titular que la
+          unidad tiene a la fecha valor.
+        </span>
+      </span>
+    </label>
+  );
+}
+
+/**
+ * La tarjeta que enseña **qué se resolvió** y de quién es (#554).
+ *
+ * Cuatro estados, y los cuatro se dicen distinto porque significan cosas
+ * distintas: se está preguntando, no se pudo preguntar, el padrón contestó que
+ * no hay nada con ese código, o hay unidad —y entonces se dice cuál, qué es y a
+ * nombre de quién figura—.
+ *
+ * El cruce es **un aviso, no un bloqueo**, y es deliberado: la deuda de un
+ * ejercicio anterior a una transferencia es del titular de entonces, no del de
+ * ahora, así que un alta sobre la unidad de otro puede ser exactamente lo que
+ * corresponde. Lo que no puede es pasar inadvertido.
+ *
+ * **Desde #635 el aviso lleva dentro la respuesta.** El servidor rechaza ese
+ * alta con 422 salvo que la petición declare el caso, así que la tarjeta deja
+ * de limitarse a advertir y ofrece la casilla que lo declara —aquí, pegada a la
+ * frase que la justifica, y no en la rejilla de campos: ver
+ * {@link DeclaracionDeTitularAnterior}—. Se ofrece en los **dos** estados que no
+ * son «suya», y por motivos distintos: con `ajena` el padrón dijo que no lo es y
+ * declararlo es obligatorio para poder mandar; con `sin-comprobar` el padrón no
+ * dijo nada —no se pudo preguntar—, así que la unidad puede ser suya, el alta
+ * se manda igual y la casilla está por si quien atiende sabe que no lo es.
+ */
+function UnidadDelAltaResuelta({
+  escrito,
+  enVuelo,
+  error,
+  unidad,
+  contribuyente,
+  declarado,
+  onDeclarar,
+}: {
+  escrito: string;
+  enVuelo: boolean;
+  error: ErrorDeApi | null;
+  unidad: UnidadDelAlta | null;
+  contribuyente: Contribuyente;
+  declarado: boolean;
+  onDeclarar: (v: boolean) => void;
+}) {
+  if (enVuelo)
+    return (
+      <p role="status" style={{ margin: 0, fontSize: 12.5, color: 'var(--ink-3)' }}>
+        Resolviendo «{escrito}» contra el padrón…
+      </p>
+    );
+  if (error !== null)
+    return (
+      <Aviso tono="bad" titulo="No se pudo comprobar la unidad">
+        {explicacionDelFallo(error)} Mientras no se sepa qué unidad es, el alta no se manda: iría sobre otra obligación.
+      </Aviso>
+    );
+  if (unidad === null) return null;
+  if (unidad.clase === 'nada')
+    return (
+      <Aviso tono="warn" titulo={`«${escrito}» no está en ningún padrón`}>
+        No es ningún código de referencia catastral del catastro ni ninguna placa del padrón vehicular. Corrígelo, o deja la caja en
+        blanco para dar de alta la obligación <strong>sin unidad</strong>, que es otra distinta.
+      </Aviso>
+    );
+  const esPredioDeLaUnidad = unidad.clase === 'predio';
+  return (
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+      <div
+        style={{
+          display: 'flex',
+          alignItems: 'baseline',
+          gap: 10,
+          flexWrap: 'wrap',
+          border: '1px solid var(--line)',
+          borderRadius: 8,
+          padding: '10px 12px',
+          background: 'var(--bg-elev)',
+        }}
+      >
+        <Insignia tono="ok">{esPredioDeLaUnidad ? 'PREDIO' : 'VEHÍCULO'}</Insignia>
+        <span style={{ fontFamily: 'var(--font-mono)', fontSize: 13, color: 'var(--ink)' }}>{unidad.codigo}</span>
+        <span style={{ flex: 1, minWidth: 120, fontSize: 12.5, color: 'var(--ink-3)' }}>
+          {unidad.detalle === '' ? SIN_DATO : unidad.detalle}
+        </span>
+        {/* El identificador es lo ÚNICO que viaja, y por eso se enseña: es lo
+            que separa esta obligación de la del mismo tributo sin unidad. */}
+        <span style={{ fontFamily: 'var(--font-mono)', fontSize: 11, color: 'var(--ink-4)' }}>
+          {esPredioDeLaUnidad ? `predioId ${String(unidad.cuerpo.predioId)}` : `vehiculoId ${String(unidad.cuerpo.vehiculoId)}`}
+        </span>
+      </div>
+      {unidad.cruce.estado === 'ajena' && (
+        <Aviso tono="warn" titulo={`La unidad resuelta ${unidad.cruce.de}`}>
+          El alta se registra sobre {contribuyente.nombreRazonSocial} ({contribuyente.codigo}), y así el servidor no la va a admitir: desde
+          #635 comprueba que la unidad sea suya a la fecha valor y responde 422 nombrando a su titular. Si la deuda es de un ejercicio
+          anterior a la transferencia, decláralo aquí; si no lo es, corrige la unidad, porque la obligación quedaría colgada de una que no
+          es la suya y no aparecería donde se la busca.
+          <DeclaracionDeTitularAnterior
+            que={`${esPredioDeLaUnidad ? 'el predio' : 'el vehículo'} ${unidad.codigo}`}
+            contribuyente={contribuyente}
+            marcado={declarado}
+            onCambio={onDeclarar}
+          />
+        </Aviso>
+      )}
+      {unidad.cruce.estado === 'sin-comprobar' && (
+        <Aviso tono="warn" titulo="No se pudo comprobar de quién es la unidad">
+          {unidad.cruce.por}. La unidad está resuelta y el alta se puede mandar, pero de quién es no lo dice nadie: compruébalo antes. Y si
+          ya sabes que no es suya —y aun así la deuda le corresponde—, decláralo aquí, porque el servidor sí lo va a comprobar.
+          <DeclaracionDeTitularAnterior
+            que={`${esPredioDeLaUnidad ? 'el predio' : 'el vehículo'} ${unidad.codigo}`}
+            contribuyente={contribuyente}
+            marcado={declarado}
+            onCambio={onDeclarar}
+          />
+        </Aviso>
+      )}
+    </div>
+  );
+}
+
+/**
+ * Lo que se sabe de la unidad de la obligación marcada para la baja (#635).
+ *
+ * Es la gemela de {@link UnidadDelAltaResuelta} y contesta lo mismo, pero la
+ * pregunta llega al revés: allí quien atiende teclea una unidad y hay que
+ * resolverla; aquí la unidad ya viene con la fila y lo único que falta es de
+ * quién es. Por eso no hay tarjeta con el identificador —la fila ya está
+ * marcada en la tabla— y sólo se dibuja la frase.
+ *
+ * **La frase se dibuja también cuando la unidad SÍ es suya**, y es deliberado:
+ * la columna «Unidad» de esa tabla enseña «—» porque el recurso publica el
+ * identificador interno y no el código predial ni la placa, de modo que ésta es
+ * la única línea de la pantalla que dice sobre qué unidad cae la baja y a
+ * nombre de quién está. Sin ella, el silencio del caso bueno sería
+ * indistinguible del de una obligación sin unidad.
+ */
+function UnidadDeLaBajaCruzada({
+  obligacion,
+  cargando,
+  error,
+  cruce,
+  contribuyente,
+  declarado,
+  onDeclarar,
+}: {
+  obligacion: ObligacionConDeuda;
+  cargando: boolean;
+  error: ErrorDeApi | null;
+  cruce: CruceDeLaUnidad | null;
+  contribuyente: Contribuyente;
+  declarado: boolean;
+  onDeclarar: (v: boolean) => void;
+}) {
+  /* Sin unidad no hay nada que comprobar ni que declarar: medido, el servidor
+     ni mira. Y no se dice nada, porque decir «esta obligación no tiene unidad»
+     en cada baja corriente sería ruido. */
+  if (obligacion.predioId === null && obligacion.vehiculoId === null) return null;
+  const que =
+    obligacion.predioId !== null
+      ? `el predio (predioId ${String(obligacion.predioId)})`
+      : `el vehículo (vehiculoId ${String(obligacion.vehiculoId)})`;
+
+  if (cargando)
+    return (
+      <p role="status" style={{ margin: 0, fontSize: 12.5, color: 'var(--ink-3)' }}>
+        Comprobando de quién es {que}…
+      </p>
+    );
+  if (error !== null)
+    return (
+      <Aviso tono="warn" titulo="No se pudo comprobar de quién es la unidad">
+        {explicacionDelFallo(error)} La baja se puede mandar igual, pero el servidor sí lo comprueba: si {que} ya no es suyo, va a
+        rechazarla nombrando a su titular.
+        <DeclaracionDeTitularAnterior que={que} contribuyente={contribuyente} marcado={declarado} onCambio={onDeclarar} />
+      </Aviso>
+    );
+  if (cruce === null) return null;
+  if (cruce.estado === 'suya')
+    return (
+      <p role="status" style={{ margin: 0, fontSize: 12.5, lineHeight: 1.5, color: 'var(--ink-3)', textWrap: 'pretty' }}>
+        {conMayuscula(que)} es de {contribuyente.nombreRazonSocial} a la fecha de la resolución.
+      </p>
+    );
+  if (cruce.estado === 'sin-comprobar')
+    return (
+      <Aviso tono="warn" titulo="No se pudo comprobar de quién es la unidad">
+        {cruce.por}. La baja se puede mandar igual, pero el servidor sí lo comprueba: si {que} ya no es suyo, va a rechazarla nombrando a
+        su titular.
+        <DeclaracionDeTitularAnterior que={que} contribuyente={contribuyente} marcado={declarado} onCambio={onDeclarar} />
+      </Aviso>
+    );
+  return (
+    <Aviso tono="warn" titulo={`${conMayuscula(que)} ${cruce.de}`}>
+      La baja se registra sobre {contribuyente.nombreRazonSocial} ({contribuyente.codigo}), y así el servidor no la va a admitir. Que la
+      deuda siga en su cuenta y la unidad ya no sea suya es lo corriente cuando el predio cambió de dueño después de que la deuda naciera:
+      la de entonces es suya y se le extingue a él. Eso hay que declararlo.
+      <DeclaracionDeTitularAnterior que={que} contribuyente={contribuyente} marcado={declarado} onCambio={onDeclarar} />
+    </Aviso>
+  );
+}
+
 const SIN_DATO = '—';
 
 /**
@@ -490,7 +974,6 @@ function TablaLeida<T>({
   vacia,
   sinPreguntar,
   cuenta,
-  pagina,
   irAPagina,
 }: {
   tabla: TablaDef;
@@ -502,7 +985,9 @@ function TablaLeida<T>({
   sinPreguntar: string;
   /** Cómo se cuenta lo que trajo: «3 predios», «1 vehículo». */
   cuenta: (n: number) => string;
-  pagina: number;
+  /* El numero de pagina NO entra por aqui: el pie lo lee del sobre, que es
+     quien lo publica. Pasarlo ademas seria tenerlo en dos sitios, y el dia que
+     uno se adelantara al otro la tabla diria una pagina y el pie otra. */
   irAPagina: (n: number) => void;
 }) {
   const filas = (estado.datos?.contenido ?? []).map(fila);
@@ -559,33 +1044,109 @@ function TablaLeida<T>({
           rejilla enseñaría 50: el recuento y lo que se ve discreparían sin que
           nada lo dijera, que es la forma silenciosa del mismo defecto que esta
           sección acaba de dejar atrás. */}
-      {(estado.datos?.totalPaginas ?? 0) > 1 && (
-        <div style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '10px 16px', borderTop: '1px solid var(--line)' }}>
-          <button
-            onClick={() => irAPagina(Math.max(0, pagina - 1))}
-            disabled={pagina === 0}
-            className="hov-linea"
-            style={{ ...BOTON_DE_TABLA, opacity: pagina === 0 ? 0.45 : 1, cursor: pagina === 0 ? 'not-allowed' : 'pointer' }}
-          >
-            Anterior
-          </button>
-          <span style={{ fontFamily: 'var(--font-mono)', fontSize: 12, color: 'var(--ink-3)' }}>
-            {(estado.datos?.pagina ?? 0) + 1} de {estado.datos?.totalPaginas}
-          </span>
-          <button
-            onClick={() => irAPagina(pagina + 1)}
-            disabled={estado.datos?.hayMas !== true}
-            className="hov-linea"
-            style={{ ...BOTON_DE_TABLA, opacity: estado.datos?.hayMas === true ? 1 : 0.45, cursor: estado.datos?.hayMas === true ? 'pointer' : 'not-allowed' }}
-          >
-            Siguiente
-          </button>
-        </div>
+      {estado.datos !== null && (
+        <Paginador
+          pagina={estado.datos.pagina}
+          totalPaginas={estado.datos.totalPaginas}
+          hayMas={estado.datos.hayMas}
+          ir={irAPagina}
+        />
       )}
       {tabla.nota !== undefined && <p style={PIE}>{tabla.nota}</p>}
     </div>
   );
 }
+
+/**
+ * Una de las tres listas que vienen dentro de la ficha, no de una lectura propia.
+ *
+ * Domicilios, contactos y responsables llegan en **la misma respuesta** que el
+ * resto del expediente —`GET /rentas/contribuyentes/{id}/ficha` los trae en una
+ * sola transacción a propósito (#486)—, así que no tienen sobre paginado, ni
+ * error propio, ni permiso propio: o está la ficha o no está ninguna de las
+ * tres. Por eso no se dibujan con `TablaLeida`, que pagina y reparte fallos, y
+ * por eso el fallo se dice **una vez** arriba y aquí sólo se remite a él:
+ * repetir el mismo aviso tres veces haría creer que fallaron tres cosas.
+ *
+ * Y por eso hay que distinguir «no se preguntó» de «no hay ninguno»: son la
+ * misma forma —cero filas— y significan lo contrario (#595).
+ */
+function TablaDeLaFicha({
+  tabla,
+  estado,
+  filas,
+  vacia,
+  cuenta,
+}: {
+  tabla: TablaDef;
+  estado: { datos: FichaDelContribuyente | null; cargando: boolean; error: ErrorDeApi | null };
+  /** Qué filas salen de la ficha. Se llama sólo cuando la hay. */
+  filas: (ficha: FichaDelContribuyente) => string[][];
+  /** Qué decir cuando la ficha se leyó y esta lista viene vacía. */
+  vacia: string;
+  cuenta: (n: number) => string;
+}) {
+  const cuerpo = estado.datos === null ? [] : filas(estado.datos);
+  return (
+    <div style={{ borderTop: '1px solid var(--line)' }}>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap', padding: '11px 16px' }}>
+        <p style={{ margin: 0, flex: 1, fontSize: 13, fontWeight: 500 }}>{tabla.titulo}</p>
+        <span style={META}>
+          {estado.cargando ? 'consultando…' : estado.datos === null ? SIN_DATO : cuenta(cuerpo.length)}
+        </span>
+      </div>
+      <div style={{ borderTop: '1px solid var(--line)' }}>
+        <TablaDeDatos
+          cols={tabla.cols}
+          filas={cuerpo}
+          min={tabla.min}
+          vacia={
+            estado.cargando
+              ? 'Consultando la ficha…'
+              : estado.datos !== null
+                ? vacia
+                : estado.error !== null
+                  ? 'No se pudo leer la ficha del contribuyente: el aviso del principio del expediente dice por qué.'
+                  : 'No se ha preguntado: sin un contribuyente del padrón abierto no hay ficha que leer. Pasa con un expediente nuevo y con un código que el padrón no reconoce.'
+          }
+        />
+      </div>
+      {tabla.nota !== undefined && <p style={PIE}>{tabla.nota}</p>}
+    </div>
+  );
+}
+
+/**
+ * Toda clave que el expediente dibuja, computada **del catálogo** y no a mano.
+ *
+ * De aquí salen dos cosas: qué se borra al cambiar de contribuyente —para que lo
+ * tecleado sobre uno no se guarde sobre el siguiente— y, sobre todo, qué campos
+ * hay que comparar contra la lista blanca del PUT. Escrita a mano, un campo
+ * nuevo del catálogo no aparecería en ninguna de las dos comprobaciones y el
+ * silencio sería el de siempre: se teclea, no viaja, y nadie se entera.
+ */
+const CLAVES_DEL_EXPEDIENTE: string[] = EXPEDIENTE.flatMap((seccion) =>
+  seccion.bloques.flatMap((bloque) => bloque.campos.map((c) => c.k)),
+);
+
+/**
+ * Las cinco claves que `PUT /rentas/contribuyentes/{id}` admite, y ninguna más.
+ *
+ * Es **la misma lista blanca** que declara `CorreccionDeContribuyente`, aquí
+ * puesta a trabajar sobre el formulario: lo que se teclee en una clave que no
+ * esté aquí no compone el cuerpo y además **apaga el botón**, nombrando el
+ * campo. La otra salida —ignorarlo en silencio— es la que produce el defecto
+ * que #331 midió: quien atiende teclea, ve el dato en pantalla, guarda, y lo
+ * tecleado no llega a ninguna parte.
+ *
+ * `activo` no está, aunque el PUT lo admita: `activo = false` es la baja, exige
+ * el privilegio ELIMINACION y no es una corrección de ficha. Compartir botón
+ * con el nombre haría que un descuido diera de baja a quien se corregía.
+ */
+const CAMPOS_DE_LA_CORRECCION = ['nombreRazonSocial', 'condicionEspecial', 'fechaNacimiento', 'estadoCivil', 'conyugeId'] as const;
+
+/** El estado civil es `varchar(20)`; el dominio rechaza lo que pase de ahí. */
+const ESTADO_CIVIL_MAXIMO = 20;
 
 /** La cabecera pulsable de una sección plegable. */
 function Cabecera({
@@ -639,6 +1200,12 @@ export default function Rentas({ dest, onDest }: PantallaProps) {
 
   const [vals, setVals] = useState<Record<string, string | boolean>>({});
   const [sucio, setSucio] = useState(false);
+  /* La observación de la corrección del expediente (regla 10, RNF-052). Va
+     aparte de `observacionDelActo` —la de la transferencia y la de los
+     movimientos de deuda— a propósito: son actos distintos, y una observación
+     escrita para uno no explica el otro. */
+  const [observacionDeLaCorreccion, setObservacionDeLaCorreccion] = useState('');
+  const [corrigiendo, setCorrigiendo] = useState(false);
   const [cerradas, setCerradas] = useState<Record<string, boolean>>({});
   const [sujeto, setSujeto] = useState<string | null>(null);
   const [q, setQ] = useState('');
@@ -709,9 +1276,11 @@ export default function Rentas({ dest, onDest }: PantallaProps) {
      dos tablas vacías sin motivo. */
   const [paginaDePredios, setPaginaDePredios] = useState(0);
   const [paginaDeVehiculos, setPaginaDeVehiculos] = useState(0);
+  const [paginaDeBeneficios, setPaginaDeBeneficios] = useState(0);
   useEffect(() => {
     setPaginaDePredios(0);
     setPaginaDeVehiculos(0);
+    setPaginaDeBeneficios(0);
   }, [contribuyenteAbierto?.codigo]);
 
   const prediosDelContribuyente = useRecurso(
@@ -724,6 +1293,120 @@ export default function Rentas({ dest, onDest }: PantallaProps) {
     [contribuyenteAbierto?.codigo, paginaDeVehiculos],
     contribuyenteAbierto !== null,
   );
+
+  /**
+   * La ficha del contribuyente abierto (#552).
+   *
+   * Es la lectura que le faltaba al expediente entero. Hasta aquí, de los
+   * cincuenta y pico campos que dibuja **ninguno** salía del backend: el código,
+   * el documento, el nombre partido en cuatro, los dieciséis del domicilio, los
+   * contactos, el beneficio y la bitácora eran constantes de la maqueta, y se
+   * dibujaban en cuanto se abría a cualquiera —la ficha de una persona bajo el
+   * nombre de otra, indistinguible de la suya—.
+   *
+   * Se pide por el **identificador interno** y no por el código, porque la ruta
+   * es `/rentas/contribuyentes/{id}/ficha`; el `id` sale de la fila que la
+   * búsqueda ya devolvió, así que no se pregunta por alguien que la lectura
+   * anterior no encontró.
+   *
+   * `fecha` va ausente: es hoy, con el reloj del servidor. Lo vigente se
+   * resuelve A ESA FECHA y no «lo último» (regla 9), y por eso la cabecera del
+   * domicilio dice a qué fecha rige lo que enseña.
+   */
+  const ficha = useRecurso(
+    (senal) => fichaDelContribuyente(contribuyenteAbierto!.id, undefined, senal),
+    [contribuyenteAbierto?.id],
+    contribuyenteAbierto !== null,
+  );
+
+  /**
+   * Los beneficios del contribuyente, de su propia lectura.
+   *
+   * Va aparte de la ficha porque es de **otro contexto y otro permiso**:
+   * `beneficios`, no `contribuyentes`. Quien tenga el padrón y no los beneficios
+   * ve el resto del expediente y el aviso de permiso sólo en esta lista, en vez
+   * de perder las seis secciones.
+   *
+   * Se pide por el **código** del padrón, no por el identificador: lo dice
+   * `CriterioDeBeneficio` campo por campo.
+   */
+  const beneficios = useRecurso(
+    (senal) => beneficiosDelContribuyente(contribuyenteAbierto!.codigo, { pagina: paginaDeBeneficios, tamano: UNIDADES_POR_PAGINA }, senal),
+    [contribuyenteAbierto?.codigo, paginaDeBeneficios],
+    contribuyenteAbierto !== null,
+  );
+
+  /**
+   * Quién es el cónyuge, resuelto para poder enseñarlo por su código.
+   *
+   * La ficha publica `conyugeId` —el identificador interno— y su javadoc dice
+   * por qué: resolver el nombre costaría una consulta más por ficha, «y quien lo
+   * necesite lo pide como pide cualquier otro contribuyente». Eso es
+   * exactamente lo que se hace aquí, y sólo cuando hay cónyuge.
+   *
+   * Importa para lo que se teclea, no para lo que se lee: el control pregunta
+   * por el **código del padrón** y no por el identificador, porque un número
+   * interno tecleado a mano enlazaría con quien no es sin que nada lo dijera
+   * —es el defecto del «Solicitante» que #427 midió, al revés—. Para que «no
+   * tocar el campo» signifique «no cambiar nada», el valor que se dibuja tiene
+   * que ser el mismo código que se teclearía.
+   */
+  const conyugeDeLaFicha = ficha.datos?.datosPersonales.conyugeId ?? null;
+  const conyugeActual = useRecurso(
+    (senal) => fichaDelContribuyente(conyugeDeLaFicha!, undefined, senal),
+    [conyugeDeLaFicha],
+    conyugeDeLaFicha !== null,
+  );
+
+  /**
+   * Lo que el expediente enseña de la ficha, campo por campo.
+   *
+   * Es el único origen de los controles del expediente: `valorDeClave` lo
+   * consulta antes que ningún valor por omisión, y del catálogo desaparecieron
+   * los que había. Lo que la ficha no publica no aparece aquí, y entonces el
+   * control sale con el guion largo —los de solo lectura— o en blanco —los que
+   * se escriben—, nunca con una cifra ni un texto que nadie ha dado.
+   */
+  const delExpediente: Record<string, string> = (() => {
+    const f = ficha.datos;
+    if (f === null) {
+      /* Sin ficha no hay dato: los de solo lectura dicen «—» y los que se
+         escriben se quedan vacíos. Un «—» dentro de una caja de texto viajaría
+         como texto la primera vez que alguien guardara. */
+      const enBlanco: Record<string, string> = {};
+      for (const clave of CLAVES_DEL_EXPEDIENTE) {
+        enBlanco[clave] = (CAMPOS_DE_LA_CORRECCION as readonly string[]).includes(clave) ? '' : ficha.cargando ? '…' : SIN_DATO;
+      }
+      return enBlanco;
+    }
+    const fiscal = f.domicilioFiscal;
+    const procesal = f.domicilioProcesal;
+    return {
+      codigo: f.contribuyente.codigo,
+      /* El tipo delante del número, que es como el padrón lo guarda: seis tipos
+         admitidos, y sin el tipo el número no se puede ni validar. */
+      documento: `${f.contribuyente.tipoDocumento} ${f.contribuyente.numeroDocumento}`,
+      tipoPersona: f.contribuyente.tipoPersona,
+      estado: f.contribuyente.activo ? 'ACTIVO' : 'INACTIVO',
+      nombreRazonSocial: f.contribuyente.nombreRazonSocial,
+      condicionEspecial: f.contribuyente.condicionEspecial ?? '',
+      fechaNacimiento: f.datosPersonales.fechaNacimiento ?? '',
+      estadoCivil: f.datosPersonales.estadoCivil ?? '',
+      /* Mientras la segunda lectura no vuelva, el campo queda vacío: enseñar el
+         identificador interno en una caja que pide un código haría que guardar
+         mandase el número equivocado. */
+      conyugeId: conyugeActual.datos?.contribuyente.codigo ?? '',
+      domDireccion: fiscal?.direccion ?? SIN_DATO,
+      domReferencia: fiscal?.referencia ?? SIN_DATO,
+      domUbigeo: fiscal?.ubigeo ?? SIN_DATO,
+      domDesde: fiscal?.vigenciaDesde ?? SIN_DATO,
+      domOrigen: fiscal?.documentoOrigen ?? SIN_DATO,
+      procDireccion: procesal?.direccion ?? SIN_DATO,
+      procDesde: procesal?.vigenciaDesde ?? SIN_DATO,
+      procOrigen: procesal?.documentoOrigen ?? SIN_DATO,
+    };
+  })();
+
   const cargando = padron.cargando;
   const vacio = !padron.cargando && padron.error === null && padron.datos !== null && filasDelPadron.length === 0;
   const [tipo, setTipo] = useState<ClaveDeDeterminacion>('predial');
@@ -735,7 +1418,16 @@ export default function Rentas({ dest, onDest }: PantallaProps) {
      que la tabla elige una fila y no un conjunto. Antes eran cuatro casillas
      premarcadas sobre filas de la maqueta que además nadie leía al mandar. */
   const [obligacionMarcada, setObligacionMarcada] = useState<number | null>(null);
-  const [dj, setDj] = useState<Record<string, boolean>>({ HR: true, PU: true, PR: false });
+  /* La hoja resumen es la de UNA declaración jurada, y hasta ahora la pantalla no
+     preguntaba por ninguna: dibujaba la de la maqueta con cualquier sesión y sin
+     haber abierto a nadie. El número lo teclea quien atiende —es el que lleva
+     impreso el cargo— y el año es el del selector del shell, que es el mismo que
+     la hoja imprime bajo el título. */
+  const [djNro, setDjNro] = useState('');
+  /* Vacía es hoy, y lo resuelve el servidor: escribir aquí `LocalDate.now()` del
+     navegador daría una fecha distinta de la que el backend usa para resolver el
+     domicilio y la titularidad, y la hoja iría fechada con una y compuesta con otra. */
+  const [djFecha, setDjFecha] = useState('');
 
   /* El expediente se abre sobre el destino «Contribuyentes», como en el
      artboard. Al cambiar de destino se suelta el sujeto, salvo cuando es la
@@ -777,7 +1469,13 @@ export default function Rentas({ dest, onDest }: PantallaProps) {
         },
         {
           etiqueta: 'Persona',
-          valor: contribuyenteAbierto.tipoPersona === 'JURIDICA' ? 'Jurídica' : 'Natural',
+          /* Tal como el padrón lo guarda. Decía «Jurídica» o «Natural» y son
+             CUATRO —`TipoPersona` declara además `SUCESION_INDIVISA` y
+             `SOCIEDAD_CONYUGAL`—, así que una sucesión indivisa salía rotulada
+             «Natural»: no es un matiz, es quién responde por la deuda y aparece
+             en cuanto muere un propietario. La celda de una ficha no traduce un
+             vocabulario del sistema a otro más corto (#427). */
+          valor: contribuyenteAbierto.tipoPersona,
           color: 'var(--ink)',
         },
         { etiqueta: 'Condición especial', valor: contribuyenteAbierto.condicionEspecial ?? '—', color: 'var(--ink)' },
@@ -814,6 +1512,21 @@ export default function Rentas({ dest, onDest }: PantallaProps) {
     }
   }, [esNuevo, toast]);
 
+  /* Lo tecleado sobre un contribuyente NO se arrastra al siguiente. `vals` es
+     del módulo entero —lo comparten las determinaciones, las transferencias y
+     las dos hojas de deuda—, así que sólo se sueltan las claves del expediente:
+     sin esto, corregir un nombre, cambiar de persona y pulsar «Guardar cambios»
+     escribiría el nombre del primero sobre la ficha del segundo. La observación
+     se va con ellas por lo mismo: es el motivo de un cambio que ya no está. */
+  useEffect(() => {
+    setVals((s2) => {
+      const limpio = { ...s2 };
+      for (const clave of CLAVES_DEL_EXPEDIENTE) delete limpio[clave];
+      return limpio;
+    });
+    setObservacionDeLaCorreccion('');
+  }, [contribuyenteAbierto?.id]);
+
   const abrirExpediente = (codigo: string) => {
     setSucio(false);
     if (dest === 'padron') setSujeto(codigo);
@@ -828,14 +1541,22 @@ export default function Rentas({ dest, onDest }: PantallaProps) {
     setSucio(true);
   };
   /**
-   * El valor de un campo, con la misma cadena para las tres funciones que lo
-   * necesitan: lo tecleado, el valor por omisión del propio campo y el del
-   * contribuyente. Antes `texto()` se saltaba el segundo eslabón y devolvía otra
-   * cosa que la que la pantalla enseñaba.
+   * El valor de un campo, con la misma cadena para las cuatro funciones que lo
+   * necesitan: lo tecleado, **lo que la ficha del contribuyente dice**, el valor
+   * por omisión del propio campo y el de la maqueta. Antes `texto()` se saltaba
+   * el segundo eslabón y devolvía otra cosa que la que la pantalla enseñaba.
+   *
+   * La ficha va delante de los dos por omisión y no detrás, y es lo que hace que
+   * el expediente enseñe a quien está abierto: los valores de la maqueta que
+   * había en `DEFECTOS` se fueron con #552, pero el orden importa igual —un
+   * campo del expediente que mañana ganara un `v` en el catálogo taparía el dato
+   * real del padrón—.
    */
   const valorDeClave = (k: string): string | boolean => {
     const v = vals[k];
     if (v !== undefined) return v;
+    const deLaFicha = delExpediente[k];
+    if (deLaFicha !== undefined) return deLaFicha;
     const propio = POR_OMISION_DEL_CAMPO[k];
     if (propio !== undefined) return propio;
     const d = DEFECTOS[k];
@@ -849,6 +1570,165 @@ export default function Rentas({ dest, onDest }: PantallaProps) {
   /** Una casilla se lee como booleano, nunca comparando su texto. */
   const marcado = (k: string) => valorDeClave(k) === true;
   const campo = (f: CampoDef) => <CampoDeFormulario key={f.k} f={f} valor={valorDe(f)} onCambio={(v) => set(f.k, v)} />;
+
+  /* ── La corrección del contribuyente (#552) ───────────────────────────────
+     «Guardar cambios» decía «Contribuyente guardado» y no mandaba nada. Lo que
+     faltaba no era el botón: era saber QUÉ mandar. `PUT
+     /rentas/contribuyentes/{id}` admite cinco campos y el expediente dibujaba
+     cincuenta y tres de la maqueta, así que conectarlo tal cual habría escrito
+     el nombre de «MEDINA MEDINA RUFINA» sobre la ficha de quien estuviera
+     abierto. Ahora los campos salen de la ficha, y de ellos sólo viajan los
+     cinco, sólo los que cambiaron y sólo con la observación puesta. */
+
+  /**
+   * El código del cónyuge tecleado, resuelto contra el padrón.
+   *
+   * Lo que viaja es `conyugeId`, un identificador interno, y lo que se teclea es
+   * un código: sin resolverlo habría que pedirle a quien atiende un número que
+   * no aparece en ninguna pantalla, y cualquier número enlazaría con alguien.
+   * Se resuelve antes de habilitar el botón, no dentro del envío.
+   */
+  const conyugeTecleado = vals['conyugeId'] === undefined ? '' : String(vals['conyugeId']).trim();
+  const conyugeEscrito = useRebote(conyugeTecleado);
+  const conyugeBuscado = useRecurso(
+    (senal) => buscarContribuyentes({ codigo: conyugeEscrito }, { tamano: 2 }, senal),
+    [conyugeEscrito],
+    contribuyenteAbierto !== null && conyugeEscrito !== '',
+  );
+  const conyugeResuelto = (conyugeBuscado.datos?.contenido ?? []).find((c) => c.codigo === conyugeEscrito) ?? null;
+
+  /**
+   * Los campos del expediente que se han tecleado y **el PUT no admite**.
+   *
+   * Hoy no puede haber ninguno: los demás controles del expediente son de solo
+   * lectura y `CampoDeFormulario` no les dibuja ninguna entrada. Existe para el
+   * día que alguien haga editable uno —o añada al catálogo un campo que la
+   * petición no lleva—: entonces el botón se apaga nombrándolo, en vez de
+   * guardar en silencio todo lo demás y dejar ese dato sin viajar, que es el
+   * defecto de #331.
+   */
+  const camposQueElPutNoAdmite = CLAVES_DEL_EXPEDIENTE.filter(
+    (clave) => vals[clave] !== undefined && !(CAMPOS_DE_LA_CORRECCION as readonly string[]).includes(clave),
+  );
+
+  /** Lo tecleado en una clave de la corrección, o `undefined` si no se tocó. */
+  const tecleadoEnLaCorreccion = (clave: string): string | undefined =>
+    vals[clave] === undefined ? undefined : String(vals[clave]).trim();
+
+  /**
+   * Lo que de verdad cambia, comparado contra lo que la ficha dice.
+   *
+   * «Lo que no viene, no cambia» es la regla del PUT, así que un campo que se
+   * tecleó y quedó igual **no se manda**: mandarlo escribiría el mismo valor con
+   * otra fila de auditoría detrás. Y la cadena vacía sí se manda cuando la ficha
+   * traía algo, porque ahí es una instrucción —«bórralo»— y no una omisión.
+   */
+  const cambiosDeLaCorreccion: [clave: string, valor: string][] = CAMPOS_DE_LA_CORRECCION.filter((clave) => {
+    const tecleado = tecleadoEnLaCorreccion(clave);
+    return tecleado !== undefined && tecleado !== (delExpediente[clave] ?? '').trim();
+  }).map((clave) => [clave, tecleadoEnLaCorreccion(clave)!]);
+
+  /** Hay algo escrito sobre el expediente: la barra de guardado tiene por qué salir. */
+  const hayBorradorDelExpediente =
+    CLAVES_DEL_EXPEDIENTE.some((clave) => vals[clave] !== undefined) || observacionDeLaCorreccion !== '';
+
+  /**
+   * Lo que impide guardar la corrección, o `undefined` si nada lo impide.
+   *
+   * Se calcula ANTES de habilitar el botón y no dentro del envío: un acto que
+   * promete lo que no puede es peor que uno apagado que dice por qué (RNF-082).
+   */
+  const impedimentoDeLaCorreccion = (): string | undefined => {
+    if (esNuevo)
+      return 'El alta de un contribuyente todavía no está conectada: «POST /rentas/contribuyentes» existe y esta pantalla no lo llama. Aquí sólo se corrige a quien ya está en el padrón.';
+    if (contribuyenteAbierto === null)
+      return 'No hay ningún contribuyente abierto: sin saber a quién se corrige no hay nada que guardar.';
+    if (camposQueElPutNoAdmite.length > 0)
+      return `El expediente escribe ${camposQueElPutNoAdmite.map((c) => `«${c}»`).join(', ')}, y «PUT /rentas/contribuyentes/{id}» no admite ese campo: guardar lo dejaría sin viajar sin que nada lo dijera. Sólo viajan el nombre o razón social, la condición especial, la fecha de nacimiento, el estado civil y el cónyuge.`;
+    if (ficha.datos === null)
+      return ficha.cargando
+        ? 'Leyendo la ficha del contribuyente…'
+        : 'No se ha podido leer la ficha, así que no se sabe qué cambia: guardar mandaría campos que nadie ha comparado con lo que el padrón tiene.';
+    if (cambiosDeLaCorreccion.length === 0) return 'No hay ningún cambio que guardar: lo que no cambia, no se manda.';
+    if (observacionDeLaCorreccion.trim() === '') return 'Falta la observación: sin motivo no se guarda (regla 10).';
+    const nombre = tecleadoEnLaCorreccion('nombreRazonSocial');
+    if (nombre === '')
+      return 'El nombre o razón social no se puede dejar en blanco: es lo único que identifica a la persona en el padrón, y el dominio lo rechaza.';
+    const estadoCivil = tecleadoEnLaCorreccion('estadoCivil');
+    if (estadoCivil !== undefined && estadoCivil.length > ESTADO_CIVIL_MAXIMO)
+      return `El estado civil no pasa de ${ESTADO_CIVIL_MAXIMO} caracteres: es lo que la columna admite, y el dominio lo rechaza.`;
+    /* Una empresa no nace ni se casa: el dominio rechaza las dos cosas, y
+       decirlo aquí evita un 422 sobre un campo que la pantalla dejó teclear. */
+    if (contribuyenteAbierto.tipoPersona === 'JURIDICA') {
+      if ((tecleadoEnLaCorreccion('fechaNacimiento') ?? '') !== '')
+        return 'Una persona jurídica no tiene fecha de nacimiento: para una empresa la fecha que importa es la de constitución, y va en otro campo.';
+      if ((tecleadoEnLaCorreccion('condicionEspecial') ?? '') !== '')
+        return 'Una persona jurídica no puede ser pensionista, adulto mayor ni tener discapacidad: esas condiciones son de una persona natural.';
+    }
+    if (conyugeTecleado !== '') {
+      if (conyugeResuelto === null)
+        return conyugeBuscado.cargando || conyugeEscrito !== conyugeTecleado
+          ? 'Buscando al cónyuge en el padrón…'
+          : `El código «${conyugeTecleado}» no está en el padrón de contribuyentes: el cónyuge es otro contribuyente de esta municipalidad.`;
+      if (conyugeResuelto.id === contribuyenteAbierto.id)
+        return 'Nadie es su propio cónyuge: escribe el código del otro contribuyente, o deja el campo en blanco para deshacer el enlace.';
+    }
+    return undefined;
+  };
+
+  /**
+   * El cuerpo del PUT: la observación y **sólo** los cinco campos declarados.
+   *
+   * La asignación es campo a campo y no un `spread` del formulario a propósito:
+   * un objeto compuesto con lo que hubiera en `vals` dejaría entrar cualquier
+   * clave que el catálogo ganara, que es justo lo que la lista blanca del
+   * backend existe para impedir. Aquí se repite del lado del cliente para que el
+   * botón lo sepa antes de mandar.
+   */
+  const cuerpoDeLaCorreccion = (): CorreccionDeContribuyente => {
+    const cuerpo: CorreccionDeContribuyente = { observacion: observacionDeLaCorreccion.trim() };
+    for (const [clave, valor] of cambiosDeLaCorreccion) {
+      if (clave === 'nombreRazonSocial') cuerpo.nombreRazonSocial = valor;
+      else if (clave === 'condicionEspecial') cuerpo.condicionEspecial = valor;
+      else if (clave === 'fechaNacimiento') cuerpo.fechaNacimiento = valor;
+      else if (clave === 'estadoCivil') cuerpo.estadoCivil = valor;
+      /* El 0 borra el enlace, como la cadena vacía en los de texto. El
+         identificador sale de la resolución, nunca de lo tecleado. */
+      else if (clave === 'conyugeId') cuerpo.conyugeId = valor === '' ? 0 : conyugeResuelto!.id;
+    }
+    return cuerpo;
+  };
+
+  /** Suelta el borrador del expediente: lo tecleado y el motivo que lo explicaba. */
+  const soltarElBorradorDelExpediente = () => {
+    setVals((s2) => {
+      const limpio = { ...s2 };
+      for (const clave of CLAVES_DEL_EXPEDIENTE) delete limpio[clave];
+      return limpio;
+    });
+    setObservacionDeLaCorreccion('');
+    setSucio(false);
+  };
+
+  const guardarLaCorreccion = async () => {
+    if (contribuyenteAbierto === null || impedimentoDeLaCorreccion() !== undefined) return;
+    setCorrigiendo(true);
+    try {
+      await corregirContribuyente(contribuyenteAbierto.id, cuerpoDeLaCorreccion());
+      soltarElBorradorDelExpediente();
+      /* Se vuelven a pedir las dos, y no se compone nada con lo devuelto: la
+         franja de la cabecera sale de la búsqueda del padrón y los campos de la
+         ficha, así que dejar sólo una al día haría que las dos dijeran cosas
+         distintas de la misma persona. */
+      ficha.reintentar();
+      expediente.reintentar();
+      toast('Contribuyente corregido.');
+    } catch (error) {
+      toast(error instanceof ErrorDeApi ? error.mensaje : 'No se pudo guardar la corrección.', 'mal');
+    } finally {
+      setCorrigiendo(false);
+    }
+  };
 
   const plegable = (clave: string, abiertaPorDefecto: boolean) => {
     const cerrada = cerradas[clave];
@@ -893,7 +1773,7 @@ export default function Rentas({ dest, onDest }: PantallaProps) {
 
   /* Al cambiar de hoja, de sujeto o de ejercicio, lo dibujado deja de ser la
      respuesta a lo que está en pantalla. */
-  const sujetoDeLaDeterminacion = `${tipo}|${pref.ejercicio}|${filtroQueViaja('codContribuyente')}|${filtroQueViaja('placa')}|${alcanceDeLaCorrida}|${filtroQueViaja('sector')}`;
+  const sujetoDeLaDeterminacion = `${tipo}|${pref.ejercicio}|${filtroQueViaja('codContribuyente')}|${filtroQueViaja('placa')}|${alcanceDeLaCorrida}|${filtroQueViaja('sector')}|${filtroQueViaja('codigoDesde')}|${filtroQueViaja('codigoHasta')}`;
   useEffect(() => {
     setDeterminacion(null);
     setFalloDeLaDeterminacion(null);
@@ -916,6 +1796,21 @@ export default function Rentas({ dest, onDest }: PantallaProps) {
     if (tipo === 'masivo' && alcanceDeLaCorrida === 'SECTOR') {
       if (sectores.error !== null) return 'No se pudieron leer los sectores del catastro, y con alcance SECTOR el backend exige uno que exista.';
       if (filtroQueViaja('sector') === '') return 'Con alcance SECTOR hay que decir cuál: sin él, «solo el sector» y «todo el padrón» serían la misma corrida.';
+    }
+    if (tipo === 'masivo' && alcanceDeLaCorrida === 'RANGO_DE_CODIGO') {
+      const desde = filtroQueViaja('codigoDesde');
+      const hasta = filtroQueViaja('codigoHasta');
+      if (desde === '' || hasta === '') {
+        return 'Con alcance RANGO_DE_CODIGO hacen falta los dos extremos: con uno solo no se sabe dónde acaba el tramo.';
+      }
+      /* El mismo orden que `enElTramo`: comparación de cadenas, que en JavaScript
+         y en `String.compareTo` de Java recorren las mismas unidades. Decirlo
+         aquí no adelanta ninguna regla —la de verdad la aplica el backend, y
+         rechaza el tramo invertido con 422—; lo que evita es mandar una corrida
+         sobre el padrón entero para que vuelva un error que ya se veía. */
+      if (desde > hasta) {
+        return `El tramo va del primero al último y «${desde}» es posterior a «${hasta}». Los códigos se comparan como texto, que es el orden con el que esta pantalla lista el padrón.`;
+      }
     }
     return undefined;
   };
@@ -950,7 +1845,13 @@ export default function Rentas({ dest, onDest }: PantallaProps) {
             simulacion: true,
             ejercicio: pref.ejercicio,
             alcance: alcanceDeLaCorrida,
+            /* Cada alcance manda LO SUYO y nada más. Un `sector` que viajara con
+               `alcance: TODOS` lo ignoraría el backend en silencio, y quien lo
+               eligió leería la corrida del padrón entero como la de su sector. */
             ...(alcanceDeLaCorrida === 'SECTOR' ? { sector: filtroQueViaja('sector') } : null),
+            ...(alcanceDeLaCorrida === 'RANGO_DE_CODIGO'
+              ? { codigoDesde: filtroQueViaja('codigoDesde'), codigoHasta: filtroQueViaja('codigoHasta') }
+              : null),
           }),
         });
       } else if (tipo === 'vehicular') {
@@ -994,6 +1895,42 @@ export default function Rentas({ dest, onDest }: PantallaProps) {
   const censoDelPadron = useRecurso((s2) => buscarContribuyentes({}, { tamano: 1 }, s2), [], enPanel);
   const kpisDeRecaudacion = useRecurso((s2) => indicadores(pref.ejercicio, s2), [pref.ejercicio], enPanel);
   const corrida = useRecurso((s2) => ultimaCorridaPredial(s2), [], enPanel);
+
+  /* ── La hoja resumen de la declaración jurada ─────────────────
+     `GET /rentas/declaraciones/{n}/hoja` (#563). Es el único documento del
+     módulo pensado para imprimirse y firmarse, y todo lo que consignaba venía
+     del juego de datos de la maqueta: el nombre, el código y el DNI de una
+     persona, dos predios que no son de nadie y cuatro totales. Una vez impresa
+     bajo «Declaro bajo juramento» y firmada, una hoja así no se distingue de
+     una correcta, y a diferencia de una pantalla nadie la vuelve a mirar contra
+     la base.
+
+     El número se rebota como cualquier otro buscador —una lectura por pausa de
+     tecleo, no por pulsación— y la lectura no se hace sin número: pedir
+     `/declaraciones//hoja` sería preguntar por una declaración vacía. */
+  const djBuscada = useRebote(djNro.trim());
+  const hojaDj = useRecurso(
+    (s2) => hojaDeDeclaracion(djBuscada, pref.ejercicio, djFecha === '' ? undefined : djFecha, s2),
+    [djBuscada, pref.ejercicio, djFecha],
+    dest === 'reporte' && djBuscada !== '',
+  );
+  /* Lo que impide imprimir, dicho. Es la hoja RESUELTA y no «que no haya error»:
+     mientras se está consultando tampoco hay nada que sacar por la impresora, y
+     la respuesta anterior a otro número ya no está —`useRecurso` la suelta al
+     cambiar la pregunta—. Y un declarante nulo tampoco imprime: sería un papel
+     que se firma con el nombre en blanco. */
+  const impedimentoDeImprimirLaDj =
+    djBuscada === ''
+      ? 'Escribe el número de la declaración: sin ella no hay hoja que imprimir'
+      : hojaDj.cargando
+        ? 'Todavía se está consultando la declaración'
+        : hojaDj.error !== null
+          ? `No se pudo leer esta declaración, así que no hay hoja: ${hojaDj.error.mensaje}`
+          : hojaDj.datos === null
+            ? 'No hay ninguna hoja leída: no hay qué imprimir'
+            : hojaDj.datos.declarante === null
+              ? 'El contribuyente de esta declaración ya no está en el padrón: la hoja saldría sin nombre ni documento'
+              : undefined;
   /* La observación del acto. El manual no le dibuja campo y toda escritura la
      exige (regla 10), así que es un control añadido con su propio rótulo. */
   const [observacionDelActo, setObservacionDelActo] = useState('');
@@ -1097,6 +2034,74 @@ export default function Rentas({ dest, onDest }: PantallaProps) {
   useEffect(() => setObligacionMarcada(null), [sujetoDeDeuda?.codigo, fechaDeLaBaja, hoja]);
   const obligacionDeLaBaja: ObligacionConDeuda | null =
     obligacionMarcada === null ? null : (obligaciones[obligacionMarcada] ?? null);
+
+  /**
+   * La unidad del alta, resuelta **mientras se teclea** y no al enviar (#554).
+   *
+   * Antes se resolvía dentro del envío, así que lo que quien atiende veía era un
+   * botón encendido sobre una caja con un código cualquiera, y sólo al pulsar se
+   * enteraba de que no era ninguna unidad del padrón. Ahora la pantalla lo dice
+   * antes: el impedimento apaga el acto y la tarjeta enseña qué se resolvió.
+   *
+   * Se pregunta con el valor aposentado —no con lo tecleado—, y el impedimento
+   * se calcula comparando los dos: a media pulsación no hay respuesta que
+   * enseñar, y anunciar «no existe» sobre un código a medio escribir es el
+   * defecto que #296 midió en la pantalla de inicio.
+   */
+  /**
+   * Lo último que el servidor rechazó de estas dos hojas, **en pantalla y no en
+   * un aviso que se va** (#597).
+   *
+   * El aviso flotante dura 3,2 s y se lo lleva cualquier navegación. Para
+   * «Transferencia registrada» sobra; para un 422 no: el del ejercicio sin
+   * partición son tres líneas —nombra el año, dice cuáles están abiertos y que
+   * añadir uno es una migración— y quien atiende necesita releerlo con el
+   * formulario delante para saber qué cambiar. Se limpia al mandar bien y
+   * cuando cambia algo de lo que lo produjo.
+   */
+  const [rechazoDelActo, setRechazoDelActo] = useState<ErrorDeApi | null>(null);
+  useEffect(() => setRechazoDelActo(null), [hoja, sujetoDeDeuda?.codigo]);
+
+  const unidadEscrita = useRebote(texto('altaUnidad').trim());
+  const unidadTecleada = texto('altaUnidad').trim();
+  const resolucionDeLaUnidad = useRecurso(
+    (s2) => resolverLaUnidadDelAlta(unidadEscrita, sujetoDeDeuda!.codigo, s2),
+    [unidadEscrita, sujetoDeDeuda?.codigo],
+    esDeuda && hoja === 'alta' && sujetoDeDeuda !== null && unidadEscrita !== '',
+  );
+  const unidadResuelta = unidadTecleada === '' ? null : resolucionDeLaUnidad.datos;
+  /** Todavía no hay respuesta para lo que hay escrito: ni la hubo, ni la habrá hasta que vuelva. */
+  const unidadEnVuelo = unidadTecleada !== '' && (unidadTecleada !== unidadEscrita || resolucionDeLaUnidad.cargando);
+
+  /**
+   * Si quien atiende declaró que la deuda del alta es de un titular anterior
+   * de la unidad (#635). Una por hoja: son dos actos distintos.
+   *
+   * **Se borra en cuanto cambia el hecho sobre el que se afirmó.** Una
+   * declaración es sobre esta unidad y este contribuyente; si cambia
+   * cualquiera de los dos —o se pasa a la otra hoja— lo marcado dejaría de
+   * decir lo que decía y viajaría igual. La llave es lo TECLEADO y no el valor
+   * aposentado: la casilla tiene que caer con la primera pulsación, no 300 ms
+   * después.
+   */
+  const [declaraTitularAnteriorEnElAlta, setDeclaraTitularAnteriorEnElAlta] = useState(false);
+  useEffect(() => setDeclaraTitularAnteriorEnElAlta(false), [unidadTecleada, sujetoDeDeuda?.codigo, hoja]);
+
+  /**
+   * De quién es la unidad de la obligación marcada para la baja (#635).
+   *
+   * Se pregunta a la **fecha de la resolución**, que es la fecha valor con que
+   * viaja la baja y contra la que el servidor resuelve el titular. Ver
+   * {@link resolverElCruceDeLaBaja}: `null` cuando la obligación no tiene
+   * unidad, que es cuando no hay nada que comprobar ni que declarar.
+   */
+  const [declaraTitularAnteriorEnLaBaja, setDeclaraTitularAnteriorEnLaBaja] = useState(false);
+  const cruceDeLaBaja = useRecurso(
+    (s2) => resolverElCruceDeLaBaja(obligacionDeLaBaja!, sujetoDeDeuda!.codigo, fechaDeLaBaja, s2),
+    [obligacionMarcada, sujetoDeDeuda?.codigo, fechaDeLaBaja],
+    esDeuda && hoja === 'baja' && sujetoDeDeuda !== null && obligacionDeLaBaja !== null && fechaDeLaBaja !== '',
+  );
+  useEffect(() => setDeclaraTitularAnteriorEnLaBaja(false), [obligacionMarcada, sujetoDeDeuda?.codigo, fechaDeLaBaja, hoja]);
 
   /**
    * Lo que impide registrar la transferencia, o `undefined` si nada lo impide.
@@ -1219,7 +2224,7 @@ export default function Rentas({ dest, onDest }: PantallaProps) {
          quien atiende acababa de elegir de un desplegable. */
       const tipoDelActo = tipoDeTransferenciaDelBackend(texto(esPredio ? 'tipoActo' : 'vTipo'));
       if (tipoDelActo === null) {
-        toast(`El sistema no reconoce el tipo de acto «${texto(esPredio ? 'tipoActo' : 'vTipo')}». No se registró nada.`);
+        toast(`El sistema no reconoce el tipo de acto «${texto(esPredio ? 'tipoActo' : 'vTipo')}». No se registró nada.`, 'mal');
         setRegistrando(false);
         return;
       }
@@ -1229,7 +2234,7 @@ export default function Rentas({ dest, onDest }: PantallaProps) {
         const encontrados = await listarPredios({ codRefCatastral: codigo }, { tamano: 2 });
         const exacto = encontrados.contenido.find((x) => x.codRefCatastral === codigo);
         if (!exacto) {
-          toast(`No hay ningún predio con el código ${codigo} en el padrón.`);
+          toast(`No hay ningún predio con el código ${codigo} en el padrón.`, 'mal');
           return;
         }
         await transferirPredio({
@@ -1268,36 +2273,49 @@ export default function Rentas({ dest, onDest }: PantallaProps) {
       setObservacionDelActo('');
       toast('Transferencia registrada.');
     } catch (error) {
-      toast(error instanceof ErrorDeApi ? error.mensaje : 'No se pudo registrar la transferencia.');
+      toast(error instanceof ErrorDeApi ? error.mensaje : 'No se pudo registrar la transferencia.', 'mal');
     } finally {
       setRegistrando(false);
     }
   };
 
   /**
-   * La unidad del alta —predio o vehículo— resuelta a su identificador interno.
+   * Lo que viaja de la unidad: el identificador interno y nada más.
    *
    * `ClaveDeSaldo` compara `predioId`/`vehiculoId` por igualdad exacta, así que
-   * una obligación con predio y una sin él son dos obligaciones distintas: mandar
-   * el alta sin resolver la unidad la asienta sobre la que no tiene ninguna.
-   * Devuelve `null` cuando lo tecleado no se encuentra, y entonces no se manda.
+   * una obligación con unidad y una sin ella son dos obligaciones distintas:
+   * mandar el alta sin resolver la unidad la asienta sobre la que no tiene
+   * ninguna. La resolución ya está hecha —`resolucionDeLaUnidad`— y aquí sólo se
+   * lee: lo que se manda es exactamente lo que la tarjeta enseñó. Devuelve
+   * `null` cuando lo escrito no es ninguna unidad del padrón, y entonces no se
+   * manda; `{}` con la caja en blanco, que es la obligación sin unidad.
    */
-  const unidadDelAlta = async (): Promise<{ predioId?: number; vehiculoId?: number } | null> => {
-    const escrito = texto('altaUnidad').trim();
-    if (escrito === '') return {};
-    const predios = await listarPredios({ codRefCatastral: escrito }, { tamano: 2 });
-    const predio = predios.contenido.find((x) => x.codRefCatastral === escrito);
-    if (predio) return { predioId: predio.predioId };
-    const sinGuion = escrito.replace(/-/g, '').toUpperCase();
-    const vehiculos = await buscarVehiculos({ placa: escrito }, { tamano: 2 });
-    const vehiculo = vehiculos.contenido.find((v) => v.placa.replace(/-/g, '').toUpperCase() === sinGuion);
-    /* `VehiculoEncontradoResource` no publica el identificador interno del
-       vehículo, sólo su placa; el cuerpo del movimiento pide `vehiculoId`. Así
-       que una placa se reconoce y no se puede mandar: se dice, en vez de
-       asentarla sobre la obligación sin unidad. */
-    if (vehiculo) return null;
-    return null;
+  const unidadDelAlta = (): { predioId?: number; vehiculoId?: number } | null => {
+    if (unidadTecleada === '') return {};
+    const r = unidadResuelta;
+    return r === null || r.clase === 'nada' ? null : r.cuerpo;
   };
+
+  /**
+   * Si el movimiento viaja declarando que la unidad fue de un titular anterior
+   * (#635), por hoja.
+   *
+   * La casilla marcada no basta: se exige además que haya unidad y que el
+   * padrón **no** haya dicho que es suya. Una declaración es sobre un hecho
+   * concreto y no puede sobrevivir a que el hecho cambie; los dos `useEffect`
+   * la borran al cambiar de unidad, de contribuyente o de fecha, y esto es la
+   * guarda de programa por si alguna vez se quedaran cortos. Declarar de más no
+   * es inofensivo: afirma en la bitácora algo que nadie preguntó, y en la
+   * unidad que sí es suya el servidor ni siquiera lo miraría —de modo que la
+   * afirmación falsa quedaría escrita sin que nada la contradijera—.
+   */
+  const declaracionDelAlta =
+    declaraTitularAnteriorEnElAlta &&
+    unidadResuelta !== null &&
+    unidadResuelta.clase !== 'nada' &&
+    unidadResuelta.cruce.estado !== 'suya';
+  const declaracionDeLaBaja =
+    declaraTitularAnteriorEnLaBaja && cruceDeLaBaja.datos !== null && cruceDeLaBaja.datos.estado !== 'suya';
 
   /**
    * Lo que impide dar de alta, o `undefined`.
@@ -1310,6 +2328,30 @@ export default function Rentas({ dest, onDest }: PantallaProps) {
     if (observacionDelActo.trim() === '') return 'Falta la observación: sin motivo no se guarda';
     if (texto('altaConcepto').trim() === '') return 'Falta el concepto: es el tributo de la obligación';
     if (texto('altaAnio').trim() === '') return 'Falta el año de la obligación';
+    /* La unidad es el sexto campo que identifica la obligación, y el que más
+       cuesta si sale mal: un identificador equivocado asienta la deuda sobre una
+       clave que no es la que se marcó y que nadie va a mirar. Lo escrito se
+       resuelve contra el padrón antes de habilitar el acto; en blanco es una
+       respuesta legítima —la obligación sin unidad— y no impide nada. */
+    if (unidadEnVuelo) return `Resolviendo «${unidadTecleada}» contra el padrón…`;
+    if (unidadTecleada !== '' && resolucionDeLaUnidad.error !== null)
+      return `No se pudo comprobar «${unidadTecleada}» contra el padrón: ${explicacionDelFallo(resolucionDeLaUnidad.error)}. Un alta con la unidad sin resolver caería sobre otra obligación`;
+    if (unidadResuelta !== null && unidadResuelta.clase === 'nada')
+      return `«${unidadTecleada}» no es ningún código de referencia catastral del catastro ni ninguna placa del padrón vehicular. Corrígelo, o deja la caja en blanco para dar de alta la obligación sin unidad`;
+    /* El padrón ya dijo de quién es la unidad, así que el 422 de #635 se ve
+       venir: mandarlo sería gastar una petición para que el servidor repita lo
+       que la tarjeta de arriba ya enseña, y devolver a quien atiende a un
+       formulario entero relleno. No apaga el caso legítimo —la deuda anterior
+       a una transferencia ES del titular de entonces—: apaga el caso SIN
+       CONTESTAR, y la casilla que lo contesta está dentro del mismo aviso.
+       Con `sin-comprobar` no se apaga nada: ahí el padrón no dijo que no sea
+       suya, dijo que no se pudo preguntar, y apagar el acto por nuestra propia
+       incapacidad de preguntar dejaría sin registrar una obligación que casi
+       siempre es correcta. */
+    /* Sin `clase !== 'nada'`: la rama de arriba ya lo descartó y TypeScript lo
+       sabe, así que repetirlo aquí no compila. */
+    if (unidadResuelta !== null && unidadResuelta.cruce.estado === 'ajena' && !declaraTitularAnteriorEnElAlta)
+      return `El padrón dice que «${unidadTecleada}» no es de ${sujetoDeDeuda.nombreRazonSocial}, y el servidor no lo va a admitir así. Si la deuda es de cuando sí lo era, márcalo en la casilla del aviso de arriba; si no, corrige la unidad`;
     /* Media pregunta no sale. El backend la contesta con 422 —y bien, nombrando
        el campo—, pero ese 422 es la red y no el camino: gastarlo obliga a quien
        atiende a rellenar el formulario entero para que le digan lo que se sabia
@@ -1346,7 +2388,22 @@ export default function Rentas({ dest, onDest }: PantallaProps) {
        vuelve con un 422 que habla de las cuatro partes del desglose. */
     if (numero(obligacionDeLaBaja.deuda.total.importe) === 0)
       return `Esa obligación no debe nada al ${fechaDeLaBaja}: no hay nada que extinguir`;
+    /* La baja carga con la misma comprobación que el alta (#635), y aquí pesa
+       más: la obligación YA está en el libro, así que un predio vendido después
+       de que naciera la deuda la deja inextinguible hasta que alguien declare
+       lo que pasó. Se pregunta al marcar la fila —una lectura, no una tecla— y
+       el resultado apaga el acto sólo cuando el padrón contestó que la unidad
+       es de otro. */
+    if (cruceDeLaBaja.cargando) return 'Comprobando de quién es la unidad de esa obligación…';
+    if (cruceDeLaBaja.datos !== null && cruceDeLaBaja.datos.estado === 'ajena' && !declaraTitularAnteriorEnLaBaja)
+      return `La unidad de esa obligación ${cruceDeLaBaja.datos.de}, no de ${sujetoDeDeuda.nombreRazonSocial}. Si la deuda es de cuando sí era suya, márcalo en la casilla de debajo de la tabla; si no, revisa la fila marcada`;
     if (observacionDelActo.trim() === '') return 'Falta la observación: sin motivo no se guarda';
+    /* La causal no tiene valor por omision desde #636, y por eso hace falta
+       exigirla aqui: se antepone a la observacion, que es LO UNICO que se audita
+       del acto, asi que una por omision quedaria escrita sin que nadie la
+       eligiera. Y no se puede corregir despues: el libro no admite `UPDATE`. */
+    if (texto('causal').trim() === '')
+      return 'Elige la causal: es lo primero que se lee en la observación del acto, que es lo único que queda auditado de una baja, y no se puede corregir después';
     if (texto('numRes').trim() === '')
       return 'Falta el Nº de resolución: sin la resolución que la aprueba, una baja no se puede defender ante nadie';
     return undefined;
@@ -1370,16 +2427,16 @@ export default function Rentas({ dest, onDest }: PantallaProps) {
   const darDeAltaLaDeuda = async () => {
     setRegistrando(true);
     try {
-      const unidad = await unidadDelAlta();
+      const unidad = unidadDelAlta();
       if (unidad === null) {
-        toast(`«${texto('altaUnidad').trim()}» no es ningún predio del padrón, y una placa todavía no se puede mandar.`);
+        toast(`«${unidadTecleada}» no es ninguna unidad del padrón: no se mandó nada.`, 'mal');
         return;
       }
       /* `impedimentoDelAlta` ya apago el boton si lo escrito no era una
          pregunta entera; esto es la guarda de programa, no la de pantalla. */
       const cuotas = cuotasDelAlta();
       if (cuotas === null) {
-        toast('Las cuotas no se entienden: revisa «Cuota desde» y «Cuota hasta».');
+        toast('Las cuotas no se entienden: revisa «Cuota desde» y «Cuota hasta».', 'mal');
         return;
       }
       const cuerpo: PeticionDeMovimientoDeDeuda = {
@@ -1389,6 +2446,10 @@ export default function Rentas({ dest, onDest }: PantallaProps) {
         ano: texto('altaAnio'),
         ...cuotas,
         ...unidad,
+        /* Sólo cuando de verdad se declaró: mandar `false` y no mandar nada son
+           lo mismo para el servidor —los dos son `EXIGIDA`—, pero un `true` que
+           nadie marcó es una afirmación inventada en la bitácora. */
+        ...(declaracionDelAlta ? { deudaDeTitularAnterior: true } : {}),
         insoluto: importeQueViaja(texto('altaInsoluto')) || undefined,
         reajuste: importeQueViaja(texto('altaReajuste')) || undefined,
         interes: importeQueViaja(texto('altaInteres')) || undefined,
@@ -1396,6 +2457,7 @@ export default function Rentas({ dest, onDest }: PantallaProps) {
         documentoOrigen: texto('altaNumDoc').trim(),
       };
       const registrado = await altaDeDeuda(cuerpo);
+      setRechazoDelActo(null);
       setSucio(false);
       setObservacionDelActo('');
       /* Cuantas obligaciones se movieron y por cuanto, contado sobre lo que
@@ -1407,7 +2469,8 @@ export default function Rentas({ dest, onDest }: PantallaProps) {
         `Alta registrada: ${n} ${n === 1 ? 'asiento' : 'asientos'} por S/ ${registrado.total.importe} al ${registrado.total.actualizadoA} · ${registrado.numeroDeDocumento}.`,
       );
     } catch (error) {
-      toast(error instanceof ErrorDeApi ? error.mensaje : 'No se pudo registrar el alta.');
+      setRechazoDelActo(error instanceof ErrorDeApi ? error : null);
+      toast(error instanceof ErrorDeApi ? error.mensaje : 'No se pudo registrar el alta.', 'mal');
     } finally {
       setRegistrando(false);
     }
@@ -1427,6 +2490,25 @@ export default function Rentas({ dest, onDest }: PantallaProps) {
    * cuota, unidad, fase— y los importes son los que el servidor acaba de publicar
    * para ella a esa misma fecha: es contra esas cifras contra las que
    * `RegistrarMovimientoDeDeuda` comprueba que la baja no exceda la deuda.
+   *
+   * **El reparto entre cuotas lo hace el servidor desde #598.** Una fila de
+   * `consulta_deuda` AGREGA los periodos de la obligación —`periodoDesde` y
+   * `periodoHasta` son el mínimo y el máximo del grupo— y publica **un solo
+   * desglose para todo el grupo**, no el de cada cuota. Hasta #598 esa fila no
+   * se podía dar de baja y la pantalla la apagaba diciéndolo: mandar el importe
+   * agregado como `cuota: periodoDesde` lo cargaba entero sobre una cuota que
+   * suele deber 0,00, y repartirlo aquí sería componer dinero en la pantalla
+   * (RNF-083) sobre cifras que la lectura no publica.
+   *
+   * Ahora el cuerpo lleva `repartir: true` y lo declarado es el **total del
+   * acto**. Lo que abarca se dice como el backend lo entiende: la fila que
+   * nombra UNA cuota va con esa `cuota`, y la que agrega varias no manda
+   * ninguna —«la obligación entera»—, que además es lo único expresable cuando
+   * el grupo empieza en la anual, porque un rango no puede empezar en 0. Y la
+   * fila ES la obligación: `ConsultarDeuda` agrupa por `ClaveDeObligacion`
+   * —tributo, ejercicio y unidad, **sin** la fase—, así que «la obligación
+   * entera» y «esta fila» son lo mismo, y la fase que se manda es la más
+   * avanzada del grupo, que es la que el recurso publica.
    */
   const darDeBajaLaDeuda = async () => {
     setRegistrando(true);
@@ -1436,12 +2518,15 @@ export default function Rentas({ dest, onDest }: PantallaProps) {
          antepone a la observación —que es donde queda auditada— en vez de
          perderse en un desplegable que no viaja. */
       const causal = texto('causal').trim();
+      const cuotas = o.periodoDesde === o.periodoHasta ? { cuota: o.periodoDesde } : {};
       const cuerpo: PeticionDeMovimientoDeDeuda = {
         observacion: causal === '' ? observacionDelActo.trim() : `${causal}. ${observacionDelActo.trim()}`,
         codContribuyente: sujetoDeDeuda!.codigo,
         tributo: o.tributo,
         ano: String(o.ejercicio),
-        cuota: o.periodoDesde,
+        ...cuotas,
+        repartir: true,
+        ...(declaracionDeLaBaja ? { deudaDeTitularAnterior: true } : {}),
         predioId: o.predioId ?? undefined,
         vehiculoId: o.vehiculoId ?? undefined,
         insoluto: o.deuda.insoluto.importe,
@@ -1452,14 +2537,24 @@ export default function Rentas({ dest, onDest }: PantallaProps) {
         fechaValor: fechaDeLaBaja,
         documentoOrigen: texto('numRes').trim(),
       };
-      await bajaDeDeuda(cuerpo);
+      const registrado = await bajaDeDeuda(cuerpo);
+      setRechazoDelActo(null);
       setSucio(false);
       setObservacionDelActo('');
       setObligacionMarcada(null);
       deudaParaLaBaja.reintentar();
-      toast('Baja registrada.');
+      /* Qué cuotas se movieron se lee de la RESPUESTA, nunca de la fila: las
+         que no debían nada no producen asiento, así que «periodos 0 - 9» acaba
+         siendo «1, 2, 3» y sólo los asientos que volvieron lo dicen. El total y
+         su fecha son los del servidor (regla 9); aquí no se suma nada. */
+      const cuotasMovidas = [...new Set(registrado.asientos.map((a) => a.periodo))].sort((a, b) => a - b);
+      const n = registrado.asientos.length;
+      toast(
+        `Baja registrada: ${n} ${n === 1 ? 'asiento' : 'asientos'} sobre ${cuotasMovidas.length === 1 ? 'la cuota' : 'las cuotas'} ${cuotasMovidas.map((c) => (c === 0 ? 'anual' : String(c))).join(', ')} por S/ ${registrado.total.importe} al ${registrado.total.actualizadoA} · ${registrado.numeroDeDocumento}.`,
+      );
     } catch (error) {
-      toast(error instanceof ErrorDeApi ? error.mensaje : 'No se pudo registrar la baja.');
+      setRechazoDelActo(error instanceof ErrorDeApi ? error : null);
+      toast(error instanceof ErrorDeApi ? error.mensaje : 'No se pudo registrar la baja.', 'mal');
     } finally {
       setRegistrando(false);
     }
@@ -1648,8 +2743,11 @@ export default function Rentas({ dest, onDest }: PantallaProps) {
             : expediente.error
               ? 'No se pudo leer este contribuyente'
               : (contribuyenteAbierto?.nombreRazonSocial ?? 'Ese código no está en el padrón'),
+          /* El tipo de persona va como el padrón lo guarda, por lo mismo que
+             en la franja de aquí abajo: son cuatro y decir «Natural» de una
+             sucesión indivisa cambia quién responde por la deuda. */
           ubic: contribuyenteAbierto
-            ? `${contribuyenteAbierto.tipoDocumento} ${contribuyenteAbierto.numeroDocumento} · ${contribuyenteAbierto.tipoPersona === 'JURIDICA' ? 'Jurídica' : 'Natural'}`
+            ? `${contribuyenteAbierto.tipoDocumento} ${contribuyenteAbierto.numeroDocumento} · ${contribuyenteAbierto.tipoPersona}`
             : '',
           estado: sucio ? 'Cambios sin guardar' : contribuyenteAbierto ? 'Del padrón' : '',
           estadoColor: sucio ? 'var(--warn-fg)' : 'var(--ok-fg)',
@@ -1951,28 +3049,13 @@ export default function Rentas({ dest, onDest }: PantallaProps) {
                     </tbody>
                   </table>
                 </div>
-                {(padron.datos?.totalPaginas ?? 0) > 1 && (
-                  <div style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '10px 16px', borderTop: '1px solid var(--line)' }}>
-                    <button
-                      onClick={() => setPaginaPadron((n) => Math.max(0, n - 1))}
-                      disabled={paginaPadron === 0}
-                      className="hov-linea"
-                      style={{ ...BOTON_DE_TABLA, opacity: paginaPadron === 0 ? 0.45 : 1, cursor: paginaPadron === 0 ? 'not-allowed' : 'pointer' }}
-                    >
-                      Anterior
-                    </button>
-                    <span style={{ fontFamily: 'var(--font-mono)', fontSize: 12, color: 'var(--ink-3)' }}>
-                      {(padron.datos?.pagina ?? 0) + 1} de {padron.datos?.totalPaginas}
-                    </span>
-                    <button
-                      onClick={() => setPaginaPadron((n) => n + 1)}
-                      disabled={!padron.datos?.hayMas}
-                      className="hov-linea"
-                      style={{ ...BOTON_DE_TABLA, opacity: padron.datos?.hayMas ? 1 : 0.45, cursor: padron.datos?.hayMas ? 'pointer' : 'not-allowed' }}
-                    >
-                      Siguiente
-                    </button>
-                  </div>
+                {padron.datos !== null && (
+                  <Paginador
+                    pagina={padron.datos.pagina}
+                    totalPaginas={padron.datos.totalPaginas}
+                    hayMas={padron.datos.hayMas}
+                    ir={setPaginaPadron}
+                  />
                 )}
                 {/* Por que faltan tres columnas del artboard, dicho donde se
                     echan en falta. */}
@@ -2010,6 +3093,19 @@ export default function Rentas({ dest, onDest }: PantallaProps) {
                 La lista lo trajo y la ficha no lo encuentra: puede haberse dado de baja entre las dos lecturas, o la búsqueda haber
                 devuelto otra municipalidad. No se dibuja nada suyo mientras no se sepa quién es.
               </Aviso>
+            )}
+            {/* El fallo de la ficha se dice UNA vez y aquí: de ella salen los
+                campos de cuatro secciones y tres de las listas, así que
+                repetirlo en cada bloque haría creer que fallaron siete cosas.
+                Los controles quedan con el guion largo y las tablas remiten a
+                este aviso. */}
+            {ficha.error !== null && (
+              <FalloDeLectura
+                error={ficha.error}
+                que="la ficha de este contribuyente"
+                acceso="contribuyentes"
+                alReintentar={ficha.reintentar}
+              />
             )}
             <section style={TARJETA}>
               <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit,minmax(150px,1fr))', gap: 0, background: 'var(--bg-card)' }}>
@@ -2153,7 +3249,6 @@ export default function Rentas({ dest, onDest }: PantallaProps) {
                                 <TablaLeida
                                   tabla={bl.tabla}
                                   estado={prediosDelContribuyente}
-                                  pagina={paginaDePredios}
                                   irAPagina={setPaginaDePredios}
                                   cuenta={(n) => `${n} ${n === 1 ? 'predio' : 'predios'}`}
                                   vacia="Este contribuyente está en el padrón y no tiene ningún predio inscrito a su nombre."
@@ -2174,7 +3269,6 @@ export default function Rentas({ dest, onDest }: PantallaProps) {
                                 <TablaLeida
                                   tabla={bl.tabla}
                                   estado={vehiculosDelContribuyente}
-                                  pagina={paginaDeVehiculos}
                                   irAPagina={setPaginaDeVehiculos}
                                   cuenta={(n) => `${n} ${n === 1 ? 'vehículo' : 'vehículos'}`}
                                   vacia="Este contribuyente está en el padrón y no tiene ningún vehículo a su nombre."
@@ -2188,6 +3282,91 @@ export default function Rentas({ dest, onDest }: PantallaProps) {
                                     `${String(v.afectoDesde)} — ${String(v.afectoHasta)}`,
                                     v.estado,
                                   ]}
+                                />
+                              )}
+                              {bl.tabla && bl.lectura === 'beneficios' && (
+                                <TablaLeida
+                                  tabla={bl.tabla}
+                                  estado={beneficios}
+                                  irAPagina={setPaginaDeBeneficios}
+                                  cuenta={(n) => `${n} ${n === 1 ? 'beneficio' : 'beneficios'}`}
+                                  vacia="Este contribuyente no tiene ningún beneficio ni exoneración registrado."
+                                  sinPreguntar="No se ha preguntado: sin un contribuyente del padrón abierto no hay de quién listar beneficios. Pasa con un expediente nuevo, que todavía no está en el padrón, y con un código que el padrón no reconoce."
+                                  fila={(b: BeneficioDelContribuyente) => [
+                                    b.tipo,
+                                    b.tributo,
+                                    b.clase,
+                                    b.porcentaje ?? SIN_DATO,
+                                    b.monto ?? SIN_DATO,
+                                    /* Los dos extremos del tramo, tal como la
+                                       lectura los da. Sin `vigenciaHasta` no es
+                                       un error: es el que no vence. */
+                                    `${b.vigenciaDesde} — ${b.vigenciaHasta ?? 'sin vencimiento'}`,
+                                    b.baseLegal,
+                                    b.documentoOrigen,
+                                  ]}
+                                />
+                              )}
+                              {bl.tabla && bl.lectura === 'domicilios' && (
+                                <TablaDeLaFicha
+                                  tabla={bl.tabla}
+                                  estado={ficha}
+                                  cuenta={(n) => `${n} ${n === 1 ? 'tramo' : 'tramos'}`}
+                                  vacia="Este contribuyente no tiene ningún domicilio registrado. Sin uno vigente no hay a dónde notificarle."
+                                  filas={(f) =>
+                                    f.historialDeDomicilios.map((d) => [
+                                      d.tipo,
+                                      d.direccion,
+                                      d.referencia ?? SIN_DATO,
+                                      d.ubigeo ?? SIN_DATO,
+                                      d.vigenciaDesde,
+                                      /* Nulo es «el que rige», no un dato que
+                                         falte: se dice con palabras y no con el
+                                         guion largo, que aquí significaría que
+                                         la fecha no se publica. */
+                                      d.vigenciaHasta ?? 'vigente',
+                                      d.documentoOrigen,
+                                    ])
+                                  }
+                                />
+                              )}
+                              {bl.tabla && bl.lectura === 'contactos' && (
+                                <TablaDeLaFicha
+                                  tabla={bl.tabla}
+                                  estado={ficha}
+                                  cuenta={(n) => `${n} ${n === 1 ? 'registro' : 'registros'}`}
+                                  vacia="Este contribuyente no tiene ningún teléfono, correo ni gestor registrado."
+                                  filas={(f) =>
+                                    f.contactos.map((c) => [
+                                      c.tipo,
+                                      c.valor,
+                                      c.nombre ?? SIN_DATO,
+                                      c.documento ?? SIN_DATO,
+                                      c.observacion ?? SIN_DATO,
+                                      c.vigente ? 'Sí' : 'No',
+                                    ])
+                                  }
+                                />
+                              )}
+                              {bl.tabla && bl.lectura === 'responsables' && (
+                                <TablaDeLaFicha
+                                  tabla={bl.tabla}
+                                  estado={ficha}
+                                  cuenta={(n) => `${n} ${n === 1 ? 'vínculo' : 'vínculos'}`}
+                                  vacia="Nadie responde solidariamente con este contribuyente."
+                                  filas={(f) =>
+                                    f.responsables.map((r) => [
+                                      String(r.responsableId),
+                                      r.vinculo,
+                                      /* El porcentaje sólo lo llevan los
+                                         vínculos que reparten; en los demás el
+                                         recurso lo publica nulo. */
+                                      r.porcentaje ?? SIN_DATO,
+                                      r.vigenciaDesde,
+                                      r.vigenciaHasta ?? 'abierto',
+                                      r.documentoOrigen,
+                                    ])
+                                  }
                                 />
                               )}
                               {bl.tabla && bl.lectura === undefined && (
@@ -2242,6 +3421,13 @@ export default function Rentas({ dest, onDest }: PantallaProps) {
                 }}
               >
                 {det.filtros.map((f, i) => {
+                  /* El campo condicional no se dibuja hasta que su alcance está
+                     elegido (#577). No es lo mismo que apagarlo: apagado diría
+                     que no sirve, y sirve —con SU alcance—; dibujarlo siempre
+                     ofrecería una caja que la corrida no va a leer. El índice se
+                     conserva porque es la clave del valor tecleado: saltarse uno
+                     al pintar no puede correr los demás. */
+                  if (f.soloCon !== undefined && f.soloCon !== alcanceDeLaCorrida) return null;
                   const clave = `${tipo}|${i}`;
                   const valor = filtros[clave] ?? f.v;
                   const cambiar = (v: string) => setFiltros((s) => ({ ...s, [clave]: v }));
@@ -2296,7 +3482,10 @@ export default function Rentas({ dest, onDest }: PantallaProps) {
                   <strong style={{ fontWeight: 500 }}>{cuales}</strong> {motivo}
                 </p>
               ))}
-              {tipo === 'masivo' && sectores.error !== null && (
+              {/* Sólo con SECTOR elegido: el aviso señala una caja, y con otro
+                  alcance esa caja no está dibujada. Quien elija SECTOR se entera
+                  en el mismo gesto, que es cuando le importa. */}
+              {tipo === 'masivo' && alcanceDeLaCorrida === 'SECTOR' && sectores.error !== null && (
                 <p style={{ ...PIE, color: 'var(--bad-ink, var(--ink-2))' }}>
                   No se pudieron leer los sectores del catastro —hace falta el acceso «sectores»—, así que la corrida por sector no se
                   puede pedir: el backend exige un código que exista y aquí no hay ninguno que ofrecer.
@@ -2304,10 +3493,21 @@ export default function Rentas({ dest, onDest }: PantallaProps) {
               )}
               {tipo === 'masivo' && (
                 <p style={PIE}>
-                  «Alcance» ofrece los dos únicos valores que <code>DeterminarPredialMasivo</code> admite. El desplegable del manual traía
-                  cuatro —«TODO EL PADRÓN», «POR SECTOR», «POR RANGO DE CÓDIGO», «SOLO OBSERVADOS»— y ninguno coincidía letra por letra:
-                  los dos primeros se parecen, y parecerse no es serlo; los otros dos el backend no los implementa. Los sectores son los
-                  del catastro, no los seis códigos que dibujaba la maqueta.
+                  «Alcance» ofrece los cuatro valores que <code>DeterminarPredialMasivo</code> admite, con sus palabras y no con los
+                  rótulos del manual —«TODO EL PADRÓN», «POR SECTOR», «POR RANGO DE CÓDIGO», «SOLO OBSERVADOS»—: traducirlos sería una
+                  segunda copia de la regla, y una copia se queda vieja en silencio. Dos de ellos piden lo suyo y hasta entonces no se
+                  preguntan: <strong style={{ fontWeight: 500 }}>«Sector»</strong> sale con <code>SECTOR</code> y los códigos del catastro,
+                  no los seis que dibujaba la maqueta; <strong style={{ fontWeight: 500 }}>«Código desde» y «Código hasta»</strong> salen
+                  con <code>RANGO_DE_CODIGO</code>, y son los dos extremos del tramo, incluidos los dos.
+                </p>
+              )}
+              {tipo === 'masivo' && alcanceDeLaCorrida === 'OBSERVADOS' && (
+                <p style={PIE}>
+                  <code>OBSERVADOS</code> no es «todo el padrón» con otro nombre: recorre a los que dejó fuera la{' '}
+                  <strong style={{ fontWeight: 500 }}>última corrida de este ejercicio</strong>, que es la lista que no se puede recomponer
+                  leyendo el padrón —un observado es, por definición, el que no tiene determinación—. Si el ejercicio todavía no se ha
+                  corrido, la corrida no recorre a nadie, y eso no significa que la emisión esté limpia: «ninguno quedó observado» y
+                  «todavía no se ha corrido» son dos cosas distintas, y sólo la primera se puede emitir.
                 </p>
               )}
             </section>
@@ -2697,15 +3897,7 @@ export default function Rentas({ dest, onDest }: PantallaProps) {
               </p>
             )}
             <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>
-              <button
-                onClick={() => setTrPaso(Math.max(paso - 1, 0))}
-                aria-disabled={paso === 0}
-                className="hov-linea"
-                style={{ ...BOTON_SECUNDARIO, display: 'flex', alignItems: 'center', gap: 7, opacity: paso === 0 ? 0.5 : 1 }}
-              >
-                <Icono d={ICO.flechaIzq} tam={14} grosor={1.8} />
-                Anterior
-              </button>
+              <PasoAtras paso={paso} atras={() => setTrPaso(paso - 1)} />
               {paso >= trDef.pasos.length - 1 ? (
                 <label style={{ flex: 1, minWidth: 220 }}>
                   <span style={{ display: 'block', fontSize: 11, fontWeight: 500, color: 'var(--ink-3)', marginBottom: 4 }}>
@@ -2909,27 +4101,23 @@ export default function Rentas({ dest, onDest }: PantallaProps) {
                       </thead>
                       <tbody>
                         {obligaciones.map((o, i) => {
-                          /* Una obligación que agrupa varias cuotas NO se puede
-                             dar de baja: `MovimientoDeDeuda` extingue una
-                             `ClaveDeSaldo` con un `periodo` concreto, y esta
-                             lectura publica un solo desglose para todo el grupo
-                             (#551). Repartirlo entre las cuotas sería componer
-                             dinero en la pantalla y produciría
-                             `BajaMayorQueLaDeuda` en cuanto no cuadrara. */
+                          /* Una fila que agrupa varias cuotas SÍ se puede dar de
+                             baja desde #598: el acto va con `repartir: true` y el
+                             reparto lo hace el servidor, que es el único que sabe
+                             cuánto queda vivo en cada cuota a la fecha valor.
+                             Hasta entonces esta casilla venía apagada, porque
+                             repartir el desglose del grupo aquí habría sido
+                             componer dinero en la pantalla (RNF-083) sobre
+                             cifras que esta lectura no publica. */
                           const agrupada = o.periodoDesde !== o.periodoHasta;
                           const on = obligacionMarcada === i;
-                          const motivo = agrupada
-                            ? `Agrupa las cuotas ${o.periodoDesde} a ${o.periodoHasta} y la consulta no publica el desglose de cada una: hoy no se puede dar de baja (#551).`
-                            : undefined;
                           return (
                             <tr
                               key={`${o.tributo}|${o.ejercicio}|${o.predioId ?? ''}|${o.vehiculoId ?? ''}|${o.periodoDesde}`}
                               className="hov-elev"
-                              title={motivo}
                               style={{
                                 borderTop: '1px solid var(--line)',
                                 background: on ? 'var(--accent-soft)' : 'transparent',
-                                opacity: agrupada ? 0.55 : 1,
                               }}
                             >
                               <td style={{ padding: '11px 14px' }}>
@@ -2937,9 +4125,12 @@ export default function Rentas({ dest, onDest }: PantallaProps) {
                                   type="radio"
                                   name="obligacion-de-la-baja"
                                   checked={on}
-                                  disabled={agrupada}
                                   onChange={() => setObligacionMarcada(i)}
-                                  aria-label={`Elegir ${o.tributo} ${o.ejercicio}, cuota ${o.periodoDesde}`}
+                                  aria-label={
+                                    agrupada
+                                      ? `Elegir ${o.tributo} ${o.ejercicio}, cuotas ${o.periodoDesde} a ${o.periodoHasta}`
+                                      : `Elegir ${o.tributo} ${o.ejercicio}, cuota ${o.periodoDesde}`
+                                  }
                                   style={{ accentColor: 'var(--accent)', width: 15, height: 15 }}
                                 />
                               </td>
@@ -2964,6 +4155,24 @@ export default function Rentas({ dest, onDest }: PantallaProps) {
                     </table>
                   </div>
                 )}
+                {/* De quién es la unidad de la fila marcada, debajo de la tabla y
+                    antes de la franja del importe (#635). Aquí y no en el
+                    formulario de sustento por lo mismo que en el alta: la
+                    declaración es la respuesta a esta frase, y sin ella no
+                    significa nada. */}
+                {obligacionDeLaBaja !== null && fechaDeLaBaja !== '' && (
+                  <div style={{ padding: '0 16px 14px' }}>
+                    <UnidadDeLaBajaCruzada
+                      obligacion={obligacionDeLaBaja}
+                      cargando={cruceDeLaBaja.cargando}
+                      error={cruceDeLaBaja.error}
+                      cruce={cruceDeLaBaja.datos}
+                      contribuyente={sujetoDeDeuda}
+                      declarado={declaraTitularAnteriorEnLaBaja}
+                      onDeclarar={setDeclaraTitularAnteriorEnLaBaja}
+                    />
+                  </div>
+                )}
                 <div
                   style={{
                     display: 'flex',
@@ -2977,7 +4186,7 @@ export default function Rentas({ dest, onDest }: PantallaProps) {
                 >
                   <span style={{ flex: 1, minWidth: 150, fontSize: 12.5, color: 'var(--ink-3)', textWrap: 'pretty' }}>
                     Una baja queda en la bitácora de auditoría con quién la hizo, cuándo y con qué resolución. Se extingue{' '}
-                    <strong>una obligación por acto</strong>: para varias, se repite.
+                    <strong>una obligación por acto</strong> —la fila marcada, con todas las cuotas que agrupe—: para varias, se repite.
                   </span>
                   <span style={{ fontSize: 11, textTransform: 'uppercase', letterSpacing: '.1em', color: 'var(--ink-3)' }}>A extinguir</span>
                   {/* El importe es el que el servidor publicó para esa obligación
@@ -2990,11 +4199,20 @@ export default function Rentas({ dest, onDest }: PantallaProps) {
                     {obligacionDeLaBaja ? `al ${obligacionDeLaBaja.deuda.total.actualizadoA}` : 'sin obligación marcada'}
                   </span>
                 </div>
-                {obligaciones.some((o) => o.periodoDesde !== o.periodoHasta) && (
+                {/* El pie explica la tabla, así que sin tabla no se dibuja: decir
+                    de qué sale el «—» de una columna que no está en pantalla es
+                    ruido, no honestidad. */}
+                {obligaciones.length > 0 && (
                   <p style={PIE}>
-                    Las filas atenuadas agrupan varias cuotas y hoy no se pueden dar de baja: el acto extingue una obligación con su cuota, y
-                    esta consulta publica un solo desglose para todo el grupo (#551). La columna «Unidad» sale «—» porque el recurso publica
-                    el identificador interno del predio, no su código.
+                    {obligaciones.some((o) => o.periodoDesde !== o.periodoHasta) && (
+                      <>
+                        Una fila con dos periodos —«0 - 9»— agrupa las cuotas de esa obligación y publica un solo desglose para todo el
+                        grupo, no el de cada cuota. Se da de baja igual: lo que se declara es el total del acto y el reparto entre las cuotas
+                        lo hace el servidor, sin que ninguna reciba más de lo que debe a la fecha de la resolución; las que no deben nada no
+                        producen asiento, y el aviso de después dice cuáles se movieron (#598).{' '}
+                      </>
+                    )}
+                    La columna «Unidad» sale «—» porque el recurso publica el identificador interno del predio, no su código.
                   </p>
                 )}
               </section>
@@ -3012,6 +4230,24 @@ export default function Rentas({ dest, onDest }: PantallaProps) {
                 </p>
               </div>
               <div style={REJILLA_DE_CAMPOS}>{(hoja === 'alta' ? CAMPOS_DEL_ALTA : CAMPOS_DE_LA_BAJA).map(campo)}</div>
+              {/* Lo que la caja «Unidad» resolvió, debajo de ella y antes de los
+                  importes (#554). Sin esto, lo que viaja —un identificador
+                  interno que nadie teclea— no se ve por ninguna parte, y la
+                  única forma de saber si el alta va sobre el predio que se
+                  quería era mirar la cuenta corriente después. */}
+              {hoja === 'alta' && sujetoDeDeuda !== null && unidadTecleada !== '' && (
+                <div style={{ padding: '0 16px 16px' }}>
+                  <UnidadDelAltaResuelta
+                    escrito={unidadTecleada}
+                    enVuelo={unidadEnVuelo}
+                    error={resolucionDeLaUnidad.error}
+                    unidad={unidadResuelta}
+                    contribuyente={sujetoDeDeuda}
+                    declarado={declaraTitularAnteriorEnElAlta}
+                    onDeclarar={setDeclaraTitularAnteriorEnElAlta}
+                  />
+                </div>
+              )}
             </section>
 
             {hoja === 'alta' && (
@@ -3079,11 +4315,28 @@ export default function Rentas({ dest, onDest }: PantallaProps) {
                 {impedimentoDeLaHoja}
               </p>
             )}
+            {/* Lo que el servidor contestó al último intento, y se queda (#597).
+                Un 422 dice qué cambiar y por qué; en un aviso que se va a los
+                3,2 s no se puede releer con el formulario delante. `alert` y no
+                `status`: es un acto que no se registró, no una nota al margen. */}
+            {rechazoDelActo !== null && (
+              <div role="alert">
+                <Aviso tono="bad" titulo={`El servidor no registró ${hoja === 'alta' ? 'el alta' : 'la baja'}`}>
+                  {rechazoDelActo.mensaje}
+                  {rechazoDelActo.incidencia !== undefined && (
+                    <>
+                      {' '}
+                      <span style={{ fontFamily: 'var(--font-mono)', fontSize: 11.5 }}>Incidencia {rechazoDelActo.incidencia}</span>
+                    </>
+                  )}
+                </Aviso>
+              </div>
+            )}
             <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>
               <p style={{ margin: 0, flex: 1, minWidth: 180, fontSize: 12, color: 'var(--ink-3)', textWrap: 'pretty' }}>
                 {hoja === 'alta'
                   ? 'Un alta manual entra en la cuenta corriente y se cobra como cualquier otra deuda. Queda en la bitácora con tu usuario. Con «Cuota desde» y «Cuota hasta» se registra una obligación por cuota, y el desglose se repite en cada una.'
-                  : 'Elige arriba la obligación que se extingue: una por acto. El importe que se da de baja es el que el servidor publicó para ella a la fecha de la resolución; la causal se antepone a la observación, porque el cuerpo no tiene campo propio para ella.'}
+                  : 'Elige arriba la obligación que se extingue: una por acto. El importe que se da de baja es el que el servidor publicó para ella a la fecha de la resolución, y si la fila agrupa varias cuotas es él quien lo reparte entre ellas; la causal se antepone a la observación, porque el cuerpo no tiene campo propio para ella.'}
               </p>
               <label style={{ flex: 1, minWidth: 220 }}>
                 <span style={{ display: 'block', fontSize: 11, fontWeight: 500, color: 'var(--ink-3)', marginBottom: 4 }}>
@@ -3112,150 +4365,243 @@ export default function Rentas({ dest, onDest }: PantallaProps) {
         {/* ══════════ DECLARACIÓN JURADA ══════════ */}
         {dest === 'reporte' && (
           <div style={{ display: 'flex', flexDirection: 'column', gap: 16, alignItems: 'center' }}>
-            <div data-noprint="1" style={{ width: '100%', maxWidth: 820, display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
-              <p style={{ margin: 0, flex: 1, minWidth: 200, fontSize: 12.5, color: 'var(--ink-3)', textWrap: 'pretty' }}>
-                Hoja resumen (HR), predio urbano (PU) y predio rústico (PR). Se imprimen para la firma del contribuyente y quedan como
-                sustento del cálculo.
-              </p>
-              {['HR', 'PU', 'PR'].map((k) => {
-                const on = dj[k] === true;
-                return (
-                  <button
-                    key={k}
-                    onClick={() => setDj((x) => ({ ...x, [k]: !on }))}
-                    aria-pressed={on}
-                    style={{
-                      border: `1px solid ${on ? 'var(--accent)' : 'var(--line-2)'}`,
-                      borderRadius: 6,
-                      padding: '8px 14px',
-                      cursor: 'pointer',
-                      fontFamily: 'var(--font-mono)',
-                      fontSize: 12,
-                      background: on ? 'var(--accent-soft)' : 'var(--bg-card)',
-                      color: on ? 'var(--accent-ink)' : 'var(--ink-4)',
-                    }}
-                  >
-                    {k}
-                  </button>
-                );
-              })}
-              {/* La hoja es un documento que se firma —«Declaro bajo
-                  juramento»— y sus cifras no las produce nadie: eran las de la
-                  maqueta. Imprimir queda apagado con su motivo hasta que haya de
-                  dónde sacarlas (#563). */}
+            <div data-noprint="1" style={{ width: '100%', maxWidth: 820, display: 'flex', alignItems: 'flex-end', gap: 10, flexWrap: 'wrap' }}>
+              <label style={{ flex: 1, minWidth: 190 }}>
+                <span style={ROTULO_DE_LA_HOJA}>N.º de declaración</span>
+                <input
+                  value={djNro}
+                  onChange={(e) => setDjNro(e.target.value)}
+                  placeholder="el número que lleva impreso el cargo"
+                  style={{ ...IN, fontFamily: 'var(--font-mono)' }}
+                />
+              </label>
+              <label>
+                <span style={ROTULO_DE_LA_HOJA}>Fecha de corte</span>
+                <input type="date" value={djFecha} onChange={(e) => setDjFecha(e.target.value)} style={IN} />
+              </label>
+              {/* El año es el del selector del shell, que es el mismo que la hoja
+                  imprime bajo el título: la ruta pide número Y año, y tener aquí
+                  un segundo campo de ejercicio dejaría la cabecera diciendo uno
+                  y la lectura preguntando por otro. */}
+              <label>
+                <span style={ROTULO_DE_LA_HOJA}>Ejercicio</span>
+                <input value={pref.ejercicio} disabled title="Es el ejercicio de trabajo: se cambia en la cabecera" style={{ ...IN, ...APAGADO, width: 90 }} />
+              </label>
+              {/* «Imprimir» saca por la impresora LO QUE HAY EN PANTALLA. Sin la
+                  guarda, un 404, un 403 o la respuesta que aún no ha llegado
+                  sacarían el membrete, el «Declaro bajo juramento» y las dos
+                  líneas de firma con las celdas en blanco: un papel oficial en
+                  blanco sigue siendo un papel oficial, y éste además afirma algo
+                  (#563 AC 4). Es la misma guarda que la constancia de Consultas. */}
               <button
-                disabled
-                aria-disabled="true"
-                title={NO_SE_PUEDE_EMITIR_LA_DJ}
-                style={{ border: 0, borderRadius: 6, padding: '9px 20px', background: 'var(--accent)', color: '#fff', fontSize: 13, fontWeight: 500, opacity: 0.55, cursor: 'not-allowed' }}
+                onClick={() => window.print()}
+                disabled={impedimentoDeImprimirLaDj !== undefined}
+                title={impedimentoDeImprimirLaDj}
+                className={impedimentoDeImprimirLaDj === undefined ? 'hov-acento-2' : undefined}
+                style={{ ...BOTON_PRIMARIO, ...(impedimentoDeImprimirLaDj !== undefined ? { opacity: 0.55, cursor: 'not-allowed' } : null) }}
               >
                 Imprimir
               </button>
             </div>
 
-            <div data-noprint="1" style={{ width: '100%', maxWidth: 820 }}>
-              <Aviso tono="warn" titulo="Esta hoja no se puede emitir todavía">
-                {NO_SE_PUEDE_EMITIR_LA_DJ}
-              </Aviso>
+            <div data-noprint="1" style={{ width: '100%', maxWidth: 820, display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
+              <p style={{ margin: 0, flex: 1, minWidth: 200, fontSize: 12.5, color: 'var(--ink-3)', textWrap: 'pretty' }}>
+                El manual emite tres formularios con la declaración: hoja resumen (HR), predio urbano (PU) y predio rústico (PR). Aquí se
+                emite <strong>la HR</strong>, que es la que resume la declaración y la que se firma.
+              </p>
+              {/* Los tres eran CONMUTADORES, dos de ellos encendidos, y no
+                  cambiaban nada: prometían que al pulsar «Imprimir» saldrían tres
+                  hojas. Ahora son tres rótulos de lo que hay, que es lo que de
+                  verdad son —sólo la HR tiene de dónde salir; PU y PR llevan la
+                  ficha del predio campo a campo y ninguna lectura la publica en
+                  esa forma—, y desmarcar la única que se emite tampoco cambiaría
+                  lo que sale por la impresora. El motivo de cada una va en su
+                  `title` Y en el pie de abajo, porque un `title` solo no lo lee
+                  nadie (RNF-082). */}
+              {(['HR', 'PU', 'PR'] as const).map((k) => {
+                const hay = k === 'HR';
+                return (
+                  <span
+                    key={k}
+                    title={hay ? 'Es lo que esta pantalla emite, y lo único que hay' : SIN_FORMULARIO_DE_PREDIO}
+                    style={{
+                      border: `1px solid ${hay ? 'var(--accent)' : 'var(--line-2)'}`,
+                      borderRadius: 6,
+                      padding: '8px 14px',
+                      fontFamily: 'var(--font-mono)',
+                      fontSize: 12,
+                      background: hay ? 'var(--accent-soft)' : 'var(--bg-card)',
+                      color: hay ? 'var(--accent-ink)' : 'var(--ink-4)',
+                      opacity: hay ? 1 : 0.55,
+                      textDecoration: hay ? undefined : 'line-through',
+                    }}
+                  >
+                    {k}
+                  </span>
+                );
+              })}
             </div>
 
-            <section style={{ width: '100%', maxWidth: 820, background: '#fff', borderRadius: 6, boxShadow: 'var(--shadow-2)', padding: '40px 44px' }}>
-              <div style={{ display: 'flex', alignItems: 'flex-start', gap: 20, paddingBottom: 12, borderBottom: '2px solid var(--ink)' }}>
-                <div style={{ flex: 1 }}>
-                  <p style={{ margin: 0, fontFamily: 'var(--font-serif)', fontSize: 15, fontWeight: 600 }}>{pref.entidad}</p>
-                  <p style={{ margin: '3px 0 0', fontSize: 11, color: 'var(--ink-3)' }}>
-                    Gerencia de Administración Tributaria — Unidad de Rentas
+            <p data-noprint="1" style={{ margin: 0, width: '100%', maxWidth: 820, fontSize: 12, lineHeight: 1.5, color: 'var(--ink-3)', textWrap: 'pretty' }}>
+              {SIN_FORMULARIO_DE_PREDIO}
+            </p>
+
+            {/* Las tres respuestas que NO son una hoja, dichas por separado: no se
+                ha preguntado todavía, se está preguntando, y el servidor contestó
+                que no. Ninguna de las tres dibuja el papel. */}
+            {djBuscada === '' && (
+              <div data-noprint="1" style={{ width: '100%', maxWidth: 820 }}>
+                <Aviso tono="neutro" titulo="Escribe el número de la declaración">
+                  La hoja resumen es la de <strong>una</strong> declaración jurada: sale de{' '}
+                  <code>GET /rentas/declaraciones/{'{'}n{'}'}/hoja</code>, que pide el número y el año. Hasta que haya número no hay a quién
+                  consultar, y el papel no se dibuja en blanco.
+                </Aviso>
+              </div>
+            )}
+            {hojaDj.cargando && (
+              <p data-noprint="1" style={{ margin: 0, width: '100%', maxWidth: 820, fontSize: 12.5, color: 'var(--ink-3)' }}>
+                Consultando la declaración…
+              </p>
+            )}
+            {hojaDj.error !== null && (
+              <div data-noprint="1" style={{ width: '100%', maxWidth: 820 }}>
+                <FalloDeLectura
+                  error={hojaDj.error}
+                  que={`la declaración jurada ${djBuscada} del ${pref.ejercicio}`}
+                  acceso="declaracion_jurada"
+                  alReintentar={hojaDj.reintentar}
+                />
+              </div>
+            )}
+
+            {hojaDj.datos && (
+              <section style={{ width: '100%', maxWidth: 820, background: '#fff', borderRadius: 6, boxShadow: 'var(--shadow-2)', padding: '40px 44px' }}>
+                <div style={{ display: 'flex', alignItems: 'flex-start', gap: 20, paddingBottom: 12, borderBottom: '2px solid var(--ink)' }}>
+                  <div style={{ flex: 1 }}>
+                    <p style={{ margin: 0, fontFamily: 'var(--font-serif)', fontSize: 15, fontWeight: 600 }}>{pref.entidad}</p>
+                    <p style={{ margin: '3px 0 0', fontSize: 11, color: 'var(--ink-3)' }}>
+                      Gerencia de Administración Tributaria — Unidad de Rentas
+                    </p>
+                  </div>
+                  <div style={{ textAlign: 'right', fontFamily: 'var(--font-mono)', fontSize: 11, color: 'var(--ink-3)' }}>
+                    <p style={{ margin: 0 }}>{hojaDj.datos.declaracion.numero} · HR</p>
+                    <p style={{ margin: '3px 0 0' }}>{hojaDj.datos.declaracion.fechaPresentacion}</p>
+                  </div>
+                </div>
+                <div style={{ borderTop: '1px solid var(--ink)', marginTop: 2, paddingTop: 26, textAlign: 'center' }}>
+                  <h2 style={{ margin: 0, fontFamily: 'var(--font-serif)', fontSize: 23, fontWeight: 600, letterSpacing: '-.01em' }}>
+                    Declaración jurada — hoja resumen
+                  </h2>
+                  <p style={{ margin: '5px 0 0', fontSize: 12, color: 'var(--ink-3)' }}>
+                    Impuesto predial del ejercicio {hojaDj.datos.declaracion.ejercicio}
                   </p>
                 </div>
-                <div style={{ textAlign: 'right', fontFamily: 'var(--font-mono)', fontSize: 11, color: 'var(--ink-3)' }}>
-                  <p style={{ margin: 0 }}>DJ — — HR</p>
-                  <p style={{ margin: '3px 0 0' }}>—</p>
+                <div
+                  style={{
+                    display: 'grid',
+                    gridTemplateColumns: 'repeat(auto-fit,minmax(186px,1fr))',
+                    gap: '14px 20px',
+                    margin: '24px 0',
+                    padding: '16px 0',
+                    borderTop: '1px solid var(--line)',
+                    borderBottom: '1px solid var(--line)',
+                  }}
+                >
+                  {/* El rótulo es «Documento» y no «D.N.I.» como en el manual: el
+                      padrón publica el documento con su tipo delante —«DNI 03593174»,
+                      «RUC 20100047218»— porque una sucesión indivisa o una empresa
+                      no tienen DNI, y escribir «D.N.I.» encima de un RUC es rotular
+                      un dato con el nombre de otro. */}
+                  {celdasDelDeclarante(hojaDj.datos).map((m) => (
+                    <div key={m[0]}>
+                      <p style={{ margin: '0 0 3px', fontSize: 10, textTransform: 'uppercase', letterSpacing: '.1em', color: 'var(--ink-3)' }}>{m[0]}</p>
+                      <p style={{ margin: 0, fontSize: 13, color: 'var(--ink)' }}>{m[1]}</p>
+                    </div>
+                  ))}
                 </div>
-              </div>
-              <div style={{ borderTop: '1px solid var(--ink)', marginTop: 2, paddingTop: 26, textAlign: 'center' }}>
-                <h2 style={{ margin: 0, fontFamily: 'var(--font-serif)', fontSize: 23, fontWeight: 600, letterSpacing: '-.01em' }}>
-                  Declaración jurada — hoja resumen
-                </h2>
-                <p style={{ margin: '5px 0 0', fontSize: 12, color: 'var(--ink-3)' }}>
-                  Impuesto predial del ejercicio {pref.ejercicio}
+                {/* Un declarante nulo no es un nombre que falte: es que el código de
+                    la DJ ya no está en el padrón. Se dice, porque las cuatro celdas
+                    con un guion se leen como «no consta» y no como «esta persona no
+                    existe». */}
+                {hojaDj.datos.declarante === null && (
+                  <p style={{ margin: '-10px 0 20px', fontSize: 12, color: 'var(--ink-3)', textWrap: 'pretty' }}>
+                    El contribuyente de esta declaración ya no está en el padrón, así que la hoja no puede consignar ni su nombre ni su
+                    documento ni su domicilio. No se imprime hasta que se aclare de quién es.
+                  </p>
+                )}
+                {/* Son TODOS los predios del contribuyente y no sólo el que la
+                    declaración nombra, y así lo compone el servidor: la base del
+                    predial es por contribuyente —los tramos progresivos se aplican
+                    al conjunto de sus predios— y una hoja con uno solo consignaría
+                    una base que no es la que se determina. Con cero filas, el aviso
+                    lo dice: una cabecera sola se lee como «no tiene ninguno». */}
+                <TablaDeDatos
+                  cols={COLS_DE_LA_HOJA}
+                  filas={hojaDj.datos.predios.map(filaDeLaHoja)}
+                  min="640px"
+                  vacia="El contribuyente no tiene ningún predio con titularidad vigente a la fecha de corte, así que no hay ninguno que consignar."
+                />
+                <div
+                  style={{
+                    display: 'grid',
+                    gridTemplateColumns: 'repeat(auto-fit,minmax(150px,1fr))',
+                    gap: 14,
+                    marginTop: 20,
+                    paddingTop: 14,
+                    borderTop: '1px solid var(--ink)',
+                  }}
+                >
+                  {/* Los dos primeros salen de la última determinación del ejercicio
+                      y son nulos cuando no la hay; los dos últimos NO viajan nunca
+                      —el derecho de emisión es `DERECHO_EMISION_PREDIAL` del conjunto
+                      sellado, cifra de ordenanza local (D-02b)—, y el total a pagar
+                      no se compone aquí sumándole el derecho al insoluto (RNF-083).
+                      El porqué de cada guion está abajo, en `faltan`, y sale impreso. */}
+                  {totalesDeLaHoja(hojaDj.datos).map((t) => (
+                    <div key={t[0]}>
+                      <p style={{ margin: '0 0 3px', fontSize: 10, textTransform: 'uppercase', letterSpacing: '.1em', color: 'var(--ink-3)' }}>{t[0]}</p>
+                      <p style={{ margin: 0, fontFamily: 'var(--font-mono)', fontSize: 15, color: 'var(--ink)' }}>{t[1]}</p>
+                    </div>
+                  ))}
+                </div>
+                {/* Regla 9 sobre el papel y no sólo sobre la pantalla: el domicilio,
+                    la titularidad y el % de propiedad son los VIGENTES A ESTA FECHA,
+                    y una hoja reimpresa en otro mes sale distinta sin que nada lo
+                    diga si no lleva la fecha impresa. Es una sola para toda la hoja,
+                    porque el recurso publica una sola. */}
+                <p style={{ margin: '12px 0 0', fontFamily: 'var(--font-mono)', fontSize: 11, color: 'var(--ink-3)' }}>
+                  Valores y titularidad al {hojaDj.datos.aLaFecha}
                 </p>
-              </div>
-              <div
-                style={{
-                  display: 'grid',
-                  gridTemplateColumns: 'repeat(auto-fit,minmax(186px,1fr))',
-                  gap: '14px 20px',
-                  margin: '24px 0',
-                  padding: '16px 0',
-                  borderTop: '1px solid var(--line)',
-                  borderBottom: '1px solid var(--line)',
-                }}
-              >
-                {/* La identidad y el domicilio salían de la maqueta: el nombre,
-                    el código y el DNI de una persona que no es la de nadie, en
-                    la cabecera de un documento que se firma. */}
-                {[...DJ_META.map((m) => ({ k: m.k, v: '—' })), { k: 'Ejercicio', v: pref.ejercicio }].map((m) => (
-                  <div key={m.k}>
-                    <p style={{ margin: '0 0 3px', fontSize: 10, textTransform: 'uppercase', letterSpacing: '.1em', color: 'var(--ink-3)' }}>{m.k}</p>
-                    <p style={{ margin: 0, fontSize: 13, color: 'var(--ink)' }}>{m.v}</p>
+                {/* `faltan` va DENTRO del papel, no en un aviso de pantalla: quien
+                    firma es quien tiene que leer por qué hay guiones donde el manual
+                    dibuja cifras. El servidor lo publica como lista de motivos y no
+                    como un booleano precisamente para esto. */}
+                {hojaDj.datos.faltan.length > 0 && (
+                  <div style={{ marginTop: 14, paddingTop: 12, borderTop: '1px solid var(--line)' }}>
+                    <p style={{ margin: '0 0 5px', fontSize: 10, textTransform: 'uppercase', letterSpacing: '.1em', color: 'var(--ink-3)' }}>
+                      Lo que esta hoja no consigna, y por qué
+                    </p>
+                    <ul style={{ margin: 0, paddingLeft: 18, fontSize: 12, lineHeight: 1.55, color: 'var(--ink-3)', textWrap: 'pretty' }}>
+                      {hojaDj.datos.faltan.map((f) => (
+                        <li key={f}>{f}</li>
+                      ))}
+                    </ul>
                   </div>
-                ))}
-              </div>
-              <table style={{ width: '100%', borderCollapse: 'collapse' }}>
-                <thead>
-                  <tr>
-                    {DJ_COLS.map((c) => (
-                      <th key={c[0]} style={c[1] ? THN : TH}>
-                        {c[0]}
-                      </th>
-                    ))}
-                  </tr>
-                </thead>
-                <tbody>
-                  {/* Los dos predios con su valuación eran de la maqueta.
-                      `DeclaracionJuradaResource` publica el número, el ejercicio,
-                      el tipo, las fechas y el estado: ni el predio con su
-                      ubicación y su uso, ni el % de propiedad, ni el valúo. */}
-                  <tr style={{ borderTop: '1px solid var(--line)' }}>
-                    <td colSpan={DJ_COLS.length} style={{ ...TD, whiteSpace: 'normal', color: 'var(--ink-3)' }}>
-                      Ninguna lectura publica los predios de la declaración con su valúo afecto: la hoja se emitirá cuando los haya.
-                    </td>
-                  </tr>
-                </tbody>
-              </table>
-              <div
-                style={{
-                  display: 'grid',
-                  gridTemplateColumns: 'repeat(auto-fit,minmax(150px,1fr))',
-                  gap: 14,
-                  marginTop: 20,
-                  paddingTop: 14,
-                  borderTop: '1px solid var(--ink)',
-                }}
-              >
-                {/* Los cuatro totales —valúo afecto, insoluto, derecho de
-                    emisión y total a pagar— son el resultado de la determinación
-                    del predial, que hoy no se puede pedir (#540). */}
-                {DJ_TOTALES.map((x) => ({ k: x.k, v: '—' })).map((t) => (
-                  <div key={t.k}>
-                    <p style={{ margin: '0 0 3px', fontSize: 10, textTransform: 'uppercase', letterSpacing: '.1em', color: 'var(--ink-3)' }}>{t.k}</p>
-                    <p style={{ margin: 0, fontFamily: 'var(--font-mono)', fontSize: 15, color: 'var(--ink)' }}>{t.v}</p>
+                )}
+                <p style={{ margin: '22px 0 0', fontFamily: 'var(--font-serif)', fontSize: 14, lineHeight: 1.65, color: 'var(--ink-2)', textWrap: 'pretty' }}>
+                  Declaro bajo juramento que los datos consignados son verdaderos y que conozco que la omisión o falsedad genera las sanciones
+                  previstas en el Código Tributario.
+                </p>
+                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 40, marginTop: 56 }}>
+                  <div style={{ borderTop: '1px solid var(--ink)', paddingTop: 7, fontSize: 11, color: 'var(--ink-3)', textAlign: 'center' }}>
+                    Funcionario receptor
                   </div>
-                ))}
-              </div>
-              <p style={{ margin: '22px 0 0', fontFamily: 'var(--font-serif)', fontSize: 14, lineHeight: 1.65, color: 'var(--ink-2)', textWrap: 'pretty' }}>
-                Declaro bajo juramento que los datos consignados son verdaderos y que conozco que la omisión o falsedad genera las sanciones
-                previstas en el Código Tributario.
-              </p>
-              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 40, marginTop: 56 }}>
-                <div style={{ borderTop: '1px solid var(--ink)', paddingTop: 7, fontSize: 11, color: 'var(--ink-3)', textAlign: 'center' }}>
-                  Funcionario receptor
+                  <div style={{ borderTop: '1px solid var(--ink)', paddingTop: 7, fontSize: 11, color: 'var(--ink-3)', textAlign: 'center' }}>
+                    Contribuyente o representante
+                  </div>
                 </div>
-                <div style={{ borderTop: '1px solid var(--ink)', paddingTop: 7, fontSize: 11, color: 'var(--ink-3)', textAlign: 'center' }}>
-                  Contribuyente o representante
-                </div>
-              </div>
-            </section>
+              </section>
+            )}
           </div>
         )}
       </div>
@@ -3264,12 +4610,13 @@ export default function Rentas({ dest, onDest }: PantallaProps) {
           En el artboard va fuera de `main`, pegada al fondo. Aquí vive dentro,
           y los márgenes negativos le devuelven el ancho completo que el
           `padding` de `main` le quitaría. */}
-      {/* Sólo en el expediente. `set()` marca `sucio` con CUALQUIER campo del
-          módulo, así que la barra salía también sobre el formulario de la
-          transferencia y sobre las dos hojas de deuda —donde teclear es
-          redactar el acto, no editar una ficha— diciendo «Cambios sin guardar»
-          de algo que ese botón no guarda. */}
-      {sucio && esExpediente && (
+      {/* Sale con el borrador del EXPEDIENTE y no con `sucio`. `set()` marca
+          `sucio` con cualquier campo del módulo, así que la barra salía también
+          sobre el formulario de la transferencia y sobre las dos hojas de deuda
+          —donde teclear es redactar el acto, no editar una ficha— diciendo
+          «Cambios sin guardar» de algo que este botón no guarda. Y sale también
+          con sólo la observación escrita, porque descartarla es descartar algo. */}
+      {esExpediente && hayBorradorDelExpediente && (
         <div
           style={{
             position: 'sticky',
@@ -3296,18 +4643,32 @@ export default function Rentas({ dest, onDest }: PantallaProps) {
               background: 'var(--warn-bg)',
               borderRadius: 999,
               padding: '5px 12px',
+              flex: '0 0 auto',
             }}
           >
             <Icono d={ICO.reloj} tam={13} grosor={2} />
-            Cambios sin guardar
+            {cambiosDeLaCorreccion.length === 0
+              ? 'Sin cambios'
+              : `${cambiosDeLaCorreccion.length} ${cambiosDeLaCorreccion.length === 1 ? 'campo' : 'campos'} sin guardar`}
           </span>
-          <p role="status" style={{ margin: 0, flex: 1, minWidth: 180, fontSize: 12, color: 'var(--warn-fg)', textWrap: 'pretty' }}>
-            {NO_SE_PUEDE_GUARDAR_EL_EXPEDIENTE}
-          </p>
+          {/* La observación es del acto y es obligatoria (regla 10, RNF-052):
+              va aquí, junto al botón que guarda, y no arriba entre los campos
+              del contribuyente —donde se leería como un dato suyo, que es lo que
+              era el campo «Observación» de la maqueta—. */}
+          <label style={{ flex: 1, minWidth: 220 }}>
+            <span style={{ display: 'block', fontSize: 11, fontWeight: 500, color: 'var(--ink-3)', marginBottom: 4 }}>
+              Observación · obligatoria
+            </span>
+            <input
+              value={observacionDeLaCorreccion}
+              onChange={(e) => setObservacionDeLaCorreccion(e.target.value)}
+              placeholder="Qué se corrige, y con qué documento"
+              style={{ width: '100%', border: '1px solid var(--line-2)', borderRadius: 6, padding: '8px 10px', background: 'var(--bg-card)', fontSize: 13 }}
+            />
+          </label>
           <button
             onClick={() => {
-              setVals({});
-              setSucio(false);
+              soltarElBorradorDelExpediente();
               toast('Cambios descartados.');
             }}
             className="hov-linea"
@@ -3315,16 +4676,17 @@ export default function Rentas({ dest, onDest }: PantallaProps) {
           >
             Deshacer
           </button>
-          {/* «Guardar cambios» decía «Contribuyente guardado» y no mandaba nada.
-              Conectarlo tal cual sería peor: `PUT /rentas/contribuyentes/{id}`
-              sólo admite `nombreRazonSocial`, `condicionEspecial` y `activo`, y
-              los campos del expediente no se leen del backend —son constantes de
-              la maqueta—, así que guardar sobrescribiría el nombre de una persona
-              real con el de la maqueta. Queda apagado con su motivo (#552). */}
+          {/* «Guardar cambios» decía «Contribuyente guardado» y no mandaba nada
+              (#552). Ahora manda `PUT /rentas/contribuyentes/{id}` con la
+              observación y **sólo los campos que esa petición admite**, y sólo
+              los que de verdad cambiaron: lo que no viene, no cambia. */}
           <button
-            disabled
-            aria-disabled="true"
-            title={NO_SE_PUEDE_GUARDAR_EL_EXPEDIENTE}
+            onClick={() => void guardarLaCorreccion()}
+            disabled={corrigiendo || impedimentoDeLaCorreccion() !== undefined}
+            aria-disabled={corrigiendo || impedimentoDeLaCorreccion() !== undefined}
+            aria-describedby="motivo-de-la-correccion"
+            title={impedimentoDeLaCorreccion()}
+            className="hov-acento-2"
             style={{
               border: 0,
               borderRadius: 6,
@@ -3333,12 +4695,24 @@ export default function Rentas({ dest, onDest }: PantallaProps) {
               color: '#fff',
               fontSize: 13.5,
               fontWeight: 500,
-              opacity: 0.55,
-              cursor: 'not-allowed',
+              opacity: corrigiendo || impedimentoDeLaCorreccion() !== undefined ? 0.55 : 1,
+              cursor: corrigiendo || impedimentoDeLaCorreccion() !== undefined ? 'not-allowed' : 'pointer',
+              flex: '0 0 auto',
             }}
           >
-            Guardar cambios
+            {corrigiendo ? 'Guardando…' : 'Guardar cambios'}
           </button>
+          {/* El motivo se LEE, no sólo se pasa por encima con el ratón: un
+              `title` en un botón apagado no lo alcanza ni el teclado ni el
+              lector de pantalla (RNF-082). */}
+          <p
+            id="motivo-de-la-correccion"
+            role="status"
+            style={{ margin: 0, flexBasis: '100%', fontSize: 12, lineHeight: 1.5, color: 'var(--warn-fg)', textWrap: 'pretty' }}
+          >
+            {impedimentoDeLaCorreccion() ??
+              `Se mandarán ${cambiosDeLaCorreccion.map((c) => `«${c[0]}»`).join(', ')} y la observación. Lo demás no viaja.`}
+          </p>
         </div>
       )}
     </Shell>
@@ -3409,29 +4783,119 @@ async function padronPorCriterio(
   };
 }
 
-/**
- * Por qué la declaración jurada no se puede emitir.
- *
- * Es el único documento del módulo que se imprime para que alguien lo firme, y
- * traía dentro el nombre, el DNI, el domicilio, los dos predios con su valúo y
- * los cuatro totales de la maqueta. Ninguno tiene origen: la lectura de la DJ
- * publica su número, su ejercicio, su tipo, sus fechas y su estado, y la cuenta
- * del predial es la determinación, que hoy contesta 422 nombrando el conjunto
- * de parámetros que falta sellar (#540) — no una cuenta que se pueda imprimir.
- */
-const NO_SE_PUEDE_EMITIR_LA_DJ =
-  'La hoja resumen lleva el contribuyente, sus predios con el valúo afecto de cada uno y el impuesto que resulta, y ninguna lectura ' +
-  'publica eso: «GET /rentas/declaraciones/{n}» da el número, el ejercicio, el tipo, las fechas y el estado de la declaración. La ' +
-  'cuenta la hace la determinación del predial, que ya se puede pedir desde «Determinaciones» y hoy contesta 422 porque el ejercicio ' +
-  'no tiene conjunto de parámetros sellado (#540). Se imprimía con las cifras de la maqueta, bajo un «Declaro bajo juramento» (#563).';
+/* ══════════ La hoja resumen de la declaración jurada (#563) ══════════ */
+
+/** El rótulo de los tres controles de la hoja. Es el de la constancia de Consultas. */
+const ROTULO_DE_LA_HOJA: CSSProperties = {
+  display: 'block',
+  fontSize: 10.5,
+  fontWeight: 500,
+  textTransform: 'uppercase',
+  letterSpacing: '.1em',
+  color: 'var(--ink-3)',
+  marginBottom: 5,
+};
 
 /**
- * Por qué el expediente no se puede guardar.
+ * Por qué PU y PR no se emiten, aunque la HR sí.
  *
- * Los cincuenta campos que dibuja no se leen del backend —`ContribuyenteResource`
- * publica ocho— y `PUT /rentas/contribuyentes/{id}` sólo admite tres. Mandarlos
- * escribiría el nombre de la maqueta sobre el de quien esté abierto.
+ * La hoja resumen tiene lectura desde #563; los dos formularios de predio no, y
+ * no es la misma hoja filtrada: llevan la ficha del predio campo a campo
+ * —construcciones, materiales, estado de conservación, antigüedad—, que es lo
+ * que guarda la ficha catastral y lo que ninguna operación del contrato publica
+ * en esa forma. Decirlo es la mitad del trabajo: un formulario que no sale y no
+ * dice por qué se lee como un formulario que esta declaración no necesita.
  */
+const SIN_FORMULARIO_DE_PREDIO =
+  'PU y PR no se emiten todavía: no son la hoja resumen filtrada, sino la ficha del predio campo a campo —construcciones, ' +
+  'materiales, estado de conservación, antigüedad— y ninguna lectura del contrato la publica en la forma de esos dos formularios. ' +
+  'Lo que hay de cada predio se ve en Catastro, en su ficha.';
+
+/**
+ * Las columnas de la tabla de predios, cambiadas por las que el recurso publica.
+ *
+ * El manual dibuja cinco y la tercera dice **«Uso»**: `PredioDeLaHojaResource`
+ * publica `tipo`, que es `URBANO` o `RUSTICO`. No es el mismo dato con otro
+ * nombre —el uso es el de la ficha catastral, «Casa habitación», «Terreno sin
+ * construir»— y ninguna lectura de la hoja lo publica, así que la columna se
+ * rotula por lo que lleva dentro (RNF-080, y el precedente de #427: parecerse
+ * no es serlo).
+ *
+ * Y son siete y no cinco porque el recurso publica también el autovalúo y lo
+ * exonerado de cada predio: son las dos cifras que explican de dónde sale el
+ * valúo afecto, y esconderlas dejaría el papel diciendo un resultado sin su
+ * cuenta.
+ */
+const COLS_DE_LA_HOJA: ColDef[] = [
+  ['Código predial', 0],
+  ['Ubicación', 0],
+  ['Tipo', 0],
+  ['% prop.', 1],
+  ['Autovalúo S/', 1],
+  ['Exonerado S/', 1],
+  ['Valuo afecto S/', 1],
+];
+
+/**
+ * Una fila de la tabla, con lo que el servidor publicó y no más.
+ *
+ * Las tres cifras son nulas cuando no hay determinación del ejercicio, y ahí va
+ * el guion: un cero en «Autovalúo» dice que el predio no vale nada, y lo dice
+ * en un papel firmado.
+ */
+function filaDeLaHoja(p: PredioDeLaHoja): string[] {
+  return [
+    p.codRefCatastral,
+    p.direccion,
+    p.tipo,
+    p.porcentajePropiedad,
+    p.autovaluo ?? SIN_DATO,
+    p.valuoExonerado ?? SIN_DATO,
+    p.valuoAfecto ?? SIN_DATO,
+  ];
+}
+
+/**
+ * Las celdas de la cabecera del papel.
+ *
+ * Sin declarante van todas con guion: `declarante` nulo significa que el
+ * contribuyente de la DJ ya no está en el padrón, y ahí no hay nombre que
+ * poner. Las cuatro de la declaración —tipo, ejercicio, presentación y estado—
+ * salen de la propia DJ y siempre están.
+ */
+function celdasDelDeclarante(h: HojaDeDeclaracion): [string, string][] {
+  const quien = h.declarante;
+  return [
+    ['Contribuyente', quien?.nombre ?? SIN_DATO],
+    ['Código', quien?.codigo ?? SIN_DATO],
+    ['Documento', quien?.documento ?? SIN_DATO],
+    ['Domicilio fiscal', quien?.domicilioFiscal ?? SIN_DATO],
+    ['Tipo de declaración', h.declaracion.tipo],
+    ['Ejercicio', String(h.declaracion.ejercicio)],
+    ['Presentada', h.declaracion.fechaPresentacion + (h.declaracion.fueraDePlazo ? ' · fuera de plazo' : '')],
+    ['Estado', h.declaracion.estado],
+  ];
+}
+
+/**
+ * Los cuatro totales del pie, con lo que el servidor publicó y no más.
+ *
+ * Los dos primeros salen de la última determinación predial del ejercicio y son
+ * nulos cuando no la hay. Los dos últimos **no viajan nunca**: el derecho de
+ * emisión es `DERECHO_EMISION_PREDIAL` del conjunto sellado —cifra de ordenanza
+ * local, D-02b— y sin él no hay total a pagar que escribir; componerlo aquí
+ * sumándole un cero al insoluto sería inventar la cifra que se cobra (regla 5,
+ * RNF-083). El motivo de cada guion sale impreso debajo, en `faltan`.
+ */
+function totalesDeLaHoja(h: HojaDeDeclaracion): [string, string][] {
+  return [
+    ['Valuo afecto', h.valuoAfectoTotal ?? SIN_DATO],
+    ['Impuesto insoluto', h.impuestoInsoluto ?? SIN_DATO],
+    ['Derecho de emisión', SIN_DATO],
+    ['Total a pagar', SIN_DATO],
+  ];
+}
+
 /**
  * Lo que la franja dice cuando el alta abarca mas de una cuota (#538).
  *
@@ -3449,11 +4913,6 @@ const NO_SE_PUEDE_EMITIR_LA_DJ =
 const PIE_DEL_RANGO = (cuantas: number, porCuota: string, total: string): string =>
   `Son ${cuantas} obligaciones, una por cuota: el desglose de arriba se repite en cada una y no se reparte entre ellas. ` +
   `${porCuota} × ${cuantas} = ${total}, que es lo que quedará en la cuenta corriente.`;
-
-const NO_SE_PUEDE_GUARDAR_EL_EXPEDIENTE =
-  'Aquí todavía no se guarda nada: los campos de este expediente no se leen del padrón —son los de la maqueta— y la operación que ' +
-  'corrige un contribuyente sólo admite el nombre o razón social, la condición especial y la baja. Guardar escribiría datos de otra ' +
-  'persona sobre esta ficha (#552).';
 
 /**
  * Por qué ninguna de las seis determinaciones puede escribir todavía.
@@ -3479,10 +4938,11 @@ const NO_SE_PUEDE_GUARDAR_EL_EXPEDIENTE =
  * Los motivos por los que hay filtros apagados, agrupados y con sus rótulos.
  *
  * Agrupar no es cosmética: en el predial los tres apagados lo están por lo mismo
- * —el contrato los declara y el controlador no los lee— y en el masivo las dos
- * cajas de cifra lo están por otro —son valores del conjunto sellado—; repetir
- * el párrafo por campo empuja la rejilla y hace que deje de leerse, y decir un
- * solo motivo para todos sería decir el equivocado para alguno.
+ * —acotar por declaración jurada sería otro cálculo, no un filtro, y por eso
+ * #576 los retiró del contrato— y en el masivo las dos cajas de cifra lo están
+ * por otro —son valores del conjunto sellado—; repetir el párrafo por campo
+ * empuja la rejilla y hace que deje de leerse, y decir un solo motivo para
+ * todos sería decir el equivocado para alguno.
  */
 function motivosDeLosFiltrosApagados(filtros: readonly FiltroDef[]): [motivo: string, cuales: string][] {
   const porMotivo = new Map<string, string[]>();

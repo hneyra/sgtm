@@ -586,6 +586,75 @@ export function descargarHojaInformativa(numero: string, formato: FormatoDeDocum
   return descargar(`/transito/papeletas/${encodeURIComponent(numero)}/hoja-informativa`, { formato });
 }
 
+/* ══════════ La constancia libre: una escritura que devuelve el papel ══════════ */
+
+/** Lo que queda de emitir una constancia: su número y el archivo entregado. */
+export type ConstanciaEmitida = {
+  /** El de `X-Sgtm-Numero`. `null` si el servidor no lo puso; no se inventa. */
+  numero: string | null;
+  archivo: string;
+};
+
+/**
+ * Emite la constancia de no registrar infracciones y entrega el papel.
+ *
+ * **No es un reporte: es un acto que numera.** Cada llamada gasta un correlativo
+ * de `documento_emitido`, escribe una fila en `constancia_libre` y deja su
+ * asiento en la bitácora, así que no se pide al abrir la pantalla ni se ofrece
+ * un botón por formato como en los trece reportes descargables —tres botones
+ * serían tres constancias—.
+ *
+ * <h2>El cuerpo es lista blanca, y va corto a propósito</h2>
+ *
+ * `PeticionDeConstanciaLibre` declara siete campos y aquí viajan cinco. Los dos
+ * que faltan son `vehiculoId` y `solicitanteId`, y no es un olvido: son
+ * `@Nullable`, el servidor **no los usa para decidir nada** —la comprobación de
+ * papeletas pendientes va por la placa— y esta pantalla no tiene con qué
+ * resolverlos. Mandar un identificador adivinado ataría la constancia al
+ * vehículo o a la persona equivocados en la fila que queda guardada, y eso no
+ * se ve en el papel.
+ *
+ * <h2>La negativa es un 409 con la lista</h2>
+ *
+ * Si a `verificadaAl` hay una sola papeleta pendiente el servidor contesta 409 y
+ * pone en `detalles` los números de hasta veinte de ellas. `descargar()` lo
+ * traduce a un `ErrorDeApi` con esos `detalles` dentro: quien lo dibuje tiene
+ * que enseñarlos, porque son lo que hay que pagar.
+ */
+export async function emitirConstanciaLibre(peticion: {
+  placa: string;
+  /** El día al que se acredita. **No es el de emisión** (regla 9, RNF-075). */
+  verificadaAl: string;
+  /** El nombre de quien la pide. Ausente = el papel sale con ese renglón vacío. */
+  solicitante?: string;
+  observacion: string;
+  formato: FormatoDeDocumento;
+}): Promise<ConstanciaEmitida> {
+  let entregada: ConstanciaEmitida = { numero: null, archivo: '' };
+  await descargar(
+    '/transito/constancias-libres',
+    {},
+    undefined,
+    {
+      metodo: 'POST',
+      cuerpo: {
+        placa: peticion.placa,
+        verificadaAl: peticion.verificadaAl,
+        /* `undefined` no se serializa, así que un solicitante en blanco no
+           viaja como cadena vacía: la clave no llega y el servidor lo lee como
+           «no se identificó», que es lo que es. */
+        solicitante: peticion.solicitante,
+        formato: peticion.formato,
+        observacion: peticion.observacion,
+      },
+      alEntregar: (d) => {
+        entregada = { numero: d.numero, archivo: d.nombre };
+      },
+    },
+  );
+  return entregada;
+}
+
 /* ══════════ Las tres escrituras que la pantalla puede componer ══════════ */
 
 /** Es `DescargoResource`. */
