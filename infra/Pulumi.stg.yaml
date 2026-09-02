@@ -75,9 +75,14 @@ config:
   # porque compara la base con **esta** línea y no con `main`. Ese tercer número lo mide
   # ahora `infra/verificaciones/deriva-de-migraciones.test.ts`, que corre sin clúster.
   #
-  # `6ce252c0` (2026-09-02T01:09Z, `publicar-imagenes.yml` en verde para las tres
-  # imágenes) es el `sha` de `main` al que se sube, y trae las 61.
-  sgtm:applicationBootstrapVersion: 6ce252c08b2b4ac900b82537b2365c3fa3a3a82d
+  # `cb4c1482` (2026-09-02T05:49Z, `publicar-imagenes.yml` en verde para las tres
+  # imágenes) es el `sha` de `main` al que se sube, y trae **62**.
+  #
+  # Se subió dos veces en el mismo PR, y la segunda la pidió la guarda nueva: se había
+  # puesto en `6ce252c0` —61 migraciones— y mientras se medía entró `V73` en `main`;
+  # `deriva-de-migraciones.test.ts` se puso roja sola, sin provocarla, diciendo «declara
+  # 61, origin/main declara 62: le faltan 1 (V73…)». Es exactamente el aviso que faltaba.
+  sgtm:applicationBootstrapVersion: cb4c1482565f5e7c2842aec878cdb730c2c7a41a
   sgtm:webReplicas: "1"
   # La municipalidad de ensayo. El ubigeo es el de Catacaos, igual que en prod (D-01,
   # 2026-08-24), porque stg restaura los respaldos de prod anonimizados (INF-03 §2 y

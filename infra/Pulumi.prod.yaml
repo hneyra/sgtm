@@ -138,8 +138,8 @@ config:
   # siguiente, **no se ha ejecutado nunca contra producción**. Por eso ese guion pasa a
   # correr también en `deteccion-de-deriva`, que sí corre a diario.
   #
-  # `6ce252c0` (2026-09-02T01:09Z, `success` en los tres jobs de imagen) trae las 61.
-  sgtm:applicationBootstrapVersion: 6ce252c08b2b4ac900b82537b2365c3fa3a3a82d
+  # `cb4c1482` (2026-09-02T05:49Z, `success` en los tres jobs de imagen) trae las 62.
+  sgtm:applicationBootstrapVersion: cb4c1482565f5e7c2842aec878cdb730c2c7a41a
   # La municipalidad que se implanta. D-01 —municipalidad piloto— se decidió el
   # 2026-08-24: Municipalidad Distrital de Catacaos (`decisiones-abiertas.md`), en
   # reemplazo de la Municipalidad Distrital de Chala que se había decidido un día antes.
