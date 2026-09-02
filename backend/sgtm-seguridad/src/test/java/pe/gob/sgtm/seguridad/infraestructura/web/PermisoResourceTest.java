@@ -21,11 +21,12 @@ import pe.gob.sgtm.seguridad.aplicacion.AdministrarPermisos;
  *
  * <h2>Por que se prueba llamando al mapeo y no por HTTP</h2>
  *
- * <p>Porque hoy <b>ninguna ruta devuelve una fila de usuario</b>: {@code GET
- * /seguridad/grupos/&#123;id&#125;/permisos} lee las del grupo, y la escritura de la excepcion
- * ({@code AdministrarPermisos.fijarParaUsuario}) sigue sin endpoint —#572—. Esperar a que la haya
- * para comprobar esto seria dejar el defecto en pie hasta entonces; el mapeo es donde vive, y es
- * donde se mide.
+ * <p>Cuando se escribio, <b>ninguna ruta devolvia una fila de usuario</b>: {@code GET
+ * /seguridad/grupos/&#123;id&#125;/permisos} lee las del grupo y la escritura de la excepcion no
+ * tenia endpoint. Desde #585 si lo tiene —{@code PUT /seguridad/usuarios/&#123;id&#125;/permisos}
+ * responde con estas mismas filas, y {@code PermisosDeUnUsuarioFronteraTest} lo comprueba por HTTP
+ * contra PostgreSQL—, pero esta prueba se queda: el defecto vive en el <b>mapeo</b>, y aqui se mide
+ * sin levantar una base.
  */
 @DisplayName("El recurso del permiso dice de quien es (#543)")
 class PermisoResourceTest {

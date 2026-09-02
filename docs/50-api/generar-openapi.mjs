@@ -1392,6 +1392,52 @@ const OPERACIONES_ADICIONALES = {
         permisos y no existir son dos respuestas distintas.
       `),
     },
+    // Y la ESCRITURA de esa excepcion, que es lo que #543 dejo sin poder tocar:
+    // el dominio existia y no la llamaba nadie (#585). Misma ruta que la lectura
+    // de arriba y otro verbo, como `permisos_de_grupo` sobre la suya.
+    {
+      operationId: 'fijar_permisos_de_usuario',
+      metodo: 'put',
+      ruta: '/api/v1/seguridad/usuarios/{id}/permisos',
+      titulo: 'Excepción de permisos de un usuario',
+      descripcionesDeRuta: {
+        id: 'El usuario, por el `id` que publica cada fila de `GET /seguridad/usuarios`',
+      },
+      descripcion: literal(`
+        Fija la **excepción propia** de una cuenta sobre los accesos que viajen en el
+        cuerpo (#585, RF-121). Es la única forma de expresar «este cajero está en el
+        grupo de caja y a él no se le deja anular recibos» sin sacarlo del grupo ni
+        fabricarle un grupo de una persona; hasta aquí sólo se podía por SQL directo,
+        que no deja fila de auditoría con quien lo decidió ni pasa por la guarda del
+        último administrador.
+
+        **Mismo cuerpo y mismo *upsert* por acceso que \`PUT /seguridad/grupos/{id}/permisos\`**:
+        recibe la lista de accesos con sus privilegios, y un acceso **ausente del cuerpo
+        se queda como estaba** — una lista parcial no puede traducirse en retirar en
+        silencio todo lo demás.
+
+        **Lo que cambia es qué significa \`privilegios: []\`.** En el grupo es «este grupo
+        no otorga nada aquí»; en la cuenta es una **negación** que sustituye a lo que su
+        grupo le da, y la fila **se escribe en cero, nunca se borra**: sin ella el acceso
+        volvería a heredar del grupo, y «se le negó expresamente» y «nunca lo tuvo»
+        volverían a ser el mismo JSON — justo lo que el \`GET\` de esta ruta existe para
+        distinguir. La clave que **falta** en el cuerpo no es lo mismo que la lista
+        vacía: se rechaza con 422, porque retirar siete privilegios por un campo
+        olvidado no puede ser el resultado de una omisión.
+
+        Exige la observación del usuario, obligatoria (regla 10, RNF-052), y queda en la
+        auditoría como \`PERMISO\` con quien la firmó (ADR-0008 §5). Sin ella, **422**.
+
+        **Puede contestar 409**, con la misma guarda que la matriz del grupo y contando
+        con la precedencia del guardia: un cambio que dejara a la municipalidad **sin
+        ningún usuario capaz de administrar permisos** se rechaza, y de ahí no se sale
+        por el sistema. La comprobación corre **después** de escribir y dentro de la
+        misma transacción, así que lo que deshace el cambio es el rollback: no se
+        escribe nada.
+
+        Un \`id\` que no existe en esta municipalidad es **404**.
+      `),
+    },
     // Lo CONFIGURADO de esa misma cuenta, que es otra pregunta y por eso otra
     // ruta: la de arriba no cambia (#583).
     {
