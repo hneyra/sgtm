@@ -294,6 +294,12 @@ class TitularesDelPredioControllerTest {
             return List.of();
         }
 
+        /** No lo usa esta pantalla, pero el puerto lo declara desde #680. */
+        @Override
+        public boolean estaEnElPadron(long predioId) {
+            return true;
+        }
+
         /** No lo usa esta pantalla —resuelve un predio al clic—, pero el puerto lo declara. */
         @Override
         public java.util.Map<Long, List<TitularDelPredio>> deVarios(

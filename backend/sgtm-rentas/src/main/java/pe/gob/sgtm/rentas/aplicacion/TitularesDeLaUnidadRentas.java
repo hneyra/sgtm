@@ -13,6 +13,7 @@ import pe.gob.sgtm.catastro.TitularesDelPredio;
 import pe.gob.sgtm.contribuyentes.DirectorioDeContribuyentes;
 import pe.gob.sgtm.contribuyentes.ResumenDeContribuyente;
 import pe.gob.sgtm.cuentacorriente.TitularesDeLaUnidad;
+import pe.gob.sgtm.cuentacorriente.TitularesDeLaUnidad.TitularidadDeLaUnidad;
 import pe.gob.sgtm.rentas.dominio.Vehiculo;
 import pe.gob.sgtm.rentas.dominio.VehiculoRepository;
 
@@ -48,24 +49,45 @@ public class TitularesDeLaUnidadRentas implements TitularesDeLaUnidad {
         this.directorio = directorio;
     }
 
+    /**
+     * De quien es el predio, y si esta en el padron cuando no es de nadie (#680).
+     *
+     * <p><b>La segunda consulta solo se hace cuando la primera vuelve vacia</b>, y no es una
+     * optimizacion cosmetica: una cuota de titularidad referencia al predio ({@code
+     * titularidad_predio_fk}, V1), asi que un titular vigente <b>implica</b> que el predio existe y
+     * preguntarlo otra vez seria preguntar algo que la respuesta anterior ya contesto. El camino de
+     * todos los dias —el predio con titular— sigue costando una consulta.
+     */
     @Override
     @Transactional(readOnly = true)
-    public List<TitularDeLaUnidad> delPredio(long predioId, LocalDate fecha) {
+    public TitularidadDeLaUnidad delPredio(long predioId, LocalDate fecha) {
         Set<Long> ids = new LinkedHashSet<>();
         for (TitularDelPredio cuota : predios.de(predioId, fecha)) {
             ids.add(cuota.contribuyenteId());
         }
-        return conNombre(ids);
+        if (!ids.isEmpty()) {
+            return TitularidadDeLaUnidad.de(conNombre(ids));
+        }
+        return predios.estaEnElPadron(predioId)
+                ? TitularidadDeLaUnidad.sinTitular()
+                : TitularidadDeLaUnidad.fueraDelPadron();
     }
 
+    /**
+     * De quien es el vehiculo.
+     *
+     * <p>Aqui basta una consulta y no hay tercera situacion: {@code vehiculo.contribuyente_id} es
+     * {@code NOT NULL} (V2), de modo que un vehiculo que esta en el padron tiene titular siempre y
+     * {@code sinTitular()} no se puede producir por este camino.
+     */
     @Override
     @Transactional(readOnly = true)
-    public List<TitularDeLaUnidad> delVehiculo(long vehiculoId, LocalDate fecha) {
+    public TitularidadDeLaUnidad delVehiculo(long vehiculoId, LocalDate fecha) {
         return vehiculos
                 .findById(vehiculoId)
                 .map(Vehiculo::contribuyenteId)
-                .map(quien -> conNombre(Set.of(quien)))
-                .orElseGet(List::of);
+                .map(quien -> TitularidadDeLaUnidad.de(conNombre(Set.of(quien))))
+                .orElseGet(TitularidadDeLaUnidad::fueraDelPadron);
     }
 
     /**
