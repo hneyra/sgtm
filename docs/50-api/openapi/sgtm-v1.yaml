@@ -5438,6 +5438,46 @@ paths:
           $ref: "#/components/responses/SinMunicipalidad"
         "422":
           $ref: "#/components/responses/ErrorDeValidacion"
+  "/tesoreria/cajas":
+    get:
+      operationId: cajas_listado
+      summary: "Ventanillas de la municipalidad"
+      description: "El catálogo de cajas: código, rótulo, el área a la que se imputa lo que recaudan y si siguen abiertas. Es lo que llena el desplegable «Caja» de las cinco pantallas de Tesorería que hoy piden ese código tecleado —las dos ventanillas de cobro, el cierre y arqueo, el avance de recaudación y el filtro del listado de recibos—. Sin filtros: una municipalidad tiene cuatro ventanillas, no cuarenta mil, y quien ya sabe el código no necesita el catálogo. **Salen también las dadas de baja**, con `activa: false`, porque sus recibos siguen existiendo (RNF-051) y el filtro «Caja» del duplicado tiene que poder nombrarlas; devolver sólo las abiertas recortaría la lista en silencio. El área viaja legible —código y nombre— y es nula en la caja tributaria general, que no cuelga de ninguna. Una municipalidad recién implantada y todavía sin ventanillas devuelve una página vacía con `totalElementos: 0`, no un 404."
+      tags: ["Tesorería"]
+      parameters:
+        - name: pagina
+          in: query
+          required: false
+          description: "Pagina que se pide, contada desde 0"
+          schema: { type: string }
+          example: "0"
+        - name: tamano
+          in: query
+          required: false
+          description: "Filas por pagina"
+          schema: { type: string }
+          example: "20"
+        - name: ordenarPor
+          in: query
+          required: false
+          description: "Campo por el que se ordena, en camelCase"
+          schema: { type: string }
+        - name: direccion
+          in: query
+          required: false
+          description: "ASCENDENTE | DESCENDENTE"
+          schema: { type: string }
+          example: "ASCENDENTE"
+      responses:
+        200:
+          description: Operacion realizada
+          content:
+            application/json:
+              schema: { type: object }
+        "403":
+          $ref: "#/components/responses/SinMunicipalidad"
+        "422":
+          $ref: "#/components/responses/ErrorDeValidacion"
   "/tesoreria/caja/cobranza":
     post:
       operationId: caja_tributaria
