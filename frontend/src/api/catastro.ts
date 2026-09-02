@@ -54,7 +54,21 @@ export type TitularesDelPredio = {
     codigo: string | null;
     nombre: string | null;
     condicion: string;
-    porcentaje: number;
+    /**
+     * Una CADENA, «50.0000», y no un número.
+     *
+     * `Porcentaje` se serializa como texto igual que `Dinero` (RNF-055), y aquí
+     * estaba declarado `number` mientras `api/consultas.ts` lo declaraba
+     * `string` para el mismo `TitularesDelPredioResource`. Los dos no podían
+     * tener razón, y la mentira no la caza el compilador: se ve el día que
+     * alguien SUMA la lista, porque `0 + "50.0000" + "50.0000"` concatena y da
+     * `NaN`, mientras que con un solo titular la coerción del `*` lo salva y
+     * parece que funciona.
+     *
+     * Se conserva la escala del padrón: son cuatro decimales, y acortarla al
+     * dibujar cambia una cifra del padrón.
+     */
+    porcentaje: string;
   }[];
 };
 

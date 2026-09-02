@@ -2360,7 +2360,9 @@ export default function Catastro({ dest, onDest }: PantallaProps) {
      «Valor asignado» sobre una celda que nadie publica se lee como un dato que
      falta, cuando lo que falta es la columna. Lo que el manual dibuja y el
      sistema no guarda se dice en el pie. */
-  const tablaConectada = (titulo: string): { cols: readonly ColumnaDeTabla[]; filas: readonly (readonly string[])[]; nota: string } => {
+  const tablaConectada = (
+    titulo: string,
+  ): { cols: readonly ColumnaDeTabla[]; filas: readonly (readonly string[])[]; nota: string; aviso?: string } => {
     const raya = (x: string | null | undefined) => (x === null || x === undefined || x === '' ? SIN_DATO : x);
     if (titulo === 'Titulares registrados') {
       const t = titulares.datos;
@@ -2371,6 +2373,25 @@ export default function Catastro({ dest, onDest }: PantallaProps) {
           t === null
             ? 'Los titulares no se han podido leer.'
             : 'Vigentes al ' + t.vigenteA + '. El manual dibuja además D.N.I., R.U.C., estado civil y fecha de inicio: la lectura de titulares publica el código, el nombre, la condición y la cuota, y nada más. Registrar una cuota es otro acto, con su propia observación.',
+        /* El predio sin ninguna cuota y el predio con las cuotas cortas son dos
+           cosas distintas y las dos se callaban: la tabla salía vacía sin una
+           línea que lo dijera, o con una fila al 0,349 % que se lee como la
+           propiedad entera. Ver `huecoDeTitularidad`. */
+        aviso:
+          t === null || titulares.cargando
+            ? undefined
+            : t.titulares.length === 0
+              ? 'Este predio no tiene ninguna titularidad vigente al ' +
+                t.vigenteA +
+                '. No es que no se hayan podido leer: es que no hay ninguna registrada, así que el predio no tiene hoy a quién cargarle el impuesto.'
+              : ((h) =>
+                  h === null
+                    ? undefined
+                    : 'Las cuotas registradas suman ' +
+                      h +
+                      ' %, no 100 %. El resto del predio no tiene titular vigente registrado, y el % de propiedad pondera la base imponible: mientras siga así, este predio tributa por la parte registrada y no por su valor entero.')(
+                  huecoDeTitularidad(t.titulares.map((x) => x.porcentaje)),
+                ),
       };
     }
     if (titulo === 'Pisos declarados') {
@@ -2597,7 +2618,20 @@ export default function Catastro({ dest, onDest }: PantallaProps) {
                   que aquí no hay nada declarado todavía.
                 </p>
               ) : (
-                t !== null && <p style={PIE}>{t.nota}</p>
+                t !== null && (
+                  <>
+                    {/* El aviso va DEBAJO de la tabla y encima del pie: quien
+                        acaba de leer las filas es quien tiene que enterarse de
+                        que no las cubren todas, y arriba competiría con el
+                        título por la primera mirada. */}
+                    {t.aviso !== undefined && (
+                      <div style={{ padding: '0 16px 12px' }}>
+                        <Aviso tono="warn">{t.aviso}</Aviso>
+                      </div>
+                    )}
+                    <p style={PIE}>{t.nota}</p>
+                  </>
+                )
               )}
             </div>
           );
@@ -5117,6 +5151,52 @@ function ubicacionDe(p: PredioDelCatastro): string {
 }
 
 /**
+ * Lo que las cuotas registradas dejan sin dueño, dicho sólo cuando lo dejan.
+ *
+ * <h2>Por qué hace falta decirlo</h2>
+ *
+ * `titularidad_no_excede_trg` impide que las cuotas de un predio pasen del
+ * 100 %, y **no impide que se queden cortas**: eso es a propósito, porque entre
+ * cerrar una cuota y abrir la siguiente el total baja de 100 en la misma
+ * transacción (#16). El efecto es que un padrón real puede tener predios con la
+ * mitad —o con el 0,349 %— de su propiedad registrada, y la tabla los enseña
+ * igual que a los completos.
+ *
+ * Medido contra la base: en Catacaos **304 de los 9 445 predios con titular**
+ * tienen cuotas vigentes que no suman 100, desde un 0,349 % hacia arriba, y
+ * otros **4 977 de los 14 422 no tienen ninguna** — el mismo 34,5 % que #545
+ * midió por el otro lado, los que no llegaban a la detección de omisos.
+ *
+ * Y no es un detalle de registro: el `%` de propiedad **pondera la base
+ * imponible** de cada predio (NEG-05), así que un predio cuyas cuotas suman
+ * 0,349 % tributa por 0,349 % de su valor. Una fila que dice «COPROPIETARIO ·
+ * 0.3490» y nada más se lee como la propiedad entera del predio, que es la
+ * lectura plausible y equivocada.
+ *
+ * Se dice el porcentaje que suma lo registrado y **no** se dice de quién es lo
+ * que falta: eso no lo sabe nadie. La suma es una propiedad de las filas que la
+ * tabla acaba de dibujar, no un dato del padrón, y el texto lo dice así.
+ */
+function huecoDeTitularidad(porcentajes: readonly string[]): string | null {
+  if (porcentajes.length === 0) return null;
+  /* Llegan como cadena —«50.0000»—, igual que el dinero (RNF-055), y se leen
+     AQUI y en un solo sitio. Sumarlas sin leerlas concatena: `0 + "50.0000" +
+     "50.0000"` da `"050.000050.0000"`, y con un solo titular la coerción del
+     `*` lo salva, así que el defecto sólo aparece en los predios con dos. */
+  const numeros = porcentajes.map(Number);
+  if (numeros.some(Number.isNaN)) return null;
+  /* En CUATRO decimales, que es la escala del dominio `porcentaje`: el padrón
+     dice `0.3490` y redondear a dos lo enseñaría como «0,35», que es cambiar
+     una cifra del padrón al dibujarla. Se redondea sólo para deshacer el
+     último bit de la coma flotante —0.1 + 0.2 no da 0.3—, no para acortar. */
+  const suma = Math.round(numeros.reduce((a, b) => a + b, 0) * 10000) / 10000;
+  if (suma >= 100) return null;
+  /* Sin ceros de relleno a la derecha: «50 %» y no «50,0000 %». Los que la
+     cuota sí tiene se conservan, porque son suyos. */
+  return String(suma).replace('.', ',');
+}
+
+/**
  * Los titulares en una línea, con sus cuotas.
  *
  * Un predio puede tener varios —dos cónyuges al 50 %, una sucesión con tantos
@@ -5127,7 +5207,7 @@ function ubicacionDe(p: PredioDelCatastro): string {
 function textoDeTitulares(
   cargando: boolean,
   error: ErrorDeApi | null,
-  datos: { titulares: { nombre: string | null; porcentaje: number }[] } | null,
+  datos: { titulares: { nombre: string | null; porcentaje: string }[] }| null,
 ): string {
   if (cargando) return 'Resolviendo el titular…';
   if (error) return error.codigo === 'SIN_PRIVILEGIO' ? 'Sin acceso al padrón de contribuyentes' : 'No se pudo resolver el titular';
