@@ -15,9 +15,15 @@ import pe.gob.sgtm.web.ProblemaDeNegocio;
  * <p>No la instancia nadie. Existe para que {@code DiscriminadorDeLoQueFaltaPublicarTest} pueda
  * demostrar que la guarda muerde: una regla que no puede fallar no protege nada.
  *
- * <p>Los tres primeros metodos son las tres formas en que el defecto aparece de verdad, y son las
- * que el escaner tiene que encontrar. Los dos ultimos son el contraste, y son los que impiden
- * arreglarlo gritando siempre: uno traduce con el ayudante y el otro no contesta 422.
+ * <p>Los <b>cuatro</b> primeros metodos son las formas en que el defecto aparece de verdad, y son
+ * las que el escaner tiene que encontrar. Los tres ultimos son el contraste, y son los que impiden
+ * arreglarlo gritando siempre: dos traducen con el ayudante —uno por cada codigo— y el tercero no
+ * compone ninguna respuesta.
+ *
+ * <p><b>El cuarto entro con #723</b>, y hasta entonces era uno de los buenos: se llamaba {@code
+ * enReglaPorNoSer422} y el escaner lo dejaba pasar por contestar 404. Esa era exactamente la puerta
+ * por la que las tres lecturas de cuadro de catastro llevaban mudas desde #691 — el miembro les
+ * faltaba igual, y el codigo de estado no es lo que un programa lee.
  */
 public final class MuestraDeControladorSinDiscriminador {
 
@@ -64,12 +70,38 @@ public final class MuestraDeControladorSinDiscriminador {
         }
     }
 
-    /** BUENO: capturar una de la familia sin contestar 422 no es asunto de esta guarda. */
-    public String enReglaPorNoSer422(Ejercicio ejercicio) {
+    /**
+     * MALO desde #723: el 404 tampoco lleva el miembro, y por ahi se colaban las tres lecturas de
+     * cuadro de catastro. Cambiar el numero no cambia lo que el cliente puede hacer con la
+     * respuesta.
+     */
+    public String sinConjuntoSelladoEnUn404(Ejercicio ejercicio) {
         try {
             return parametros.vigenteEn(ejercicio).toString();
         } catch (LectorDeParametros.EjercicioSinSellar sinSellar) {
             throw new ProblemaDeNegocio(CodigoDeError.NO_ENCONTRADO, sinSellar.getMessage());
+        }
+    }
+
+    /** BUENO: el mismo 404, por el sitio que si pone el discriminador (#723). */
+    public String enReglaConUn404(Ejercicio ejercicio) {
+        try {
+            return parametros.vigenteEn(ejercicio).toString();
+        } catch (LectorDeParametros.EjercicioSinSellar sinSellar) {
+            throw FaltaPublicar.noEncontrado(sinSellar);
+        }
+    }
+
+    /**
+     * BUENO: capturar una de la familia y <b>no componer ninguna respuesta</b> no es asunto de esta
+     * guarda. Es lo que hace el resumen anual de licencias: cuenta los anios que si puede contar y
+     * dice por que le falta la cifra del que no.
+     */
+    public String enReglaPorNoContestarNada(Ejercicio ejercicio) {
+        try {
+            return parametros.vigenteEn(ejercicio).toString();
+        } catch (LectorDeParametros.EjercicioSinSellar sinSellar) {
+            return "sin conjunto sellado: " + sinSellar.getMessage();
         }
     }
 }
