@@ -258,7 +258,7 @@ class ConteoDeLaDeteccionTest {
     }
 
     @Test
-    @DisplayName("la ficha se queda en el conteo: un predio con dos versiones que cubren la fecha")
+    @DisplayName("el conteo dice lo que la grilla ensena, y el solape ya no se puede escribir")
     void laFichaSeQuedaEnElConteo() {
         TenantContext.fijar(new MunicipalidadId(municipalidadConFichaSuperpuesta));
 
@@ -273,16 +273,19 @@ class ConteoDeLaDeteccionTest {
                                                 .size());
 
         assertThat(contar(DeteccionRepositoryJdbc.CONTEO_SIN_CONDICION, sinFiltros()))
-                .as(
-                        "el JOIN de ficha_catastral NO se puede quitar del conteo aunque tampoco lo"
-                                + " use: ficha_vigente_uq es PARCIAL —solo impide dos versiones"
-                                + " ABIERTAS—, asi que una abierta y una cerrada pueden cubrir la"
-                                + " misma fecha y la pagina devuelve dos filas de ese predio. Un"
-                                + " conteo que no las vea diria un total menor que las filas que la"
-                                + " grilla ensena, y la ultima pagina saldria vacia sin que nada lo"
-                                + " explique")
+                .as("el conteo dice exactamente las filas que la grilla ensena")
                 .isEqualTo(filasDeLaPagina)
-                .isEqualTo(4L);
+                .isEqualTo(3L);
+
+        // Y el dato que hacia falta para que dijera 4 ya no se puede escribir: es lo que #669
+        // cerro, y sale de esta misma prueba. Cuando #561 se escribio, este INSERT entraba.
+        // Se compara el texto y no el objeto: `assertThat(Throwable)` es ambiguo aqui, y ademas
+        // asi un `null` —que seria «el INSERT entro»— falla diciendo «null», que es legible.
+        assertThat(String.valueOf(intentarFichaQueSeSuperpone(municipalidadConFichaSuperpuesta)))
+                .as(
+                        "una version abierta y una cerrada que cubren la misma fecha hacen que la"
+                                + " grilla ensene el predio dos veces; V72 lo rechaza")
+                .contains("ficha_vigencias_no_se_pisan");
     }
 
     @Test
@@ -495,7 +498,6 @@ class ConteoDeLaDeteccionTest {
         sembrarMunicipalidad(municipalidadVecina, PREDIOS);
         sembrarMunicipalidad(municipalidadPequena, PREDIOS_DEL_PADRON_PEQUENO);
         sembrarMunicipalidad(municipalidadConFichaSuperpuesta, 3);
-        sembrarFichaQueSeSuperpone(municipalidadConFichaSuperpuesta);
         try (Connection owner = base.conexion(BaseDeDatosDePrueba.OWNER);
                 PreparedStatement sentencia =
                         owner.prepareStatement(
@@ -585,18 +587,24 @@ class ConteoDeLaDeteccionTest {
     }
 
     /**
-     * Una segunda version de ficha del primer predio que <b>tambien</b> cubre la fecha de corte.
+     * <b>Intenta</b> sembrar una segunda version de ficha del primer predio que tambien cubre la
+     * fecha de corte, y devuelve lo que el motor conteste.
      *
-     * <p>El esquema lo admite: {@code ficha_vigente_uq} es parcial —{@code WHERE vigencia_hasta IS
-     * NULL}—, asi que solo impide dos versiones ABIERTAS y la cerrada puede solaparse con la
-     * abierta. Con ella, ese predio sale dos veces en la grilla, y el conteo tiene que decir dos.
+     * <h2>Por que ya no siembra, y esto es lo que #669 cambio</h2>
      *
-     * <p>El camino de escritura no produce este solape —{@code ActualizarFichaCatastral} cierra la
-     * anterior el dia antes de abrir la nueva—, asi que se siembra por SQL: lo que se prueba no es
-     * que el sistema lo escriba, sino que el conteo diga lo que la grilla ensena <b>sea cual sea el
-     * dato</b>, que es lo que un padron migrado puede traer.
+     * <p>Cuando esta prueba se escribio (#561), el esquema lo admitia: {@code ficha_vigente_uq} es
+     * parcial —{@code WHERE vigencia_hasta IS NULL}—, asi que solo impide dos versiones ABIERTAS y
+     * la cerrada podia solaparse con la abierta. El predio salia dos veces en la grilla y el conteo
+     * tenia que decir dos, y de ahi salio la decision de conservar el {@code JOIN} de {@code
+     * ficha_catastral} en el conteo aunque no lo use.
+     *
+     * <p>Desde {@code V72} ese dato <b>ya no puede existir</b>: {@code ficha_vigencias_no_se_pisan}
+     * lo rechaza (#669, que salio precisamente de este hallazgo). Asi que lo que aqui se comprueba
+     * pasa a ser lo contrario — que el intento se rechaza y por que—, y el {@code JOIN} se queda
+     * por una razon distinta: quitarlo es un cambio de plan que nadie ha medido, y su coste es cero
+     * porque el planificador ya lo elimina solo.
      */
-    private static void sembrarFichaQueSeSuperpone(long municipalidadId) throws SQLException {
+    private static SQLException intentarFichaQueSeSuperpone(long municipalidadId) {
         try (Connection app = base.conexion(BaseDeDatosDePrueba.APP)) {
             ContextoDeTenant.fijar(app, municipalidadId);
             ejecutar(
@@ -611,6 +619,9 @@ class ConteoDeLaDeteccionTest {
                             + "  WHERE p.codigo_ref_catastral = lpad('1', 23, '0')",
                     municipalidadId);
             app.commit();
+            return null;
+        } catch (SQLException rechazo) {
+            return rechazo;
         }
     }
 
