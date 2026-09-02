@@ -43,7 +43,31 @@ input:focus, select:focus, textarea:focus { border-color: var(--accent); box-sha
   [data-scrim][data-open="1"] { display: block !important }
 }
 @media (max-width: 860px) { [data-sm-hide] { display: none !important } }
-@media print { [data-noprint] { display: none !important } }
+/* Lo que sale por la impresora es un documento municipal: una constancia de no
+   adeudo o una ficha del contribuyente con el menu de la aplicacion encima no lo
+   es, y la primera hoja se gastaba en pintar el carril (#591).
+
+   La regla es ESTRUCTURAL y no una lista de marcas, porque la lista es lo que
+   fallo: `data-noprint` lo llevaban las barras de acciones y los filtros de cada
+   pantalla —quien porto cada modulo se acordo de la suya— y el shell no, asi que
+   el carril de modulos, el panel de destinos y la caja de busqueda salian
+   impresos. Marcarlos uno a uno deja el mismo agujero abierto para el siguiente
+   elemento de chrome que alguien anada.
+
+   Aqui se imprime `<main>` y nada mas. Se usa `visibility` y no `display` porque
+   ocultar por `display` a un ancestro se lleva por delante al descendiente que
+   se quiere ver; con `visibility` el hijo puede volver a hacerse visible. Y
+   `main` se saca a `position: absolute` porque lo oculto CONSERVA su hueco, y sin
+   esto la hoja empezaria varias pulgadas mas abajo.
+
+   `data-noprint` se conserva: sirve dentro de `<main>`, que es donde cada
+   pantalla marca su barra de acciones y sus filtros. */
+@media print {
+  body * { visibility: hidden }
+  main, main * { visibility: visible }
+  main { position: absolute; left: 0; top: 0; width: 100%; padding: 0 !important }
+  [data-noprint] { display: none !important }
+}
 @media (prefers-reduced-motion: reduce) { * { animation-duration: .01ms !important } }
 
 /* Los artboards escriben `style-hover` como atributo. Aquí ese gesto vive en

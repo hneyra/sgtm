@@ -1,5 +1,6 @@
 package pe.gob.sgtm.fiscalizacion.infraestructura.web;
 
+import static java.nio.charset.StandardCharsets.ISO_8859_1;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
@@ -12,6 +13,7 @@ import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.springframework.http.MediaType;
+import org.springframework.http.converter.ByteArrayHttpMessageConverter;
 import org.springframework.http.converter.json.JacksonJsonHttpMessageConverter;
 import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.test.web.servlet.MvcResult;
@@ -61,6 +63,7 @@ class ResolucionControllerTest {
     private static final long PREDIO = 20L;
     private static final long CONTRIBUYENTE = 10L;
 
+    private DocumentosEnMemoria documentos;
     private LiquidacionesEnMemoria liquidaciones;
     private MovimientosDeLiquidacionEnMemoria movimientos;
     private ResolucionesEnMemoria resoluciones;
@@ -136,6 +139,21 @@ class ResolucionControllerTest {
                         "cerrada",
                         OBSERVACION));
 
+        documentos = new DocumentosEnMemoria();
+        // El MISMO emisor para la transferencia y para la consulta: el papel que se descarga
+        // tiene que ser el que la transferencia emitio, no otro dibujado aparte (#593).
+        EmitirDocumento emisor =
+                new EmitirDocumento(
+                        documentos,
+                        new GeneradorDeDocumentos(
+                                List.of(
+                                        new RenderizadorPdf(),
+                                        new RenderizadorXls(),
+                                        new RenderizadorRtf()),
+                                RegimenDeLaInstalacion.REAL),
+                        registro -> {},
+                        reloj);
+
         TransferirARentas transferir =
                 new TransferirARentas(
                         liquidaciones,
@@ -145,16 +163,7 @@ class ResolucionControllerTest {
                         padron,
                         new CargosEnMemoria(),
                         directorio,
-                        new EmitirDocumento(
-                                new DocumentosEnMemoria(),
-                                new GeneradorDeDocumentos(
-                                        List.of(
-                                                new RenderizadorPdf(),
-                                                new RenderizadorXls(),
-                                                new RenderizadorRtf()),
-                                        RegimenDeLaInstalacion.REAL),
-                                registro -> {},
-                                reloj),
+                        emisor,
                         registro -> {},
                         reloj);
 
@@ -163,10 +172,13 @@ class ResolucionControllerTest {
                                 new ResolucionController(
                                         transferir,
                                         new ConsultaDeResoluciones(
-                                                resoluciones, liquidaciones, directorio),
+                                                resoluciones, liquidaciones, directorio, emisor),
                                         reloj))
                         .setControllerAdvice(new ManejadorDeErrores())
                         .setMessageConverters(
+                                // El de bytes ademas del de JSON: la resolucion sale tambien como
+                                // documento, y el montaje autonomo reemplaza la lista entera.
+                                new ByteArrayHttpMessageConverter(),
                                 new JacksonJsonHttpMessageConverter(
                                         JsonMapper.builder()
                                                 .addModule(
@@ -304,6 +316,186 @@ class ResolucionControllerTest {
                 .as("el area inscrita es la del acta, no la del cuerpo")
                 .isEqualTo(AreaM2.de("300.00"));
         assertThat(padron.vigenteDe(PREDIO).uso()).isEqualTo("COMERCIO");
+    }
+
+    // ══════════════════════════════════════════════════════════════════
+    // #593 — La resolucion como documento descargable
+    // ══════════════════════════════════════════════════════════════════
+
+    @Test
+    @DisplayName("#593 — con formato=PDF devuelve el documento, con su tipo y su nombre")
+    void conFormatoPdfDevuelveElDocumento() throws Exception {
+        transferir(cuerpoCompleto());
+
+        MvcResult resultado = descargar("RDF-2026-000001", "PDF");
+
+        assertThat(resultado.getResponse().getStatus()).isEqualTo(200);
+        assertThat(resultado.getResponse().getContentType()).isEqualTo("application/pdf");
+        assertThat(resultado.getResponse().getHeader("Content-Disposition"))
+                .contains("RDF-2026-000001.pdf");
+        // Mirar solo el 200 no distingue nada: el handler de JSON tambien lo da. Lo que
+        // dice que esto es un PDF son sus primeros bytes.
+        assertThat(new String(resultado.getResponse().getContentAsByteArray(), 0, 5, ISO_8859_1))
+                .isEqualTo("%PDF-");
+    }
+
+    @Test
+    @DisplayName("#593 — y en hoja de calculo y en texto enriquecido, los tres de RF-132")
+    void losTresFormatos() throws Exception {
+        transferir(cuerpoCompleto());
+
+        MvcResult hoja = descargar("RDF-2026-000001", "XLS");
+        MvcResult texto = descargar("RDF-2026-000001", "RTF");
+
+        assertThat(hoja.getResponse().getContentType()).isEqualTo("application/vnd.ms-excel");
+        assertThat(hoja.getResponse().getHeader("Content-Disposition"))
+                .as("el nombre lleva la extension del formato PEDIDO, no la de la emision")
+                .contains("RDF-2026-000001.xls");
+        assertThat(hoja.getResponse().getContentAsString()).startsWith("<?xml");
+
+        assertThat(texto.getResponse().getContentType()).isEqualTo("application/rtf");
+        assertThat(texto.getResponse().getHeader("Content-Disposition"))
+                .contains("RDF-2026-000001.rtf");
+        assertThat(texto.getResponse().getContentAsString()).startsWith("{\\rtf1");
+    }
+
+    @Test
+    @DisplayName("#593 — sin formato sigue devolviendo el JSON de siempre")
+    void sinFormatoSigueElJson() throws Exception {
+        transferir(cuerpoCompleto());
+
+        MvcResult resultado =
+                mvc.perform(get("/api/v1/fiscalizacion/resoluciones/RDF-2026-000001")).andReturn();
+
+        assertThat(resultado.getResponse().getStatus()).isEqualTo(200);
+        assertThat(resultado.getResponse().getContentType()).startsWith("application/json");
+        assertThat(resultado.getResponse().getContentAsString())
+                .contains("\"numero\":\"RDF-2026-000001\"");
+    }
+
+    @Test
+    @DisplayName("#593 — un formato que no existe da 422 nombrando los tres, no un PDF")
+    void elFormatoDesconocidoDa422() throws Exception {
+        transferir(cuerpoCompleto());
+
+        MvcResult resultado = descargar("RDF-2026-000001", "DOCX");
+
+        assertThat(resultado.getResponse().getStatus()).isEqualTo(422);
+        assertThat(resultado.getResponse().getContentAsString())
+                .contains("PDF")
+                .contains("XLS")
+                .contains("RTF")
+                .contains("DOCX");
+    }
+
+    @Test
+    @DisplayName("#593 — y «formato=» vacio tampoco cae en PDF por omision")
+    void elFormatoVacioDa422() throws Exception {
+        transferir(cuerpoCompleto());
+
+        // `params = "formato"` elige este handler en cuanto el parametro esta, aunque
+        // venga vacio: devolver PDF ahi seria contestar con un formato que nadie pidio.
+        MvcResult resultado = descargar("RDF-2026-000001", "");
+
+        assertThat(resultado.getResponse().getStatus()).isEqualTo(422);
+        assertThat(resultado.getResponse().getContentType()).startsWith("application/problem+json");
+    }
+
+    @Test
+    @DisplayName("#593, AC 2 — descargar no emite nada: mismos bytes, sin duplicado y sin numerar")
+    void descargarNoEmiteNada() throws Exception {
+        transferir(cuerpoCompleto());
+        int documentosTrasLaTransferencia = documentos.cuantos();
+
+        byte[] primera = descargar("RDF-2026-000001", "PDF").getResponse().getContentAsByteArray();
+        byte[] segunda = descargar("RDF-2026-000001", "PDF").getResponse().getContentAsByteArray();
+
+        // El orden importa: la reimpresion y la cuenta fallan diciendo un numero; la
+        // comparacion byte a byte falla volcando dos PDF enteros, y no se lee.
+        assertThat(documentos.reimpresionesDe("RDF-2026-000001"))
+                .as("no se registra una reimpresion por abrir la pantalla de consulta")
+                .isZero();
+        assertThat(documentos.cuantos())
+                .as("ni se gasta un segundo correlativo para el mismo acto")
+                .isEqualTo(documentosTrasLaTransferencia);
+        assertThat(new String(primera, ISO_8859_1))
+                .as("y el papel no sale marcado: es la primera vez que estos bytes salen")
+                .doesNotContain("DUPLICADO");
+        assertThat(segunda)
+                .as("dos descargas del mismo papel son el mismo papel, byte a byte")
+                .isEqualTo(primera);
+    }
+
+    @Test
+    @DisplayName("#593 — el papel es el que emitio la transferencia, con sus datos guardados")
+    void elPapelEsElQueSeEmitio() throws Exception {
+        transferir(cuerpoCompleto());
+
+        String papel = descargar("RDF-2026-000001", "RTF").getResponse().getContentAsString();
+
+        assertThat(papel)
+                .contains("Resolucion de determinacion")
+                .contains("LIQ-2026-000001")
+                .contains("PEREZ, JUAN")
+                .as("con su cuadro fechado, que es la regla 9 dentro del papel")
+                .contains("Determinacion al 2026-06-15")
+                .as("y lo que la transferencia dejo inscrito en el padron")
+                .contains("Inscripcion en el padron catastral")
+                .as("la multa sigue sin cifra (D-02c): el papel imprime una raya, nunca un cero")
+                .contains("\\u8212?");
+    }
+
+    @Test
+    @DisplayName("#593 — una resolucion de otro ejercicio se descarga igual, no con el reloj")
+    void laResolucionDeOtroEjercicioSeDescarga() throws Exception {
+        // El ejercicio con que se numero el documento sale de la FECHA DE LA RESOLUCION.
+        // Resolverlo con el reloj —2026— dejaria sin papel a toda resolucion de otro ano.
+        transferir(
+                """
+                {"observacion":"Se transfiere lo hallado en la inspeccion",
+                 "nLiquidacion":"LIQ-2026-000001",
+                 "documentoSustento":"ACTA-2026-000001",
+                 "sustento":"Ampliacion no declarada",
+                 "baseLegal":"TUO del Codigo Tributario, arts. 76 y 77",
+                 "fecha":"2025-12-31"}
+                """);
+
+        MvcResult resultado = descargar("RDF-2025-000001", "PDF");
+
+        assertThat(resultado.getResponse().getStatus()).isEqualTo(200);
+        assertThat(resultado.getResponse().getContentType()).isEqualTo("application/pdf");
+    }
+
+    @Test
+    @DisplayName("#593 — si el papel ya no se dibuja igual que cuando se emitio, 409 y no un papel")
+    void siElPapelYaNoSaleIgual409() throws Exception {
+        transferir(cuerpoCompleto());
+        documentos.corromperElResumenDe("RDF-2026-000001");
+
+        MvcResult resultado = descargar("RDF-2026-000001", "PDF");
+
+        // 409 y no 500: la peticion esta bien y el sistema no esta roto. Lo que pasa es
+        // que entregar esto seria dar un papel distinto al que se emitio con ese numero.
+        assertThat(resultado.getResponse().getStatus()).isEqualTo(409);
+        assertThat(resultado.getResponse().getContentType()).startsWith("application/problem+json");
+        assertThat(resultado.getResponse().getContentAsString()).contains("RDF-2026-000001");
+    }
+
+    @Test
+    @DisplayName("#593 — una resolucion que no existe da 404 tambien pidiendo el documento")
+    void elDocumentoDeUnaResolucionInexistente404() throws Exception {
+        MvcResult resultado = descargar("RDF-2026-999999", "PDF");
+
+        assertThat(resultado.getResponse().getStatus()).isEqualTo(404);
+    }
+
+    // ------------------------------------------------------------------
+
+    private MvcResult descargar(String numero, String formato) throws Exception {
+        return mvc.perform(
+                        get("/api/v1/fiscalizacion/resoluciones/" + numero)
+                                .param("formato", formato))
+                .andReturn();
     }
 
     // ------------------------------------------------------------------

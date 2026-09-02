@@ -44,6 +44,206 @@ export function buscarContribuyentes(
 }
 
 
+/* ══════════ La ficha del contribuyente ══════════ */
+
+/**
+ * Los tres datos de la persona que la grilla del padron NO publica.
+ *
+ * Es `FichaDelContribuyenteResource.DatosPersonalesResource`, y viven aqui y no
+ * en `ContribuyenteResource` por lo que dice su javadoc: aquella es la fila de
+ * una grilla de busqueda —«lo que no se publica no se filtra»— y esta es la
+ * pantalla por la que se corrige el padron.
+ *
+ * `conyugeId` es **el identificador interno, no el nombre**: resolverlo costaria
+ * una consulta mas por ficha, y el backend lo dice explicitamente. Quien
+ * necesite saber quien es lo pide como pide a cualquier otro contribuyente.
+ */
+export type DatosPersonales = {
+  /** `AAAA-MM-DD`. Nula si no consta; una persona juridica no puede tenerla. */
+  fechaNacimiento: string | null;
+  /** Texto libre de hasta 20 caracteres: la columna no tiene vocabulario cerrado. */
+  estadoCivil: string | null;
+  conyugeId: number | null;
+};
+
+/**
+ * Un domicilio con su tramo de vigencia entero. Es `DomicilioResource`.
+ *
+ * `vigenciaHasta` nulo es el que rige. El historial trae tambien los cerrados:
+ * no se borra nada (regla 4), y `documentoOrigen` es lo que sostiene la
+ * notificacion si alguien la impugna.
+ */
+export type DomicilioDelContribuyente = {
+  id: number;
+  /** `FISCAL` | `PROCESAL`. */
+  tipo: string;
+  direccion: string;
+  referencia: string | null;
+  ubigeo: string | null;
+  vigenciaDesde: string;
+  vigenciaHasta: string | null;
+  documentoOrigen: string;
+};
+
+/** Un telefono, un correo o un gestor. Es `ContactoResource`. */
+export type ContactoDelContribuyente = {
+  id: number;
+  tipo: string;
+  valor: string;
+  nombre: string | null;
+  documento: string | null;
+  /** La nota DEL contacto —«llamar despues de las 6»—, no la del usuario que guardo. */
+  observacion: string | null;
+  vigente: boolean;
+};
+
+/** Quien responde con el contribuyente, y desde cuando. Es `ResponsableResource`. */
+export type ResponsableDelContribuyente = {
+  id: number;
+  /** Otro contribuyente del mismo padron: para notificarle hace falta su domicilio. */
+  responsableId: number;
+  vinculo: string;
+  /** Texto, no numero: es un `Porcentaje` y los objetos de valor viajan como cadena. */
+  porcentaje: string | null;
+  vigenciaDesde: string;
+  vigenciaHasta: string | null;
+  documentoOrigen: string;
+};
+
+/**
+ * La ficha entera a una fecha. Es `FichaDelContribuyenteResource`.
+ *
+ * **Lleva su fecha y no es decorativa** (regla 9): los dos domicilios son los
+ * vigentes a `aLaFecha`, no «los ultimos». Publicar la direccion sin decir a que
+ * fecha rige es lo que hace que una notificacion de marzo se defienda con la
+ * direccion de setiembre.
+ *
+ * Las cuatro consultas van en **una sola** transaccion (#486): cuatro por
+ * separado dejarian sitio entre medias a una mudanza, y la ficha saldria
+ * diciendo que el contribuyente vive en dos sitios y en ninguno.
+ */
+export type FichaDelContribuyente = {
+  contribuyente: Contribuyente;
+  datosPersonales: DatosPersonales;
+  aLaFecha: string;
+  /** Nulo de verdad: un contribuyente recien dado de alta todavia no tiene ninguno. */
+  domicilioFiscal: DomicilioDelContribuyente | null;
+  domicilioProcesal: DomicilioDelContribuyente | null;
+  historialDeDomicilios: DomicilioDelContribuyente[];
+  contactos: ContactoDelContribuyente[];
+  responsables: ResponsableDelContribuyente[];
+};
+
+/**
+ * La ficha de un contribuyente por su **identificador interno**, no por su codigo.
+ *
+ * Es la unica lectura del padron que se pide por `id`, y no hay eleccion: la
+ * ruta es `/rentas/contribuyentes/{id}/ficha`. El `id` sale de la fila que la
+ * busqueda ya devolvio.
+ *
+ * `fecha` ausente es hoy, con el reloj del servidor.
+ */
+export function fichaDelContribuyente(
+  id: number,
+  fecha?: string,
+  senal?: AbortSignal,
+): Promise<FichaDelContribuyente> {
+  return solicitar(`/rentas/contribuyentes/${id}/ficha`, { parametros: { fecha }, senal });
+}
+
+/**
+ * El cuerpo de `PUT /rentas/contribuyentes/{id}`. **Lista blanca**: lo que no
+ * esta aqui no viaja, aunque la pantalla lo dibuje.
+ *
+ * Son los cinco campos que el controlador admite, y ninguno mas. Lo que queda
+ * fuera no es un olvido, y conviene tenerlo escrito porque cada exclusion tiene
+ * su propio motivo:
+ *
+ * - `codigo` y el documento son **la identidad**. Cambiarlos no es corregir una
+ *   ficha sino decidir que dos filas eran la misma persona, y la cuenta del
+ *   ciudadano en el portal se **deriva** del documento (ADR-0020 §6).
+ * - `tipoPersona` tampoco entra: el controlador lo copia de la fila existente.
+ * - El domicilio, los contactos y los responsables tienen su propia escritura
+ *   desde #488, y con motivo: **una mudanza no es una edicion** —agrega un tramo
+ *   y cierra el anterior el dia antes—, asi que meterlos aqui como campos
+ *   sueltos perderia la historia con la que se explica por que se notifico donde
+ *   se notifico.
+ * - Los beneficios son de `rentas`, con su propia lectura y su vigencia.
+ * - `activo` lo admite el PUT y **no se declara aqui**: `activo = false` es la
+ *   baja, exige el privilegio `ELIMINACION` y no es una correccion de ficha.
+ *   Mandarla desde el mismo boton que guarda el nombre haria que un descuido
+ *   diera de baja a quien se estaba corrigiendo.
+ *
+ * **Lo que no viene, no cambia; la cadena vacia BORRA** —y `conyugeId: 0` con
+ * ella—: es una instruccion y no una omision, la misma regla que
+ * `PUT /catastro/vias/{codigo}`.
+ */
+export type CorreccionDeContribuyente = {
+  /** Regla 10, RNF-052: sin ella el backend responde 422 y no se guarda nada. */
+  observacion: string;
+  nombreRazonSocial?: string;
+  /** `PENSIONISTA` | `ADULTO_MAYOR` | `DISCAPACIDAD`, o `''` para quitarla. */
+  condicionEspecial?: string;
+  /** `AAAA-MM-DD`, o `''` para borrarla. */
+  fechaNacimiento?: string;
+  estadoCivil?: string;
+  /** `0` borra el enlace. Nadie es su propio conyuge: el backend lo rechaza. */
+  conyugeId?: number;
+};
+
+/** Corrige un contribuyente ya registrado. Devuelve la fila como quedo. */
+export function corregirContribuyente(
+  id: number,
+  peticion: CorreccionDeContribuyente,
+): Promise<Contribuyente> {
+  return solicitar(`/rentas/contribuyentes/${id}`, { metodo: 'PUT', cuerpo: peticion });
+}
+
+/* ══════════ Beneficios y exoneraciones ══════════ */
+
+/**
+ * Un beneficio del contribuyente. Es `BeneficioResource`.
+ *
+ * `porcentaje` y `monto` viajan como texto y **no llevan fecha**: son cifras
+ * fijas de un registro —lo que la resolucion concedio—, no una deuda que cambie
+ * con el tiempo, y el propio recurso lo deja escrito.
+ */
+export type BeneficioDelContribuyente = {
+  id: number;
+  contribuyenteId: number;
+  predioId: number | null;
+  vehiculoId: number | null;
+  tipo: string;
+  tributo: string;
+  clase: string;
+  porcentaje: string | null;
+  monto: string | null;
+  vigenciaDesde: string;
+  vigenciaHasta: string | null;
+  baseLegal: string;
+  documentoOrigen: string;
+};
+
+/**
+ * Los beneficios de un contribuyente.
+ *
+ * `contribuyente` es **el codigo unico del padron, no el identificador
+ * interno**: lo dice `CriterioDeBeneficio` campo por campo. Y la lectura exige
+ * su propio acceso —`beneficios`—, distinto del de la pantalla, asi que puede
+ * fallar sola sin tumbar el resto del expediente.
+ *
+ * **Solo lectura.** El alta y el cese viven en `RegistrarBeneficio` y no se
+ * publican: el contrato no declara ningun `POST` ni `PUT` en esta ruta.
+ */
+export function beneficiosDelContribuyente(
+  contribuyente: string,
+  paginacion: Paginacion,
+  senal?: AbortSignal,
+): Promise<RespuestaPaginada<BeneficioDelContribuyente>> {
+  return solicitar('/rentas/beneficios', { parametros: { contribuyente, ...paginacion }, senal });
+}
+
+
 /* ══════════ Los predios del contribuyente ══════════ */
 
 /**
@@ -146,6 +346,12 @@ export function listarPrediosDelContribuyente(
  * afectación se deriva del año de fabricación y siempre existe.
  */
 export type VehiculoDelContribuyente = {
+  /**
+   * El identificador interno (#554). Es el mismo campo que publica la hermana de
+   * Consultas, porque es la misma fila: declararlo en una sola de las dos las
+   * dejaría diciendo cosas distintas del mismo vehículo.
+   */
+  vehiculoId: number;
   placa: string;
   clase: string | null;
   marca: string;
@@ -310,7 +516,7 @@ export function transferirVehiculo(peticion: PeticionDeTransferenciaDeVehiculo):
  * solo `cuotaHasta`, el rango invertido, `cuotaDesde: 0`, uno fuera de 1..12, o
  * `cuota` **y** el rango a la vez—, y ese 422 es la red, no el camino.
  *
- * <h2>El desglose SE REPITE en cada cuota, no se reparte</h2>
+ * <h2>El desglose SE REPITE en cada cuota, no se reparte —salvo con `repartir`</h2>
  *
  * Medido: `cuotaDesde: 1`, `cuotaHasta: 4`, `insoluto: "100.00"` devuelve
  * **cuatro asientos y `total: 400.00`**, uno de 100,00 por cuota. Las dos
@@ -318,6 +524,31 @@ export function transferirVehiculo(peticion: PeticionDeTransferenciaDeVehiculo):
  * desde» y «Cuota hasta»— son plausibles y se diferencian en un factor `n`,
  * asi que la pantalla tiene que decir cual es: lo hace `PIE_DEL_RANGO` y el
  * total que se ensena antes de mandar.
+ *
+ * Esa es la forma del ALTA. La BAJA tiene desde #598 la contraria, y hay que
+ * pedirla: con `repartir: true` el desglose es el **total del acto** y el
+ * servidor lo parte entre las cuotas. Ver ese campo.
+ *
+ * <h2>La unidad tiene que ser del contribuyente (#635)</h2>
+ *
+ * Desde #635 el servidor comprueba, **antes de asentar**, que el `predioId` o
+ * el `vehiculoId` sea de quien va a deber: resuelve el titular de la unidad a
+ * la **fecha valor** del movimiento y, si no es el contribuyente, rechaza. Sin
+ * esa comprobación se podía cargar el predial de la casa de un vecino a
+ * cualquiera —el importe queda impecable y el cargo cae sobre quien no lo
+ * debe—. Medido, el predio 2 (de C-000002) sobre C-000001:
+ *
+ * > 422 · «El predio 2 es de 'C-000002 DEMO Yovera Sandoval Teodoro' a la fecha
+ * > valor del movimiento, no del contribuyente que lo debe. Si es deuda de un
+ * > titular anterior, hay que declararlo con «deudaDeTitularAnterior»»
+ *
+ * Vale para las **dos rutas** —el alta y la baja— y para las dos clases de
+ * unidad; el vehículo contesta lo mismo nombrando a su titular. Y **sin
+ * unidad no se comprueba nada**: medido, un alta sin `predioId` ni
+ * `vehiculoId` sigue dando 201, porque la obligación sin unidad no cuelga de
+ * ninguna y es otra obligación distinta.
+ *
+ * La única forma de decir que el caso es el legítimo es `deudaDeTitularAnterior`.
  */
 export type PeticionDeMovimientoDeDeuda = {
   observacion: string;
@@ -331,6 +562,46 @@ export type PeticionDeMovimientoDeDeuda = {
   cuotaDesde?: number;
   /** La ultima del rango, incluida. Va siempre con `cuotaDesde`. */
   cuotaHasta?: number;
+  /**
+   * Solo en la BAJA: el desglose declarado es el **total del acto** y lo
+   * reparte el servidor entre las cuotas de la obligacion (#598).
+   *
+   * Sin el, las cuatro cifras son las de **una** obligacion, la de la clave.
+   * Con el, se recorren las cuotas de la primera a la ultima y a cada una se le
+   * asigna, por cada parte del desglose, lo menor entre lo que queda por
+   * repartir y lo que esa cuota debe **a la fecha valor**; las que no deben nada
+   * no producen asiento, y si al terminar sobra algo el acto **no se hace**
+   * —422, «la baja de … es de X y a esa fecha solo se deben Y»—.
+   *
+   * Que cuotas abarca lo dice la propia peticion: sin `cuota` ni rango, la
+   * obligacion entera; con `cuotaDesde`/`cuotaHasta`, ese tramo.
+   *
+   * **Un alta no se reparte** y el backend la rechaza con 422: incorporar deuda
+   * que no estaba no tiene tope contra el que repartir.
+   */
+  repartir?: boolean;
+  /**
+   * Declara que la deuda es de un **titular anterior** de la unidad (#635).
+   *
+   * No es un permiso para saltarse la comprobación: es una afirmación de quien
+   * atiende sobre un hecho —la deuda de un ejercicio anterior a una
+   * transferencia **es** del titular de entonces, así que un alta sobre la
+   * unidad de otro puede ser exactamente lo que corresponde—, y queda auditada
+   * con la observación del acto.
+   *
+   * `ComprobacionDeUnidad` tiene tres modos y este campo elige entre dos:
+   * ausente o `false` es `EXIGIDA` —la unidad tiene que ser suya— y `true` es
+   * `DECLARADA_DE_TITULAR_ANTERIOR`. El tercero, `NO_APLICA`, no se puede
+   * pedir desde aquí y no debería: es el de los contextos que asientan sus
+   * propios cargos —una papeleta se asienta con el predio de la infracción y
+   * quien la paga puede no ser su titular—.
+   *
+   * Medido, con el predio 2 sobre C-000001: sin él, 422; con `true`, 201. Y lo
+   * mismo en la baja, que es donde más pesa —una obligación que YA está en el
+   * libro sobre una unidad que cambió de dueño no se puede extinguir sin
+   * declararlo—.
+   */
+  deudaDeTitularAnterior?: boolean;
   predioId?: number;
   vehiculoId?: number;
   insoluto?: string;
@@ -379,7 +650,13 @@ export function altaDeDeuda(peticion: PeticionDeMovimientoDeDeuda): Promise<Movi
   return solicitar('/rentas/deuda/altas', { metodo: 'POST', cuerpo: peticion });
 }
 
-export function bajaDeDeuda(peticion: PeticionDeMovimientoDeDeuda): Promise<unknown> {
+/**
+ * La baja. Devuelve lo mismo que el alta —`MovimientoDeDeudaResource`—, y desde
+ * #598 hay que **leerlo**: con `repartir` el reparto entre cuotas lo decide el
+ * servidor, asi que cuantas obligaciones se movieron y por cuanto no se puede
+ * saber desde el formulario. Solo lo dicen los asientos que volvieron.
+ */
+export function bajaDeDeuda(peticion: PeticionDeMovimientoDeDeuda): Promise<MovimientoRegistrado> {
   return solicitar('/rentas/deuda/bajas', { metodo: 'POST', cuerpo: peticion });
 }
 
@@ -583,10 +860,25 @@ export type PeticionDeCorridaPredial = {
   simulacion: boolean;
   observacion?: string;
   ejercicio: string;
-  /** `TODOS` o `SECTOR`, letra por letra: `DeterminarPredialMasivo` no admite otra cosa. */
+  /**
+   * `TODOS`, `SECTOR`, `RANGO_DE_CODIGO` u `OBSERVADOS`, letra por letra:
+   * `ALCANCES` de `DeterminarPredialMasivo` no admite otra cosa y rechaza con
+   * 422 lo que no esté en esa lista (#577).
+   */
   alcance?: string;
   /** Obligatorio con `alcance: 'SECTOR'`. */
   sector?: string;
+  /**
+   * Los dos extremos del tramo, obligatorios con `alcance: 'RANGO_DE_CODIGO'` y
+   * **incluidos los dos**.
+   *
+   * Van como cadena y sin normalizar aquí porque el backend los compara COMO
+   * TEXTO —`enElTramo` usa `String.compareTo`—: el código del contribuyente es
+   * una cadena y ni siquiera siempre numérica, así que recortarle los ceros o
+   * pasarlo por un número aquí cambiaría el tramo sin que nada lo dijera.
+   */
+  codigoDesde?: string;
+  codigoHasta?: string;
   recalculaYaEmitidos?: boolean;
 };
 
@@ -651,6 +943,123 @@ export function calcularVehicular(
     metodo: 'POST',
     parametros: { ...sujeto },
     cuerpo: peticion,
+    senal,
+  });
+}
+
+
+/* ══════════ La hoja resumen de la declaración jurada ══════════ */
+
+/**
+ * Una declaración jurada ya presentada. Es `DeclaracionJuradaResource`.
+ *
+ * No lleva ningún importe, y su javadoc lo dice: la DJ no calcula nada. El
+ * valúo y el impuesto de la hoja salen de la determinación del ejercicio, no de
+ * aquí.
+ */
+export type DeclaracionJurada = {
+  id: number;
+  numero: string;
+  ejercicio: number;
+  /** `ORIGINAL` | `RECTIFICATORIA` | … tal como lo nombra `TipoDeDeclaracion`. */
+  tipo: string;
+  predioId: number | null;
+  vehiculoId: number | null;
+  fichaCatastralId: number | null;
+  /** `AAAA-MM-DD`. */
+  fechaPresentacion: string;
+  fechaLimite: string;
+  fueraDePlazo: boolean;
+  estado: string;
+  djRectificaId: number | null;
+};
+
+/**
+ * Quien declara. Es `HojaDeDeclaracionResource.DeclaranteResource`.
+ *
+ * `documento` viene **ya formateado** —«DNI 03593174»—, como lo publica el
+ * padrón: se imprime tal cual, y componerlo aquí sería una segunda forma de
+ * escribir el mismo dato.
+ *
+ * `domicilioFiscal` es el **vigente a la fecha de corte** de la hoja, no «el
+ * último»: la hoja de una DJ de marzo tiene que poder reimprimirse como se
+ * imprimió.
+ */
+export type DeclaranteDeLaHoja = {
+  codigo: string;
+  nombre: string;
+  documento: string;
+  domicilioFiscal: string | null;
+};
+
+/**
+ * Una línea de la tabla de predios. Es `PredioDeLaHojaResource`.
+ *
+ * Las tres cifras son **nulas cuando no hay determinación del ejercicio**, y
+ * eso no es un hueco que rellenar: sin determinación el sistema no tiene
+ * autovalúo que consignar, y un cero en un papel que se firma se lee como «este
+ * predio no vale nada».
+ *
+ * `porcentajePropiedad` sale de la determinación cuando la hay —es el que se
+ * aplicó para calcular— y de la titularidad vigente cuando no.
+ *
+ * `tipo` es `URBANO` o `RUSTICO`, que **no es el «Uso»** que el manual dibuja en
+ * esta columna: aquél es el de la ficha catastral —«Casa habitación»— y ninguna
+ * lectura de la hoja lo publica.
+ */
+export type PredioDeLaHoja = {
+  predioId: number;
+  codRefCatastral: string;
+  direccion: string;
+  tipo: string;
+  porcentajePropiedad: string;
+  autovaluo: string | null;
+  valuoExonerado: string | null;
+  valuoAfecto: string | null;
+};
+
+/**
+ * La hoja resumen entera. Es `HojaDeDeclaracionResource`.
+ *
+ * Los importes viajan como texto (RNF-055) y **la fecha es una sola para toda
+ * la hoja**: `aLaFecha` (regla 9).
+ *
+ * `faltan` es una **lista de motivos y no un booleano**, y el backend lo dejó
+ * escrito: «no se puede imprimir» sin decir por qué es lo que hace que alguien
+ * lo imprima igual desde otro sitio. Trae siempre al menos uno —el derecho de
+ * emisión y el total a pagar no viajan nunca, porque son cifra de ordenanza
+ * local (D-02b)— y trae dos cuando además falta la determinación del ejercicio.
+ */
+export type HojaDeDeclaracion = {
+  declaracion: DeclaracionJurada;
+  /** `AAAA-MM-DD`. A qué día se resolvieron el domicilio y la titularidad. */
+  aLaFecha: string;
+  /** Nulo si el contribuyente ya no está en el padrón: la hoja lo dice en vez de inventar un nombre. */
+  declarante: DeclaranteDeLaHoja | null;
+  predios: PredioDeLaHoja[];
+  valuoAfectoTotal: string | null;
+  impuestoInsoluto: string | null;
+  faltan: string[];
+};
+
+/**
+ * La hoja de esa declaración en ese año.
+ *
+ * Una DJ que no existe es **404**, no una hoja vacía: `DeclaracionJuradaController`
+ * lo devuelve así a propósito, y la pantalla tiene que decirlo en vez de dibujar
+ * el membrete con las celdas en blanco.
+ *
+ * `fecha` en blanco es hoy —el controlador lo resuelve—, y por eso viaja
+ * opcional en vez de con un valor por omisión escrito aquí.
+ */
+export function hojaDeDeclaracion(
+  djNro: string,
+  ano: string,
+  fecha: string | undefined,
+  senal?: AbortSignal,
+): Promise<HojaDeDeclaracion> {
+  return solicitar(`/rentas/declaraciones/${encodeURIComponent(djNro)}/hoja`, {
+    parametros: { ano, fecha },
     senal,
   });
 }

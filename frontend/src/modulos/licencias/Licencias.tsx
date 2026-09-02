@@ -3,6 +3,7 @@ import { Shell, type EntradaDePaleta } from '../../shell/Shell';
 import type { PantallaProps } from '../../App';
 import { Icono } from '../../ds/Icono';
 import { ICO } from '../../ds/iconos';
+import { Paginador } from '../../ds/componentes';
 import { usarPreferencias } from '../../shell/preferencias';
 import {
   COLS_ANUNCIOS,
@@ -134,14 +135,6 @@ const ENTRADILLA: CSSProperties = {
   color: 'var(--ink-2)',
   maxWidth: '70ch',
   textWrap: 'pretty',
-};
-const BOTON_SEC: CSSProperties = {
-  border: '1px solid var(--line-2)',
-  borderRadius: 6,
-  padding: '10px 18px',
-  background: 'var(--bg-card)',
-  fontSize: 13,
-  cursor: 'pointer',
 };
 const BOTON_PRI: CSSProperties = {
   border: 0,
@@ -639,6 +632,11 @@ export default function Licencias({ dest, onDest }: PantallaProps) {
     [criterio, pagina],
     enPanel || (enLista && tipo === 'anuncio'),
   );
+
+  /* Cuál de los tres se está mirando. El pie de paginación lee del sobre de
+     ÉSTE y no de un estado propio: los tres comparten el número de página, pero
+     cuántas hay y si queda alguna detrás lo dice cada lectura por su cuenta. */
+  const padronALaVista = tipo === 'funcionamiento' ? licencias : tipo === 'edificacion' ? fues : anuncios;
 
   /* La ficha: el mismo endpoint con el número, que es lo que hace que la fila
      traiga además su historial, sus duplicados y sus cinco secciones. */
@@ -1221,20 +1219,19 @@ export default function Licencias({ dest, onDest }: PantallaProps) {
                 />
               ))}
 
-            {/* La paginación solo cuando hay algo que paginar: con la tabla vacía
-                el «Siguiente» prometía una segunda página de nada. */}
-            {((tipo === 'funcionamiento' && (licencias.datos?.contenido.length ?? 0) > 0) ||
-              (tipo === 'edificacion' && (fues.datos?.contenido.length ?? 0) > 0) ||
-              (tipo === 'anuncio' && (anuncios.datos?.contenido.length ?? 0) > 0)) && (
-              <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-                <button onClick={() => setPagina((p) => Math.max(0, p - 1))} disabled={pagina === 0} style={{ ...BOTON_SEC, opacity: pagina === 0 ? 0.5 : 1 }}>
-                  Anterior
-                </button>
-                <span style={{ fontSize: 12, color: 'var(--ink-3)' }}>Página {pagina + 1}</span>
-                <button onClick={() => setPagina((p) => p + 1)} style={BOTON_SEC}>
-                  Siguiente
-                </button>
-              </div>
+            {/* Este pie era el peor de los dieciséis (#671): dibujaba «Página N»
+                sin decir de cuántas, y su «Siguiente» **no se apagaba nunca**
+                —no leía `hayMas`—, así que desde la última página llevaba a una
+                vacía y de vuelta. Las tres cifras salen ahora del sobre del
+                padrón que se está mirando, que es quien las publica. */}
+            {padronALaVista.datos !== null && (
+              <Paginador
+                pagina={padronALaVista.datos.pagina}
+                totalPaginas={padronALaVista.datos.totalPaginas}
+                hayMas={padronALaVista.datos.hayMas}
+                ir={setPagina}
+                style={{ padding: 0, borderTop: 'none' }}
+              />
             )}
           </>
         )}

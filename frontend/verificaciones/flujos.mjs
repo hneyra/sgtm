@@ -160,7 +160,15 @@ for (const ruta of RUTAS) {
   if (soloModulo && !ruta.startsWith('/' + soloModulo)) continue;
   const { inertes, peticiones, errores } = await botonesInertes(ruta, SALTAR);
   total += peticiones.length;
-  sinAutenticar += peticiones.filter((p) => p.estado === 401).length;
+  const noAutenticadas = peticiones.filter((p) => p.estado === 401).length;
+  sinAutenticar += noAutenticadas;
+  /* Una linea por ruta. Sin esto el arnes no imprime NADA hasta el final, y
+     durante los diez minutos que tarda «sigue corriendo» y «se colgo» son
+     indistinguibles. */
+  process.stdout.write(
+    `  ${ruta.padEnd(30)} ${String(peticiones.length).padStart(3)} peticion(es)` +
+      `${noAutenticadas ? ` · ${noAutenticadas} SIN AUTENTICAR` : ''}\n`,
+  );
   if (peticiones.length > 0) conPeticion++;
   const malas = peticiones.filter((p) => p.estado >= 500);
   if (errores.length) fallos.push(`${ruta}\n  errores: ${errores.slice(0, 2).join(' | ')}`);
@@ -171,16 +179,25 @@ for (const ruta of RUTAS) {
 
 await navegador.close();
 
-/* Un token caducado deja este arnes en VERDE, y ese es el peor de sus fallos:
+/* CUALQUIER 401 invalida la corrida, no solo que lo sean todas.
+   Un token caducado deja este arnes en VERDE, y ese es el peor de sus fallos:
    un 401 no es un 5xx, ninguna pantalla llega a cargar, ningun boton llega a
-   estar habilitado, y el informe dice «ningun boton inerte, ningun 5xx».
-   Ocurrio de verdad: una corrida con el token vencido dio limpio sobre un
-   modulo que tenia un 500 dentro. Una verificacion que se salta a si misma deja
-   el build en verde. */
-if (total > 0 && sinAutenticar === total) {
+   estar habilitado, y no hay nada que salga mal porque no hay nada.
+
+   La primera version comparaba `sinAutenticar === total`, y dejaba pasar el caso
+   que de verdad ocurre: el token vive **900 s** y el recorrido completo tarda
+   unos once minutos en esta maquina, asi que el tramo final corre con el token
+   caducado, solo PARTE de las peticiones son 401, la guarda no dispara y el
+   informe sale verde con los ultimos modulos sin verificar. Lo encontro un
+   agente usandolo, no una revision. */
+if (sinAutenticar > 0) {
   console.error(
-    `\nEl token no vale: las ${total} peticiones volvieron 401.\n` +
-      'No se ha verificado nada. Consigue un token fresco y vuelve a correrlo.',
+    `\nEl token no vale: ${sinAutenticar} de ${total} peticiones volvieron 401.\n` +
+      (sinAutenticar === total
+        ? 'No se ha verificado nada.'
+        : 'Caduco A MITAD del recorrido: lo que va despues del primer 401 no se ha verificado.') +
+      '\nConsigue un token fresco y vuelve a correrlo. Si el recorrido completo no cabe en la\n' +
+      'vida del token, correlo por modulos.',
   );
   process.exit(2);
 }

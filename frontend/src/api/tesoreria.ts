@@ -191,8 +191,27 @@ export type SeleccionDeObligacion = {
   vehiculoId?: number;
 };
 
-export function cobrarDeuda(peticion: PeticionDeCobranza): Promise<Recibo> {
-  return solicitar('/tesoreria/caja/cobranza', { metodo: 'POST', cuerpo: peticion });
+/**
+ * Cobra por ventanilla. **`clave` es la del intento, no la del envio.**
+ *
+ * `CajaController` lee `Idempotency-Key` desde #33 y `recibo_idempotencia_uq`
+ * (V29) la sujeta del otro lado: con la misma clave, un reenvio devuelve el
+ * recibo YA emitido en vez de cobrar otra vez. Sin ella —que es como estaba
+ * hasta hoy— el reintento del navegador tras un tiempo de espera agotado
+ * **cobra dos veces**, y quien atiende no sabe si cobro o no.
+ *
+ * Medido contra el compose: dos envios con la misma clave devuelven el mismo
+ * `001-0000004`.
+ *
+ * Es opcional en la firma porque el servidor la admite ausente, no porque dé
+ * igual: quien llame sin ella se queda sin la red.
+ */
+export function cobrarDeuda(peticion: PeticionDeCobranza, clave?: string): Promise<Recibo> {
+  return solicitar('/tesoreria/caja/cobranza', {
+    metodo: 'POST',
+    cuerpo: peticion,
+    ...(clave === undefined ? {} : { cabeceras: { 'Idempotency-Key': clave } }),
+  });
 }
 
 /**
@@ -766,10 +785,18 @@ export type Convenio = {
  * hay ninguna ruta para formalizar, porque publicarla permitiría poner un
  * convenio en vigor sin recibo.
  */
-export function registrarPreconvenio(peticion: PeticionDeFraccionamiento): Promise<Convenio> {
+export function registrarPreconvenio(
+  peticion: PeticionDeFraccionamiento,
+  clave?: string,
+): Promise<Convenio> {
   return solicitar('/tesoreria/fraccionamientos', {
     metodo: 'POST',
     cuerpo: { ...peticion, simular: false },
+    /* La clave del INTENTO (#606). `convenio_numero_uq` no tapaba el alta
+       —cada intento toma correlativo nuevo— y `convenio_deuda_uq` es por
+       convenio, asi que hasta `V70` un reenvio tras un 500 eran dos convenios
+       sobre la misma deuda. La simulacion NO la lleva: no escribe nada. */
+    ...(clave === undefined ? {} : { cabeceras: { 'Idempotency-Key': clave } }),
   });
 }
 
@@ -797,9 +824,17 @@ export type PeticionDeCierreDeConvenio = {
 export function cerrarConvenio(
   numero: string,
   peticion: PeticionDeCierreDeConvenio,
+  clave?: string,
 ): Promise<Convenio> {
   return solicitar(`/tesoreria/convenios/${encodeURIComponent(numero)}/anulacion`, {
     metodo: 'POST',
     cuerpo: peticion,
+    /* La clave del INTENTO (#606 AC 3). `convenio_movimiento_cierre_uq` ya
+       impedia el doble cierre, asi que sin cabecera no se cerraba dos veces —
+       pero el reenvio contestaba `409 CONFLICTO`, que se lee como un fallo
+       nuevo en vez de como «ya estaba hecho». Con ella devuelve el convenio ya
+       cerrado. */
+    ...(clave === undefined ? {} : { cabeceras: { 'Idempotency-Key': clave } }),
   });
 }
+

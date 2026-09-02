@@ -387,6 +387,15 @@ const DEL_BACKEND = {
       `),
     },
   ],
+  // La resolucion de determinacion sale en papel, como los otros quince
+  // documentos del contrato (#593, RF-132). Era el UNICO que no: es el valor que
+  // se notifica al contribuyente y el que arranca el plazo del art. 137 para
+  // reclamar, y su pantalla solo podia leerlo en JSON. `ResolucionController`
+  // parte la ruta con `params = "formato"`, como la ficha del contribuyente:
+  // sin el parametro, el JSON que la pantalla pinta; con el, el documento.
+  // No sale del prototipo —la pantalla dibuja «Descargar PDF» y no dice como
+  // viaja—, asi que se declara aqui.
+  resolucion_determinacion_fisc: [FORMATO_DE_REPORTE],
   // El estado de cuenta de fiscalizacion responde **a una fecha**: es la unica
   // cifra que publica y no existe «la deuda», existe la deuda actualizada a un
   // dia (regla 9, RNF-075). `OmisosController.estadoDeCuenta` lo lee desde #49 y
@@ -519,6 +528,37 @@ const DEL_BACKEND = {
       ejemplo: '',
       tras: 'ano',
       descripcion: 'Filtro «Tributo» de la pantalla, dentro de «Filtros del detalle»',
+    },
+  ],
+  // La granularidad de la fila, que es lo que decide si la fila se puede dar de
+  // baja (#551).
+  //
+  // Por omision `GET /consultas/deuda` agrega los periodos: `periodoDesde` y
+  // `periodoHasta` son el minimo y el maximo del grupo, y hay UN solo desglose
+  // para todos. `POST /rentas/deuda/bajas` extingue UNA cuota —su
+  // `ClaveDeSaldo` lleva el periodo—, asi que desde una fila que agrega cinco
+  // periodos no hay ningun cuerpo que se pueda componer: la pantalla sabe cuanto
+  // se debe por el conjunto y no cuanto por cada cuota, y repartir el total en la
+  // interfaz es componer dinero en la pantalla (RNF-083).
+  //
+  // Con `porPeriodo=true` cada fila es una cuota, con `periodoDesde ==
+  // periodoHasta` y su propio desglose con su fecha. La forma del recurso no
+  // cambia: lo unico que cambia es donde se corta.
+  //
+  // No lo dibuja la pantalla porque el prototipo nunca tuvo que elegirlo —su
+  // grilla es la de cobranza—, y por eso se declara aqui y no como filtro.
+  consulta_deuda: [
+    {
+      nombre: 'porPeriodo',
+      ejemplo: 'true',
+      tras: 'incluyeConvenios',
+      esquema: '{ type: string, enum: [true, false] }',
+      descripcion: bloque(`
+        Una fila por cuota («true») o una por obligacion con sus periodos agregados
+        (ausente o «false»). Cualquier otra palabra es 422: un «si» tecleado que se leyera
+        como «false» devolveria filas agregadas a quien pidio cuotas, y esa respuesta es
+        indistinguible de la correcta hasta que alguien intenta dar una de baja.
+      `),
     },
   ],
   // El ejercicio del calculo individual del predial, con su nombre (#541).
@@ -748,6 +788,19 @@ const DESCRIPCIONES = {
     así que ninguna de esas nueve opciones casaría con ningún dato y la respuesta sería la tabla
     vacía, que se lee como «no hay cuotas». Se acota por código predial. La pantalla los dibuja
     bloqueados con su motivo, como los de #322 y #398.
+  `),
+  // Fiscalizacion (#593)
+  resolucion_determinacion_fisc: bloque(`
+    El valor que cierra un procedimiento de fiscalización: determina por ejercicio la diferencia
+    de tributo y la multa tributaria, y es lo que arranca el plazo del art. 137 para reclamar
+    (#52, RF-057). Las cifras salen **nulas** mientras D-02a siga abierta, y eso no es un cero:
+    lo que no se puede determinar todavía no se dibuja como «no debe nada» (#198).
+
+    Con \`?formato=PDF|XLS|RTF\` la respuesta es el **documento**; sin él, el JSON que la pantalla
+    pinta (#593, RF-132). El papel **no se emite aquí**: la resolución ya se numeró y se guardó al
+    transferirla, así que esta ruta entrega los datos guardados dibujados en el formato pedido
+    —no recompone nada con datos vivos, que daría otro papel con el mismo número— y no registra
+    ninguna reimpresión.
   `),
   // Cuenta corriente (#72)
   constancia: bloque(`
@@ -2475,7 +2528,11 @@ const OPERACIONES_ADICIONALES = {
         ' seleccionados» de la pantalla y también de donde el acta de inspección resuelve sus tres' +
         ' identificadores —programa, contribuyente y predio—, que su catálogo dibuja de solo' +
         ' lectura. La columna «Estado» se DERIVA de si el predio ya tiene acta en el programa: no' +
-        ' es una columna de la fila, porque guardarla dejaría dos verdades sobre lo mismo.',
+        ' es una columna de la fila, porque guardarla dejaría dos verdades sobre lo mismo. Los' +
+        ' tres campos del titular —contribuyenteId, codContribuyente y titular— salen NULOS en el' +
+        ' predio sin titularidad vigente: es el predio que nadie reclama, el candidato de primer' +
+        ' orden, y desde #586 la muestra lo admite en vez de apartarlo. Quien lo visite averigua' +
+        ' quién lo ocupa y nombra al contribuyente al levantar el acta.',
     },
     {
       operationId: 'fisc_programa_generar_muestra',
@@ -2495,7 +2552,12 @@ const OPERACIONES_ADICIONALES = {
         ' un predio que otro programa abierto ya se llevó ni uno ya fiscalizado en el ejercicio,' +
         ' así que la muestra depende del orden: el primer programa que se genere se lleva los' +
         ' predios. Responde 409 si el programa ya la sorteó — una muestra es un acto y no se' +
-        ' regenera, porque hay actas levantadas sobre ella.',
+        ' regenera, porque hay actas levantadas sobre ella. La respuesta dice sobre qué padrón se' +
+        ' sorteó y no sólo cuántos entraron: detectados, predios, sinTitular —cuántos de los' +
+        ' sorteados no tienen titular vigente— y los excluidos POR MOTIVO, de modo que detectados' +
+        ' = predios + excluidosPorOtroPrograma + excluidosPorActaDelEjercicio. Un número suelto no' +
+        ' distinguiría «otro programa se lo llevó» de «ya se fiscalizó», que se arreglan de' +
+        ' maneras distintas (#586).',
     },
   ],
   // «Resultados y determinaciones» declara «GET /fiscalizacion/resultados» como

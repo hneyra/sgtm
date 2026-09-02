@@ -726,3 +726,171 @@ export function Nota({ children, style }: { children: ReactNode; style?: CSSProp
 export function Esqueleto({ alto = 14, ancho = '100%' }: { alto?: number; ancho?: number | string }) {
   return <span data-esq="1" style={{ display: 'block', height: alto, width: ancho }} />;
 }
+
+/* ══════════ Pies de paginación y de asistente ══════════ */
+
+/** El botón de los dos extremos del pie. Uno solo, para que «Anterior» y
+ *  «Siguiente» no puedan divergir en el mismo paginador. */
+const BOTON_DE_PAGINA: CSSProperties = {
+  border: '1px solid var(--line-2)',
+  borderRadius: 6,
+  padding: '6px 12px',
+  background: 'var(--bg-elev)',
+  fontSize: 12,
+  color: 'var(--ink-2)',
+};
+
+/**
+ * El pie que mueve una tabla de página, y el único de la interfaz.
+ *
+ * Estaba copiado en nueve módulos —con guarda y sin ella, leyendo el sobre y sin
+ * leerlo—, y lo que #671 midió no fue la duplicación sino su consecuencia: los
+ * dos botones se apagan y **ninguno dice por qué**. Quien navega con teclado
+ * llega al primero y oye «Anterior, atenuado», sin saber si está en la primera
+ * página, si la lectura falló o si el pie está roto. Es RNF-082 aplicado a la
+ * causa de un acto: un dato al que sólo se llega mirando el número de página no
+ * está disponible para quien no lo ve.
+ *
+ * <h2>Las tres cifras salen del sobre y ninguna se deriva</h2>
+ *
+ * `pagina`, `totalPaginas` y `hayMas` se leen tal cual. Dividir `totalElementos`
+ * entre el tamaño pedido sería hacer aquí una cuenta que ya hizo el servidor, y
+ * las dos dejarían de coincidir el día que el backend acote la página por otro
+ * motivo. Por lo mismo «Siguiente» se apaga con `hayMas` y nunca comparando
+ * `pagina + 1` con `totalPaginas`, que es la misma cuenta derivada por otro
+ * camino.
+ *
+ * <h2>Los dos motivos son distintos a propósito</h2>
+ *
+ * «Ya estás en la primera página» y «el sobre dice que no hay más» no son la
+ * misma situación —la primera es aritmética de esta pantalla y la segunda es un
+ * dato del servidor—, y darles el mismo texto pondría «ya estás en la última»
+ * sobre el botón que va hacia atrás.
+ *
+ * <h2>Con una sola página no se dibuja</h2>
+ *
+ * Y esa guarda es la otra mitad: un «Siguiente» sobre tres filas promete una
+ * página que no existe. Dos de las copias que este componente sustituye se
+ * dibujaban siempre, escondiendo el caso con `Math.max(1, totalPaginas)`.
+ *
+ * No hace falta apagar los dos mientras la siguiente viaja —y en Catacaos viaja
+ * 8,5 s (#561)—: `useRecurso` vacía `datos` en cuanto la pregunta cambia, así
+ * que durante la espera no hay pie que pulsar ni filas viejas debajo del número
+ * nuevo.
+ *
+ * `style` es para el contenedor, que es lo único que cambia de sitio a sitio: la
+ * mayoría cuelga del filete inferior de una tabla y un par flota en una columna.
+ * `detalle` es para lo que alguna pantalla decía además del «n de N» —las
+ * manzanas de un sector escriben cuántas hay en total— y que no se pierde al
+ * unificar: un recuento que desaparece no deja síntoma.
+ */
+export function Paginador({
+  pagina,
+  totalPaginas,
+  hayMas,
+  ir,
+  detalle,
+  style,
+}: {
+  pagina: number;
+  totalPaginas: number;
+  hayMas: boolean;
+  ir: (n: number) => void;
+  detalle?: ReactNode;
+  style?: CSSProperties;
+}) {
+  if (totalPaginas <= 1) return null;
+  const enLaPrimera = pagina === 0;
+  return (
+    <div
+      style={{
+        display: 'flex',
+        alignItems: 'center',
+        gap: 10,
+        padding: '10px 16px',
+        borderTop: '1px solid var(--line)',
+        ...style,
+      }}
+    >
+      <button
+        onClick={() => ir(Math.max(0, pagina - 1))}
+        disabled={enLaPrimera}
+        className="hov-linea"
+        aria-label={enLaPrimera ? 'Anterior · ya estás en la primera página' : `Ir a la página ${pagina} de ${totalPaginas}`}
+        title={enLaPrimera ? `Ya estás en la primera página de ${totalPaginas}: no hay ninguna antes.` : undefined}
+        style={{ ...BOTON_DE_PAGINA, opacity: enLaPrimera ? 0.45 : 1, cursor: enLaPrimera ? 'not-allowed' : 'pointer' }}
+      >
+        Anterior
+      </button>
+      <span style={{ fontFamily: 'var(--font-mono)', fontSize: 12, color: 'var(--ink-3)' }}>
+        {pagina + 1} de {totalPaginas.toLocaleString('es-PE')}
+        {detalle !== undefined && <> · {detalle}</>}
+      </span>
+      <button
+        onClick={() => ir(pagina + 1)}
+        disabled={!hayMas}
+        className="hov-linea"
+        aria-label={hayMas ? `Ir a la página ${pagina + 2} de ${totalPaginas}` : 'Siguiente · ya estás en la última página'}
+        title={hayMas ? undefined : 'Ya estás en la última página: la lectura dice que no hay más filas detrás de éstas.'}
+        style={{ ...BOTON_DE_PAGINA, opacity: hayMas ? 1 : 0.45, cursor: hayMas ? 'pointer' : 'not-allowed' }}
+      >
+        Siguiente
+      </button>
+    </div>
+  );
+}
+
+/**
+ * El «Anterior» de un asistente por pasos, que no es el de una tabla.
+ *
+ * `grep '^\s*Anterior$'` los cuenta juntos y no son lo mismo: de los dieciséis
+ * que #671 contó, sólo trece tienen «Siguiente» enfrente, y la diferencia son
+ * exactamente estos tres —el alta de predio, el acta de fiscalización y la
+ * transferencia—, cuyo botón de avanzar dice «Continuar» o el nombre del acto.
+ * Tres de los siete mudos que el arnés encontró eran éstos y no paginadores, así
+ * que ponerles el motivo del pie de tabla habría sido mentir sobre la causa.
+ *
+ * Se apaga con `aria-disabled` y no con `disabled` —a propósito, y así estaba en
+ * las tres copias—: el botón sigue en el orden de tabulación, de modo que quien
+ * navega con teclado llega a él y oye por qué no lleva a ninguna parte, en vez
+ * de saltárselo sin enterarse de que existe. Por eso el `onClick` guarda el
+ * primer paso: `aria-disabled` no impide la pulsación, sólo la anuncia.
+ */
+export function PasoAtras({
+  paso,
+  atras,
+  style,
+}: {
+  paso: number;
+  atras: () => void;
+  style?: CSSProperties;
+}) {
+  const enElPrimero = paso === 0;
+  return (
+    <button
+      onClick={() => {
+        if (!enElPrimero) atras();
+      }}
+      aria-disabled={enElPrimero}
+      className="hov-linea"
+      aria-label={enElPrimero ? 'Anterior · éste es el primer paso' : `Volver al paso ${paso}`}
+      title={enElPrimero ? 'Éste es el primer paso: no hay ninguno antes al que volver.' : undefined}
+      style={{
+        display: 'flex',
+        alignItems: 'center',
+        gap: 7,
+        border: '1px solid var(--line-2)',
+        borderRadius: 6,
+        padding: '10px 18px',
+        background: 'var(--bg-card)',
+        fontSize: 13,
+        cursor: 'pointer',
+        opacity: enElPrimero ? 0.5 : 1,
+        ...style,
+      }}
+    >
+      <Icono d={ICO.flechaIzq} tam={14} grosor={1.8} />
+      Anterior
+    </button>
+  );
+}

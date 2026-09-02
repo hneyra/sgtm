@@ -3,7 +3,7 @@ import { Shell, type Contexto, type EntradaDePaleta } from '../../shell/Shell';
 import type { PantallaProps } from '../../App';
 import { Icono } from '../../ds/Icono';
 import { ICO } from '../../ds/iconos';
-import { Insignia, type Tono } from '../../ds/componentes';
+import { Insignia, Paginador, type Tono } from '../../ds/componentes';
 import { moduloDe } from '../../shell/modulos';
 import { miles, usarPreferencias } from '../../shell/preferencias';
 import {
@@ -23,6 +23,7 @@ import {
 import { useRebote, useRecurso, type Estado } from '../../api/useRecurso';
 import { Descargas, type FormatoDeDocumento } from '../../api/descarga';
 import { ErrorDeApi, fijarToken } from '../../api/cliente';
+import { causasDelRechazo } from '../../api/Fallo';
 import { cuentaActual, hayPuerta } from '../../api/sesion';
 import {
   descargarPadronDeNotificaciones,
@@ -139,15 +140,6 @@ const ENTRADILLA: CSSProperties = {
   color: 'var(--ink-2)',
   maxWidth: '70ch',
 };
-const BOTON_LINEA: CSSProperties = {
-  border: '1px solid var(--line-2)',
-  borderRadius: 6,
-  padding: '6px 12px',
-  background: 'var(--bg-elev)',
-  fontSize: 12,
-  color: 'var(--ink-2)',
-  cursor: 'pointer',
-};
 
 const SIN_DATO = '—';
 const T_INFO = ['M12 3a9 9 0 1 0 0 18 9 9 0 0 0 0-18', 'M12 8.2h.02', 'M11.2 11.4h1v5h-1z'];
@@ -261,7 +253,11 @@ function tituloDelFallo(error: ErrorDeApi | null, que: string): string {
       return 'El acto choca con algo que ya está registrado';
     case 'VALIDACION':
     case 'ORDEN_NO_ADMITIDO':
-      return 'El servidor no admite lo que se le mandó';
+      /* No dice «no admite lo que se le mandó»: dictar una resolución de
+         gerencia lee su plazo del conjunto sellado, y desde #562 eso contesta
+         422 nombrando la llave en vez de un 500 opaco. Con aquel titular, quien
+         atiende se pone a corregir un formulario que está bien. */
+      return 'El servidor rechazó la operación';
     case 'SIN_RESPUESTA':
       return error.estado === 0 ? 'No se pudo contactar con el servidor' : 'El servidor contestó otra cosa';
     default:
@@ -392,23 +388,6 @@ function Vacio({ titulo, children }: { titulo: string; children: ReactNode }) {
       <p style={{ margin: 0, fontFamily: 'var(--font-serif)', fontSize: 16, fontWeight: 600 }}>{titulo}</p>
       <p style={{ margin: 0, maxWidth: '56ch', fontSize: 13, lineHeight: 1.55, color: 'var(--ink-3)', textAlign: 'center', textWrap: 'pretty' }}>{children}</p>
     </section>
-  );
-}
-
-function Paginas({ pagina, totalPaginas, hayMas, ir }: { pagina: number; totalPaginas: number; hayMas: boolean; ir: (n: number) => void }) {
-  if (totalPaginas <= 1) return null;
-  return (
-    <div style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '10px 16px', borderTop: '1px solid var(--line)' }}>
-      <button onClick={() => ir(Math.max(0, pagina - 1))} disabled={pagina === 0} className="hov-linea" style={{ ...BOTON_LINEA, opacity: pagina === 0 ? 0.45 : 1, cursor: pagina === 0 ? 'not-allowed' : 'pointer' }}>
-        Anterior
-      </button>
-      <span style={{ fontFamily: 'var(--font-mono)', fontSize: 12, color: 'var(--ink-3)' }}>
-        {pagina + 1} de {totalPaginas}
-      </span>
-      <button onClick={() => ir(pagina + 1)} disabled={!hayMas} className="hov-linea" style={{ ...BOTON_LINEA, opacity: hayMas ? 1 : 0.45, cursor: hayMas ? 'pointer' : 'not-allowed' }}>
-        Siguiente
-      </button>
-    </div>
   );
 }
 
@@ -678,6 +657,14 @@ export default function Sanciones({ dest, onDest }: PantallaProps) {
     }
   };
 
+    /* El motivo del acto, en un solo sitio: lo lee el parrafo de al lado y lo
+     lleva el `title` del boton. Con dos copias, arreglar una y no la otra deja
+     al boton diciendo algo distinto de lo que se ve. */
+  const motivoDeLaCorrida = faltaObservacion
+    ? 'Falta la observación: sin ella el servidor no guarda nada.'
+    : texto('valDesde') === '' || texto('valHasta') === ''
+      ? 'Faltan las dos fechas del rango: el servidor exige exactamente uno de los dos caminos, y este es el del rango.'
+      : 'Registrar la corrida no emite ningún valor todavía.';
   const registrarLaCorrida = async () => {
     setEnviando(true);
     setFalloDelActo(null);
@@ -929,7 +916,7 @@ export default function Sanciones({ dest, onDest }: PantallaProps) {
                         </tbody>
                       </table>
                     </div>
-                    <Paginas pagina={p.pagina} totalPaginas={p.totalPaginas} hayMas={p.hayMas} ir={setPagina} />
+                    <Paginador pagina={p.pagina} totalPaginas={p.totalPaginas} hayMas={p.hayMas} ir={setPagina} />
                     <p style={{ ...PIE, borderTop: '1px solid var(--line)' }}>
                       La multa es la del acta, al {p.contenido[0].actualizadoA}, y la fase se resolvió al {p.contenido[0].faseAlDia}. Las
                       dos fechas viajan con su cifra y no se dan por «hoy».
@@ -1131,6 +1118,14 @@ export default function Sanciones({ dest, onDest }: PantallaProps) {
               <div role="alert" style={{ display: 'flex', flexDirection: 'column', gap: 4, padding: '12px 14px', borderRadius: 8, background: 'var(--bad-bg)', color: 'var(--bad-fg)' }}>
                 <strong style={{ fontSize: 12.5 }}>{tituloDelFallo(falloDelActo, 'el acto')}</strong>
                 <span style={{ fontSize: 12.5, lineHeight: 1.55, textWrap: 'pretty' }}>{falloDelActo.mensaje}</span>
+                {/* Las dos causas de un 422 llegan con el mismo código y la
+                    respuesta no trae ningún discriminador: se dicen las dos y en
+                    qué se reconocen, en vez de clasificar por subcadena (#562). */}
+                {causasDelRechazo(falloDelActo, 'PLAZO:RG_ORDINARIA_CUMPLIMIENTO') !== null && (
+                  <span style={{ fontSize: 12, lineHeight: 1.5, textWrap: 'pretty', opacity: 0.85 }}>
+                    {causasDelRechazo(falloDelActo, 'PLAZO:RG_ORDINARIA_CUMPLIMIENTO')}
+                  </span>
+                )}
                 {falloDelActo.detalles && falloDelActo.detalles.length > 0 && (
                   <span style={{ fontFamily: 'var(--font-mono)', fontSize: 11.5 }}>{falloDelActo.detalles.join(' · ')}</span>
                 )}
@@ -1189,7 +1184,7 @@ export default function Sanciones({ dest, onDest }: PantallaProps) {
                           </tbody>
                         </table>
                       </div>
-                      <Paginas pagina={p.pagina} totalPaginas={p.totalPaginas} hayMas={p.hayMas} ir={setPaginaCuis} />
+                      <Paginador pagina={p.pagina} totalPaginas={p.totalPaginas} hayMas={p.hayMas} ir={setPaginaCuis} />
                       <p style={{ ...PIE, borderTop: '1px solid var(--line)' }}>
                         No hay columna de multa en soles: sería el porcentaje por la UIT del ejercicio, y la UIT sale del conjunto de
                         parámetros sellado. Multiplicarla aquí con una UIT escrita a mano es lo que la regla 5 prohíbe.
@@ -1229,17 +1224,23 @@ export default function Sanciones({ dest, onDest }: PantallaProps) {
               </p>
             </section>
 
+            {/* El motivo sale una vez y se usa dos: en el parrafo que se lee y en
+                el `title` del boton. Con dos copias, arreglar una y no la otra
+                deja al boton diciendo algo distinto de lo que hay al lado. */}
             <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>
-              <p style={{ margin: 0, flex: 1, minWidth: 180, fontSize: 12, color: 'var(--ink-3)', textWrap: 'pretty' }}>
-                {faltaObservacion
-                  ? 'Falta la observación: sin ella el servidor no guarda nada.'
-                  : texto('valDesde') === '' || texto('valHasta') === ''
-                    ? 'Faltan las dos fechas del rango: el servidor exige exactamente uno de los dos caminos, y este es el del rango.'
-                    : 'Registrar la corrida no emite ningún valor todavía.'}
+              {/* El motivo se enlaza con `aria-describedby`, no se deja sólo al
+                  lado: quien navega con teclado llega al botón y oye «Registrar
+                  la corrida, atenuado» sin nada más, y este párrafo se queda a
+                  la espalda del foco (RNF-082). El `title` cubre al que pasa el
+                  ratón por encima. */}
+              <p id="motivo-de-la-corrida" style={{ margin: 0, flex: 1, minWidth: 180, fontSize: 12, color: 'var(--ink-3)', textWrap: 'pretty' }}>
+                {motivoDeLaCorrida}
               </p>
               <button
                 onClick={registrarLaCorrida}
                 disabled={faltaObservacion || texto('valDesde') === '' || texto('valHasta') === '' || enviando}
+                aria-describedby="motivo-de-la-corrida"
+                title={faltaObservacion || texto('valDesde') === '' || texto('valHasta') === '' ? motivoDeLaCorrida : undefined}
                 className={!faltaObservacion && texto('valDesde') !== '' && texto('valHasta') !== '' && !enviando ? 'hov-acento-2' : undefined}
                 style={{ border: 0, borderRadius: 6, padding: '11px 22px', background: 'var(--accent)', color: '#fff', fontSize: 13.5, fontWeight: 500, cursor: !faltaObservacion && texto('valDesde') !== '' && texto('valHasta') !== '' && !enviando ? 'pointer' : 'not-allowed', opacity: !faltaObservacion && texto('valDesde') !== '' && texto('valHasta') !== '' && !enviando ? 1 : 0.5 }}
               >
