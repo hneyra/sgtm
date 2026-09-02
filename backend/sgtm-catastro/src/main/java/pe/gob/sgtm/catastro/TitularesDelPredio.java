@@ -52,10 +52,41 @@ public interface TitularesDelPredio {
      * §4.2).
      *
      * <p>Una lista vacia <b>no distingue</b> «el predio no existe» de «no tiene titular a esa
-     * fecha», y es deliberado: bajo RLS un predio de otra municipalidad tampoco existe, y contestar
-     * distinto en cada caso convertiria esta lectura en un detector de predios ajenos.
+     * fecha». Quien necesite separarlos lo pregunta con {@link #estaEnElPadron(long)}, que es una
+     * pregunta distinta y contesta lo mismo para un predio inventado y para uno de otra
+     * municipalidad — de modo que separarlos no convierte esta lectura en un detector de predios
+     * ajenos.
      */
     List<TitularDelPredio> de(long predioId, LocalDate fecha);
+
+    /**
+     * Si ese identificador es una fila del padron de predios de esta municipalidad (#680).
+     *
+     * <h2>Por que vive aqui y no en un puerto propio</h2>
+     *
+     * <p>Aunque «¿de quien es?» y «¿existe?» sean dos preguntas —y este modulo prefiera puertos
+     * pequenos, uno por pregunta—, esta <b>solo existe para interpretar la respuesta vacia de
+     * {@link #de(long, LocalDate)}</b>. Separarlas en dos puertos dejaria que dos implementaciones
+     * distintas contestaran sobre el mismo predio y se contradijeran —«no tiene titular» y «no
+     * existe» a la vez—, que es exactamente la respuesta incoherente que #680 existe para hacer
+     * imposible.
+     *
+     * <h2>Lo que no distingue, a proposito</h2>
+     *
+     * <p>Un identificador inventado y el de un predio de otra municipalidad contestan lo mismo:
+     * {@code false}. Bajo RLS el segundo no es una fila de este padron, y contestar distinto seria
+     * publicar que existe en algun sitio.
+     *
+     * <p><b>Un predio dado de baja sigue estando en el padron.</b> Aqui no se pregunta si esta
+     * activo sino si el identificador apunta a una fila: su deuda existe, se lee y se tiene que
+     * poder mover, y confundir «de baja» con «no existe» dejaria esa deuda sin forma de corregirse
+     * —el mismo defecto que #660 midio para el otro lado del movimiento—.
+     *
+     * <p>No lleva fecha, y es la unica lectura de este puerto que no la lleva: un predio no deja de
+     * existir en una fecha. Lo que cambia con la fecha es de quien es, y eso lo contesta {@link
+     * #de(long, LocalDate)}.
+     */
+    boolean estaEnElPadron(long predioId);
 
     /**
      * Lo mismo para un lote de predios, en una sola lectura (#545).
