@@ -163,6 +163,31 @@ Los dos habrían pasado una revisión de código sin que nadie los viera:
   medido**: 62 s frente a los 2 s reales, porque wal-g tarda en rendirse con una clave
   equivocada. Un RTO medido así es un RTO inventado.
 
+### 5.3 Y desde #558 la restauración verificada queda escrita
+
+Hasta aquí el simulacro **demostraba** que la copia se podía restaurar y no lo **decía en
+ninguna parte**: `respaldo` (V8) sabía si la copia se había *tomado* —lo escribe el `CronJob`
+de [`componentes/Respaldo.ts`](../../infra/componentes/Respaldo.ts)— y no si alguna vez se
+había *restaurado*, que es exactamente la pregunta de RNF-079 y la única que la pantalla
+`Seguridad · Sistema · Copias de seguridad` existe para contestar (RF-126). La pantalla
+rellenaba el hueco con «la última restauración verificada es de hace 94 días», inventado.
+
+`V78` le da a la tabla dos columnas —`ultima_restauracion_verificada` y
+`ultima_restauracion_verificada_por`— y el modo `--contra-cluster` las escribe **al final del
+paso 8**, con `sgtm_owner` y sobre la última copia `EXITOSA`, que es la que `backup-fetch
+LATEST` acaba de restaurar. Nulo significa **«nunca se probó»**, nunca «hoy»: no hay valor por
+omisión, y `sgtm_app` sigue con `SELECT` y nada más.
+
+**El modo local no escribe ahí, y no es un olvido**: levanta su propio motor efímero con su
+propia tabla de ensayo, así que lo que verifica es el *procedimiento* y no ninguna copia
+registrada; marcar una fila desde ahí diría que se restauró una copia del clúster que nadie
+tocó.
+
+Tres `CHECK` impiden que la constancia mienta, y los tres se rompieron a propósito: marcar una
+copia `FALLIDO` o `EN_CURSO` (2 en rojo), fechar la verificación **antes** del fin de la copia
+—sería de otra— (1), y guardar media verificación, un instante sin quien lo firma o al revés
+(1).
+
 ## 6. Lo que sigue sin verificarse, y por qué
 
 Decirlo es parte del trabajo: **el simulacro guarda en el sistema de archivos local

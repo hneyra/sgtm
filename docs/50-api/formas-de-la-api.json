@@ -5673,7 +5673,9 @@
         "resultado": "texto",
         "destino": "texto",
         "tamanoBytes": "entero",
-        "detalle": "texto"
+        "detalle": "texto",
+        "ultimaRestauracionVerificada": "instante",
+        "ultimaRestauracionVerificadaPor": "texto"
       }
     ],
     "pagina": "entero",
