@@ -5,11 +5,85 @@ import { Aviso, Esqueleto, Insignia, tonoDe, type Tono } from '../../ds/componen
 import { MODULOS } from '../../shell/modulos';
 import { personaDeLaSesion } from '../../shell/persona';
 import { hayPuerta, salir } from '../../api/sesion';
-import { EJERCICIOS, soles, usarPreferencias } from '../../shell/preferencias';
-import { DEUDA, PAGOS, PARADO, UNIDADES } from '../../datos/inicio';
-import { indicadores } from '../../api/rentas';
+import { EJERCICIOS, miles, soles, usarPreferencias } from '../../shell/preferencias';
+import { DEUDA, PAGOS, UNIDADES } from '../../datos/inicio';
+import { indicadores, trabajoParado, type ImporteConFecha } from '../../api/rentas';
 import { useRecurso } from '../../api/useRecurso';
 import { FalloDeLectura } from '../../api/Fallo';
+import { dia, instante, zonaDelLector } from '../../ds/fechas';
+
+/** Lo que se dibuja cuando no hay dato. Igual que en el resto del producto. */
+const SIN_DATO = '—';
+
+/**
+ * Un importe del backend, tal cual, con el signo de soles delante.
+ *
+ * **No convierte a numero.** El backend manda `BigDecimal.toPlainString()` y
+ * pasarlo por `Number` lo mete en un `double`, que es lo que la regla 1 prohibe
+ * al otro lado y por el mismo motivo. Lo unico que se hace es separar los miles
+ * —que es tipografia, no aritmetica—, con la misma guarda que `areaEnMetros`:
+ * sale verbatim todo lo que no sea un decimal sin signo y sin ceros a la
+ * izquierda, para no convertir un codigo en una cantidad.
+ *
+ * Un nulo NO sale como «S/ 0.00»: sale con el guion. Un cero es una medida y un
+ * nulo es que no hay cifra, y confundirlos es lo que el AC 2.2 de #549 existe
+ * para impedir.
+ */
+function moneda(v: string | null | undefined): string {
+  if (v === null || v === undefined || v === '') return SIN_DATO;
+  if (!/^(0|[1-9]\d*)(\.\d+)?$/.test(v)) return 'S/ ' + v;
+  const punto = v.indexOf('.');
+  const entero = punto === -1 ? v : v.slice(0, punto);
+  const decimales = punto === -1 ? '.00' : v.slice(punto).padEnd(3, '0');
+  return 'S/ ' + entero.replace(/\B(?=(\d{3})+$)/g, ',') + decimales;
+}
+
+/**
+ * Donde se desatasca cada frente, dicho como una parada del riel.
+ *
+ * La llave es el nombre del **enumerado** del backend, no el rotulo: el rotulo
+ * es prosa que el servidor redacta y reescribirla no debe mover a nadie de
+ * modulo. El valor es el par (modulo, destino) del shell, elegido para que sea
+ * la misma pantalla cuyo permiso de lectura decide que el frente se publique
+ * —`transito_padron` → Papeletas, `consulta_valores` → Valores,
+ * `coactiva_expedientes` → Expedientes, `consulta_fichas` → Predios—: quien
+ * recibe el frente puede abrir eso, asi que el enlace no lleva a un 403.
+ *
+ * **Un frente que no este aqui no se enlaza.** El enumerado del backend puede
+ * crecer —el propio issue enumera seis y hoy hay cuatro—, y mandar a nadie a
+ * `#/undefined/panel` es peor que dejar la fila sin enlace: la fila se dibuja
+ * igual, con su recuento, y dice que todavia no tiene pantalla a la que llevar.
+ */
+const DESTINO_DEL_FRENTE: Record<string, { modulo: string; dest: string } | undefined> = {
+  TRANSITO: { modulo: 'transito', dest: 'padron' },
+  VALORES: { modulo: 'valores', dest: 'lista' },
+  COACTIVA: { modulo: 'coactiva', dest: 'lista' },
+  CATASTRO: { modulo: 'catastro', dest: 'predios' },
+};
+
+/**
+ * Lo que una fila de frente dice de su importe, y por que.
+ *
+ * Tres estados y no dos: la cifra, el cero medido y el «no se cifra». El
+ * tercero **no** puede salir como `S/ 0.00` —seria afirmar que ese trabajo
+ * parado no cuesta nada—, y el segundo tampoco puede salir como guion, porque
+ * cero papeletas sin emitir es un hecho y una buena noticia.
+ */
+function importeDelFrente(f: { cuantos: number; importe: ImporteConFecha | null }): {
+  texto: string;
+  motivo: string | null;
+} {
+  if (f.importe !== null) {
+    return { texto: moneda(f.importe.importe), motivo: null };
+  }
+  return {
+    texto: SIN_DATO,
+    motivo:
+      f.cuantos === 0
+        ? 'Su módulo no publica lo que suma este frente, así que no se cifra ni cuando está en cero.'
+        : 'Su módulo cuenta cuántos hay pero no suma lo que valen; ponerle una cifra aquí sería inventarla.',
+  };
+}
 
 /**
  * Inicio no es un módulo: es la respuesta a «a quién atiendes». Trae su propio
@@ -57,6 +131,18 @@ export default function Inicio() {
      rotulo y no por posicion: el orden de `kpis` no es contrato, y tomar el
      [3] pondria en «Recaudado hoy» la cifra de otra cosa el dia que cambie. */
   const kpiDelDia = panel.datos?.kpis.find((k) => /hoy/i.test(k.label)) ?? null;
+
+  /* ── El trabajo parado por modulo, contra `GET /indicadores/trabajo-parado` ──
+     Es una lectura APARTE de la del panel, y no un trozo de ella: son cuatro
+     modulos distintos, con cuatro permisos distintos, y el backend le da a cada
+     uno su propio `calculadoEn`. Falla por su lado y se dibuja por su lado: que
+     no se pueda leer la recaudacion no tiene por que borrar el trabajo parado.
+
+     Lo que llega ya viene filtrado por permiso —cada frente lleva detras el
+     acceso de la pantalla de su modulo— asi que aqui NO se filtra otra vez ni
+     se pregunta por los permisos: se dibuja lo que hay. Una fila «no puedes ver
+     esto» seria justo lo que ADR-0016 §2 prohibe (#297). */
+  const parado = useRecurso((s2) => trabajoParado(pref.ejercicio, s2), [pref.ejercicio], esMuni);
 
   /* La sesión de verdad es la del personal. La del contribuyente NO se sustituye:
      el ciudadano entra por otro realm —`sgtm-ciudadano`, con su propio emisor
@@ -531,15 +617,60 @@ export default function Inicio() {
                   <h2 style={{ margin: 0, flex: 1, fontFamily: 'var(--font-serif)', fontSize: 16, fontWeight: 600 }}>
                     Emitido contra recaudado · ejercicio {pref.ejercicio}
                   </h2>
-                  <span style={{ fontFamily: 'var(--font-mono)', fontSize: 11, color: 'var(--ink-3)' }}>
-                    {panel.datos ? `al ${panel.datos.fechaCalculo}` : 'al 13/08'}
-                  </span>
+                  {/* LO EMITIDO, por fin como cifra y no dentro de una frase (#549).
+                      El titulo de esta seccion promete «emitido contra recaudado» y
+                      hasta hoy el emitido no estaba: la franja que lo decia se
+                      retiro porque era de la maqueta —«S/ 23,725,394.80» sobre
+                      filas que suman catorce mil— y la unica cifra real vivia
+                      dentro del texto del KPI «Avance de cobranza», «de
+                      S/ 14,384.83 cargados». Sacarla de ahi con una expresion
+                      regular habria sido peor que no tenerla.
+
+                      Se LEE, no se compone: es `panel.datos.cargado`, un importe
+                      con su fecha. Sumar los `cargado` de las filas daria el mismo
+                      numero hoy y seria componer dinero en la pantalla (RNF-083),
+                      ademas de romperse el dia que el bloque no traiga todos los
+                      tributos. Y lo recaudado y el avance NO se repiten aqui: ya
+                      son dos de los cuatro KPI de arriba. */}
+                  {panel.datos && (
+                    <span style={{ display: 'flex', alignItems: 'baseline', gap: 6, flexWrap: 'wrap' }}>
+                      <span style={{ fontSize: 11, textTransform: 'uppercase', letterSpacing: '.09em', color: 'var(--ink-4)' }}>Emitido</span>
+                      <span style={{ fontFamily: 'var(--font-mono)', fontSize: 14.5, color: 'var(--ink)' }}>
+                        {moneda(panel.datos.cargado.importe)}
+                      </span>
+                      {/* SU fecha, no la del panel. `cargado` viaja con su propio
+                          `actualizadoA` a proposito —«es la fecha con la que el
+                          libro contesto», dice el dominio— y no con
+                          `fechaCalculo`: hoy son la misma, y el dia que el libro
+                          conteste con otra, estampar aqui la del panel seria
+                          fechar una cifra con una fecha que no es la suya
+                          (regla 9). Por eso no hay una fecha suelta de seccion:
+                          cada cifra lleva la que le corresponde, y la del panel
+                          entero se dice una vez al pie. */}
+                      <span style={{ fontFamily: 'var(--font-mono)', fontSize: 11, color: 'var(--ink-3)' }}>
+                        al {dia(panel.datos.cargado.actualizadoA)}
+                      </span>
+                    </span>
+                  )}
                 </div>
                 {(porTributo?.rows ?? []).map((r) => ({
                   etiqueta: r.label,
                   pct: r.pct,
                   conocido: r.avanceConocido,
                   valor: r.value,
+                  /* Las dos cifras salen de los CAMPOS y no del `sub` (#549).
+                     El `sub` dice lo mismo con palabras —«cargado S/ 1,697.65 ·
+                     pendiente S/ 1,697.65»— y sigue siendo lo que se lee cuando
+                     la fila no publica los campos: el bloque «por mes» agrupa
+                     por el mes del abono y no tiene cargado propio, y ahi un
+                     cero afirmaria que ese mes cargo cero.
+
+                     Cada una lleva SU fecha, que puede no ser la de la
+                     cabecera: la del bloque es una sola hoy, pero es la fila la
+                     que la publica y es la fila la que la tiene que decir
+                     (regla 9). */
+                  cargado: r.cargado,
+                  pendiente: r.pendiente,
                   sub: r.sub,
                 })).map((a) => {
                   const color = !a.conocido ? 'var(--ink-4)' : a.pct < 50 ? 'var(--bad-fg)' : a.pct < 80 ? 'var(--warn-fg)' : 'var(--ok-fg)';
@@ -558,8 +689,23 @@ export default function Inicio() {
                       <span style={{ flex: '0 0 60px', whiteSpace: 'nowrap', textAlign: 'right', fontFamily: 'var(--font-mono)', fontSize: 12.5, color }}>
                         {a.conocido ? `${a.pct.toFixed(1)} %` : '—'}
                       </span>
-                      <span data-sm-hide="1" style={{ flex: '0 0 210px', textAlign: 'right', fontFamily: 'var(--font-mono)', fontSize: 11.5, color: 'var(--ink-3)' }}>
-                        {a.sub}
+                      {/* Las cifras, del campo; el motivo, del `sub`.
+                          Cuando la barra NO se pudo medir, el `sub` deja de
+                          repetir las dos cifras y pasa a decir por que —«sin
+                          cargos asentados en el ejercicio»—: es lo unico que
+                          explica el hueco de la barra y el guion del
+                          porcentaje, asi que ahi manda el, no los campos.
+                          Ponerle «cargado S/ 0.00 · pendiente S/ 0.00» en su
+                          lugar cambiaria una explicacion por dos ceros. */}
+                      <span data-sm-hide="1" style={{ flex: '0 0 316px', textAlign: 'right', fontFamily: 'var(--font-mono)', fontSize: 11.5, color: 'var(--ink-3)' }}>
+                        {a.conocido && a.cargado !== null && a.pendiente !== null ? (
+                          <>
+                            cargado {moneda(a.cargado.importe)} · pendiente {moneda(a.pendiente.importe)}
+                            <span style={{ display: 'block', fontSize: 10, color: 'var(--ink-4)' }}>al {dia(a.cargado.actualizadoA)}</span>
+                          </>
+                        ) : (
+                          a.sub
+                        )}
                       </span>
                     </div>
                   );
@@ -576,62 +722,176 @@ export default function Inicio() {
                     <Esqueleto alto={10} />
                   </div>
                 )}
-                {/* Aqui habia una franja de totales —EMITIDO / RECAUDADO / SALDO /
+                {/* Aqui hubo una franja de totales —EMITIDO / RECAUDADO / SALDO /
                     AVANCE— sumada sobre la maqueta: decia «S/ 23,725,394.80 ·
                     S/ 18,424,251.20 · 77.7 %» encima de tres filas reales que
-                    suman S/ 13,783.75, y contradecirlas por tres ordenes de
-                    magnitud es peor que no decir nada. No se recompone aqui:
-                    una cifra de dinero no se compone en la pantalla (RNF-083), y
-                    del total del ejercicio el panel publica lo recaudado, la
-                    cartera y el avance —los tres KPI de arriba— pero NO lo
-                    emitido, que solo aparece dentro del texto de una nota. */}
+                    suman catorce mil, y contradecirlas por tres ordenes de
+                    magnitud era peor que no decir nada.
+
+                    De las cuatro cifras, tres ya estaban arriba como KPI y la
+                    cuarta —lo emitido— no la publicaba nadie. Desde #549 si, y
+                    esta en la cabecera de esta seccion, LEIDA de `cargado`. La
+                    franja no vuelve: recomponer aqui el saldo y el avance
+                    seria restar y dividir dos cifras de dinero en la pantalla
+                    (RNF-083), y el avance ya viene calculado en su KPI. */}
                 <p style={{ margin: 0, padding: '11px 16px', borderTop: '1px solid var(--line)', background: 'var(--bg-elev)', fontSize: 12, lineHeight: 1.5, color: 'var(--ink-3)', textWrap: 'pretty' }}>
                   {porTributo?.note ??
                     'Lo recaudado, la cartera pendiente y el avance del ejercicio están arriba, tal como los publica el panel.'}
+                  {/* La hora de la lectura, no el dia (#549). `fechaCalculo` es
+                      el dia tributario al que estan calculadas las cifras y
+                      `calculadoEn` es CUANDO se leyeron: dos lecturas del mismo
+                      dia dan cifras distintas —el interes corre, la caja
+                      cobra— y sin la hora no se distingue cual se esta mirando.
+                      Va por `instante()`, que es lo unico que lo dibuja en la
+                      zona del lector: partir la cadena lo dejaria en UTC, y en
+                      Peru son cinco horas, suficiente para cambiar de dia. */}
+                  {panel.datos && (
+                    <span style={{ display: 'block', marginTop: 4, color: 'var(--ink-4)' }}>
+                      Cifras al {dia(panel.datos.fechaCalculo)}, leídas el {instante(panel.datos.calculadoEn)}, hora de{' '}
+                      {zonaDelLector()}. No se actualiza solo.
+                    </span>
+                  )}
                 </p>
               </section>
 
               <section style={{ background: 'var(--bg-card)', border: '1px solid var(--line)', borderRadius: 10, boxShadow: 'var(--shadow-1)', overflow: 'hidden' }}>
-                <div style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '13px 16px', borderBottom: '1px solid var(--line)' }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 12, flexWrap: 'wrap', padding: '13px 16px', borderBottom: '1px solid var(--line)' }}>
                   <h2 style={{ margin: 0, flex: 1, fontFamily: 'var(--font-serif)', fontSize: 16, fontWeight: 600 }}>Dónde se para el trabajo</h2>
-                  <span style={{ fontFamily: 'var(--font-mono)', fontSize: 11, color: 'var(--ink-3)' }}>{PARADO.length} módulos</span>
+                  {/* El recuento de frentes sale de lo LEIDO, no de una constante.
+                      Decia «6 módulos» siempre, y eran seis filas de la maqueta;
+                      ahora son los que este perfil puede ver, que es un numero
+                      que cambia con quien entra. */}
+                  <span style={{ fontFamily: 'var(--font-mono)', fontSize: 11, color: 'var(--ink-3)' }}>
+                    {parado.datos ? `${parado.datos.frentes.length} ${parado.datos.frentes.length === 1 ? 'frente' : 'frentes'} · al ${dia(parado.datos.fechaCalculo)}` : ''}
+                  </span>
                 </div>
-                {PARADO.map((p) => (
-                  <button
-                    key={p[0]}
-                    onClick={() => ir(p[6])}
-                    className="hov-acento"
-                    style={{
-                      display: 'flex',
-                      alignItems: 'center',
-                      gap: 14,
-                      width: '100%',
-                      textAlign: 'left',
-                      border: 0,
-                      borderBottom: '1px solid var(--line)',
-                      background: 'transparent',
-                      padding: '13px 16px',
-                      cursor: 'pointer',
-                    }}
-                  >
-                    {/* La insignia va NEUTRA y sin cifra al lado. Con «1,842
-                        papeletas · S/ 788,976.00» en rojo, la fila afirmaba una
-                        medida —cuanto hay parado y cuanto cuesta— que nadie
-                        habia contado: las seis cifras y los seis tonos eran de
-                        la maqueta. Lo que sobrevive es lo unico cierto: que ahi
-                        es donde el trabajo se atasca, y por donde se entra. */}
-                    <Insignia tono="neutro">{p[0]}</Insignia>
-                    <span style={{ flex: 1, minWidth: 0 }}>
-                      <span style={{ display: 'block', fontSize: 13.5, fontWeight: 500 }}>{p[3]}</span>
-                    </span>
-                    <span style={{ fontFamily: 'var(--font-mono)', fontSize: 11.5, color: 'var(--ink-4)', flex: '0 0 auto' }}>—</span>
-                    <Icono d={ICO.flechaDer} tam={14} grosor={1.8} style={{ color: 'var(--ink-4)', flex: '0 0 auto' }} />
-                  </button>
-                ))}
+
+                {parado.error !== null && (
+                  <div style={{ padding: '14px 16px' }}>
+                    <FalloDeLectura
+                      error={parado.error}
+                      que="el trabajo parado por módulo"
+                      alReintentar={parado.reintentar}
+                    />
+                  </div>
+                )}
+
+                {parado.cargando && (
+                  <div style={{ padding: '14px 16px', display: 'flex', flexDirection: 'column', gap: 10 }}>
+                    <Esqueleto alto={14} />
+                    <Esqueleto alto={14} />
+                    <Esqueleto alto={14} />
+                  </div>
+                )}
+
+                {/* Ni una fila de aqui es de la maqueta (#549).
+                    Lo eran las seis: «1,842 papeletas caducadas sin notificar ·
+                    S/ 788,976.00», con su tono rojo, sumando S/ 1,351,114.40
+                    que nadie habia contado. Lo que se dibuja ahora son los
+                    frentes que `GET /indicadores/trabajo-parado` devuelve, con
+                    el recuento y el importe que el backend cuenta con la MISMA
+                    consulta que sostiene la pantalla del modulo (AC 2.4).
+
+                    Y el rotulo lo redacta el servidor —`queEstaParado`,
+                    `porQueCuestaDinero`—: reescribirlo aqui dejaria a la
+                    pantalla de aterrizaje diciendo de un frente algo distinto
+                    de lo que dice el modulo donde se desatasca (RNF-080). */}
+                {(parado.datos?.frentes ?? []).map((f) => {
+                  const destino = DESTINO_DEL_FRENTE[f.frente];
+                  const cifra = importeDelFrente(f);
+                  const idMotivo = `parado-${f.frente}-motivo`;
+                  /* El cuerpo de la fila es el mismo se pueda entrar o no: lo
+                     unico que cambia es si es un boton. Un frente sin destino
+                     conocido —el enumerado del backend puede crecer— se dibuja
+                     igual y dice que todavia no lleva a ninguna parte, en vez
+                     de mandar a nadie a una ruta que no existe. */
+                  const cuerpo = (
+                    <>
+                      <Insignia tono="neutro">{f.modulo}</Insignia>
+                      <span style={{ flex: 1, minWidth: 0 }}>
+                        <span style={{ display: 'block', fontSize: 13.5, fontWeight: 500 }}>
+                          {miles(f.cuantos)} · {f.queEstaParado}
+                        </span>
+                        <span style={{ display: 'block', fontSize: 12, color: 'var(--ink-3)', marginTop: 2, textWrap: 'pretty' }}>
+                          {f.porQueCuestaDinero}
+                          {destino === undefined && ' · todavía no hay pantalla a la que llevar desde aquí'}
+                        </span>
+                      </span>
+                      <span style={{ flex: '0 0 auto', textAlign: 'right' }}>
+                        <span style={{ display: 'block', fontFamily: 'var(--font-mono)', fontSize: 12.5, color: cifra.motivo === null ? 'var(--ink)' : 'var(--ink-4)' }}>
+                          {cifra.texto}
+                        </span>
+                        {/* La fecha va SOLO donde hay cifra que fechar: bajo un
+                            guion diria que el guion esta calculado a esa fecha
+                            (regla 9). El recuento no es dinero y la lleva la
+                            cabecera de la seccion. */}
+                        {f.importe !== null && (
+                          <span style={{ display: 'block', fontSize: 10, color: 'var(--ink-4)' }}>al {dia(f.importe.actualizadoA)}</span>
+                        )}
+                      </span>
+                    </>
+                  );
+                  /* El motivo del guion va DIBUJADO, no en un `title`: la fila
+                     puede ser un boton y un `title` no lo lee un lector de
+                     pantalla (RNF-082). Se ata con `aria-describedby` para que
+                     se lea junto con la fila, no como un parrafo suelto. */
+                  const motivo = cifra.motivo !== null && (
+                    <p id={idMotivo} style={{ margin: 0, padding: '0 16px 11px 16px', fontSize: 11, lineHeight: 1.45, color: 'var(--ink-4)', textWrap: 'pretty' }}>
+                      Sin cifrar: {cifra.motivo}
+                    </p>
+                  );
+                  const ESTILO = {
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: 14,
+                    width: '100%',
+                    textAlign: 'left' as const,
+                    border: 0,
+                    background: 'transparent',
+                    padding: '13px 16px',
+                  };
+                  return (
+                    <div key={f.frente} style={{ borderBottom: '1px solid var(--line)' }}>
+                      {destino !== undefined ? (
+                        <button
+                          onClick={() => ir(destino.modulo, destino.dest)}
+                          className="hov-acento"
+                          aria-describedby={cifra.motivo !== null ? idMotivo : undefined}
+                          style={{ ...ESTILO, cursor: 'pointer' }}
+                        >
+                          {cuerpo}
+                          <Icono d={ICO.flechaDer} tam={14} grosor={1.8} style={{ color: 'var(--ink-4)', flex: '0 0 auto' }} />
+                        </button>
+                      ) : (
+                        <div style={ESTILO}>{cuerpo}</div>
+                      )}
+                      {motivo}
+                    </div>
+                  );
+                })}
+
+                {/* Cero frentes NO es «no hay trabajo parado»: es que este perfil
+                    no puede abrir ninguna de las cuatro pantallas donde se
+                    desatasca. Decirlo con una lista vacia sin explicacion seria
+                    afirmar lo primero. */}
+                {parado.datos !== null && parado.datos.frentes.length === 0 && (
+                  <p style={{ margin: 0, padding: '22px 16px', fontSize: 12.5, color: 'var(--ink-3)', textWrap: 'pretty' }}>
+                    Tu perfil no puede abrir ninguna de las pantallas donde este trabajo se desatasca, así que el panel no
+                    cuenta ninguno. Esto no dice que no haya trabajo parado: dice que no te toca a ti.
+                  </p>
+                )}
+
                 <p style={{ margin: 0, padding: '11px 16px', background: 'var(--bg-elev)', fontSize: 12, lineHeight: 1.5, color: 'var(--ink-3)', textWrap: 'pretty' }}>
-                  Cada fila es un frente donde el trabajo se queda parado y el dinero no entra. <strong>Cuánto hay parado en
-                  cada uno, y cuánto vale, todavía no se puede decir</strong>: el panel de recaudación no publica ese recuento y
-                  componerlo aquí sería inventarlo (#549). Entra al módulo para verlo.
+                  Cada fila es un frente donde el trabajo se queda parado y el dinero no entra. Los recuentos salen de la misma
+                  consulta que sostiene la pantalla de su módulo, así que dicen lo mismo que dirá el módulo cuando entres.
+                  <strong> Sólo Tránsito publica lo que suma</strong>: en los demás, el módulo cuenta cuántos hay y no suma lo
+                  que valen, y ponerle una cifra aquí sería inventarla (#549).
+                  <span style={{ display: 'block', marginTop: 4, color: 'var(--ink-4)' }}>
+                    Faltan dos de los seis frentes del manual, y no por descuido: el de Autorizaciones necesita el plazo del
+                    silencio positivo, que es un valor normativo sin publicar, y el de Fiscalización no tiene ninguna consulta de
+                    módulo que reutilizar —ninguna pantalla lista actas—.
+                    {parado.datos && ` Leído el ${instante(parado.datos.calculadoEn)}, hora de ${zonaDelLector()}.`}
+                  </span>
                 </p>
               </section>
             </div>
