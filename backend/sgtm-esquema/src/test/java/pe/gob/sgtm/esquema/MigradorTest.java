@@ -4,15 +4,11 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 import java.io.IOException;
-import java.io.InputStream;
-import java.nio.charset.StandardCharsets;
 import java.sql.Connection;
-import java.sql.DriverManager;
 import java.sql.ResultSet;
 import java.sql.SQLException;
 import java.sql.Statement;
 import java.util.List;
-import java.util.UUID;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 
@@ -115,22 +111,16 @@ class MigradorTest {
 
     // ------------------------------------------------------------------
 
+    /**
+     * Los roles se crean con el <b>mismo</b> provisionador que usa {@link BaseDeDatosDePrueba}, y
+     * no con una copia.
+     *
+     * <p>La copia existia, y ponia una clave aleatoria propia: contra el PostgreSQL compartido que
+     * documenta {@code backend/README.md} eso le cambiaba la clave a las demas corridas, que es el
+     * defecto de #698 escrito por segunda vez.
+     */
     private static void crearRoles(MotorPostgres motor) throws SQLException, IOException {
-        String guion;
-        try (InputStream entrada =
-                MigradorTest.class.getResourceAsStream("/db/roles/crear-roles.sql")) {
-            guion = new String(entrada.readAllBytes(), StandardCharsets.UTF_8);
-        }
-        try (Connection admin =
-                        DriverManager.getConnection(
-                                motor.url(), motor.usuarioAdmin(), motor.claveAdmin());
-                Statement sentencia = admin.createStatement()) {
-            sentencia.execute(guion);
-            sentencia.execute(
-                    "ALTER ROLE sgtm_owner LOGIN PASSWORD '"
-                            + UUID.randomUUID().toString().replace("-", "")
-                            + "'");
-        }
+        BaseDeDatosDePrueba.provisionarRoles(motor);
     }
 
     private static int migracionesRegistradas(BaseDeDatosDePrueba base) throws SQLException {

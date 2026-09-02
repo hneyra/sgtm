@@ -213,17 +213,20 @@ prueba**:
 
 ```bash
 cd backend
-./gradlew verificarAislamiento --max-workers=1 \
+./gradlew verificarAislamiento \
   -Dsgtm.pruebas.postgres.url=jdbc:postgresql://localhost:5432/postgres \
   -Dsgtm.pruebas.postgres.usuario=postgres \
   -Dsgtm.pruebas.postgres.clave=…
 ```
 
-El usuario tiene que ser superusuario: la prueba crea los cuatro roles, les asigna claves efímeras
-y crea una base nueva por corrida. `--max-workers=1` **no es decorativo**: los roles son del
-clúster y no de la base, así que dos módulos en paralelo sobre el mismo motor se pisan la clave
-efímera de `sgtm_owner` y el fallo aparece como `password authentication failed`, que no se parece
-en nada a su causa.
+El usuario tiene que ser superusuario: la prueba crea los cuatro roles, les asigna su clave y crea
+una base nueva por corrida. Los **roles son del clúster y no de la base**, así que las comparten
+todas las corridas que apunten a ese motor; desde #698 la clave **se deriva** del clúster —dos
+tareas en paralelo escriben lo mismo— y el provisionamiento se serializa con un candado del propio
+motor, de modo que `--max-workers=1` ya no hace falta. Lo que sigue sin poder convivir es una
+corrida con **otro código** o **otra credencial de superusuario**: eso pisa la clave igual, pero
+ahora el fallo lo dice en vez de salir como `password authentication failed`. Qué garantiza y qué
+no, en [`backend/README.md`](../../backend/README.md).
 
 Lo que **sí** funciona sin Docker ni base, y conviene tener a mano:
 

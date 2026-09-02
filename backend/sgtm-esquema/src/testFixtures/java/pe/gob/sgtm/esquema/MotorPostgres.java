@@ -72,6 +72,13 @@ public final class MotorPostgres implements AutoCloseable {
      */
     private static final String INTERCALACION = "C.UTF-8";
 
+    /**
+     * La base donde se citan todas las corridas para serializar el provisionamiento de los roles
+     * (#698). {@code initdb} la crea en todo cluster de PostgreSQL, incluido el de Testcontainers,
+     * y por eso vale como punto de cita: no depende de como cada quien escriba su URL.
+     */
+    static final String BASE_DE_COORDINACION = "postgres";
+
     private final PostgreSQLContainer<?> contenedor;
     private final String url;
     private final String usuarioAdmin;
@@ -162,6 +169,24 @@ public final class MotorPostgres implements AutoCloseable {
 
     public String claveAdmin() {
         return claveAdmin;
+    }
+
+    /**
+     * La base sobre la que se coordina el provisionamiento de los roles.
+     *
+     * <p>Existe porque los candados de asesoramiento de PostgreSQL son <b>de la base</b> —medido:
+     * dos sesiones en bases distintas toman la misma clave a la vez sin esperarse— y los roles son
+     * <b>del cluster</b>. Tomar el candado en la base recien creada de esta corrida no excluiria a
+     * nadie, porque nadie mas se conecta a ella (#698).
+     *
+     * <p>Y no basta con volver a la URL que dieron: dos tareas pueden apuntar al mismo cluster
+     * nombrando bases de mantenimiento distintas —{@code /postgres} y {@code /sgtm}— y volverian a
+     * no verse. El punto de cita tiene que ser el mismo se escriba como se escriba la URL, asi que
+     * es {@link #BASE_DE_COORDINACION}, la que {@code initdb} crea en todo cluster.
+     */
+    String urlDeCoordinacion() {
+        return reemplazarBaseDeDatos(
+                urlDeMantenimiento != null ? urlDeMantenimiento : url, BASE_DE_COORDINACION);
     }
 
     @Override
