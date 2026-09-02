@@ -311,6 +311,11 @@ class RegistrarValorTest {
         }
 
         @Override
+        public long contar(CriterioDeConsultaDeValores criterio) {
+            throw new UnsupportedOperationException("Este doble no cuenta la grilla de consulta");
+        }
+
+        @Override
         public long siguienteCorrelativo(TipoValor tipo, Ejercicio ejercicio) {
             String clave = tipo.codigo() + "-" + ejercicio.valor();
             long siguiente = correlativos.getOrDefault(clave, 0L) + 1;

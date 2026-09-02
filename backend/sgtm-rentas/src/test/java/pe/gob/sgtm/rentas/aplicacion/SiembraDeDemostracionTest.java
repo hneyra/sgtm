@@ -431,11 +431,11 @@ class SiembraDeDemostracionTest {
                             new StringReader(
                                     ENCABEZADO
                                             // enero: el predio todavia era de C-000013
-                                            + "C-000013,ARBITRIOS,2026,1,"
+                                            + "C-000013,ARBITRIO,2026,1,"
                                             + CODIGO_PREDIAL
                                             + ",,36.50,2026-01-31,SALDO-INICIAL-DEMO,\n"
                                             // y en enero NO era de C-000009
-                                            + "C-000009,ARBITRIOS,2026,2,"
+                                            + "C-000009,ARBITRIO,2026,2,"
                                             + CODIGO_PREDIAL
                                             + ",,36.50,2026-01-31,SALDO-INICIAL-DEMO,\n"),
                             PORQUE);

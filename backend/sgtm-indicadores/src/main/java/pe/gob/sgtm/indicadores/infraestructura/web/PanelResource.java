@@ -4,6 +4,7 @@ import java.time.Instant;
 import java.time.LocalDate;
 import java.util.List;
 import org.jspecify.annotations.Nullable;
+import pe.gob.sgtm.dominio.Dinero;
 import pe.gob.sgtm.indicadores.dominio.AvanceDeRecaudacion;
 import pe.gob.sgtm.indicadores.dominio.Cartera;
 import pe.gob.sgtm.indicadores.dominio.Indicador;
@@ -35,9 +36,22 @@ import pe.gob.sgtm.web.ImporteActualizado;
  * tributario: dos lecturas del mismo dia dan cifras distintas y sin la hora no se distinguen (AC 2
  * de #56).
  *
+ * <h2>Lo cargado es un campo (#549)</h2>
+ *
+ * <p>{@code cargado} es lo emitido del ejercicio, y hasta #549 la unica forma de leerlo era sacarlo
+ * de la frase del KPI «Avance de cobranza» con una expresion regular. La franja «Emitido contra
+ * recaudado» de la pantalla de inicio se habia retirado por eso: sin el campo, la unica cifra
+ * disponible era la de la maqueta, que contradecia por tres ordenes de magnitud a las filas que
+ * tenia justo debajo.
+ *
+ * <p>Y va donde va el resto de los importes: como {@link ImporteActualizado}, nunca como un {@code
+ * Dinero} suelto. Lo mismo las dos cifras nuevas de cada fila —{@code cargado} y {@code
+ * pendiente}—, que ahora salen ademas del {@code sub} de texto que ya las decia.
+ *
  * @param ejercicio el ejercicio del panel
  * @param fechaCalculo el dia al que corresponden las cifras
  * @param calculadoEn el instante exacto en que se leyeron
+ * @param cargado lo emitido del ejercicio, con su fecha
  * @param kpis las cifras grandes
  * @param paneles los bloques de filas
  */
@@ -45,6 +59,7 @@ public record PanelResource(
         int ejercicio,
         LocalDate fechaCalculo,
         Instant calculadoEn,
+        ImporteActualizado cargado,
         List<Kpi> kpis,
         List<Bloque> paneles) {
 
@@ -53,6 +68,7 @@ public record PanelResource(
                 avance.ejercicio().valor(),
                 avance.fechaCalculo(),
                 avance.calculadoEn(),
+                new ImporteActualizado(avance.cargado(), avance.cargadoA()),
                 avance.indicadores().stream().map(Kpi::de).toList(),
                 avance.carteras().stream().map(Bloque::de).toList());
     }
@@ -106,12 +122,20 @@ public record PanelResource(
      * ese campo, «0 %» se leeria como «no se ha cobrado nada» en un tributo que ni siquiera tiene
      * cargos asentados.
      *
+     * <p>{@code cargado} y {@code pendiente} son las dos cifras que el {@code sub} ya decia con
+     * palabras (#549). El {@code sub} se queda —es lo que se lee— y los campos son lo que se
+     * dibuja. Van <b>nulos</b> en las filas que no las tienen: el bloque «Recaudacion por mes»
+     * agrupa por el mes del abono y no tiene cargado ni pendiente propios, y un cero ahi afirmaria
+     * que ese mes cargo cero.
+     *
      * @param label el tributo o el mes
      * @param sub contra que se mide esta fila
      * @param value el texto que se dibuja
      * @param pct la barra, de 0 a 100
      * @param avanceConocido si esa barra se pudo medir
      * @param importe la misma cifra con su fecha
+     * @param cargado lo cargado de esta fila, con su fecha; nulo si la fila no agrupa cargos
+     * @param pendiente el insoluto pendiente de esta fila, con su fecha; nulo si no agrupa cartera
      */
     public record Fila(
             String label,
@@ -119,7 +143,9 @@ public record PanelResource(
             String value,
             int pct,
             boolean avanceConocido,
-            @Nullable ImporteActualizado importe) {
+            @Nullable ImporteActualizado importe,
+            @Nullable ImporteActualizado cargado,
+            @Nullable ImporteActualizado pendiente) {
 
         static Fila de(LineaDeCartera linea) {
             return new Fila(
@@ -128,9 +154,14 @@ public record PanelResource(
                     linea.cifra(),
                     linea.avance().orElse(0),
                     linea.avance().isPresent(),
-                    linea.importe() == null
-                            ? null
-                            : new ImporteActualizado(linea.importe(), linea.actualizadoA()));
+                    conSuFecha(linea.importe(), linea.actualizadoA()),
+                    conSuFecha(linea.cargado(), linea.actualizadoA()),
+                    conSuFecha(linea.pendiente(), linea.actualizadoA()));
+        }
+
+        private static @Nullable ImporteActualizado conSuFecha(
+                @Nullable Dinero importe, LocalDate actualizadoA) {
+            return importe == null ? null : new ImporteActualizado(importe, actualizadoA);
         }
     }
 }

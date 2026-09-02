@@ -62,7 +62,7 @@ class ValorMasivoTest {
     void sinTributoAceptaCualquiera() {
         ValorMasivo corrida = corridaDe(null);
         assertThat(corrida.coincideTributo("PREDIAL")).isTrue();
-        assertThat(corrida.coincideTributo("ARBITRIOS")).isTrue();
+        assertThat(corrida.coincideTributo("ARBITRIO")).isTrue();
     }
 
     @Test
@@ -70,7 +70,7 @@ class ValorMasivoTest {
     void conTributoSoloAceptaElMismo() {
         ValorMasivo corrida = corridaDe("predial");
         assertThat(corrida.coincideTributo("PREDIAL")).isTrue();
-        assertThat(corrida.coincideTributo("ARBITRIOS")).isFalse();
+        assertThat(corrida.coincideTributo("ARBITRIO")).isFalse();
     }
 
     @Test

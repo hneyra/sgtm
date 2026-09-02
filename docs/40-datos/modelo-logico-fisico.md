@@ -114,6 +114,40 @@ desplegadas, o cuando se sabe que alguna fila no encaja y no se va a reescribir 
 tenant desde una migración muere con el mismo `unrecognized configuration parameter`. «Normalizar el
 vocabulario viejo en la migración» no es una salida disponible, ni siquiera cuando parece la cómoda.
 
+**Y de ahí sale una consecuencia que `V74` (#553) tuvo que resolver, y conviene tenerla escrita.**
+Si las filas viejas no se pueden reescribir, lo único que la regla 4 deja para corregir un asiento
+equivocado es **reversarlo**: asentar su opuesto con `asiento_reversado_id` apuntando al original.
+Y una reversión **copia** el valor del original, porque si no, no netea. Un `CHECK` sin excepción
+cerraría ese camino **justo sobre las filas que más falta hace poder corregir**, y la obligación
+quedaría partida en dos para siempre. Por eso `asiento_tributo_ck` se escribe como «el vocabulario,
+**o** eres la reversión de otra fila», y no debilita nada: `asiento_reversado_id` sólo lo pone
+`Asiento.reversionDe`, que exige un asiento ya guardado, mientras que un asiento nuevo —el único que
+puede introducir una grafía nueva— lo lleva en nulo.
+
+Del mismo hallazgo sale la otra mitad: **el `CHECK` se pone donde está la verdad, no donde está la
+copia**. `saldo_proyectado` es caché reconstruible del libro, así que con el libro acotado lo está
+transitivamente; acotar además la caché no añadiría protección y sí haría fallar el `UPSERT` que
+`RegistrarAsiento.reproyectar` ejecuta en cada escritura, convirtiendo un defecto **detectable** en
+un estado de cuenta que revienta.
+
+**Un `CREATE UNIQUE INDEX` tampoco es una clave foránea, y también se midió (#588).** En la misma
+sesión —rol dueño, `FORCE ROW LEVEL SECURITY`, sin contexto de tenant— donde `SELECT count(*)` y
+`UPDATE` mueren con `unrecognized configuration parameter`, un `CREATE UNIQUE INDEX … WHERE …`
+**funciona**: construir un índice lee el montón directamente y no pasa por la política. Conviene
+tenerlo escrito porque el hecho anterior haría esperar lo contrario, y porque de ahí salen dos
+consecuencias que sí duelen:
+
+- **La migración no puede diagnosticar.** Como no puede consultar, no hay forma de contar los
+  duplicados antes de crear el índice, ni de nombrarlos, ni de repararlos después.
+- **Y el fallo no dice cuáles son.** Si alguna fila viola el índice, el error es
+  `could not create unique index …` con `DETAIL: Duplicate keys exist.` **sin los valores de la
+  clave**: como el dueño está sujeto a la política, PostgreSQL los oculta. El mismo fallo ejecutado
+  como superusuario sí los imprime.
+
+Un índice único **no tiene `NOT VALID`**, así que la única forma de que la migración no pueda
+pararse es que su predicado excluya por construcción a las filas anteriores — es lo que `V75` hace
+con `WHERE acto = 'ALTA_DEUDA'`, columna que `V68` estrenó y que en toda fila previa es nula.
+
 ### Hallazgo 5 — Bajo RLS, el operador espacial tampoco llega al índice
 
 Es el hallazgo 3 otra vez, con otro operador, y por eso conviene leerlos como una **familia** y no
@@ -235,9 +269,10 @@ está verificada.
 | `V56__determinacion_detalle_valuo_exonerado.sql` | El detalle por predio dice también qué parte del autovalúo **no** está afecta, para que la ponderación se reconstruya (#395) |
 | `V57__depreciacion_por_uso_de_la_edificacion.sql` | La tabla de depreciación son **cuatro** tablas, una por uso de la edificación: `uso` entra en la clave y «más de 50 años» entra sin tope (H-15, #188) |
 | `V65__marco_del_predio.sql` | El rectángulo envolvente del lote, en cuatro columnas generadas, y su índice: es lo único que llega al índice bajo RLS, porque el operador espacial no es *leakproof* (ver §0, hallazgo 5; #536) |
+| `V75__idempotencia_del_alta_de_deuda.sql` | `asiento_alta_unica_uq`: un alta de deuda por obligación, documento de sustento y concepto. Índice único **parcial** sobre `acto = 'ALTA_DEUDA'` —la columna que `V68` estrenó—, con `COALESCE` en las tres columnas nulables y `ejercicio` dentro por ser la clave de partición (#588) |
 
 La numeración salta —no hay `V36`, `V38`, `V40`, `V42`, `V44`, `V46`, `V48`, `V50` ni `V52`— y no
-es un error: hoy, con `V57`, hay **48** migraciones, y la lista viva es el propio directorio
+es un error: hoy, con `V75`, hay **63** migraciones, y la lista viva es el propio directorio
 `backend/sgtm-esquema/src/main/resources/db/migration/`.
 
 Los roles se crean **antes**, con `db/roles/crear-roles.sql`, que no es una migración: las
@@ -348,7 +383,30 @@ fraccionamiento— y `fase` —ordinaria, valor, coactiva, convenio—.
   `motivo`, por `CHECK`.
 - `referencia_externa` es cómo entran papeletas y licencias **sin** que el libro dependa de esos
   contextos: no hay clave foránea a propósito (ARQ-01 §4 regla 2).
+- `acto` (`V68`, #601) dice **por qué** existe la fila cuando el libro lo sabe: `ALTA_DEUDA` o
+  `BAJA_DEUDA`. Nulo no es «se ignora», es «no nació de un alta ni de una baja».
+- **Un alta de deuda no se puede registrar dos veces** (`asiento_alta_unica_uq`, `V75`, #588). La
+  clave es la obligación —las mismas seis columnas de `saldo_uq`— más `documento_origen` y
+  `concepto`, y el índice es parcial sobre `acto = 'ALTA_DEUDA' AND asiento_reversado_id IS NULL`.
+  Lo garantiza el índice y no un `if`: entre leer y escribir cabe otra petición. La **baja** queda
+  fuera a propósito, porque ya tiene su guarda —`verificarQueNoExcedeLaDeuda`, que el alta no
+  tiene—; y la reversión también, porque `Asiento#reversionDe` copia el acto y el asiento que
+  corrige a otro no puede quedar bloqueado por el índice que protege al original.
 - `saldo_proyectado` es caché reconstruible. Si diverge, manda el libro.
+- `tributo` es un **vocabulario cerrado** desde `V74` (#553), con los siete que `determinacion`
+  ya declaraba en `V2` más `MULTA_TRIBUTARIA`, `MULTA_TRANSITO`, `MULTA_ADMINISTRATIVA`,
+  `CONVENIO` y `COSTAS PROCESALES`. Nació como `varchar(20)` sin restricción, y como
+  `ClaveDeSaldo` compara ese texto por igualdad exacta, **dos grafías del mismo tributo eran dos
+  obligaciones distintas**: `DeterminarArbitrios` asienta `ARBITRIO` y
+  `ejemplos/deuda.csv` sembraba `ARBITRIOS`, así que el filtro «Arbitrios» de la consulta
+  unificada no encontraba la deuda sembrada. El vocabulario vive en un solo sitio,
+  `pe.gob.sgtm.cuentacorriente.TributoDelLibro`, y es API pública del módulo porque los siete
+  contextos que asientan lo necesitan.
+- **`saldo_proyectado.tributo` no lleva `CHECK`, y es deliberado**: es caché derivada del libro
+  —su tributo sólo puede venir de un asiento—, así que acotarla no añade protección y sí
+  impediría reproyectar una obligación con grafía anterior a `V74`, que es exactamente la que hay
+  que poder seguir leyendo. `RegistrarAsiento.reproyectar` hace ese `UPSERT` en **cada**
+  escritura.
 
 ### 4.5 Sanciones: el desglose se guarda, no se recalcula
 

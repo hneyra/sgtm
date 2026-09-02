@@ -11,6 +11,7 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import pe.gob.sgtm.cuentacorriente.ConsultaDeDeudaPublica;
 import pe.gob.sgtm.cuentacorriente.ObligacionPublica;
+import pe.gob.sgtm.cuentacorriente.TributoDelLibro;
 import pe.gob.sgtm.dominio.Dinero;
 import pe.gob.sgtm.dominio.Ejercicio;
 import pe.gob.sgtm.fiscalizacion.dominio.LineaDeLiquidacion;
@@ -45,10 +46,10 @@ import pe.gob.sgtm.fiscalizacion.dominio.LiquidacionRepository;
 public class EstadoDeCuentaDeFiscalizacion {
 
     /** Como {@code cuentacorriente} nombra al predial. La fiscalización predial imputa ahí. */
-    private static final String TRIBUTO_PREDIAL = "PREDIAL";
+    private static final String TRIBUTO_PREDIAL = TributoDelLibro.PREDIAL.texto();
 
     /** Y al patrimonio vehicular. */
-    private static final String TRIBUTO_VEHICULAR = "VEHICULAR";
+    private static final String TRIBUTO_VEHICULAR = TributoDelLibro.VEHICULAR.texto();
 
     private final LiquidacionRepository liquidaciones;
     private final ConsultaDeDeudaPublica deuda;

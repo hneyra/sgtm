@@ -65,6 +65,18 @@ public interface ValorRepository {
     Pagina<ValorEnConsulta> consultar(CriterioDeConsultaDeValores criterio, Paginacion paginacion);
 
     /**
+     * Cuantos valores cumplen ese criterio, <b>sin traerse ninguno</b> (#549).
+     *
+     * <p>Es el {@code count(*)} que {@link #consultar} ya ejecuta para poder paginar, con el mismo
+     * {@code FROM} y el mismo {@code WHERE} —incluida la condicion de {@link SituacionDelValor},
+     * que no es una columna sino una expresion—. Existe para que el panel de trabajo parado pida la
+     * cifra sin componer ademas una pagina de valores que nadie va a dibujar, y sobre todo para que
+     * esa cifra no sea una <b>segunda</b> transcripcion de «sin notificar»: si divergieran, la de
+     * la pantalla de aterrizaje es la que se lee primero (AC 2.4 de #549).
+     */
+    long contar(CriterioDeConsultaDeValores criterio);
+
+    /**
      * Los valores del contribuyente que formalizan ese tributo y ese ejercicio, y que todavia se
      * pueden cobrar.
      *

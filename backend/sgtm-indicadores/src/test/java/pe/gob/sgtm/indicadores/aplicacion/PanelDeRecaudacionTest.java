@@ -5,6 +5,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 import java.time.Instant;
 import java.time.LocalDate;
 import java.util.List;
+import java.util.Objects;
 import java.util.OptionalInt;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Nested;
@@ -15,6 +16,7 @@ import pe.gob.sgtm.indicadores.dobles.CajaDeMentira;
 import pe.gob.sgtm.indicadores.dobles.LibroDeMentira;
 import pe.gob.sgtm.indicadores.dominio.AvanceDeRecaudacion;
 import pe.gob.sgtm.indicadores.dominio.Cartera;
+import pe.gob.sgtm.indicadores.dominio.FormatoDeCifra;
 import pe.gob.sgtm.indicadores.dominio.Indicador;
 import pe.gob.sgtm.indicadores.dominio.LineaDeCartera;
 
@@ -32,6 +34,11 @@ class PanelDeRecaudacionTest {
     private static final LocalDate HOY = LocalDate.of(2026, 8, 13);
     private static final Instant AHORA = Instant.parse("2026-08-13T14:05:31Z");
 
+    /** Lo que envuelve a la cifra dentro de la nota del KPI «Avance de cobranza» (#549). */
+    private static final String PREFIJO_DE_LA_NOTA = "de ";
+
+    private static final String SUFIJO_DE_LA_NOTA = " cargados";
+
     private final LibroDeMentira libro =
             new LibroDeMentira()
                     // Cobrado en 2026: 800 de deuda de 2026 y 200 de deuda de 2025.
@@ -39,7 +46,7 @@ class PanelDeRecaudacionTest {
                     .conRecaudado("PREDIAL", EJERCICIO, 7, "300.00", 2)
                     .conRecaudado("PREDIAL", new Ejercicio(2025), 7, "200.00", 1)
                     .conCargado("PREDIAL", "1000.00", 10)
-                    .conCargado("ARBITRIOS", "400.00", 8)
+                    .conCargado("ARBITRIO", "400.00", 8)
                     .conPendiente("PREDIAL", "200.00", 3);
 
     private final CajaDeMentira caja = new CajaDeMentira().con("310.00", "10.00");
@@ -167,7 +174,7 @@ class PanelDeRecaudacionTest {
             // union por lo recaudado lo dejaria fuera.
             assertThat(porTributo().lineas())
                     .extracting(LineaDeCartera::concepto)
-                    .containsExactly("ARBITRIOS", "PREDIAL");
+                    .containsExactly("ARBITRIO", "PREDIAL");
         }
 
         @Test
@@ -188,7 +195,7 @@ class PanelDeRecaudacionTest {
             // Con la barra calculada como «(cargado - pendiente) / cargado» esto daria
             // 100 %, porque la proyeccion no distingue «cancelado» de «sin proyectar
             // todavia». Con las dos cifras del libro, el caso imposible no existe.
-            LineaDeCartera arbitrios = fila(porTributo(), "ARBITRIOS");
+            LineaDeCartera arbitrios = fila(porTributo(), "ARBITRIO");
 
             assertThat(arbitrios.cifra()).isEqualTo("S/ 0.00");
             assertThat(arbitrios.avance()).isEqualTo(OptionalInt.of(0));
@@ -257,6 +264,128 @@ class PanelDeRecaudacionTest {
             assertThat(indicador(avance, "Cartera pendiente").nota())
                     .isEqualTo("sin obligaciones pendientes en el ejercicio");
             assertThat(avance.carteras()).allSatisfy(c -> assertThat(c.lineas()).isEmpty());
+        }
+    }
+
+    @Nested
+    @DisplayName("#549 — Lo cargado es un campo, no una frase")
+    class LoCargadoEsUnCampo {
+
+        @Test
+        @DisplayName("AC 1.1 — el panel publica lo cargado del ejercicio, con su fecha")
+        void elPanelPublicaLoCargado() {
+            AvanceDeRecaudacion avance = panel();
+
+            // 1000 de PREDIAL y 400 de ARBITRIOS: lo emitido del ejercicio.
+            assertThat(avance.cargado()).isEqualTo(Dinero.de("1400.00"));
+            assertThat(avance.cargadoA())
+                    .as("es la fecha con la que el libro contesto, no la que el panel estampa")
+                    .isEqualTo(HOY);
+        }
+
+        @Test
+        @DisplayName("AC 1.2 — y es el mismo numero que la nota del KPI de avance dice")
+        void elCampoDiceLoMismoQueLaNota() {
+            // La nota es «de S/ 1,400.00 cargados». Se le quita el envoltorio y se compara
+            // con el campo redactado igual: si la nota se compusiera con otra cifra —o el
+            // campo saliera de otra suma— las dos dejarian de coincidir, y esta es la
+            // unica prueba que lo ve. La cifra de la frase es la que la pantalla estuvo a
+            // punto de tener que sacar con una expresion regular.
+            AvanceDeRecaudacion avance = panel();
+            String nota = indicador("Avance de cobranza").nota();
+
+            assertThat(nota).startsWith(PREFIJO_DE_LA_NOTA).endsWith(SUFIJO_DE_LA_NOTA);
+            String deLaFrase =
+                    nota.substring(
+                            PREFIJO_DE_LA_NOTA.length(),
+                            nota.length() - SUFIJO_DE_LA_NOTA.length());
+
+            assertThat(deLaFrase).isEqualTo(FormatoDeCifra.importe(avance.cargado()));
+        }
+
+        @Test
+        @DisplayName("AC 1.2 — sin cargos la nota no lleva cifra, y el campo es S/ 0.00, no nulo")
+        void sinCargosElCampoEsCero() {
+            // El borde que la comparacion anterior no puede cubrir: la nota pasa a ser
+            // «sin cargos asentados en el ejercicio: no hay avance que medir» y no hay de
+            // donde extraer nada. El campo sigue existiendo, y su valor es un hecho que se
+            // puede afirmar —el libro no tiene ni un cargo—, no un hueco como el avance.
+            LibroDeMentira vacio = new LibroDeMentira();
+            AvanceDeRecaudacion avance =
+                    new PanelDeRecaudacion(vacio, vacio, new CajaDeMentira())
+                            .del(EJERCICIO, HOY, AHORA);
+
+            assertThat(indicador(avance, "Avance de cobranza").nota())
+                    .doesNotContain(FormatoDeCifra.SIN_CIFRA)
+                    .doesNotContain("S/");
+            assertThat(avance.cargado()).isEqualTo(Dinero.CERO);
+            assertThat(avance.cargadoA()).isEqualTo(HOY);
+        }
+
+        @Test
+        @DisplayName("AC 1.3 — la fila de un tributo publica su cargado y su pendiente")
+        void laFilaPublicaSuCargadoYSuPendiente() {
+            LineaDeCartera predial = fila(porTributo(), "PREDIAL");
+
+            assertThat(predial.cargado()).isEqualTo(Dinero.de("1000.00"));
+            assertThat(predial.pendiente()).isEqualTo(Dinero.de("200.00"));
+        }
+
+        @Test
+        @DisplayName("AC 1.3 — y son exactamente las dos cifras que el detalle ya decia")
+        void losCamposDicenLoMismoQueElDetalle() {
+            // El `sub` se queda: es lo que se lee. Lo que se añade es la misma cifra sin
+            // redactar. Cruzar los dos campos —pasarle a la fila el pendiente donde va el
+            // cargado— produce una fila cuyo texto y cuyos campos se contradicen, y esta
+            // es la comparacion que lo ve.
+            for (LineaDeCartera linea : porTributo().lineas()) {
+                if (linea.cargado() == null) {
+                    continue;
+                }
+                assertThat(linea.detalle())
+                        .as("el texto y los campos de %s", linea.concepto())
+                        .isEqualTo(
+                                "cargado "
+                                        + FormatoDeCifra.importe(linea.cargado())
+                                        + " · pendiente "
+                                        + FormatoDeCifra.importe(
+                                                Objects.requireNonNull(linea.pendiente())));
+            }
+        }
+
+        @Test
+        @DisplayName("AC 1.3 — un tributo sin cargos lleva cero cargado, no un hueco")
+        void unTributoSinCargosLlevaCeroCargado() {
+            LibroDeMentira sinCargos =
+                    new LibroDeMentira().conRecaudado("MULTA_TRANSITO", EJERCICIO, 4, "150.00", 2);
+            PanelDeRecaudacion otro = new PanelDeRecaudacion(sinCargos, sinCargos, caja);
+
+            LineaDeCartera multa =
+                    fila(otro.del(EJERCICIO, HOY, AHORA).carteras().get(0), "MULTA_TRANSITO");
+
+            // La fila SI agrupa cargos —lo que pasa es que son cero—, asi que el campo
+            // existe. Lo que no existe es su avance, y eso lo dice `avance()`.
+            assertThat(multa.cargado()).isEqualTo(Dinero.CERO);
+            assertThat(multa.pendiente()).isEqualTo(Dinero.CERO);
+            assertThat(multa.avance()).isEqualTo(OptionalInt.empty());
+        }
+
+        @Test
+        @DisplayName("AC 1.3 — la fila de un MES no tiene ninguno de los dos, y va nula")
+        void laFilaDeUnMesNoTieneNinguno() {
+            // Lo cargado es del ejercicio entero y la cartera no se reparte por mes de
+            // cobro. Un cero aqui afirmaria que ese mes cargo cero —la fila de julio diria
+            // «cargado S/ 0.00» junto a «S/ 500.00 cobrados»—, que es el mismo defecto que
+            // `avanceConocido` existe para evitar en la barra.
+            Cartera porMes = panel().carteras().get(1);
+
+            assertThat(porMes.lineas())
+                    .isNotEmpty()
+                    .allSatisfy(
+                            linea -> {
+                                assertThat(linea.cargado()).isNull();
+                                assertThat(linea.pendiente()).isNull();
+                            });
         }
     }
 

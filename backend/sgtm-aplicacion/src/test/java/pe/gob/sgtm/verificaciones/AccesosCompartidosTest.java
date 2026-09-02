@@ -50,6 +50,15 @@ class AccesosCompartidosTest {
      */
     private static final Map<String, Set<String>> LO_QUE_DOS_OPCIONES_CUBREN =
             Map.of(
+                    // #599 — la grilla de actas de inspeccion. `acta_fiscalizacion` es UNA tabla y
+                    // el acta predial y la vehicular son el mismo tipo de dominio y el mismo
+                    // recurso, asi que la lectura es una: dos listados serian dos copias de la
+                    // misma consulta. Las dos opciones que ESCRIBEN actas la necesitan por igual, y
+                    // exigir solo `fisc_predial` dejaria a un perfil de fiscalizacion vehicular
+                    // registrando actas que no puede volver a ver — el mismo sintoma que #548
+                    // encontro en la caja, una pantalla que escribe y no ve lo que escribio.
+                    "GET /fiscalizacion/actas",
+                    Set.of("fisc_vehicular"),
                     // #548 — la grilla de deuda de la caja tributaria. `POST
                     // /tesoreria/caja/cobranza` exige `obligaciones[]` con tributo, ejercicio y
                     // unidad una a una, y esta es la UNICA lectura que las publica asi: sin ella,
@@ -57,7 +66,8 @@ class AccesosCompartidosTest {
                     // `consulta_deuda` en la implantacion porque no hay ningun grupo de cajero que
                     // otorgar —`ImplantarMunicipalidad` deja dos grupos, y ninguno es ese— y
                     // porque es estructural: quien puede cobrar tiene que poder ver la deuda.
-                    "GET /consultas/deuda", Set.of("caja_tributaria"));
+                    "GET /consultas/deuda",
+                    Set.of("caja_tributaria"));
 
     @Test
     @DisplayName("todo endpoint que comparte su acceso esta censado, y el censo no miente")
