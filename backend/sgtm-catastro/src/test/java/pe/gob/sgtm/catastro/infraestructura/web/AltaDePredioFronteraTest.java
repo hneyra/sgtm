@@ -353,6 +353,151 @@ class AltaDePredioFronteraTest {
 
     // ------------------------------------------------------------------
 
+    @org.junit.jupiter.api.Nested
+    @DisplayName("#690 — El censo de saneamiento de titularidad")
+    class CensoDeTitularidad {
+
+        /** Los tres codigos del censo, uno por estado. */
+        private static final String COMPLETO = "24010100010001000100690";
+
+        private static final String A_MEDIAS = "24010100010001000100691";
+        private static final String SIN_DUENO = "24010100010001000100692";
+
+        /** La siembra es de la clase, no de cada prueba: el alta de un codigo repetido es 409. */
+        private static boolean sembrado;
+
+        @org.junit.jupiter.api.BeforeEach
+        void sembrar() throws Exception {
+            if (sembrado) {
+                return;
+            }
+            sembrado = true;
+            long contribuyente = crearContribuyente(municipalidadA, "C-690", "40690690");
+            long completo = inscribirYDevolverId(COMPLETO, "AV. COMPLETA 1");
+            long aMedias = inscribirYDevolverId(A_MEDIAS, "AV. A MEDIAS 2");
+            inscribirYDevolverId(SIN_DUENO, "AV. SIN DUENO 3");
+
+            // 60 + 40: cubre el predio entero, y de paso comprueba que la copropiedad cuenta como
+            // completa. Con una sola cuota del 100 no se distinguiria de una suma mal hecha.
+            crearTitularidad(municipalidadA, completo, contribuyente, "60");
+            crearTitularidad(municipalidadA, completo, contribuyente, "40");
+            // Y el que se queda corto, que es el caso que este censo existe para encontrar.
+            crearTitularidad(municipalidadA, aMedias, contribuyente, "60");
+        }
+
+        @Test
+        @DisplayName("«INCOMPLETA» trae los que tienen cuotas y no llegan a 100, y solo esos")
+        void incompletaTraeSoloLosQueNoLlegan() throws Exception {
+            String cuerpo = censo("INCOMPLETA");
+
+            assertThat(cuerpo)
+                    .as(
+                            "el predio al 60 % tributa por el 60 % de su valor, y ninguna cifra"
+                                    + " parece mal porque la determinacion sale correcta para lo"
+                                    + " registrado")
+                    .contains(A_MEDIAS);
+            assertThat(cuerpo)
+                    .as("un censo que trajera tambien los correctos no seria el de los incompletos")
+                    .doesNotContain(COMPLETO)
+                    .doesNotContain(SIN_DUENO);
+        }
+
+        @Test
+        @DisplayName("«SIN_TITULAR» trae los que no tienen ninguna cuota, y solo esos")
+        void sinTitularTraeSoloLosQueNoTienenNinguna() throws Exception {
+            String cuerpo = censo("SIN_TITULAR");
+
+            assertThat(cuerpo).contains(SIN_DUENO);
+            assertThat(cuerpo)
+                    .as(
+                            "el que tiene cuotas y no llega a 100 es otro problema y otro remedio:"
+                                    + " a este hay que encontrarle dueño, a aquel averiguar de"
+                                    + " quien es lo que falta")
+                    .doesNotContain(A_MEDIAS)
+                    .doesNotContain(COMPLETO);
+        }
+
+        @Test
+        @DisplayName("«COMPLETA» trae los que suman 100, y la copropiedad cuenta como completa")
+        void completaTraeLosQueSuman100() throws Exception {
+            String cuerpo = censo("COMPLETA");
+
+            assertThat(cuerpo).contains(COMPLETO);
+            assertThat(cuerpo).doesNotContain(A_MEDIAS).doesNotContain(SIN_DUENO);
+        }
+
+        @Test
+        @DisplayName(
+                "los tres valores parten el padron: ninguno se queda fuera ni cuenta dos veces")
+        void losTresValoresPartenElPadron() throws Exception {
+            long total = totalDe(censo(null));
+            long suma =
+                    totalDe(censo("SIN_TITULAR"))
+                            + totalDe(censo("INCOMPLETA"))
+                            + totalDe(censo("COMPLETA"));
+
+            assertThat(suma)
+                    .as(
+                            "es lo que hace que el panel pueda sumar los dos censos de saneamiento"
+                                    + " y saber cuanto le queda: si se solaparan, contaria de mas")
+                    .isEqualTo(total);
+        }
+
+        @Test
+        @DisplayName("el censo se cuenta con una peticion, no con una por predio")
+        void elCensoSeCuentaConUnaPeticion() throws Exception {
+            MvcResult respuesta =
+                    mvc.perform(
+                                    get("/api/v1/catastro/predios")
+                                            .param("titularidad", "SIN_TITULAR")
+                                            .param("tamano", "1"))
+                            .andReturn();
+
+            assertThat(respuesta.getResponse().getStatus()).isEqualTo(200);
+            assertThat(totalDe(respuesta.getResponse().getContentAsString()))
+                    .as(
+                            "es la forma que el panel ya usa para los otros dos censos: pagina de"
+                                    + " uno y se lee «totalElementos»")
+                    .isGreaterThanOrEqualTo(1L);
+        }
+
+        @Test
+        @DisplayName("un valor que no es de los tres es 422, no el padron entero")
+        void unValorInventadoEs422() throws Exception {
+            MvcResult respuesta =
+                    mvc.perform(get("/api/v1/catastro/predios").param("titularidad", "A_MEDIAS"))
+                            .andReturn();
+
+            assertThat(respuesta.getResponse().getStatus())
+                    .as(
+                            "ignorarlo devolveria los 14 422 predios y quien lo pidio los leeria"
+                                    + " como «todos tienen la titularidad incompleta»")
+                    .isEqualTo(422);
+            assertThat(respuesta.getResponse().getContentAsString()).contains("SIN_TITULAR");
+        }
+
+        private String censo(@org.jspecify.annotations.Nullable String titularidad)
+                throws Exception {
+            var peticion = get("/api/v1/catastro/predios").param("tamano", "200");
+            if (titularidad != null) {
+                peticion = peticion.param("titularidad", titularidad);
+            }
+            MvcResult respuesta = mvc.perform(peticion).andReturn();
+            assertThat(respuesta.getResponse().getStatus())
+                    .as("respuesta: %s", respuesta.getResponse().getContentAsString())
+                    .isEqualTo(200);
+            return respuesta.getResponse().getContentAsString();
+        }
+
+        private long inscribirYDevolverId(String codigo, String direccion) throws Exception {
+            MvcResult creado = inscribir(codigo, direccion, "SC-1");
+            assertThat(creado.getResponse().getStatus())
+                    .as("respuesta: %s", creado.getResponse().getContentAsString())
+                    .isEqualTo(201);
+            return idDelPredio(municipalidadA, codigo);
+        }
+    }
+
     private static MvcResult inscribir(String codigo, String direccion, String sector)
             throws Exception {
         return mvc.perform(
@@ -379,6 +524,90 @@ class AltaDePredioFronteraTest {
                     resultado.next();
                     return resultado.getLong(1);
                 }
+            }
+        }
+    }
+
+    /** «totalElementos» del sobre paginado, sin recomponerlo con una libreria de JSON. */
+    private static long totalDe(String cuerpo) {
+        java.util.regex.Matcher encontrado =
+                java.util.regex.Pattern.compile("\"totalElementos\":(\\d+)").matcher(cuerpo);
+        if (!encontrado.find()) {
+            throw new AssertionError("la respuesta no trae totalElementos: " + cuerpo);
+        }
+        return Long.parseLong(encontrado.group(1));
+    }
+
+    private static long idDelPredio(long municipalidadId, String codigo) throws SQLException {
+        try (Connection app = base.conexion(BaseDeDatosDePrueba.APP)) {
+            ContextoDeTenant.fijar(app, municipalidadId);
+            try (PreparedStatement sentencia =
+                    app.prepareStatement("SELECT id FROM predio WHERE codigo_ref_catastral = ?")) {
+                sentencia.setString(1, codigo);
+                try (ResultSet fila = sentencia.executeQuery()) {
+                    fila.next();
+                    return fila.getLong(1);
+                }
+            }
+        }
+    }
+
+    private static long crearContribuyente(long municipalidadId, String codigo, String documento)
+            throws SQLException {
+        try (Connection app = base.conexion(BaseDeDatosDePrueba.APP)) {
+            ContextoDeTenant.fijar(app, municipalidadId);
+            try (PreparedStatement sentencia =
+                    app.prepareStatement(
+                            "INSERT INTO contribuyente (municipalidad_id, codigo_contribuyente,"
+                                    + " tipo_documento, numero_documento, tipo_persona,"
+                                    + " nombre_razon_social, usuario_registro)"
+                                    + " VALUES (?, ?, 'DNI', ?, 'NATURAL', 'TITULAR DE PRUEBA',"
+                                    + "         'prueba')"
+                                    + " ON CONFLICT DO NOTHING RETURNING id")) {
+                sentencia.setLong(1, municipalidadId);
+                sentencia.setString(2, codigo);
+                sentencia.setString(3, documento);
+                try (ResultSet fila = sentencia.executeQuery()) {
+                    if (fila.next()) {
+                        long id = fila.getLong(1);
+                        app.commit();
+                        return id;
+                    }
+                }
+            }
+            try (PreparedStatement consulta =
+                    app.prepareStatement(
+                            "SELECT id FROM contribuyente WHERE codigo_contribuyente = ?")) {
+                consulta.setString(1, codigo);
+                try (ResultSet fila = consulta.executeQuery()) {
+                    fila.next();
+                    long id = fila.getLong(1);
+                    app.commit();
+                    return id;
+                }
+            }
+        }
+    }
+
+    /** Una cuota ABIERTA, que es lo que el censo suma (#690). */
+    private static void crearTitularidad(
+            long municipalidadId, long predioId, long contribuyenteId, String porcentaje)
+            throws SQLException {
+        try (Connection app = base.conexion(BaseDeDatosDePrueba.APP)) {
+            ContextoDeTenant.fijar(app, municipalidadId);
+            try (PreparedStatement sentencia =
+                    app.prepareStatement(
+                            "INSERT INTO titularidad (municipalidad_id, predio_id,"
+                                    + " contribuyente_id, condicion, porcentaje, vigencia_desde,"
+                                    + " documento_origen)"
+                                    + " VALUES (?, ?, ?, 'COPROPIETARIO', CAST(? AS numeric),"
+                                    + "         DATE '2026-01-01', 'MINUTA-690')")) {
+                sentencia.setLong(1, municipalidadId);
+                sentencia.setLong(2, predioId);
+                sentencia.setLong(3, contribuyenteId);
+                sentencia.setString(4, porcentaje);
+                sentencia.executeUpdate();
+                app.commit();
             }
         }
     }

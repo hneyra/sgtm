@@ -18,12 +18,25 @@ import org.jspecify.annotations.Nullable;
  *     lo que entra por una carga cartografica y todavia no tiene ficha
  * @param estado {@code null} trae activos y retirados. Este listado es el del catastro, no el de la
  *     emision: esconder los dados de baja seria esconder precisamente lo que hay que revisar
+ * @param titularidad {@code null} trae todos; lo demas es el <b>censo de saneamiento de
+ *     titularidad</b> (#690), que es lo unico que permite preguntar cuantos predios no tienen dueño
+ *     registrado o lo tienen a medias sin ir predio por predio. Ver {@link TitularidadDelPredio}
  */
 public record FiltroDePredios(
         @Nullable String codRefCatastral,
         @Nullable String codigoDeSector,
         @Nullable EstadoPredio estado,
-        @Nullable Boolean fichado) {
+        @Nullable Boolean fichado,
+        @Nullable TitularidadDelPredio titularidad) {
+
+    /** La forma anterior a #690, para no tocar quien no filtra por titularidad. */
+    public FiltroDePredios(
+            @Nullable String codRefCatastral,
+            @Nullable String codigoDeSector,
+            @Nullable EstadoPredio estado,
+            @Nullable Boolean fichado) {
+        this(codRefCatastral, codigoDeSector, estado, fichado, null);
+    }
 
     public FiltroDePredios {
         codRefCatastral = limpio(codRefCatastral);
@@ -31,7 +44,7 @@ public record FiltroDePredios(
     }
 
     public static FiltroDePredios ninguno() {
-        return new FiltroDePredios(null, null, null, null);
+        return new FiltroDePredios(null, null, null, null, null);
     }
 
     private static @Nullable String limpio(@Nullable String valor) {

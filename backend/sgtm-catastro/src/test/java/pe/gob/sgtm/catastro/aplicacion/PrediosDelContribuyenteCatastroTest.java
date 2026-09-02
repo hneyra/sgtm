@@ -27,6 +27,7 @@ import pe.gob.sgtm.auditoria.AuditoriaJdbc;
 import pe.gob.sgtm.auditoria.Origen;
 import pe.gob.sgtm.auditoria.OrigenContext;
 import pe.gob.sgtm.catastro.PredioDelContribuyente;
+import pe.gob.sgtm.catastro.dominio.CondicionDeTitularidad;
 import pe.gob.sgtm.catastro.dominio.Predio;
 import pe.gob.sgtm.catastro.dominio.Titularidad;
 import pe.gob.sgtm.catastro.infraestructura.CatastroRepositoryJdbc;
@@ -127,6 +128,70 @@ class PrediosDelContribuyenteCatastroTest {
         assertThat(predio.direccion()).isEqualTo("AV. LOS PREDIOS 100");
         assertThat(predio.tipo()).isEqualTo("URBANO");
         assertThat(predio.porcentajeTitularidad()).isEqualTo(Porcentaje.total());
+    }
+
+    @Test
+    @DisplayName("#690 — publica cuanto del predio esta registrado, no solo la cuota propia")
+    void publicaCuantoDelPredioEstaRegistrado() throws SQLException {
+        long unTitular = crearContribuyente(municipalidad, "P-0690", "50200690", "MEDIO, DUEÑO");
+        long otroTitular = crearContribuyente(municipalidad, "P-0691", "50200691", "OTRO, DUEÑO");
+        long aMedias = predioNuevo("20020100100100101010690", "AV. A MEDIAS 690");
+        long completo = predioNuevo("20020100100100101010691", "AV. COMPLETA 691");
+
+        registrar.registrarTitularidad(
+                Titularidad.parcial(
+                        aMedias,
+                        unTitular,
+                        CondicionDeTitularidad.COPROPIETARIO,
+                        Porcentaje.de("60"),
+                        LocalDate.of(2020, 1, 1),
+                        "FICHA-0690"),
+                Observacion.de("El 60 % que se conoce; del 40 % restante no se sabe quien es"));
+        // El otro predio si tiene dueño entero, entre dos: es la copropiedad corriente.
+        registrar.registrarTitularidad(
+                Titularidad.parcial(
+                        completo,
+                        unTitular,
+                        CondicionDeTitularidad.COPROPIETARIO,
+                        Porcentaje.de("60"),
+                        LocalDate.of(2020, 1, 1),
+                        "FICHA-0691"),
+                Observacion.de("Copropiedad: la primera cuota"));
+        registrar.registrarTitularidad(
+                Titularidad.parcial(
+                        completo,
+                        otroTitular,
+                        CondicionDeTitularidad.COPROPIETARIO,
+                        Porcentaje.de("40"),
+                        LocalDate.of(2020, 1, 1),
+                        "FICHA-0691"),
+                Observacion.de("Copropiedad: la segunda cuota"));
+
+        List<PredioDelContribuyente> predios =
+                transaccion.execute(estado -> consulta.de(unTitular, LocalDate.of(2026, 1, 1)));
+
+        PredioDelContribuyente elDeMedias =
+                predios.stream().filter(x -> x.predioId() == aMedias).findFirst().orElseThrow();
+        PredioDelContribuyente elCompleto =
+                predios.stream().filter(x -> x.predioId() == completo).findFirst().orElseThrow();
+
+        assertThat(elDeMedias.porcentajeTitularidad())
+                .as("la cuota propia es la misma en los dos: 60 %")
+                .isEqualTo(Porcentaje.de("60"));
+        assertThat(elCompleto.porcentajeTitularidad()).isEqualTo(Porcentaje.de("60"));
+
+        assertThat(elDeMedias.porcentajeRegistradoDelPredio())
+                .as("y lo que los distingue es cuanto del PREDIO tiene dueño registrado")
+                .isEqualTo(Porcentaje.de("60"));
+        assertThat(elDeMedias.titularidadCompleta()).isFalse();
+
+        assertThat(elCompleto.porcentajeRegistradoDelPredio())
+                .as(
+                        "la copropiedad legitima suma 100 aunque la cuota propia sea 60: sumar solo"
+                                + " la del contribuyente daria un aviso en el caso corriente, y un"
+                                + " aviso que salta siempre deja de leerse")
+                .isEqualTo(Porcentaje.de("100"));
+        assertThat(elCompleto.titularidadCompleta()).isTrue();
     }
 
     @Test

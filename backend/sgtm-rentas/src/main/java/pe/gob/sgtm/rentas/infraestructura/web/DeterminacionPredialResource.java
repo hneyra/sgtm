@@ -96,7 +96,9 @@ public record DeterminacionPredialResource(
                             predio.autovaluo().toString(),
                             predio.valuoExonerado().toString(),
                             predio.valuoAfecto().toString(),
-                            predio.baseImponiblePredio().toString()));
+                            predio.baseImponiblePredio().toString(),
+                            predio.porcentajeRegistradoDelPredio().valor().toPlainString(),
+                            predio.titularidadCompleta()));
         }
         List<TramoAplicado> tramos = new ArrayList<>();
         for (AporteDeTramo aporte : calculada.tramos()) {
@@ -149,6 +151,15 @@ public record DeterminacionPredialResource(
      *
      * @param baseImponible lo que este predio puso, ya ponderado por el % de propiedad. Es la cifra
      *     que RNF-083 prohibe recomponer: no es el valuo afecto, es el valuo afecto por la cuota
+     * @param porcentajeRegistradoDelPredio lo que suman <b>todas</b> las cuotas del predio a la
+     *     fecha de calculo (#690). No es {@code porcentajePropiedad}: aquel es la parte de este
+     *     contribuyente, este es cuanto del predio tiene dueño registrado
+     * @param titularidadCompleta si esa suma llega a 100. Viaja <b>derivado y no derivable</b> a
+     *     proposito: la comparacion es de una cifra decimal contra 100 y hacerla en la pantalla es
+     *     invitar a que 99,9999 se lea como completo. Cuando es {@code false}, la base de este
+     *     predio esta ponderada por una titularidad que no cubre el predio entero — la
+     *     determinacion es correcta para lo registrado, y lo que no puede pasar es que salga sin
+     *     que nada la acompañe
      */
     public record PredioDeLaBase(
             long predioId,
@@ -159,7 +170,9 @@ public record DeterminacionPredialResource(
             String autovaluo,
             String valuoExonerado,
             String valuoAfecto,
-            String baseImponible) {}
+            String baseImponible,
+            String porcentajeRegistradoDelPredio,
+            boolean titularidadCompleta) {}
 
     /**
      * Un tramo del articulo 13 y lo que aporto.
