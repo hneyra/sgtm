@@ -4700,7 +4700,12 @@
   },
   "POST /fiscalizacion/programas/{id}/muestra": {
     "programaId": "entero",
-    "predios": "entero"
+    "predios": "entero",
+    "sinTitular": "entero",
+    "detectados": "entero",
+    "excluidosPorOtroPrograma": "entero",
+    "excluidosPorActaDelEjercicio": "entero",
+    "fechaSorteo": "texto"
   },
   "POST /fiscalizacion/transferencias": {
     "numero": "texto",
