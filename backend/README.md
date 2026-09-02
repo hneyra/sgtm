@@ -85,6 +85,18 @@ mismo motor se pisan la clave efímera de `sgtm_owner`, y el fallo aparece como
 problema no existe —cada módulo levanta su propio motor—, así que es un detalle exclusivo de esta
 salida de emergencia.
 
+**La base de prueba declara su codificación; no hereda la del clúster** (#706). `CREATE DATABASE`
+a secas la toma de `template1`, y esa la fija `initdb` con el *locale* del entorno: basta que quien
+creó el clúster no tuviera `LANG` puesto para que quede en `SQL_ASCII`. Contra uno así, el rango de
+prefijo del catálogo vial —que cierra con `chr(1114111)` (#565, V66)— falla con
+`requested character too large for encoding`, y lo que se ve son cinco rojos en
+`BusquedaDelCatalogoVialTest` hablando de Unicode. Por eso la base se crea con
+`TEMPLATE template0 ENCODING 'UTF8' LC_COLLATE 'C.UTF-8' LC_CTYPE 'C.UTF-8'`, y el arranque
+comprueba que salió en UTF-8 y **dice cuál es la del anfitrión** si no. Si la intercalación no está
+instalada en el sistema, la creación falla nombrándola: hay que instalarla (`locale-gen`), **no**
+replegarse a `C` —con ese tipo de carácter `lower` y `upper` dejan de conocer la `ñ`, y el filtro
+por uso de la ficha catastral devuelve cero filas sin decir por qué—.
+
 **Sin motor, las pruebas fallan; no se saltan.** Una prueba bloqueante que se omite a sí misma
 deja el build en verde sin haber verificado nada.
 
