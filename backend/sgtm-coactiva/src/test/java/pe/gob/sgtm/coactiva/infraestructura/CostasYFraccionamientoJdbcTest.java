@@ -566,7 +566,8 @@ class CostasYFraccionamientoJdbcTest {
         }
 
         @Test
-        @DisplayName("sin el arancel sellado, liquidar falla nombrando la llave (regla 5, D-02c)")
+        @DisplayName(
+                "sin NINGUN arancel publicado, liquidar falla nombrando la llave (#634, D-02c)")
         void sinArancelNoSeLiquida() {
             String expediente = expedienteConRec1("COSTA-5");
 
@@ -578,8 +579,12 @@ class CostasYFraccionamientoJdbcTest {
                                             PORQUE))
                     .as(
                             "es lo que ocurre hoy: el arancel es de ordenanza local y #193 esta"
-                                    + " bloqueado")
-                    .isInstanceOf(LiquidarCostas.SinActosQueLiquidar.class);
+                                    + " bloqueado. Hasta #634 esta rama contestaba «no tiene"
+                                    + " ningun acto pendiente de liquidar», que se lee como «no"
+                                    + " hay nada que cobrar» y no como «falta publicar una cifra»")
+                    .isInstanceOf(ArancelDeCostasParametrizado.ArancelSinParametrizar.class)
+                    .hasMessageContaining("ARANCEL_COSTA:REC1")
+                    .hasMessageContaining("#193");
 
             assertThatThrownBy(
                             () ->
@@ -597,6 +602,52 @@ class CostasYFraccionamientoJdbcTest {
             assertThat(deudaDe(expediente, LIQUIDACION).costas())
                     .as("y no se asento nada: mejor no liquidar que liquidar una cifra inventada")
                     .isEqualTo(Dinero.de("0.00"));
+        }
+
+        /**
+         * El contraste que impide «arreglarlo» convirtiendo todo en {@code ArancelSinParametrizar}.
+         *
+         * <p>Aqui la ordenanza SI esta publicada —el conjunto sellado de la prueba trae {@code
+         * ARANCEL_COSTA:REC1} y {@code ARANCEL_COSTA:REC2}— y lo que no tarifa es el acta de
+         * embargo. Eso es una <b>decision de la ordenanza</b>, no un dato que falte, y el mensaje
+         * no puede pedir que se publique nada.
+         */
+        @Test
+        @DisplayName("con arancel publicado, el acto que la ordenanza no tarifa sigue sin llave")
+        void loQueLaOrdenanzaNoTarifaSigueSiendoSinActos() {
+            String expediente = expedienteConRec1("COSTA-10");
+            liquidarTodo(expediente);
+            dictarActo(expediente, TipoDeActoCoactivo.EMBARGO, LIQUIDACION, null);
+
+            assertThatThrownBy(() -> liquidarTodo(expediente))
+                    .as(
+                            "queda un acto pendiente y el arancel no lo tarifa: no falta ninguna"
+                                    + " cifra que publicar")
+                    .isInstanceOf(LiquidarCostas.SinActosQueLiquidar.class)
+                    .hasMessageContaining("no tiene ningun acto pendiente de liquidar")
+                    .hasMessageNotContaining("ARANCEL_COSTA");
+        }
+
+        /**
+         * Y el otro contraste: la comprobacion mira los actos <b>pendientes</b>, no el arancel.
+         *
+         * <p>Un expediente cuyos actos ya se liquidaron todos no gana un 422 nuevo porque la
+         * ordenanza haya dejado de estar cargada: ahi no hay nada que liquidar y nunca lo hubo.
+         */
+        @Test
+        @DisplayName("ya liquidado del todo, sin arancel sigue siendo «sin actos» y no una llave")
+        void yaLiquidadoDelTodoNoEsFaltaDeArancel() {
+            String expediente = expedienteConRec1("COSTA-11");
+            liquidarTodo(expediente);
+
+            assertThatThrownBy(
+                            () ->
+                                    liquidarSinArancel.liquidar(
+                                            LiquidarCostas.Peticion.deTodoElExpediente(
+                                                    expediente, LIQUIDACION),
+                                            PORQUE))
+                    .isInstanceOf(LiquidarCostas.SinActosQueLiquidar.class)
+                    .hasMessageNotContaining("ARANCEL_COSTA");
         }
 
         @Test
@@ -1326,6 +1377,7 @@ class CostasYFraccionamientoJdbcTest {
                         "EJECUTOR COACTIVO",
                         "MEMO-2026-042",
                         null),
+                null,
                 Observacion.de("Se quiebra el convenio coactivo, prueba de #42"));
     }
 

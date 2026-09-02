@@ -31,7 +31,6 @@ class PanelDeRecaudacionTest {
     private static final Ejercicio EJERCICIO = new Ejercicio(2026);
     private static final LocalDate HOY = LocalDate.of(2026, 8, 13);
     private static final Instant AHORA = Instant.parse("2026-08-13T14:05:31Z");
-    private static final Instant PROYECTADO = Instant.parse("2026-08-12T03:00:00Z");
 
     private final LibroDeMentira libro =
             new LibroDeMentira()
@@ -41,7 +40,7 @@ class PanelDeRecaudacionTest {
                     .conRecaudado("PREDIAL", new Ejercicio(2025), 7, "200.00", 1)
                     .conCargado("PREDIAL", "1000.00", 10)
                     .conCargado("ARBITRIOS", "400.00", 8)
-                    .conPendiente("PREDIAL", "200.00", 3, PROYECTADO);
+                    .conPendiente("PREDIAL", "200.00", 3);
 
     private final CajaDeMentira caja = new CajaDeMentira().con("310.00", "10.00");
 
@@ -109,15 +108,28 @@ class PanelDeRecaudacionTest {
         }
 
         @Test
-        @DisplayName("la cartera dice cuantas obligaciones son y desde cuando esta proyectada")
+        @DisplayName("la cartera dice cuantas obligaciones son y a que fecha esta cortada")
         void laCartera() {
             Indicador cartera = indicador("Cartera pendiente");
 
             assertThat(cartera.cifra()).isEqualTo("S/ 200.00");
-            // La fecha es la de la fila MAS VIEJA. Sin ella, una cifra de hace una semana
-            // se lee como si fuera de hoy: la cartera sale de un cache (ADR-0006).
-            assertThat(cartera.nota())
-                    .isEqualTo("3 obligaciones · insoluto proyectado desde " + PROYECTADO);
+            // Desde #639 la fecha que acompana a la cifra es la que la DECIDE: la cartera
+            // es el insoluto pendiente hasta ese dia. Antes decia «proyectado desde …» —la
+            // frescura de un cache— y la cifra era la misma preguntara uno por la fecha que
+            // preguntara.
+            assertThat(cartera.nota()).isEqualTo("3 obligaciones · insoluto pendiente al " + HOY);
+        }
+
+        @Test
+        @DisplayName("#639 — y la cartera se pide con la fecha de la peticion, no con otra")
+        void laCarteraSePideConLaFechaDeLaPeticion() {
+            panel.del(EJERCICIO, HOY, AHORA);
+
+            assertThat(libro.fechaDeCorteDeLaCartera())
+                    .as(
+                            "con otra fecha el total seguiria siendo plausible y estaria contando"
+                                    + " la cuota que aun no vence (#639)")
+                    .isEqualTo(HOY);
         }
 
         @Test

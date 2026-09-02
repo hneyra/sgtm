@@ -62,12 +62,24 @@ public interface FraccionamientoCoactivo {
     /**
      * Registra el preconvenio coactivo con su numero, su deuda congelada y su cronograma.
      *
+     * <p><b>Lleva su clave de idempotencia</b> (#606). Este puerto tambien esta al final de un
+     * {@code POST} —{@code ConvenioCoactivoController.fraccionar}, {@code POST
+     * /coactiva/convenios}—, asi que un reenvio del mismo intento abre un segundo convenio sobre la
+     * misma deuda igual que por la ruta de tesoreria. Que la llamada pase por un caso de uso de
+     * coactiva no cambia nada: lo que reenvia es el cliente HTTP, no el caso de uso.
+     *
+     * @param claveDeIdempotencia la cabecera {@code Idempotency-Key} del intento, o {@code null} si
+     *     quien llama no la manda; entonces cada envio es un intento distinto, que es lo que era
+     *     antes de #606
      * @param observacion por que se registra (regla 10, RNF-052)
      * @throws SinDeudaCoactivaQueFraccionar si la seleccion no tiene deuda a la fecha de corte
      * @throws CondicionesSinPublicar si el conjunto sellado del ejercicio no existe o no trae
      *     alguna de las cifras con que se arma el cronograma
      */
-    ConvenioCoactivo registrar(SolicitudDeConvenioCoactivo solicitud, Observacion observacion);
+    ConvenioCoactivo registrar(
+            SolicitudDeConvenioCoactivo solicitud,
+            @org.jspecify.annotations.Nullable String claveDeIdempotencia,
+            Observacion observacion);
 
     /**
      * La seleccion no tiene deuda a esa fecha.

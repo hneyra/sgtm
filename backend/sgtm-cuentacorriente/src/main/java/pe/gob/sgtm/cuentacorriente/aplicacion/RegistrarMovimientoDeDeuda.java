@@ -171,7 +171,12 @@ public class RegistrarMovimientoDeDeuda {
             }
         }
         return asentarYEmitir(
-                movimiento, porCuota, cuotas.etiqueta(), codigoContribuyente, observacion);
+                movimiento,
+                porCuota,
+                cuotas.etiqueta(),
+                codigoContribuyente,
+                comprobacion,
+                observacion);
     }
 
     /**
@@ -230,7 +235,12 @@ public class RegistrarMovimientoDeDeuda {
         exigirQueLaUnidadSeaDelContribuyente(movimiento, comprobacion);
         List<MovimientoDeDeuda> partes = repartir(movimiento, cuotas);
         return asentarYEmitir(
-                movimiento, partes, etiquetaDe(partes), codigoContribuyente, observacion);
+                movimiento,
+                partes,
+                etiquetaDe(partes),
+                codigoContribuyente,
+                comprobacion,
+                observacion);
     }
 
     // ------------------------------------------------------------------
@@ -240,11 +250,19 @@ public class RegistrarMovimientoDeDeuda {
             List<MovimientoDeDeuda> porCuota,
             String etiquetaDeLasCuotas,
             String codigoContribuyente,
+            ComprobacionDeUnidad comprobacion,
             Observacion observacion) {
+
+        // La declaracion viaja hasta la fila del libro (#653). Que la comprobacion llegara solo
+        // hasta `exigirQueLaUnidadSeaDelContribuyente` era el defecto: el acto se admitia y no
+        // quedaba dicho en ninguna parte que se hubiera declarado, asi que su fila de auditoria
+        // era indistinguible de la de un alta sobre la unidad propia.
+        boolean deTitularAnterior =
+                comprobacion == ComprobacionDeUnidad.DECLARADA_DE_TITULAR_ANTERIOR;
 
         List<Asiento> guardados = new ArrayList<>();
         for (MovimientoDeDeuda deLaCuota : porCuota) {
-            for (Asiento asiento : deLaCuota.enAsientos()) {
+            for (Asiento asiento : deLaCuota.enAsientos(deTitularAnterior)) {
                 guardados.add(registrarAsiento.asentar(asiento, observacion));
             }
         }
@@ -408,7 +426,11 @@ public class RegistrarMovimientoDeDeuda {
          * <p>No es una puerta trasera: la deuda de un ejercicio anterior a una transferencia
          * <b>es</b> del titular de entonces, asi que un alta sobre la unidad de otro puede ser
          * exactamente lo que corresponde. Lo que separa ese caso del error es que alguien lo diga,
-         * y la observacion del acto queda con la constancia de que se dijo.
+         * y <b>la declaracion queda escrita como dato</b> en cada asiento del movimiento —{@code
+         * cuenta_corriente_asiento.unidad_de_titular_anterior}, V71— y, con el, en su fila de
+         * auditoria (#653). Hasta entonces la marca solo servia para dejar pasar el acto y no
+         * quedaba dicha en ninguna parte, asi que la fila era indistinguible de la de un alta sobre
+         * la unidad propia.
          */
         DECLARADA_DE_TITULAR_ANTERIOR,
 
@@ -443,13 +465,16 @@ public class RegistrarMovimientoDeDeuda {
             return;
         }
         ClaveDeSaldo clave = movimiento.clave();
+        // La baja se corrige aunque la unidad ya no exista (#660). Ver `comprobar`.
+        boolean exigirQueLaUnidadExista = movimiento.sentido() == SentidoDelMovimiento.ALTA;
         if (clave.predioId() != null) {
             comprobar(
                     "predio",
                     clave.predioId(),
                     titulares.delPredio(clave.predioId(), movimiento.fechaValor()),
                     clave.contribuyenteId(),
-                    comprobacion);
+                    comprobacion,
+                    exigirQueLaUnidadExista);
         }
         if (clave.vehiculoId() != null) {
             comprobar(
@@ -457,18 +482,43 @@ public class RegistrarMovimientoDeDeuda {
                     clave.vehiculoId(),
                     titulares.delVehiculo(clave.vehiculoId(), movimiento.fechaValor()),
                     clave.contribuyenteId(),
-                    comprobacion);
+                    comprobacion,
+                    exigirQueLaUnidadExista);
         }
     }
 
+    /**
+     * La comprobacion de una unidad, con la asimetria que #660 encontro.
+     *
+     * <p><b>Un alta</b> escribe deuda nueva: si el identificador no apunta a nada, el cargo queda
+     * sobre una clave que ninguna consulta va a mirar —invisible desde la ficha del predio, sin
+     * sumarse a la deuda de quien paga— y por eso se rechaza.
+     *
+     * <p><b>Una baja</b> extingue deuda que <b>ya esta escrita</b>. Exigirle que la unidad siga en
+     * el padron es pedirle a la correccion el requisito que el error no tuvo: los asientos con un
+     * {@code predioId} colgado existen —nada lo impedia, porque V2 no declara clave foranea sobre
+     * {@code predio} ni sobre {@code vehiculo}—, no se pueden borrar (regla 4, RNF-051) ni
+     * reescribir desde el migrador (RLS con {@code FORCE}, DAT-01 §0), asi que rechazarla dejaba
+     * esa deuda <b>viva y sin forma de extinguirla por el circuito normal</b>, que es peor que el
+     * defecto original. Lo que la baja necesita comprobar es que la obligacion exista, y de eso ya
+     * se ocupa {@link #verificarQueNoExcedeLaDeuda}: sobre una clave inventada no se debe nada y la
+     * baja se rechaza por su propio motivo.
+     *
+     * <p>Lo que <b>no</b> cambia es la otra mitad: si la unidad existe y es de otro, la baja sigue
+     * pidiendo la declaracion igual que el alta.
+     */
     private static void comprobar(
             String unidad,
             long unidadId,
             List<TitularesDeLaUnidad.TitularDeLaUnidad> deLaUnidad,
             long contribuyenteId,
-            ComprobacionDeUnidad comprobacion) {
+            ComprobacionDeUnidad comprobacion,
+            boolean exigirQueLaUnidadExista) {
 
         if (deLaUnidad.isEmpty()) {
+            if (!exigirQueLaUnidadExista) {
+                return;
+            }
             throw new UnidadAjena(
                     "El "
                             + unidad

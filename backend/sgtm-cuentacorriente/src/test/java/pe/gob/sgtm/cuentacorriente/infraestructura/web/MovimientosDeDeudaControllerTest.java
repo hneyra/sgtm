@@ -335,6 +335,12 @@ class MovimientosDeDeudaControllerTest {
         }
 
         @Override
+        public List<pe.gob.sgtm.cuentacorriente.dominio.PendienteAgregado> pendientePorTributo(
+                Ejercicio ejercicio, java.time.LocalDate aLaFecha) {
+            throw new UnsupportedOperationException("El controlador no pide la cartera");
+        }
+
+        @Override
         public List<Ejercicio> ejerciciosAsentables() {
             // El libro de mentira acepta el ejercicio de las pruebas de este archivo. Lo que
             // el ejercicio sin particion produce se mide contra PostgreSQL, en

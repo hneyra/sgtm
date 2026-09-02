@@ -128,6 +128,19 @@ public class FraccionarEnCoactiva {
      */
     @Transactional
     public ConvenioCoactivo fraccionar(Peticion peticion, Observacion observacion) {
+        return fraccionar(peticion, null, observacion);
+    }
+
+    /**
+     * El mismo acto, con la clave de idempotencia del intento (#606).
+     *
+     * <p>La sobrecarga de arriba conserva la firma que ya usaban las pruebas y quien no manda
+     * cabecera; con {@code null} cada envio es un intento distinto, que es lo que era antes.
+     */
+    public ConvenioCoactivo fraccionar(
+            Peticion peticion,
+            @org.jspecify.annotations.Nullable String claveDeIdempotencia,
+            Observacion observacion) {
         Objects.requireNonNull(peticion, "No se fracciona sin peticion");
         Objects.requireNonNull(observacion, "Sin observacion no se guarda (regla 10, RNF-052)");
 
@@ -138,7 +151,7 @@ public class FraccionarEnCoactiva {
         // coactiva, el registro no llega a ocurrir y no hay nada que deshacer.
         exigirQueVengaDeCoactiva(expediente, fraccionamiento.simular(solicitud));
 
-        return fraccionamiento.registrar(solicitud, observacion);
+        return fraccionamiento.registrar(solicitud, claveDeIdempotencia, observacion);
     }
 
     // ------------------------------------------------------------------

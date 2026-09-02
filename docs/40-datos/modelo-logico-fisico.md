@@ -553,13 +553,15 @@ Sumadas las cuatro sentencias que la petición ejecuta —el conteo, la página,
 resolución de sus nombres en `contribuyente`, que ya entraba por `contribuyente_pk` con las dos
 condiciones en el `Index Cond`—, `?tamano=20` sin filtros cuesta **~85 ms** con `V69` sobre los
 14 422 predios, frente a los ~110 ms de antes. La lectura de titulares baja de 242 páginas tocadas
-a 45 —236 y 39 si se cuenta sólo el nodo que recorre la tabla—.
+a 45 —236 y 39 si se cuenta sólo el nodo que recorre la tabla—. De esos ~85 ms, casi todo es el
+conteo, y §7.2 le quita el 98 % de lo que lee.
 
-**El conteo es O(padrón) por naturaleza y no se toca.** Cuenta el padrón: lee sus 14 422 predios y
+**El conteo es O(padrón) por naturaleza.** Cuenta el padrón: lee sus 14 422 predios y
 sus 14 422 fichas vigentes, y de sus 30 871 buffers **30 295 son el `LEFT JOIN LATERAL`** que busca
 la declaración de cada predio —14 422 descensos al índice `dj_ejercicio_predio_ix`, con su nodo
 `Sort` montado y desmontado una vez por predio—. Es exactamente el coste que no depende del tamaño
-de página. Se midieron dos salidas y **no se toma ninguna**:
+de página. Se midieron dos salidas y **aquí no se toma ninguna** —una tercera, que no cambia el plan
+sino la sentencia, se midió después y **sí se toma**: es §7.2—:
 
 - **Reescribir el `LATERAL` como `DISTINCT ON` sin correlación** baja el conteo —medido con el
   filtro `condicion` puesto, que es el caso caro porque conserva el segundo `JOIN` de fichas— de
@@ -609,6 +611,96 @@ Las tres condiciones entran en el `Index Cond` porque `int8eq` y `date_le` **son
 **Y el padrón pequeño no lo paga**: con 25 predios, la misma consulta pasa de 13 a 54 páginas
 tocadas —el motor prefiere veinte descensos al índice antes que recorrer veinticinco filas— y de
 0,283 ms a 0,332 ms. Las dos formas están muy por debajo del milisegundo, y ninguna lee el padrón.
+
+### 7.2 El conteo de esa misma página: lo que se contaba y no se usaba (#561, sin migración)
+
+§7.1 cerró la tercera sentencia y dejó escrito que *«el conteo es O(padrón) por naturaleza y no se
+toca»*, con dos salidas medidas y descartadas. Volviendo a medirlo apareció una tercera que no
+cambia el **plan** sino la **sentencia**, y ésa sí se toma.
+
+**Lo que el conteo hacía y no usaba.** El conteo se armaba con la misma subconsulta con la que se
+pinta la página, y esa subconsulta trae la declaración de cada predio para poder **escribir la
+columna «Condición»**. Un `count(*)` no escribe columnas. Cuando nadie filtra por condición —que es
+como se abre la pantalla, y es el caso del AC 2 de #561— los dos `JOIN` de la declaración son
+trabajo cuyo resultado se descarta entero, y además **no pueden cambiar el número de filas**:
+
+- el `LEFT JOIN LATERAL (… LIMIT 1) … ON true` devuelve exactamente una fila por predio, con nulos
+  si no hay declaración;
+- `fd` entra por la clave primaria de `ficha_catastral`, o sea a lo sumo una.
+
+El que sí podría multiplicar —`f`, la ficha vigente— **se queda en el conteo**: `ficha_vigente_uq`
+es *parcial* (`WHERE vigencia_hasta IS NULL`), así que impide dos versiones **abiertas** y nada más;
+una abierta y una cerrada pueden cubrir la misma fecha. La página devuelve dos filas de ese predio;
+un conteo que no las viera diría un total menor que las filas que la grilla enseña, y la última
+página saldría vacía sin que nada lo explicara. El camino de escritura no las produce
+—`ActualizarFichaCatastral` cierra la anterior el día antes de abrir la nueva—, pero un padrón
+migrado sí puede traerlas, y **el conteo tiene que decir lo que la grilla enseña sea cual sea el
+dato**. Eso lo fija una prueba con esa siembra exacta, no este párrafo.
+
+**Medido.** Misma forma que §7.1 —PostgreSQL 16.10, conexión de **`sgtm_app`** con RLS activa,
+`SET LOCAL app.municipalidad_id` dentro de una transacción, el padrón de Catacaos (14 422 predios,
+14 422 fichas, 14 422 titularidades, 2 885 declaraciones) sembrado en **dos** municipalidades— y en
+otra máquina, más lenta y compartida: aquí el conteo que §7.1 midió en 83,5 ms cuesta entre 311 y
+534. **Por eso la moneda son páginas tocadas**, que es lo único que sobrevive al cambio de máquina,
+que es justo el problema que tuvo este issue.
+
+| Conteo | Páginas tocadas | Reloj |
+|---|---|---|
+| Sin filtros, **con** los dos `JOIN` de la declaración | 32 293 | 311–534 ms |
+| Sin filtros, **sin** ellos | **555** | 86–180 ms |
+| Con `sector=01`, con ellos | 6 479 | 24 ms \* |
+| Con `sector=01`, sin ellos | **3 828** | 11 ms \* |
+| Padrón de 25 predios, con ellos | 67 | — |
+| Padrón de 25 predios, sin ellos | **6** | — |
+| *(no cambia)* con `condicion=SUBVALUADOR` o `=OMISO` | 32 818 | 464–484 ms \* |
+
+Las dos primeras filas son cinco corridas cronometradas **desde el cliente**, que es lo que la
+petición paga; las marcadas con `*` son el `Execution Time` del propio `EXPLAIN ANALYZE`, que sobre
+14 422 ciclos lleva dentro su instrumentación (el nodo raíz del conteo largo declara 297 ms y el
+`EXPLAIN` entero 636).
+
+De las 32 293 páginas del conteo sin filtros, **31 738 eran el `LATERAL`**: 14 422 descensos al
+índice `dj_ejercicio_predio_ix`, uno por predio, con su nodo `Sort` montado y desmontado 14 422
+veces. Lo que queda es el suelo real de contar un padrón: leerlo una vez —235 páginas de `predio` y
+320 de `ficha_catastral`—.
+
+**Y el planificador ya hacía lo que podía**: en el conteo sin filtros no aparecen ni `sector` ni
+`fd`, porque los dos entran por un índice único y sus columnas no se usan, así que PostgreSQL
+**elimina** esos dos `LEFT JOIN` él solo. El que no puede eliminar es el `LATERAL`: una subconsulta
+con `LIMIT` no le ofrece la prueba de unicidad que la eliminación exige, aunque para quien la
+escribió sea evidente. De ahí que esto haya que decirlo en el SQL.
+
+```
+-- antes, como sgtm_app y con RLS activa
+Aggregate  (Buffers: shared hit=32293)
+  ->  Nested Loop Left Join (actual rows=14422)
+        ->  Hash Right Join (actual rows=14422)          <- 555: el padron, una vez
+        ->  Limit (actual rows=0 loops=14422)            <- 31 738 paginas
+              ->  Sort  (Sort Key: d.fecha_presentacion DESC, d.id DESC)
+                    ->  Index Scan using dj_ejercicio_predio_ix on declaracion_jurada d
+
+-- despues
+Aggregate  (Buffers: shared hit=555)
+  ->  Hash Right Join (actual rows=14422)
+        ->  Bitmap Heap Scan on ficha_catastral f   (Buffers: shared hit=320)
+        ->  Bitmap Heap Scan on predio p            (Buffers: shared hit=235)
+```
+
+**Y no es una mejora de plan, sino de sentencia.** Un índice puede dejar de usarse cuando cambian
+las estadísticas —es lo que §7.1 y §0 documentan una y otra vez—; una tabla que **no está en el
+SQL** no la puede traer ningún planificador. Por eso la prueba mide las dos cosas: las páginas del
+plan, y —a través del caso de uso entero, con un pool que anota lo que se prepara— que la sentencia
+de conteo que la petición manda de verdad no nombre `declaracion_jurada`.
+
+**Lo que sigue siendo O(padrón), y por qué.** El conteo **con** filtro de condición (32 818 páginas,
+~470 ms aquí) no se toca y no se puede: la condición se deriva del cruce, así que para contar
+cuántos subvaluadores hay hay que mirar la declaración de cada predio. Lo que sí cambió es que ahora
+el conteo y la página son **dos cadenas distintas**, y eso reabre la primera de las dos salidas que
+§7.1 descartó: el `DISTINCT ON` sin correlación se descartó porque volvía la **página** O(declaraciones),
+y aplicado sólo al conteo filtrado ese reparo ya no aplica. No se toma aquí —serían tres formas del
+mismo cruce, y dos de ellas tendrían que coincidir fila a fila en qué declaración es «la que rige»,
+que es exactamente la divergencia que #545 vino a cerrar—, pero queda dicho para que retomarlo sea
+una decisión y no un redescubrimiento.
 
 ## 8. Al agregar una tabla
 

@@ -3,6 +3,7 @@ package pe.gob.sgtm.licencias.infraestructura.web;
 import java.time.LocalDate;
 import java.util.List;
 import org.jspecify.annotations.Nullable;
+import pe.gob.sgtm.dominio.AreaM2;
 import pe.gob.sgtm.licencias.aplicacion.ConsultaDeLicencias;
 import pe.gob.sgtm.licencias.dominio.DuplicadoDeLicencia;
 import pe.gob.sgtm.licencias.dominio.GiroDeLaLicencia;
@@ -24,6 +25,12 @@ import pe.gob.sgtm.licencias.dominio.MovimientoDeLicencia;
  * <p><b>Ningun importe.</b> Una licencia no lleva cifras: el derecho de tramite se pago antes y su
  * importe esta en el recibo. Lo que viaja es el numero del recibo, que es lo que permite ir a
  * buscarlo.
+ *
+ * <p><b>El area viaja tipada</b> (#607). Se escribia a mano con {@code valor().toPlainString()}:
+ * daba la cifra buena, pero era una segunda convencion para lo mismo, y de tener dos salio que
+ * catastro compusiera con {@code toString()} y publicara «360.00 m2» del mismo predio que aqui sale
+ * «360.00». Ahora la escribe el serializador que {@code ConfiguracionDeJson} registra para {@code
+ * AreaM2}, que es un solo sitio; la unidad la sigue poniendo el nombre del campo, no el dato.
  */
 public record LicenciaResource(
         String nroLicencia,
@@ -35,7 +42,7 @@ public record LicenciaResource(
         String denominacionComercial,
         String direccion,
         String tipoDeLicencia,
-        String areaDelEstablecimiento,
+        AreaM2 areaDelEstablecimiento,
         @Nullable String zonificacion,
         @Nullable Integer aforo,
         LocalDate fechaDeEmision,
@@ -60,7 +67,7 @@ public record LicenciaResource(
                 licencia.nombreComercial(),
                 licencia.direccion(),
                 licencia.tipoLicencia().name(),
-                licencia.areaSolicitada().valor().toPlainString(),
+                licencia.areaSolicitada(),
                 licencia.zonificacion(),
                 licencia.aforo(),
                 licencia.fechaEmision(),

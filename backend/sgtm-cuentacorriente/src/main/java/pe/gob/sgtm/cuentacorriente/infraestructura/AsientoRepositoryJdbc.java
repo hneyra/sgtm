@@ -2,6 +2,7 @@ package pe.gob.sgtm.cuentacorriente.infraestructura;
 
 import java.sql.ResultSet;
 import java.sql.SQLException;
+import java.time.LocalDate;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
@@ -25,6 +26,7 @@ import pe.gob.sgtm.cuentacorriente.dominio.CriterioDeConsulta;
 import pe.gob.sgtm.cuentacorriente.dominio.CriterioDeDeuda;
 import pe.gob.sgtm.cuentacorriente.dominio.CriterioDePagos;
 import pe.gob.sgtm.cuentacorriente.dominio.Fase;
+import pe.gob.sgtm.cuentacorriente.dominio.PendienteAgregado;
 import pe.gob.sgtm.cuentacorriente.dominio.RecaudacionAgregada;
 import pe.gob.sgtm.cuentacorriente.dominio.SentidoDelMovimiento;
 import pe.gob.sgtm.cuentacorriente.dominio.TipoAsiento;
@@ -55,7 +57,7 @@ public class AsientoRepositoryJdbc extends RepositorioJdbc implements AsientoRep
             "a.id, a.ejercicio, a.contribuyente_id, a.tributo, a.concepto, a.tipo, a.fase,"
                     + " a.periodo, a.predio_id, a.vehiculo_id, a.referencia_externa, a.monto,"
                     + " a.fecha_valor, a.documento_origen, a.asiento_reversado_id, a.usuario_id,"
-                    + " a.motivo, a.acto";
+                    + " a.motivo, a.acto, a.unidad_de_titular_anterior";
 
     private static final String DESDE = " FROM cuenta_corriente_asiento a";
 
@@ -201,6 +203,38 @@ public class AsientoRepositoryJdbc extends RepositorioJdbc implements AsientoRep
                 .list();
     }
 
+    /**
+     * La relacion de altas y bajas de un contribuyente (RF-045), que son <b>actos</b> y no todo el
+     * libro (#640).
+     *
+     * <h2>Lo que queda fuera, y por que</h2>
+     *
+     * <p>Un cobro de ventanilla no es una baja de deuda ni el cargo de la emision masiva es un
+     * alta, aunque los tres se escriban con los mismos conceptos del desglose. Se acota por {@code
+     * acto IS NOT NULL} porque es lo unico que los separa: un asiento sin acto no es uno del que se
+     * ignore el origen, es uno que <b>no nacio</b> de un alta ni de una baja (V68 §2).
+     *
+     * <p>Los sitios que estampan la columna son <b>dos</b> desde #662: {@link
+     * pe.gob.sgtm.cuentacorriente.dominio.MovimientoDeDeuda#enAsientos} —los actos de RF-043 y
+     * RF-044, tecleados en Rentas— y {@code ExtincionDeDeudaCuentaCorriente}, que asienta la misma
+     * baja cuando la ordena una resolucion de gerencia (#50, RF-064). Antes de #662 esa segunda
+     * baja no salia aqui, que es tanto como decir que la pantalla del control se saltaba la via por
+     * la que se extingue deuda con mas consecuencias.
+     *
+     * <h2>Los asientos anteriores a V68, dicho en vez de callado</h2>
+     *
+     * <p>Los que existian antes de esa migracion tienen {@code acto} nulo y <b>no se pueden
+     * reparar</b>: el libro no admite {@code UPDATE} (V7, regla 4) y el migrador no puede
+     * reescribir una tabla con {@code FORCE ROW LEVEL SECURITY} porque corre sin contexto de tenant
+     * (DAT-01 §0 cuarto hallazgo, medido igual en V64). Asi que <b>una baja anterior a V68 no sale
+     * en esta relacion</b>, y no hay forma de distinguirla de un cobro del mismo dia.
+     *
+     * <p><b>No se acota por fecha</b>, que era la otra salida: haria falta saber cuando se aplico
+     * V68 en <i>esta</i> instalacion —cada una la aplica el dia que despliega—, y ese dato no esta
+     * en ninguna tabla que la aplicacion pueda leer. Un corte inventado dejaria fuera bajas buenas
+     * o dentro cobros, con el mismo aspecto en los dos casos. Se dice, en cambio, en la descripcion
+     * que el contrato publica de la operacion, que es lo que llega a quien lee la pantalla (#312).
+     */
     @Override
     public Pagina<Asiento> altasYBajas(CriterioDeAltasBajas criterio, Paginacion paginacion) {
         List<String> condiciones = new ArrayList<>();
@@ -208,9 +242,14 @@ public class AsientoRepositoryJdbc extends RepositorioJdbc implements AsientoRep
 
         condiciones.add("c.codigo_contribuyente = :codigo");
         parametros.put("codigo", criterio.codigoContribuyente());
-        // Los cuatro conceptos del desglose: es lo que un alta o una baja produce. Un
-        // PAGO es un cobro, no un movimiento de deuda, y tiene su propia consulta.
-        condiciones.add("a.concepto IN ('INSOLUTO','REAJUSTE','INTERES','GASTO')");
+        // EL filtro de esta consulta, y el unico (#640). Acotar por los cuatro conceptos
+        // del desglose no separaba nada: el abono de una baja y el de una COBRANZA son
+        // columna a columna el mismo asiento —ABONO de concepto INSOLUTO—, asi que la
+        // pantalla que existe para auditar las altas y bajas listaba como baja cada pago
+        // de ventanilla, y como alta el cargo de la emision masiva y el que cristaliza el
+        // interes al cobrar. Lo que distingue un acto de un movimiento cualquiera es de
+        // que nace, y desde V68 el libro lo guarda.
+        condiciones.add("a.acto IS NOT NULL");
 
         if (criterio.ejercicio() != null) {
             condiciones.add("a.ejercicio = :ejercicio");
@@ -223,6 +262,13 @@ public class AsientoRepositoryJdbc extends RepositorioJdbc implements AsientoRep
         if (criterio.sentido() != null) {
             // Un alta incorpora deuda (CARGO) y una baja la extingue (ABONO): es la
             // misma equivalencia que MovimientoDeDeuda#enAsientos escribe al asentar.
+            //
+            // Se acota por `tipo` y NO por `acto`, y a proposito: la columna «A/B» de la
+            // pantalla dibuja el tipo del asiento, asi que filtrar por el acto dejaria el
+            // filtro diciendo una cosa y la columna otra —dos verdades sobre la misma
+            // fila, y la que se lee no seria la que filtro (#397)—. Donde se ve es en la
+            // REVERSION de una baja: copia el acto BAJA_DEUDA y es un CARGO, porque
+            // devuelve la deuda al padron; sale bajo «Alta», que es lo que su tipo dice.
             condiciones.add("a.tipo = :tipo");
             parametros.put(
                     "tipo",
@@ -250,8 +296,10 @@ public class AsientoRepositoryJdbc extends RepositorioJdbc implements AsientoRep
 
         condiciones.add("c.codigo_contribuyente = :codigo");
         parametros.put("codigo", criterio.codigoContribuyente());
-        // Un pago es un ABONO de concepto PAGO: los demas abonos son movimientos de
-        // deuda y los cubre altasYBajas (ver CriterioDePagos).
+        // Un pago es un ABONO de concepto PAGO (ver CriterioDePagos). Los demas abonos no
+        // son todos «movimientos de deuda»: el de una cobranza tambien es un ABONO de
+        // INSOLUTO, y desde #640 lo que separa un acto de un cobro es `acto`, no el
+        // concepto.
         condiciones.add("a.tipo = 'ABONO'");
         condiciones.add("a.concepto = 'PAGO'");
 
@@ -512,6 +560,53 @@ public class AsientoRepositoryJdbc extends RepositorioJdbc implements AsientoRep
                 .list();
     }
 
+    /**
+     * Lo pendiente del ejercicio a la fecha de corte, agrupado por tributo (#639, RF-130).
+     *
+     * <p><b>Dos agregaciones y no una, y las dos las hace el motor.</b> La de dentro netea el
+     * insoluto de cada <b>obligacion</b> —el mismo grupo con el que {@code consulta_deuda} publica
+     * una fila: contribuyente, tributo, ejercicio y unidad— hasta el corte; la de fuera se queda
+     * con las positivas y las suma por tributo. Devuelve una linea por tributo, no una por
+     * obligacion: la cartera de un padron son decenas de miles de filas y el panel escribe una
+     * docena de numeros (AC 4 de #56).
+     *
+     * <p>{@code fecha_valor <= :aLaFecha} es la condicion que faltaba y que da nombre a #639. Sin
+     * ella la cifra es la misma preguntando por enero que por diciembre, y estampar en ella la
+     * fecha de corte del panel es afirmar que en enero ya se debia la cuota de noviembre. Medido en
+     * la municipalidad de demostracion: PREDIAL 2026 al 2026-09-01 son <b>8 221,05</b> y sin la
+     * condicion salian <b>10 662,60</b>.
+     *
+     * <p>Sin filtro de reversion: ver {@link AsientoRepository#pendientePorTributo}. Netear ya lo
+     * corrige; las dos mitades del filtro son inertes aqui y media resta deuda viva.
+     */
+    @Override
+    public List<PendienteAgregado> pendientePorTributo(Ejercicio ejercicio, LocalDate aLaFecha) {
+        return jdbc().sql(
+                        "SELECT tributo, sum(insoluto) AS pendiente,"
+                                + "       count(*) AS obligaciones"
+                                + " FROM (SELECT a.tributo,"
+                                + "              sum(CASE WHEN a.tipo = 'CARGO' THEN a.monto"
+                                + "                       ELSE -a.monto END) AS insoluto"
+                                + DESDE
+                                + "        WHERE a.ejercicio = :ejercicio"
+                                + "          AND a.concepto = 'INSOLUTO'"
+                                + "          AND a.fecha_valor <= :aLaFecha"
+                                + "        GROUP BY a.contribuyente_id, a.tributo, a.ejercicio,"
+                                + "                 a.predio_id, a.vehiculo_id) obligacion"
+                                + " WHERE insoluto > 0"
+                                + " GROUP BY tributo"
+                                + " ORDER BY tributo")
+                .param("ejercicio", ejercicio.valor())
+                .param("aLaFecha", aLaFecha)
+                .query(
+                        (fila, numeroDeFila) ->
+                                new PendienteAgregado(
+                                        fila.getString("tributo"),
+                                        new Dinero(fila.getBigDecimal("pendiente")),
+                                        fila.getLong("obligaciones")))
+                .list();
+    }
+
     private static RecaudacionAgregada mapearRecaudacion(ResultSet fila, int numeroDeFila)
             throws SQLException {
         return new RecaudacionAgregada(
@@ -620,14 +715,14 @@ public class AsientoRepositoryJdbc extends RepositorioJdbc implements AsientoRep
                                         + "  tributo, concepto, tipo, fase, periodo, predio_id,"
                                         + "  vehiculo_id, referencia_externa, monto, fecha_valor,"
                                         + "  documento_origen, asiento_reversado_id, usuario_id,"
-                                        + "  motivo, acto)"
+                                        + "  motivo, acto, unidad_de_titular_anterior)"
                                         + " VALUES ("
                                         + MUNICIPALIDAD_ACTUAL
                                         + ", :ejercicio, :contribuyenteId, :tributo, :concepto,"
                                         + "  :tipo, :fase, :periodo, :predioId, :vehiculoId,"
                                         + "  :referenciaExterna, :monto, :fechaValor,"
                                         + "  :documentoOrigen, :asientoReversadoId, :usuario,"
-                                        + "  :motivo, :acto)"
+                                        + "  :motivo, :acto, :deTitularAnterior)"
                                         + " RETURNING id")
                         .param("ejercicio", asiento.ejercicio().valor())
                         .param("contribuyenteId", asiento.contribuyenteId())
@@ -646,6 +741,7 @@ public class AsientoRepositoryJdbc extends RepositorioJdbc implements AsientoRep
                         .param("usuario", usuario)
                         .param("motivo", asiento.motivo())
                         .param("acto", asiento.acto() == null ? null : asiento.acto().name())
+                        .param("deTitularAnterior", asiento.unidadDeTitularAnterior())
                         .query(Long.class)
                         .single();
 
@@ -667,7 +763,8 @@ public class AsientoRepositoryJdbc extends RepositorioJdbc implements AsientoRep
                 asiento.asientoReversadoId(),
                 usuario,
                 asiento.motivo(),
-                asiento.acto());
+                asiento.acto(),
+                asiento.unidadDeTitularAnterior());
     }
 
     private static Asiento mapear(ResultSet fila, int numeroDeFila) throws SQLException {
@@ -698,7 +795,8 @@ public class AsientoRepositoryJdbc extends RepositorioJdbc implements AsientoRep
                 asientoReversadoId,
                 fila.getString("usuario_id"),
                 fila.getString("motivo"),
-                actoDe(fila.getString("acto")));
+                actoDe(fila.getString("acto")),
+                fila.getBoolean("unidad_de_titular_anterior"));
     }
 
     /**

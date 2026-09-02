@@ -112,10 +112,12 @@ public class LiquidarCostas {
      *
      * @throws CambiarEstadoDelExpediente.ExpedienteInexistente si no hay expediente con ese numero
      * @throws CambiarEstadoDelExpediente.ExpedienteConcluido si el procedimiento ya termino
-     * @throws SinActosQueLiquidar si no queda ningun acto tarifado sin liquidar
+     * @throws SinActosQueLiquidar si no queda ningun acto pendiente, o si la ordenanza —que si esta
+     *     publicada— no tarifa los que quedan
      * @throws ActoAjeno si alguno de los actos pedidos no es de ese expediente
      * @throws ArancelDeCostasParametrizado.ArancelSinParametrizar si el arancel no tarifa un acto
-     *     pedido expresamente
+     *     pedido expresamente, o si no hay <b>ningun</b> arancel publicado y quedan actos
+     *     pendientes (#634)
      * @throws LiquidacionDeCostasRepository.ActoYaLiquidado si otro liquido el mismo acto a la vez
      * @throws LiquidacionDeCostasRepository.ObligacionDeOtroExpediente si otro expediente del mismo
      *     obligado ya tiene las costas de ese tributo y ejercicio
@@ -207,9 +209,36 @@ public class LiquidarCostas {
      * <p>Con lista de actos, exactamente esos: si alguno no es del expediente se rechaza —liquidar
      * en el expediente A la costa de un acto de B mezclaria dos procedimientos— y si alguno no
      * tiene arancel, {@link ArancelDeCostasParametrizado.Vigente#paraElActo} falla nombrando la
-     * llave. Sin lista, <b>todos los que quedan por liquidar y el arancel tarifa</b>: los que la
-     * ordenanza no tarifa se omiten en silencio porque no tarifarlos es una decision de la
-     * ordenanza, no un error de quien liquida.
+     * llave. Sin lista, <b>todos los que quedan por liquidar y el arancel tarifa</b>.
+     *
+     * <h2>Que la ordenanza no tarife un acto y que no haya ordenanza NO son lo mismo (#634)</h2>
+     *
+     * <p>Hasta #634 los dos casos se contestaban igual —{@link SinActosQueLiquidar}— y por eso el
+     * {@code catch} de {@code ArancelSinParametrizar} de {@code CostasController} era inalcanzable
+     * por esta rama: el descarte por {@code arancel.tarifa(tipo)} se comia los actos antes de que
+     * nadie preguntara su importe. Con D-02c abierta (#193) y <b>ninguna</b> llave {@code
+     * ARANCEL_COSTA} publicada en ninguna municipalidad, liquidar un expediente con su REC-1
+     * dictada contestaba «este expediente no tiene ningun acto pendiente de liquidar», que se lee
+     * como «no hay nada que cobrar» y no como «falta publicar una cifra». Un resultado plausible y
+     * equivocado, que es lo que este repositorio decidio no producir en #51 ({@code TASA_ANUNCIO}),
+     * en #54 ({@code VIGENCIA_DEL_CERTIFICADO}) y en #72 ({@code BENEFICIO}).
+     *
+     * <p>El discriminador no hay que inventarlo, lo publica el propio conjunto sellado: {@link
+     * ArancelDeCostasParametrizado.Vigente#tarifaAlgunActo()} pregunta si hay <b>alguna</b> clave
+     * de esa familia. Con alguna, que este acto no este es la decision de la ordenanza y se respeta
+     * —se omite en silencio, y si no queda ninguno sale {@code SinActosQueLiquidar}—. Sin ninguna,
+     * no hay decision que respetar: falta la ordenanza, y se falla nombrando la llave del primer
+     * acto pendiente para que quien lea el 422 sepa que publicar.
+     *
+     * <p>El {@code catch} de {@code CostasController} <b>no sobra</b> —la salida (1) del issue—: ya
+     * era alcanzable pidiendo actos por su identificador, y retirarlo convertiria ese 422 en un 500
+     * con incidencia. Lo que se corrige es el silencio de la otra rama.
+     *
+     * <p>Y {@link SinActosQueLiquidar} sigue existiendo para lo que de verdad es: que no quede
+     * ningun acto pendiente —ya se liquidaron todos— o que la ordenanza, existiendo, no tarife los
+     * que quedan. Por eso la comprobacion mira los actos <b>pendientes</b> y no el arancel a secas:
+     * un expediente ya liquidado del todo no gana un 422 nuevo por que la ordenanza haya dejado de
+     * estar cargada.
      */
     private List<ActoCoactivo> candidatosDe(
             ExpedienteCoactivo expediente,
@@ -234,24 +263,44 @@ public class LiquidarCostas {
             }
         }
 
-        List<ActoCoactivo> candidatos = new ArrayList<>();
+        List<ActoCoactivo> pendientes = new ArrayList<>();
         for (ActoCoactivo acto : delExpediente) {
             long id = acto.identificador();
             if (yaLiquidados.contains(id)) {
                 continue;
             }
-            if (pedidos.isEmpty()) {
-                if (arancel.tarifa(acto.tipo())) {
-                    candidatos.add(acto);
-                }
-            } else if (pedidos.contains(id)) {
+            if (pedidos.isEmpty() || pedidos.contains(id)) {
+                pendientes.add(acto);
+            }
+        }
+
+        if (pendientes.isEmpty()) {
+            // Ni uno pendiente: ya se liquidaron todos. Aqui no falta ninguna cifra.
+            throw new SinActosQueLiquidar(expediente.numero(), arancel.ejercicio());
+        }
+
+        if (!pedidos.isEmpty()) {
+            // Pedidos por su identificador: se tarifan todos, y el que no tenga arancel lo dice
+            // `paraElActo` nombrando su llave. Es la rama que ya llegaba a la excepcion.
+            return pendientes;
+        }
+
+        List<ActoCoactivo> candidatos = new ArrayList<>();
+        for (ActoCoactivo acto : pendientes) {
+            if (arancel.tarifa(acto.tipo())) {
                 candidatos.add(acto);
             }
         }
-        if (candidatos.isEmpty()) {
-            throw new SinActosQueLiquidar(expediente.numero(), arancel.ejercicio());
+        if (!candidatos.isEmpty()) {
+            return candidatos;
         }
-        return candidatos;
+        if (!arancel.tarifaAlgunActo()) {
+            // Nadie publico el arancel (D-02c, #193): no es que la ordenanza no tarife estos
+            // actos, es que no hay ordenanza. Se dice QUE llave hay que publicar.
+            throw new ArancelDeCostasParametrizado.ArancelSinParametrizar(
+                    arancel.ejercicio(), pendientes.get(0).tipo());
+        }
+        throw new SinActosQueLiquidar(expediente.numero(), arancel.ejercicio());
     }
 
     /** La glosa que sale impresa: que acto se tarifa y con que numero. */
@@ -304,7 +353,14 @@ public class LiquidarCostas {
         }
     }
 
-    /** No queda ningun acto del expediente sin liquidar que el arancel tarife. */
+    /**
+     * No queda ningun acto del expediente sin liquidar que el arancel tarife.
+     *
+     * <p>Son <b>dos</b> situaciones y las dos son legitimas: que ya se liquidaran todos, y que la
+     * ordenanza publicada no tarife los que quedan. Lo que desde #634 <b>ya no</b> sale por aqui es
+     * la tercera —que no haya ninguna ordenanza publicada—, porque eso no es un expediente sin nada
+     * que liquidar sino una cifra sin publicar, y se contesta nombrando su llave.
+     */
     public static final class SinActosQueLiquidar extends RuntimeException {
 
         @java.io.Serial private static final long serialVersionUID = 1L;
