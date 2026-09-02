@@ -247,6 +247,51 @@ export const gruposDelUsuario = (usuarioId: number, p: Paginacion, s?: AbortSign
   });
 
 /**
+ * Quien esta DENTRO de un grupo (#582). La pregunta inversa de
+ * `gruposDelUsuario`, y hasta #646 no se podia hacer: de esta ruta solo existia
+ * el `POST` que afilia, asi que contestar «quien esta dentro» obligaba a
+ * recorrer el padron de cuentas preguntando por cada una.
+ *
+ * <h2>Solo las pertenencias activas</h2>
+ *
+ * Una baja no borra la fila —sigue ahi con `activo` en falso (RNF-051)— pero
+ * quien salio del grupo ya no esta dentro, y el `JOIN ... AND m.activo` del
+ * repositorio lo deja fuera. Lo que si devuelve son las cuentas
+ * **deshabilitadas** que siguen afiliadas: cada fila trae su `habilitado`, y esa
+ * separacion es la que permite contestar que cuenta sin poder entrar conserva
+ * permisos sin una segunda lectura. Estar en el grupo y poder entrar son cosas
+ * distintas.
+ *
+ * <h2>Cero miembros y no existir son dos respuestas</h2>
+ *
+ * Un grupo sin nadie es una pagina vacia con 200; un grupo que no existe **en
+ * esta municipalidad** es 404 nombrandolo. La segunda no se puede decir
+ * callando: cero filas se leeria como «a este grupo no pertenece nadie», que es
+ * lo contrario de lo que hay que contestarle a quien administra. Es la misma
+ * decision que el `Optional.empty()` frente a la pagina vacia del listado de
+ * manzanas (#537).
+ *
+ * <h2>Lo que hay que pedir para poder contar los deshabilitados</h2>
+ *
+ * El sobre publica `totalElementos`, asi que **cuantos son** lo dice el servidor
+ * sobre el grupo entero y no hace falta traerlos todos. **Cuantos de ellos estan
+ * deshabilitados**, en cambio, solo se puede contar sobre las filas que
+ * llegaron: con mas de una pagina, contar la primera y presentarlo como del
+ * grupo da un numero mas pequeno que el real, o sea el que nadie sabria
+ * distinguir del bueno. Quien lo dibuje tiene que mirar `hayMas` antes de decir
+ * esa segunda cifra.
+ *
+ * Ordena por `cuenta` si no se pide otra cosa, y ese orden ya desempata por `id`
+ * en el backend: sin desempate, dos cuentas homonimas dejan de tener un orden
+ * total y dos paginas consecutivas pueden repetir a una y omitir a otra (#548).
+ */
+export const miembrosDelGrupo = (grupoId: number, p: Paginacion, s?: AbortSignal) =>
+  solicitar<RespuestaPaginada<Usuario>>(`/seguridad/grupos/${grupoId}/miembros`, {
+    parametros: { ...p },
+    senal: s,
+  });
+
+/**
  * La matriz efectiva de un usuario, con el origen de cada fila (#543).
  *
  * Devuelve lista suelta, no el sobre paginado, y **sin filas** para los accesos
@@ -304,6 +349,112 @@ export const listarAuditoria = (f: FiltroDeAuditoria, p: Paginacion, s?: AbortSi
  * dejara a la municipalidad sin nadie capaz de administrar permisos se rechaza,
  * y de ahi no se sale por el sistema.
  */
+/**
+ * La municipalidad de la sesion, con su nombre (#555).
+ *
+ * Sin esta lectura la cabecera no podia decir de quien son las cifras que se
+ * estan mirando: el token trae el identificador y nada mas. Se decia
+ * «Municipalidad n.º 1» —feo a proposito, para que se leyera como el dato que
+ * faltaba— despues de haber dicho durante meses un nombre compilado que era el
+ * de otra: la municipalidad 1 es **Sullana**, y la constante decia «Catacaos».
+ *
+ * No lleva parametro: sale del token. Pedirla por identificador convertiria la
+ * operacion en un directorio de municipalidades.
+ */
+export type MunicipalidadDeLaSesion = {
+  id: number;
+  ubigeo: string;
+  nombre: string;
+  tipo: string;
+};
+
+export function municipalidadDeLaSesion(senal?: AbortSignal): Promise<MunicipalidadDeLaSesion> {
+  return solicitar('/seguridad/sesion/municipalidad', { senal });
+}
+
+/**
+ * Quien es la sesion (#559). Es `IdentidadResource`, campo por campo.
+ *
+ * <h2>El `usuarioId` es el dato, no un campo mas</h2>
+ *
+ * `PUT /seguridad/usuarios/{id}/clave` solo admite la clave PROPIA —el servidor
+ * compara la cuenta del token con la del usuario que ese `id` nombra— y hasta
+ * esta lectura la interfaz no sabia cual era el suyo: las dos unicas
+ * operaciones que publican un `usuario.id` son el listado de usuarios y la
+ * matriz de otro, las dos detras de un permiso de administracion mucho mayor
+ * que «cambiar mi propia contrasena». Deducirlo cruzando la cuenta del token
+ * contra el listado obligaria a otorgarlo.
+ *
+ * Y es el de ESTA municipalidad: la misma persona con la misma cuenta en dos
+ * municipalidades son dos filas de `usuario` y dos identificadores distintos,
+ * asi que no puede salir del token —que trae la cuenta— sino de la consulta.
+ *
+ * <h2>`ejercicioDeTrabajo` nulo no quiere decir «el corriente»</h2>
+ *
+ * Quiere decir que nadie lo ha fijado con `PUT /seguridad/sesion/ejercicio`, y
+ * las dos cosas se distinguen a proposito (#557): el año del reloj ahi afirmaria
+ * que alguien lo eligio. El selector de la cabecera no lo escribe — solo acota
+ * lo que las consultas piden.
+ */
+export type IdentidadDeLaSesion = {
+  usuarioId: number;
+  cuenta: string;
+  nombre: string;
+  ejercicioDeTrabajo: number | null;
+};
+
+/**
+ * La sesion preguntando quien es.
+ *
+ * **Sin ningun parametro**, igual que `municipalidadDeLaSesion`: el sujeto sale
+ * del token. Con un identificador seria el padron de usuarios sin su permiso, y
+ * devolveria el `id` de otro — justo lo que la guarda del cambio de clave
+ * existe para rechazar. Uno de mas ni siquiera se ignora: el servidor contesta
+ * 422 nombrandolo.
+ *
+ * La lee cualquier sesion valida, tenga los permisos que tenga: leer quien es
+ * uno mismo no revela nada que no revele el token que ya se presento (ADR-0013).
+ */
+export function identidadDeLaSesion(senal?: AbortSignal): Promise<IdentidadDeLaSesion> {
+  return solicitar('/seguridad/sesion', { senal });
+}
+
+/**
+ * Lo que contesta el cambio de clave: quien la gestiona y a donde hay que ir.
+ *
+ * `destino` es una ruta RELATIVA del proveedor —hoy `/account/password`—, no una
+ * URL completa: el emisor concreto es configuracion del ambiente (ADR-0005). La
+ * base la pone `enElProveedorDeIdentidad`, que es la misma con la que se pide el
+ * token.
+ */
+export type CambioDeClaveIniciado = { gestionadaPor: string; destino: string };
+
+/**
+ * Inicia el cambio de la contrasena PROPIA.
+ *
+ * <h2>No viaja ninguna contrasena, y esa ausencia es la garantia</h2>
+ *
+ * El cuerpo lleva la observacion y nada mas: `SolicitudDeCambioDeClave` no
+ * declara ni la vieja, ni la nueva, ni la repetida. La credencial no vive en
+ * este sistema —la guarda el proveedor de identidad (ADR-0005)—, asi que no hay
+ * donde ponerla y lo tecleado en una caja de contrasena se quedaria en el estado
+ * de React. Lo que el backend hace es registrar el acto en la bitacora y decir a
+ * donde mandar a quien lo pide.
+ *
+ * <h2>Solo la propia</h2>
+ *
+ * `AdministrarSesion` compara la cuenta del token con la del usuario que el `id`
+ * nombra y contesta 403 si no son la misma: cambiar la clave de otro no es
+ * administrar, es suplantar. Por eso el `id` que se manda es el de
+ * `identidadDeLaSesion` y no uno elegido en ninguna lista.
+ */
+export function iniciarCambioDeClave(usuarioId: number, observacion: string): Promise<CambioDeClaveIniciado> {
+  return solicitar(`/seguridad/usuarios/${usuarioId}/clave`, {
+    metodo: 'PUT',
+    cuerpo: { observacion },
+  });
+}
+
 export function fijarPermisosDelGrupo(
   grupoId: number,
   niveles: { acceso: string; privilegios: Privilegio[] }[],
@@ -369,3 +520,41 @@ export const listarConjuntosDeParametros = (p: Paginacion, s?: AbortSignal) =>
     parametros: { ...p },
     senal: s,
   });
+
+/**
+ * Si un ejercicio tiene conjunto de parametros SELLADO. Es
+ * `ParametrosController.EjercicioParametrizadoResource`.
+ *
+ * **Ninguna cifra, y ninguna promesa.** Lo que contesta es si HAY conjunto
+ * sellado, no si el calculo va a salir: sin conjunto seguro que no, pero con el
+ * puede faltar dentro alguna llave que la regla pida —`INTERES_FRACCIONAMIENTO:
+ * ORDINARIO`, `CUOTAS_MAXIMAS_FRACCIONAMIENTO:ORDINARIO`, `REDONDEO:CUOTA`— y
+ * eso sigue saliendo como 422 al calcular (#547, #562). Medido contra este
+ * ambiente: el ejercicio 2026 contesta `sellado: true` y la simulacion de un
+ * fraccionamiento contesta igualmente 422 nombrando
+ * `CUOTAS_MAXIMAS_FRACCIONAMIENTO:ORDINARIO`. Quien la use tiene que decir esa
+ * mitad y no la otra.
+ *
+ * `conjuntoId` y `version` son nulos cuando `sellado` es falso, y son la
+ * IDENTIDAD del juego de valores —lo mismo que `ConvenioResource
+ * .conjuntoDeParametros` publica cuando el convenio ya existe—, nunca sus
+ * cifras: esas siguen detras del permiso de `parametros` (REQ-03).
+ */
+export type EjercicioParametrizado = {
+  ejercicio: number;
+  sellado: boolean;
+  conjuntoId: number | null;
+  version: number | null;
+};
+
+/**
+ * Pregunta por UN ejercicio, con el numero en la ruta.
+ *
+ * No exige ninguna opcion del catalogo —el backend la sirve con el centinela
+ * `SESION_PROPIA` (#605)—, asi que la puede llamar quien fracciona sin tener
+ * que administrar los parametros del sistema. Fuera del rango 1990 a 2100 es un
+ * 422 nombrando el rango, que **no** es lo mismo que «ese ejercicio no esta
+ * sellado»: eso es un 200 diciendo que no.
+ */
+export const ejercicioParametrizado = (ejercicio: number, s?: AbortSignal) =>
+  solicitar<EjercicioParametrizado>(`/seguridad/parametros/ejercicios/${ejercicio}`, { senal: s });

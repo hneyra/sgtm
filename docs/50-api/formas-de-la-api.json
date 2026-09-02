@@ -996,6 +996,33 @@
     "totalPaginas": "entero",
     "hayMas": "booleano"
   },
+  "GET /coactiva/prescripcion": {
+    "contenido": [
+      {
+        "id": "entero",
+        "codContribuyente": "texto",
+        "contribuyente": "texto",
+        "tributo": "texto",
+        "ejercicioDesde": "entero",
+        "ejercicioHasta": "entero",
+        "fechaDePresentacion": "texto",
+        "plazoAplicable": "texto",
+        "plazo": "texto",
+        "resultado": "texto",
+        "nDeResolucion": "texto",
+        "ejerciciosPrescritos": [
+          "entero"
+        ],
+        "usuario": "texto",
+        "observacion": "texto"
+      }
+    ],
+    "pagina": "entero",
+    "tamano": "entero",
+    "totalElementos": "entero",
+    "totalPaginas": "entero",
+    "hayMas": "booleano"
+  },
   "GET /consultas/altas-bajas": {
     "contenido": [
       {
@@ -4710,7 +4737,12 @@
   },
   "POST /fiscalizacion/programas/{id}/muestra": {
     "programaId": "entero",
-    "predios": "entero"
+    "predios": "entero",
+    "sinTitular": "entero",
+    "detectados": "entero",
+    "excluidosPorOtroPrograma": "entero",
+    "excluidosPorActaDelEjercicio": "entero",
+    "fechaSorteo": "texto"
   },
   "POST /fiscalizacion/transferencias": {
     "numero": "texto",

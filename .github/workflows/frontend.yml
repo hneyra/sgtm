@@ -58,9 +58,13 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
+      # La version sale de `frontend/.nvmrc` y no de un literal aqui: con el
+      # literal, CI y quien clona el repositorio son dos numeros que pueden
+      # separarse sin que nada lo diga, y separarse es lo que hacen. Asi la
+      # incoherencia no se comprueba: no se puede escribir (#439).
       - uses: actions/setup-node@v4
         with:
-          node-version: '22'
+          node-version-file: frontend/.nvmrc
           cache: yarn
           cache-dependency-path: frontend/yarn.lock
 
@@ -88,9 +92,13 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
+      # La version sale de `frontend/.nvmrc` y no de un literal aqui: con el
+      # literal, CI y quien clona el repositorio son dos numeros que pueden
+      # separarse sin que nada lo diga, y separarse es lo que hacen. Asi la
+      # incoherencia no se comprueba: no se puede escribir (#439).
       - uses: actions/setup-node@v4
         with:
-          node-version: '22'
+          node-version-file: frontend/.nvmrc
           cache: yarn
           cache-dependency-path: frontend/yarn.lock
 

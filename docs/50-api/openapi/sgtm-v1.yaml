@@ -3040,7 +3040,7 @@ paths:
     get:
       operationId: fisc_programa_muestra
       summary: "Muestra sorteada del programa"
-      description: "Los predios que el programa sorteó para inspeccionar, con la condición que la detección concluyó el día del sorteo y las dos superficies que comparó. Es la grilla «Predios seleccionados» de la pantalla y también de donde el acta de inspección resuelve sus tres identificadores —programa, contribuyente y predio—, que su catálogo dibuja de solo lectura. La columna «Estado» se DERIVA de si el predio ya tiene acta en el programa: no es una columna de la fila, porque guardarla dejaría dos verdades sobre lo mismo."
+      description: "Los predios que el programa sorteó para inspeccionar, con la condición que la detección concluyó el día del sorteo y las dos superficies que comparó. Es la grilla «Predios seleccionados» de la pantalla y también de donde el acta de inspección resuelve sus tres identificadores —programa, contribuyente y predio—, que su catálogo dibuja de solo lectura. La columna «Estado» se DERIVA de si el predio ya tiene acta en el programa: no es una columna de la fila, porque guardarla dejaría dos verdades sobre lo mismo. Los tres campos del titular —contribuyenteId, codContribuyente y titular— salen NULOS en el predio sin titularidad vigente: es el predio que nadie reclama, el candidato de primer orden, y desde #586 la muestra lo admite en vez de apartarlo. Quien lo visite averigua quién lo ocupa y nombra al contribuyente al levantar el acta."
       tags: ["Fiscalización"]
       parameters:
         - name: id
@@ -3088,7 +3088,7 @@ paths:
     post:
       operationId: fisc_programa_generar_muestra
       summary: "Generar la muestra del programa"
-      description: "Sortea los predios que el programa va a inspeccionar, aplicando sobre el padrón el ejercicio, el sector y el criterio de riesgo que el propio programa declara. No sortea un predio que otro programa abierto ya se llevó ni uno ya fiscalizado en el ejercicio, así que la muestra depende del orden: el primer programa que se genere se lleva los predios. Responde 409 si el programa ya la sorteó — una muestra es un acto y no se regenera, porque hay actas levantadas sobre ella."
+      description: "Sortea los predios que el programa va a inspeccionar, aplicando sobre el padrón el ejercicio, el sector y el criterio de riesgo que el propio programa declara. No sortea un predio que otro programa abierto ya se llevó ni uno ya fiscalizado en el ejercicio, así que la muestra depende del orden: el primer programa que se genere se lleva los predios. Responde 409 si el programa ya la sorteó — una muestra es un acto y no se regenera, porque hay actas levantadas sobre ella. La respuesta dice sobre qué padrón se sorteó y no sólo cuántos entraron: detectados, predios, sinTitular —cuántos de los sorteados no tienen titular vigente— y los excluidos POR MOTIVO, de modo que detectados = predios + excluidosPorOtroPrograma + excluidosPorActaDelEjercicio. Un número suelto no distinguiría «otro programa se lo llevó» de «ya se fiscalizó», que se arreglan de maneras distintas (#586)."
       tags: ["Fiscalización"]
       parameters:
         - name: id
@@ -3454,12 +3454,27 @@ paths:
     get:
       operationId: resolucion_determinacion_fisc
       summary: "Resolución de determinación de fiscalización"
-      description: "Valor emitido al cierre de un procedimiento de fiscalización: determina la diferencia de tributo por ejercicio y la multa tributaria que corresponde."
+      description: >-
+        El valor que cierra un procedimiento de fiscalización: determina por ejercicio la diferencia
+        de tributo y la multa tributaria, y es lo que arranca el plazo del art. 137 para reclamar
+        (#52, RF-057). Las cifras salen **nulas** mientras D-02a siga abierta, y eso no es un cero:
+        lo que no se puede determinar todavía no se dibuja como «no debe nada» (#198).
+
+        Con `?formato=PDF|XLS|RTF` la respuesta es el **documento**; sin él, el JSON que la pantalla
+        pinta (#593, RF-132). El papel **no se emite aquí**: la resolución ya se numeró y se guardó al
+        transferirla, así que esta ruta entrega los datos guardados dibujados en el formato pedido
+        —no recompone nada con datos vivos, que daría otro papel con el mismo número— y no registra
+        ninguna reimpresión.
       tags: ["Fiscalización"]
       parameters:
         - name: numero
           in: path
           required: true
+          schema: { type: string }
+        - name: formato
+          in: query
+          required: false
+          description: "PDF, XLS o RTF; sin el, la respuesta es JSON (RF-132)"
           schema: { type: string }
       responses:
         200:
@@ -5969,6 +5984,16 @@ paths:
           required: false
           description: "Filtro «Incluye convenios» de la pantalla"
           schema: { type: string }
+        - name: porPeriodo
+          in: query
+          required: false
+          description: >-
+            Una fila por cuota («true») o una por obligacion con sus periodos agregados
+            (ausente o «false»). Cualquier otra palabra es 422: un «si» tecleado que se leyera
+            como «false» devolveria filas agregadas a quien pidio cuotas, y esa respuesta es
+            indistinguible de la correcta hasta que alguien intenta dar una de baja.
+          schema: { type: string, enum: [true, false] }
+          example: "true"
         - name: pagina
           in: query
           required: false
@@ -6724,6 +6749,85 @@ paths:
             schema: { type: object }
       responses:
         201:
+          description: Operacion realizada
+          content:
+            application/json:
+              schema: { type: object }
+        "403":
+          $ref: "#/components/responses/SinMunicipalidad"
+        "422":
+          $ref: "#/components/responses/ErrorDeValidacion"
+    get:
+      operationId: prescripciones_declaradas
+      summary: "Prescripciones declaradas"
+      description: |
+        La relación de declaraciones de prescripción: **qué deuda quedó sin acción de
+        cobro** (#674, RF-094).
+
+        **La deuda sigue ahí, y eso es la decisión, no un defecto.** Lo que prescribe es
+        la *acción* para exigir el pago —art. 43 del TUO del Código Tributario—, no la
+        obligación: el libro conserva sus asientos, la deuda sigue siendo cartera
+        pendiente y sigue contando como emisión del ejercicio en el panel de recaudación.
+        Deja de contar cuando la administración la **da de baja** con RF-044, cuya
+        primera causal se llama «PRESCRIPCIÓN DECLARADA» —participio: presupone esta
+        declaración, que es su sustento y no la baja misma—.
+
+        Por eso existe esta lectura: si la deuda inexigible no se puede *ver* en ninguna
+        parte, quien audita la cartera no sabe qué parte de ella ya no se puede exigir, y
+        quien registra la baja no tiene dónde encontrar el acto que la sustenta.
+
+        **Ninguna cifra de dinero**, y no por descuido: la prescripción no extingue un
+        importe. `ejerciciosPrescritos` es la lista de los que de verdad prescribieron
+        —una solicitud pide un rango y se resuelve año por año, así que «procede en
+        parte» es el caso corriente— y con el contribuyente y el tributo identifica la
+        obligación alcanzada.
+      tags: ["Valores"]
+      parameters:
+        - name: codContribuyente
+          in: query
+          required: false
+          description: "Código del contribuyente. Un código que no está en el padrón es 404 nombrándolo, no una relación vacía."
+          schema: { type: string }
+        - name: tributo
+          in: query
+          required: false
+          description: "Tributo sobre el que se declaró"
+          schema: { type: string }
+        - name: ejercicio
+          in: query
+          required: false
+          description: "Acota a las declaraciones que RESOLVIERON ese ejercicio, hayan prescrito o no: cuáles prescribieron lo dice `ejerciciosPrescritos` de cada fila."
+          schema: { type: string }
+        - name: resultado
+          in: query
+          required: false
+          description: "PROCEDE, PROCEDE_EN_PARTE o NO_PROCEDE; otro valor es 422"
+          schema: { type: string }
+        - name: pagina
+          in: query
+          required: false
+          description: "Pagina que se pide, contada desde 0"
+          schema: { type: string }
+          example: "0"
+        - name: tamano
+          in: query
+          required: false
+          description: "Filas por pagina"
+          schema: { type: string }
+          example: "20"
+        - name: ordenarPor
+          in: query
+          required: false
+          description: "Campo por el que se ordena, en camelCase"
+          schema: { type: string }
+        - name: direccion
+          in: query
+          required: false
+          description: "ASCENDENTE | DESCENDENTE"
+          schema: { type: string }
+          example: "ASCENDENTE"
+      responses:
+        200:
           description: Operacion realizada
           content:
             application/json:

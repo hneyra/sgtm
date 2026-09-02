@@ -24,11 +24,11 @@ export const TRAMOS: readonly [string, string, number][] = [
   ['Unidad', 'unidad', 3],
 ];
 
-/** El código que ya está en uso. Se copia del artboard tal cual —allí es un
- *  literal de veintiún dígitos frente a los veintitrés que exigen los ocho
- *  tramos, así que la rama de «Código ya usado» no llega a dispararse—; lo
- *  único que cambia es el ubigeo, que aquí es el de Catacaos. */
-export const CODIGO_YA_USADO = '200104010420040101020';
+/* `CODIGO_YA_USADO` se ha ido. Era un literal de veintiun digitos copiado del
+   artboard con el ubigeo cambiado, y decidia por si solo si un codigo estaba
+   ocupado: la rama de «Codigo ya usado» se disparaba contra una cadena escrita a
+   mano y nunca contra el padron. Se fue cuando el alta paso a preguntarselo al
+   backend. */
 
 /* ══════════ Las seis secciones de la ficha ══════════
    Seis grupos donde el sistema actual pone once pestañas: lo que se agrupa es
@@ -133,7 +133,7 @@ export const GRUPOS: GrupoDeFicha[] = [
       },
       {
         titulo: 'Territorio',
-        nota: 'Departamento, provincia y distrito los pone el sistema desde el sector: no se vuelven a escribir.',
+        nota: 'El padrón publica el ubigeo del predio —seis dígitos, «200104»— y ninguna lectura traduce esos dígitos a nombres: no hay catálogo de ubigeo en este sistema. Por eso los tres salen «—» en vez de PIURA / PIURA / CATACAOS, que es lo que el artboard escribía y se dibujaba igual en cualquier municipalidad.',
         campos: [
           { k: 'dep', l: 'Departamento', t: 'ro' },
           { k: 'prov', l: 'Provincia', t: 'ro' },
@@ -194,7 +194,7 @@ export const GRUPOS: GrupoDeFicha[] = [
       },
       {
         titulo: 'Piso en edición — 02',
-        nota: 'Las siete partidas de acabados llevan la categoría A–G de la tabla de valores unitarios. La letra es la categoría, no una nota.',
+        nota: 'Las siete partidas de acabados llevan una categoría de la A a la J. La letra es la categoría, no una nota. Van de la A a la J y no de la A a la G desde que se leyeron los cuatro anexos: el cuadro de la Costa tiene nueve y el de la Selva diez —la J es «CAÑA GUAYAQUIL PONA O PINTOC»—, y con el rango corto una municipalidad de la Selva no podía fichar una construcción de ese material (#436).',
         campos: [
           { k: 'nPiso', l: 'Nº de piso', t: 'text' },
           { k: 'mesC', l: 'Mes de construcción', t: 'text' },
@@ -387,7 +387,7 @@ export const GRUPOS: GrupoDeFicha[] = [
       },
       {
         titulo: 'Valuación del ejercicio',
-        nota: 'Calculado con los aranceles y valores unitarios sellados para el ejercicio. No se escribe a mano.',
+        nota: 'Las cuatro salen «—» y no es un fallo de lectura: la ficha catastral no publica ni un importe —ni valor unitario, ni arancel, ni autovalúo— porque son datos normativos versionados (regla 5, D-02a), y el cuadro de valores unitarios del ejercicio todavía no está cargado (GOB-03, H-14). Aquí venían cuatro importes copiados del artboard —los del predio de la maqueta— que se dibujaban idénticos sobre cualquier predio que se abriera, autovalúo incluido.',
         campos: [],
         totales: [['Valor del terreno', 'S/ 135,745.40', 0], ['Valor de la construcción', 'S/ 96,182.10', 0], ['Otras instalaciones', 'S/ 8,420.00', 0], ['Autovalúo', 'S/ 240,347.50', 1]],
       },
@@ -395,46 +395,18 @@ export const GRUPOS: GrupoDeFicha[] = [
   },
 ];
 
-/* ══════════ Los valores de la ficha del predio 01-1042-0004 ══════════ */
+/* ══════════ Los valores de la ficha ══════════ */
 export type ValoresDeFicha = Record<string, string | boolean>;
 
-export const BASE: ValoresDeFicha = {
-  uso: 'Casa habitación', cuc: '', hoja: '2006-17-010', anterior: '',
-  contrib: '00000003542 · VILLEGAS PRADO, ROSA',
-  predial: '01-1042-0004', ficha: '004182', fichaLote: '01', unidAcum: '',
-  arancel: '198.40',
-  tipoVia: 'CALLE', calle: 'CALLE BOLÍVAR', numMun: '539', numAd: '',
-  tipoPuerta: 'P — PRINCIPAL', condNum: 'CON CERTIFICADO', certNum: '0004182', antNum: '',
-  dep: 'PIURA', prov: 'PIURA', dist: 'CATACAOS', habUrb: 'URB. SANTA ROSA',
-  zona: 'Zona 2', ref: 'A media cuadra del mercado modelo',
-  condTit: 'COPROPIETARIO', formaAdq: 'COMPRA-VENTA', fechaAdq: '2014-03-12',
-  docAcre: 'ESCRITURA PÚBLICA', partida: '11024-0418', oficina: 'SUNARP — PIURA',
-  partic: '50.00', litigio: false,
-  terLegal: '329.00', terFis: '329.00', consLegal: '136.00', consFis: '136.00',
-  nPiso: '02', mesC: '01', anoC: '1998', mep: '02 — LADRILLO', ecs: '03 — REGULAR',
-  ecc: '03 — TERMINADO', uca: '01 — CASA HABITACIÓN',
-  muros: 'C', techos: 'F', pisos: 'H', puertas: 'F', revest: 'H', banos: 'E', instEle: 'G',
-  areaDecl: '0.00', areaVer: '',
-  tipoObra: 'CERCO PERIMÉTRICO', unidMed: 'ml', metrado: '45.50', largo: '45.50',
-  ancho: '0.20', alto: '2.40', anoO: '2006', estObra: 'BUENO', valUni: '184.60', valObra: '8,399.30',
-  agua: true, desague: true, luz: true, gas: false, alumbrado: true,
-  viaFrente: 'ASFALTADA', sumLuz: '4182-0093', sumAgua: '', telPredio: '',
-  docInq: '', nomInq: '', areaInq: '', usoInq: 'COMERCIO', iniInq: '', finInq: '', merced: '',
-  nomCom: 'BODEGA ROSITA', ciiu: 'G-5211-01 — VENTA AL POR MENOR EN ALMACENES',
-  licencia: '2019-004182', estLic: 'CON LICENCIA · ACTIVA', areaNeg: '18.00',
-  trab: '2', horario: '07:00 a 22:00', iniAct: '2019-05-02', anuncio: true,
-  codEdif: '11024-0418', denom: 'EDIFICIO SANTA ROSA', nPisosE: '3', nUnid: '3',
-  areaComT: '176.80', areaComC: '48.20', valBC: '—', reglamento: true, partidaReg: '11024-0418',
-  codUC: '11024-0418', nomPredio: '', valle: 'Valle del Chira', regantes: '',
-  areaHa: '', tipoTierra: 'A1 — CULTIVO EN LIMPIO', riego: 'BAJO RIEGO', cultivo: 'ARROZ',
-  arancelHa: '—', valTerRus: '—', valInstFij: '', autoRural: '—',
-  obs: '', verifCampo: false, fechaVerif: '', fuente: 'INSPECCIÓN DE CAMPO', patrimonio: false,
-  usoRec: '01 — CASA HABITACIÓN', usoBar: '01 — CASA HABITACIÓN',
-  frecRec: 'INTERDIARIA', frecBar: 'SEMANAL', frontis: '9.40',
-  posicion: 'FRENTE A VÍA PRINCIPAL', peligro: 'MEDIA', factor: '0.8420', inafecto: false,
-  distrito: '200104', sector: '01', manzana: '042', lote: '004', edif: '01',
-  entrada: '01', piso: '02', unidad: '001',
-};
+/* `BASE` se ha ido. Eran los ciento veintitrés valores de la ficha del predio
+   `01-1042-0004` del artboard —«VILLEGAS PRADO, ROSA» de contribuyente, «198.40»
+   de arancel de la vía, la partida registral «11024-0418», el material y el
+   estado del piso 02—, y se dibujaban tal cual sobre el predio real que se
+   acabara de abrir: eran indistinguibles de lo declarado en cuanto salían de la
+   pantalla. Se fue cuando la ficha pasó a leerse del backend (#566): lo que la
+   lectura publica lo pone `PROCEDENCIA` campo por campo, y lo que no publica
+   nadie sale «—» con su motivo. Las casillas arrancan en blanco, compuestas de
+   las claves que `GRUPOS` dibuja y de los ocho tramos del código. */
 
 /**
  * Lo que la municipalidad ya sabe de una ficha nueva: hoy, nada de territorio.
@@ -457,49 +429,32 @@ export const DEFECTOS_DE_FICHA_NUEVA: ValoresDeFicha = {
 };
 
 /* ══════════ Panel del módulo ══════════ */
-export type Pendiente = { tipo: string; titulo: string; detalle: string; conteo: string; tono: 'ok' | 'warn' | 'bad'; dest: string };
 
-export const PENDIENTES: Pendiente[] = [
-  { tipo: 'Campo', titulo: 'Fichas con área verificada pendiente', detalle: 'Levantadas en el barrido del sector 03 y sin cerrar. El autovalúo no se recalcula hasta que se graben.', conteo: '14', tono: 'warn', dest: 'predios' },
-  { tipo: 'Rentas', titulo: 'Predios sin conciliar con el padrón', detalle: 'Tienen ficha catastral y no generan deuda predial. La conciliación se hace desde Rentas.', conteo: '208', tono: 'bad', dest: 'predios' },
-  { tipo: 'Valores', titulo: 'Tabla de aranceles {ejercicio} sellada', detalle: 'Publicada por el Ministerio de Vivienda. Ya se aplica a todo el padrón.', conteo: 'OK', tono: 'ok', dest: 'valores' },
-];
-
-export const KPIS: { valor: string; etiqueta: string; nota: string }[] = [
-  { valor: '18,412', etiqueta: 'Predios en el padrón', nota: 'Activos. Los dados de baja siguen en determinaciones ya emitidas.' },
-  { valor: '1,096', etiqueta: 'Manzanas en 5 sectores', nota: 'Un predio sin sector no cuenta en ninguno.' },
-  { valor: '96.4 %', etiqueta: 'Fichas con área verificada', nota: '662 predios siguen solo con área declarada.' },
-  { valor: 'S/ 198.40', etiqueta: 'Arancel mediano por m²', nota: 'Zona 2 — el tramo más frecuente del padrón.' },
-];
+/* `KPIS` y `PENDIENTES`, con el tipo `Pendiente`, se han ido. `KPIS` eran las
+   cuatro cifras de cabecera —«18,412 predios», «1,096 manzanas», «96.4 %»,
+   «S/ 198.40» de arancel mediano—, cuatro conteos de una captura que se
+   dibujaban iguales en toda municipalidad. `PENDIENTES` eran las tres tarjetas de
+   avisos de la maqueta del prototipo —«14 fichas con área verificada
+   pendiente», «208 predios sin conciliar»—, tres conteos que ninguna lectura
+   había contado y que se dibujaban iguales en toda municipalidad. Se fueron
+   cuando el panel pasó a leer del backend. */
 
 /* ══════════ Padrón de predios ══════════ */
-export type FiltroDelPadron =
-  | { label: string; tipo: 'sel'; valor: string; opts: string[] }
-  | { label: string; tipo: 'texto'; valor: string; ph: string };
-
-export const FILTROS: FiltroDelPadron[] = [
-  { label: 'Sector', tipo: 'sel', valor: 'Todos', opts: ['Todos', '01', '02', '03', '04', '05'] },
-  { label: 'Manzana', tipo: 'texto', valor: '', ph: '042' },
-  { label: 'Lote', tipo: 'texto', valor: '', ph: '004' },
-  { label: 'Uso', tipo: 'sel', valor: 'Todos', opts: ['Todos', 'Casa habitación', 'Comercio', 'Industria', 'Terreno sin construir', 'Servicios', 'Educación', 'Salud'] },
-  { label: 'Conciliada con rentas', tipo: 'sel', valor: 'Todas', opts: ['Todas', 'Sí', 'No'] },
-  { label: 'Estado de la ficha', tipo: 'sel', valor: 'Todas', opts: ['Todas', 'Verificada', 'Solo declarada', 'Sin ficha'] },
-];
-
 export const COLS_PREDIOS: readonly ColumnaDeTabla[] = [
   ['Cod. ref. catastral', 0], ['Titular', 0], ['Dirección', 0], ['Uso', 0],
   ['Área terreno m²', 1], ['Área const. m²', 1], ['Con rentas', 0],
 ];
 
-/** `[código, titular, dirección, uso, terreno, construido, estado, tono]`. */
-export const PREDIOS: readonly (readonly [string, string, string, string, string, string, string, 'ok' | 'warn' | 'bad'])[] = [
-  ['01-1042-0004', 'VILLEGAS PRADO, ROSA', 'CALLE BOLÍVAR 539', 'Casa habitación', '329.00', '136.00', 'Conciliada', 'ok'],
-  ['01-1042-0005', 'CHÁVEZ SAAVEDRA, CÉSAR', 'CALLE BOLÍVAR 543', 'Comercio', '212.00', '198.40', 'Conciliada', 'ok'],
-  ['01-1007-0001', 'ASOCIACIÓN PRO CASA DEL MAESTRO', 'CALLE SAN MARTÍN 102', 'Educación', '5,000.00', '1,240.00', 'Sin conciliar', 'warn'],
-  ['02-1188-0012', 'DISARTEX S.A.C.', 'AV. JOSÉ DE LAMA 1204', 'Industria', '1,840.00', '960.00', 'Conciliada', 'ok'],
-  ['03-1042-0088', 'RUFINO VALDERA, EDGAR YOEL', 'PASAJE EL ALTO 116', 'Terreno sin construir', '148.00', '—', 'Sin ficha', 'bad'],
-  ['05-2201-0004', 'SUC. TOMÁS MAZA GÓMEZ', 'CARRET. CATACAOS — PAITA KM 4', 'Casa habitación', '840.00', '96.00', 'Sin conciliar', 'warn'],
-];
+/* `PREDIOS` se ha ido. Eran las seis filas de la maqueta del prototipo —«VILLEGAS
+   PRADO, ROSA», «DISARTEX S.A.C.», con sus áreas y su columna «Con rentas» ya
+   conciliada—, seis predios de una captura dibujados bajo el padrón de cualquier
+   municipalidad. Se fueron cuando la grilla pasó a leer del backend. */
+
+/* `FILTROS` y su tipo `FiltroDelPadron` se han ido. Eran los seis filtros de la
+   maqueta del prototipo, con los sectores «01» a «05» y los usos escritos a mano
+   dentro: cinco sectores que son los de una captura y no los de ninguna
+   municipalidad. Se fueron cuando la consulta pasó a leer del backend, que es
+   quien sabe qué sectores y qué usos tiene el padrón que se está mirando. */
 
 /* ══════════ Mapa catastral ══════════ */
 /**
@@ -561,28 +516,15 @@ export const CAPAS: readonly CapaDelPlano[] = [
 ];
 
 /* ══════════ Territorio ══════════ */
-/** `[código, nombre, predios, manzanas]`. */
-export const SECTORES: readonly [string, string, string, number][] = [
-  ['01', 'CERCADO DE CATACAOS', '2,384 predios', 96],
-  ['02', 'ZONA INDUSTRIAL', '1,944 predios', 84],
-  ['03', 'BARRIO BUENOS AIRES', '3,018 predios', 112],
-  ['04', 'BELLAVISTA LÍMITE', '1,388 predios', 68],
-  ['05', 'EJE CARRETERA PAITA', '902 predios', 58],
-];
 
-export const MANZANAS_DEL_SECTOR = ['M-01', 'M-02', 'M-03', 'M-04', 'M-05', 'M-06', 'M-07', 'M-08'];
-
-export const COLS_VIAS: readonly ColumnaDeTabla[] = [
-  ['Código', 0], ['Tipo', 0], ['Nombre', 0], ['Zona', 0], ['Arancel S/ m²', 1], ['Estado', 0],
-];
-
-export const VIAS: readonly (readonly string[])[] = [
-  ['00001182', 'AVENIDA', 'JOSÉ DE LAMA', 'Zona 1', '412.60', 'ACTIVA'],
-  ['00001183', 'CALLE', 'SANTA ROSA', 'Zona 2', '198.40', 'ACTIVA'],
-  ['00001184', 'CALLE', 'LAMA', 'Zona 2', '198.40', 'ACTIVA'],
-  ['00001185', 'PASAJE', 'EL ALTO', 'Zona 3', '142.80', 'ACTIVA'],
-  ['00001186', 'CARRETERA', 'CATACAOS — PAITA', 'Zona 4', '96.20', 'INACTIVA'],
-];
+/* `SECTORES`, `MANZANAS_DEL_SECTOR`, `COLS_VIAS` y `VIAS` se han ido: el bloque
+   entero era la maqueta del prototipo. Los cinco sectores de Catacaos con su
+   nombre y su conteo de predios, ocho manzanas «M-01» a «M-08» que no son las de
+   ningún sector, y cinco vías con su código, su zona y su arancel al céntimo
+   —«JOSÉ DE LAMA · Zona 1 · 412.60»—, que es una cifra de valuación inventada.
+   Se fueron cuando el territorio pasó a leer del backend: los sectores y sus
+   manzanas salen de `GET /catastro/sectores`, y las vías de su propia lectura
+   con las columnas que el recurso publica. */
 
 /* ══════════ Valores del ejercicio ══════════ */
 export type TablaDeValores = {
@@ -595,73 +537,23 @@ export type TablaDeValores = {
 
 export const PESTANIAS_DE_VALORES = ['Aranceles de terreno', 'Valores unitarios', 'Depreciación'];
 
-/** Las tres tablas oficiales. El ejercicio entra en el rótulo, así que el
- *  título se compone con el que esté elegido en la cabecera. */
-export const tablasDeValores = (ejercicio: string): TablaDeValores[] => [
-  {
-    titulo: 'Aranceles vigentes ' + ejercicio,
-    conteo: '6 tramos',
-    cols: [['Vía', 0], ['Cuadra desde', 1], ['Cuadra hasta', 1], ['Zona', 0], ['Arancel S/ m²', 1], ['Variación', 1]],
-    filas: [
-      ['AV. JOSÉ DE LAMA', '1', '6', 'Zona 1', '412.60', '+4.2 %'],
-      ['AV. JOSÉ DE LAMA', '7', '14', 'Zona 1', '386.40', '+4.0 %'],
-      ['CALLE SANTA ROSA', '1', '12', 'Zona 2', '198.40', '+3.8 %'],
-      ['CALLE LAMA', '1', '10', 'Zona 2', '198.40', '+3.8 %'],
-      ['PASAJE EL ALTO', '1', '4', 'Zona 3', '142.80', '+3.2 %'],
-      ['CARRETERA CATACAOS — PAITA', '1', '8', 'Zona 4', '96.20', '+2.8 %'],
-    ],
-    nota: 'Aranceles aprobados por el Ministerio de Vivienda, Construcción y Saneamiento para el ejercicio ' + ejercicio + '.',
-  },
-  {
-    titulo: 'Valores unitarios de edificación — costa ' + ejercicio + ' (S/ por m²)',
-    conteo: '7 categorías',
-    cols: [['Cat.', 0], ['Muros y columnas', 1], ['Techos', 1], ['Pisos', 1], ['Puertas y ventanas', 1], ['Revestimientos', 1], ['Baños', 1], ['Inst. eléct. y sanit.', 1]],
-    filas: [
-      ['A', '451.28', '212.90', '148.36', '204.12', '286.44', '78.20', '212.10'],
-      ['B', '341.72', '162.14', '112.88', '158.42', '221.06', '58.72', '160.44'],
-      ['C', '256.18', '118.92', '84.36', '112.60', '162.18', '42.10', '118.32'],
-      ['D', '182.44', '86.20', '61.42', '78.14', '112.36', '28.44', '84.16'],
-      ['E', '124.36', '58.72', '41.20', '52.88', '76.42', '18.62', '56.44'],
-      ['F', '78.20', '34.16', '24.88', '31.44', '44.20', '10.36', '32.18'],
-      ['G', '41.62', '18.44', '12.36', '16.20', '22.88', '4.12', '16.44'],
-    ],
-    nota: 'La ficha declara una categoría A–G por cada una de las siete partidas. El sistema las suma y les aplica la depreciación.',
-  },
-  {
-    titulo: 'Depreciación por antigüedad y estado — ladrillo, casa habitación',
-    conteo: '6 rangos',
-    cols: [['Antigüedad', 0], ['Muy bueno %', 1], ['Bueno %', 1], ['Regular %', 1], ['Malo %', 1]],
-    filas: [
-      ['Hasta 5 años', '0', '3', '8', '15'],
-      ['6 a 10 años', '3', '8', '15', '24'],
-      ['11 a 20 años', '8', '17', '27', '39'],
-      ['21 a 30 años', '15', '25', '38', '52'],
-      ['31 a 40 años', '22', '33', '48', '64'],
-      ['Más de 40 años', '30', '42', '58', '76'],
-    ],
-    nota: 'El porcentaje depende del material predominante (MEP) y del estado de conservación (ECS) declarados por piso.',
-  },
-];
+/* `tablasDeValores` se ha ido. Eran las tres tablas normativas escritas a mano
+   —seis tramos de arancel con su variacion, los valores unitarios y la
+   depreciacion—, o sea cifras que multiplican el autovaluo de todo un padron
+   dibujadas desde una captura (regla 5). Se fue cuando la pantalla paso a leer
+   los cuadros publicados al conjunto del ejercicio, que es de donde tienen que
+   salir o no salir. */
+
 
 /* ══════════ Ficha del contribuyente (el documento) ══════════ */
-export const REPORTE_META: readonly [string, string][] = [
-  ['Contribuyente', 'VILLEGAS PRADO, ROSA'],
-  ['Código', '00000003542'],
-  ['D.N.I.', '03593174'],
-  ['Domicilio fiscal', 'CALLE BOLÍVAR 539 — CATACAOS'],
-  ['Calificación', '003 — PEQUEÑO CONTRIBUYENTE'],
-  ['Ejercicio', '{ejercicio}'],
-];
 
-export const COLS_REPORTE: readonly ColumnaDeTabla[] = [
-  ['Unidad', 0], ['Identificación', 0], ['Uso / clase', 0], ['Condición', 0], ['Deuda S/', 1],
-];
-
-export const FILAS_REPORTE: readonly (readonly string[])[] = [
-  ['01-1042-0004', 'CALLE BOLÍVAR 539', 'Casa habitación', 'PROPIETARIO', '0.00'],
-  ['01-1042-0004-02', 'CALLE BOLÍVAR 539 int. 2', 'Comercio', 'PROPIETARIO', '182.40'],
-  ['05-2201-0018', 'CARRET. CATACAOS — PAITA KM 4', 'Terreno sin construir', 'POSEEDOR', '96.20'],
-];
+/* `REPORTE_META`, `COLS_REPORTE` y `FILAS_REPORTE` se han ido, y eran la hoja
+   entera: el nombre, el código, el D.N.I. y el domicilio de una persona de la
+   maqueta del prototipo, y sus tres unidades con la deuda de cada una. La
+   pantalla la dibujaba con cualquier sesión y sin haber abierto ningún
+   contribuyente, y una vez impresa esa hoja no se distingue de una correcta. Se
+   fueron cuando el reporte pasó a leer del backend, que es quien sabe de quién
+   es la ficha y qué unidades tiene. */
 
 /* ══════════ Modalidades de la ficha ══════════ */
 /** `[clave, rótulo, ayuda]`. Las que no aplican no piden datos. */
@@ -695,3 +587,241 @@ export const MODOS: readonly [('pagina' | 'pasos'), string][] = [
   ['pagina', 'Una página'],
   ['pasos', 'Por pasos'],
 ];
+
+/* ══════════ De dónde sale cada uno de los 123 campos de la ficha ══════════
+
+   Medido contra el backend en marcha, no razonado: `GET /catastro/fichas/{tipo}/{codigo}`
+   publica veintiún campos de cabecera y cinco listas, y el cuerpo de
+   `PUT …/actualizacion` admite diez claves. Todo lo demás que el manual dibuja
+   —y son más de cien casillas— no lo publica ninguna lectura ni lo admite
+   ninguna escritura, así que rellenarlo era teclear en una caja que no viaja.
+
+   La regla es una: **un campo sin `lee` y sin `escribe` no se puede teclear, y
+   dice por qué**. Sin esa exigencia, la casilla vacía se lee como un dato que
+   falta —algo que alguien tendría que rellenar— cuando lo que falta es el
+   modelo entero por debajo.
+
+   Y `motivo` no admite rellenos: nombra la columna que no existe, el cuerpo que
+   no la lleva o la decisión que la bloquea. «No disponible» no dice nada, y un
+   escáner que grita en verde deja de leerse. */
+
+/**
+ * Los datos que la lectura de la ficha —o la del padrón, o la de titulares—
+ * sabe poner en un campo del formulario.
+ *
+ * Son diez de las veintiséis cosas que `FichaResource` publica: las otras son
+ * listas, y una lista no cabe en una casilla. Van a las tablas.
+ */
+export const SELECTORES_DE_LECTURA = [
+  'predio.codRefCatastral',
+  'predio.via',
+  'predio.numeroMunicipal',
+  'titulares.texto',
+  'ficha.uso',
+  'ficha.origen',
+  'ficha.observacion',
+  'ficha.frontis',
+  'ficha.denominacion',
+  'ficha.hectareasTotales',
+  'ficha.sinLicencia',
+] as const;
+export type SelectorDeLectura = (typeof SELECTORES_DE_LECTURA)[number];
+
+/**
+ * De dónde sale un campo y a dónde va.
+ *
+ * `lee` — el dato del backend que lo llena. Sin él, el campo sale «—».
+ * `escribe` — la clave del cuerpo de `PUT …/actualizacion` que lo lleva. Sin
+ *   ella, el campo no se puede teclear, se pinte o no un valor leído.
+ * `motivo` — por qué no viaja. **Obligatorio cuando no hay `escribe`.**
+ */
+export type ProcedenciaDeCampo = {
+  lee?: SelectorDeLectura;
+  escribe?: string;
+  motivo?: string;
+};
+
+/** Lo que se repite: los pisos y las obras son listas, y esto es la fila de edición de una. */
+const LISTA_DE_PISOS =
+  'Los pisos son una lista y esto es la fila de edición de uno; la tabla «Pisos declarados» los enseña todos. Y no se pueden mandar: el cuerpo lleva la lista entera, y reenviarla deja el «% construido» de TODOS los pisos en blanco, porque el cuerpo no tiene ese campo.';
+const LISTA_DE_OBRAS =
+  'Las obras complementarias son una lista y esto es la fila de edición de una; la tabla «Instalaciones registradas» las enseña todas.';
+const IMPORTE_BLOQUEADO =
+  'Es un importe, y la ficha no publica ninguno: valor unitario, arancel, depreciación y factor de oficialización son datos normativos versionados (regla 5, D-02a, D-11). Se calcula al determinar, no se teclea aquí.';
+const TITULARIDAD_APARTE =
+  'La titularidad es otro acto —`POST /catastro/predios/{id}/titulares`, con su propia observación— y un predio puede tener varias cuotas; la tabla «Titulares registrados» las enseña.';
+
+export const PROCEDENCIA: Record<string, ProcedenciaDeCampo> = {
+  /* ── Identificación ───────────────────────────────────────────── */
+  cod: {
+    lee: 'predio.codRefCatastral',
+    motivo:
+      'El código de referencia catastral identifica al predio (`predio_codigo_uq`); la corrección del predio no lo lleva a propósito, porque cambiarlo no es corregir este predio sino declarar otro.',
+  },
+  uso: {
+    lee: 'ficha.uso',
+    motivo:
+      'El cuerpo de la actualización no lleva el uso. Sólo lo escriben el alta de la ficha y el puerto por el que fiscalización corrige el padrón, que tiene un único llamador y una regla de arquitectura que lo vigila.',
+  },
+  cuc: { motivo: 'El Código Único Catastral no está en el modelo: `ficha_catastral` no tiene esa columna y ninguna lectura lo publica.' },
+  hoja: { motivo: 'La hoja catastral no está en el modelo: ninguna tabla la guarda y ninguna lectura la publica.' },
+  anterior: { motivo: 'El código catastral anterior no está en el modelo; el padrón migrado no conserva el del sistema de origen.' },
+  contrib: { lee: 'titulares.texto', motivo: TITULARIDAD_APARTE },
+  predial: {
+    lee: 'predio.codRefCatastral',
+    motivo: 'No hay dos padrones de predios: el código predial de rentas ES el de referencia catastral (ADR-0015), así que se lee del mismo sitio y no se teclea.',
+  },
+  ficha: { motivo: 'El Nº de ficha del manual no lo publica ninguna lectura: una ficha se identifica por el código de su predio y su número de versión, que están en la cabecera.' },
+  fichaLote: { motivo: 'El Nº de ficha por lote no está en el modelo, por lo mismo que el Nº de ficha.' },
+  unidAcum: { motivo: 'La unidad acumulada al código predial no está en el modelo: ninguna columna la guarda.' },
+  arancel: {
+    motivo:
+      'El arancel está llaveado por (conjunto sellado, vía, tramo) y `predio` no tiene tramo, así que una vía con dos aranceles no se puede resolver por lote (ADR-0022 §5). Y es un importe: la ficha no publica ninguno.',
+  },
+
+  /* ── Ubicación ────────────────────────────────────────────────── */
+  tipoVia: { motivo: 'El padrón publica el código y el nombre de la vía, no su tipo; resolverlo pediría el catálogo vial una vez por predio, y el cuerpo de la corrección no lleva ningún tipo de vía: lleva `codigoDeVia`.' },
+  calle: {
+    lee: 'predio.via',
+    motivo: 'Cambiar la vía es mandar `predio.codigoDeVia`, y un código de vía se elige del catálogo vial, no se teclea. Esta pantalla lo resuelve en el alta y todavía no aquí.',
+  },
+  numMun: { lee: 'predio.numeroMunicipal', escribe: 'predio.numeroMunicipal' },
+  numAd: { motivo: 'El número adicional no está en el modelo: `predio` guarda un solo número municipal.' },
+  tipoPuerta: { motivo: 'La nomenclatura de puertas no está en el modelo: `predio` guarda un número municipal y ninguna puerta.' },
+  condNum: { motivo: 'La condición de numeración no está en el modelo; el certificado de numeración lo emite «Certificados» y no queda en el predio.' },
+  certNum: { motivo: 'El Nº de certificado de numeración no lo guarda el predio: el certificado se emite y se numera en Autorizaciones y Licencias.' },
+  antNum: { motivo: 'La numeración municipal anterior no está en el modelo.' },
+  dep: { motivo: 'El padrón publica el ubigeo del predio —seis dígitos— y no su desglose en nombres; ninguna lectura del sistema resuelve el nombre de un departamento.' },
+  prov: { motivo: 'Por lo mismo que el departamento: hay ubigeo y no hay catálogo que lo traduzca.' },
+  dist: { motivo: 'Por lo mismo que el departamento: hay ubigeo y no hay catálogo que lo traduzca.' },
+  habUrb: { motivo: 'La habilitación urbana no está en el modelo: lo que el predio guarda de su territorio es sector, manzana, lote y ubigeo.' },
+  zona: { motivo: 'La zona de arbitrios vive en `sector.zona` y es texto libre por municipalidad; no es un dato de la ficha y el cuerpo de la actualización no la lleva.' },
+  ref: { motivo: 'La referencia de ubicación no está en el modelo.' },
+
+  /* ── Titularidad ──────────────────────────────────────────────── */
+  condTit: { motivo: TITULARIDAD_APARTE },
+  partic: { motivo: TITULARIDAD_APARTE },
+  formaAdq: { motivo: 'La forma de adquisición no está en el modelo: `titularidad` guarda quién, cuánto, desde cuándo y con qué documento de origen.' },
+  fechaAdq: { motivo: 'La fecha de adquisición no está en el modelo; lo que la titularidad guarda es desde cuándo rige la cuota, que no es lo mismo.' },
+  docAcre: { motivo: 'El tipo de documento que acredita no está en el modelo: la titularidad guarda el documento de origen como texto, sin clasificarlo.' },
+  partida: { motivo: 'La partida registral no está en el modelo.' },
+  oficina: { motivo: 'La oficina registral no está en el modelo.' },
+  litigio: { motivo: 'El litigio no está en el modelo: ninguna columna lo marca y ninguna lectura lo publica.' },
+
+  /* ── Terreno y construcción ───────────────────────────────────── */
+  terLegal: { motivo: 'La ficha declara UN área de terreno —la de la cabecera— y el manual dibuja dos; el sistema no distingue «según título» de «medida en campo», así que ninguna de las dos casillas tiene de dónde salir.' },
+  terFis: { motivo: 'Por lo mismo que el área según título: la ficha declara una sola.' },
+  consLegal: { motivo: 'La construida se declara por piso; la del predio entero la suma el servidor en la consulta de fichas. El manual la parte en «según título» y «medida en campo», y el sistema no hace esa distinción.' },
+  consFis: { motivo: 'Por lo mismo que la construcción según título.' },
+  nPiso: { motivo: LISTA_DE_PISOS },
+  mesC: { motivo: 'El mes de construcción no está en el modelo: la construcción declara su año, que es lo que la depreciación consume.' },
+  anoC: { motivo: LISTA_DE_PISOS },
+  mep: { motivo: LISTA_DE_PISOS },
+  ecs: { motivo: LISTA_DE_PISOS },
+  ecc: { motivo: 'El estado de la construcción —en construcción, inconcluso, terminado, en ruinas— no está en el modelo; lo que hay es el estado de CONSERVACIÓN, que es el campo de arriba y no dice lo mismo.' },
+  uca: { motivo: 'El uso de la unidad no está en el modelo: la ficha declara un uso, el de «Identificación».' },
+  muros: { motivo: LISTA_DE_PISOS },
+  techos: { motivo: LISTA_DE_PISOS },
+  pisos: { motivo: LISTA_DE_PISOS },
+  puertas: { motivo: LISTA_DE_PISOS },
+  revest: { motivo: LISTA_DE_PISOS },
+  banos: { motivo: LISTA_DE_PISOS },
+  instEle: { motivo: LISTA_DE_PISOS },
+  areaDecl: { motivo: 'La construcción declara UN área construida y el manual dibuja dos, declarada y verificada; el sistema no las distingue. ' + LISTA_DE_PISOS },
+  areaVer: { motivo: 'Por lo mismo que el área declarada: la construcción tiene una sola.' },
+  tipoObra: { motivo: LISTA_DE_OBRAS },
+  unidMed: { motivo: LISTA_DE_OBRAS },
+  metrado: { motivo: LISTA_DE_OBRAS },
+  largo: { motivo: 'La obra complementaria se declara por su metrado y su unidad; sus dimensiones no están en el modelo.' },
+  ancho: { motivo: 'Por lo mismo que el largo: no está en el modelo.' },
+  alto: { motivo: 'Por lo mismo que el largo: no está en el modelo.' },
+  anoO: { motivo: LISTA_DE_OBRAS },
+  estObra: { motivo: LISTA_DE_OBRAS },
+  valUni: { motivo: IMPORTE_BLOQUEADO },
+  valObra: { motivo: IMPORTE_BLOQUEADO },
+
+  /* ── Uso y ocupación ──────────────────────────────────────────── */
+  agua: { motivo: 'Los servicios del predio no están en el modelo: ninguna columna de `ficha_catastral` los guarda.' },
+  desague: { motivo: 'Por lo mismo que el agua: los servicios no están en el modelo.' },
+  luz: { motivo: 'Por lo mismo que el agua: los servicios no están en el modelo.' },
+  gas: { motivo: 'Por lo mismo que el agua: los servicios no están en el modelo.' },
+  alumbrado: { motivo: 'Por lo mismo que el agua: los servicios no están en el modelo.' },
+  viaFrente: { motivo: 'El tipo de vía frente al predio no está en el modelo.' },
+  sumLuz: { motivo: 'El número de suministro eléctrico no está en el modelo.' },
+  sumAgua: { motivo: 'El número de suministro de agua no está en el modelo.' },
+  telPredio: { motivo: 'El teléfono del predio no está en el modelo.' },
+  docInq: { motivo: 'La ocupación no propietaria es otra lectura y otro acto —`GET`/`POST /catastro/predios/{id}/inquilinos`—; el cuerpo de la actualización de la ficha no la lleva.' },
+  nomInq: { motivo: 'Por lo mismo que el documento del ocupante: la ocupación tiene su propia lectura y su propio acto.' },
+  areaInq: { motivo: 'Por lo mismo que el documento del ocupante: la ocupación tiene su propia lectura y su propio acto.' },
+  usoInq: { motivo: 'Por lo mismo que el documento del ocupante: la ocupación tiene su propia lectura y su propio acto.' },
+  iniInq: { motivo: 'Por lo mismo que el documento del ocupante: la ocupación tiene su propia lectura y su propio acto.' },
+  finInq: { motivo: 'Por lo mismo que el documento del ocupante: la ocupación tiene su propia lectura y su propio acto.' },
+  merced: { motivo: 'La merced conductiva no está en el modelo: la ocupación guarda quién, qué área ocupa y desde cuándo, sin importe.' },
+  nomCom: { motivo: 'Las actividades económicas son una lista; la tabla de abajo las enseña. Y no se pueden mandar desde aquí: el cuerpo lleva el bloque entero y reenviarlo deja SIN FECHA de vigencia todas las actividades, porque el cuerpo no tiene ese campo.' },
+  ciiu: { motivo: 'Por lo mismo que el nombre comercial: la actividad es una fila de una lista.' },
+  licencia: { motivo: 'Por lo mismo que el nombre comercial: la actividad es una fila de una lista.' },
+  estLic: {
+    lee: 'ficha.sinLicencia',
+    motivo: 'El estado de la licencia lo sabe Autorizaciones y Licencias; catastro guarda su NÚMERO, y que falte no es un dato incompleto: es el hallazgo de fiscalización.',
+  },
+  areaNeg: { motivo: 'Por lo mismo que el nombre comercial: la actividad es una fila de una lista.' },
+  trab: { motivo: 'El número de trabajadores no está en el modelo.' },
+  horario: { motivo: 'El horario de atención no está en el modelo.' },
+  iniAct: { motivo: 'La fecha de inicio la publica cada actividad y se ve en la tabla; el cuerpo de la actualización no la lleva, así que aquí no se puede teclear.' },
+  anuncio: { motivo: 'El anuncio publicitario no es una marca: cada actividad declara el NÚMERO de su autorización y su fecha, y la tabla los enseña.' },
+  codEdif: { motivo: 'No hay un código de edificación aparte: la lectura de bienes comunes recibe el código de referencia catastral del predio, el mismo de «Identificación».' },
+  denom: {
+    lee: 'ficha.denominacion',
+    motivo: 'El cuerpo de la actualización no lleva la denominación; sólo la escribe el alta de la ficha.',
+  },
+  nPisosE: { motivo: 'El número de pisos de la edificación no está en el modelo: lo que hay son las construcciones de cada unidad, cada una con su piso.' },
+  nUnid: { motivo: 'El número de unidades de la edificación no está en el modelo; lo que la ficha declara es cuántas participan del reparto de lo común, y eso sale en el pie de este bloque.' },
+  areaComT: { motivo: 'La ficha declara UN área común total —sale en el pie— y el manual la parte en terreno y construida; el sistema no hace esa distinción.' },
+  areaComC: { motivo: 'Por lo mismo que el área común de terreno: la ficha declara una sola.' },
+  valBC: { motivo: IMPORTE_BLOQUEADO },
+  reglamento: { motivo: 'El reglamento interno no está en el modelo.' },
+  partidaReg: { motivo: 'La partida del régimen no está en el modelo.' },
+  codUC: {
+    lee: 'predio.codRefCatastral',
+    motivo: 'No hay un código de unidad catastral aparte: la lectura de la ficha rural recibe el código de referencia catastral del predio.',
+  },
+  nomPredio: {
+    lee: 'ficha.denominacion',
+    motivo: 'Es el MISMO dato que «Denominación» de bienes comunes, con otro rótulo: la ficha guarda una denominación y el cuerpo de la actualización no la lleva.',
+  },
+  valle: { motivo: 'El valle o sector de riego no está en el modelo.' },
+  regantes: { motivo: 'La comisión de regantes no está en el modelo.' },
+  areaHa: {
+    lee: 'ficha.hectareasTotales',
+    motivo: 'El total en hectáreas lo SUMA el servidor a partir de los grupos de tierra; no se declara, se declara cada grupo.',
+  },
+  tipoTierra: { motivo: 'Los grupos de tierra son una lista —cada uno con su clasificación, su calidad agrológica, su riego y sus hectáreas— y la tabla de abajo los enseña.' },
+  riego: { motivo: 'Por lo mismo que el tipo de tierra: el riego es de cada grupo, no del predio.' },
+  cultivo: { motivo: 'El cultivo predominante no está en el modelo: lo que clasifica la tierra es su categoría y su calidad agrológica.' },
+  arancelHa: { motivo: IMPORTE_BLOQUEADO },
+  valTerRus: { motivo: IMPORTE_BLOQUEADO },
+  valInstFij: { motivo: IMPORTE_BLOQUEADO },
+  autoRural: { motivo: IMPORTE_BLOQUEADO },
+  obs: {
+    lee: 'ficha.observacion',
+    motivo: 'Es la observación con la que se registró ESTA versión, y el histórico la conserva. La del acto nuevo se pide en la barra de guardado: son dos motivos distintos y confundirlos deja el cambio explicado con la razón del anterior.',
+  },
+  verifCampo: { motivo: 'La marca de verificación en campo no está en el modelo; lo que dice de dónde sale la versión es su origen, abajo.' },
+  fechaVerif: { motivo: 'La fecha de verificación no está en el modelo; lo que la versión fecha es desde cuándo rige.' },
+  fuente: { lee: 'ficha.origen', escribe: 'origen' },
+  patrimonio: { motivo: 'La declaración de patrimonio no está en el modelo.' },
+
+  /* ── Valuación y arbitrios ────────────────────────────────────── */
+  usoRec: { motivo: 'Los datos de arbitrios no son de la ficha catastral: los usa la determinación de arbitrios, que es de Rentas, y ninguna lectura los publica.' },
+  usoBar: { motivo: 'Por lo mismo que el uso para recolección: es un dato de arbitrios, no de la ficha.' },
+  frecRec: { motivo: 'Por lo mismo que el uso para recolección: es un dato de arbitrios, no de la ficha.' },
+  frecBar: { motivo: 'Por lo mismo que el uso para recolección: es un dato de arbitrios, no de la ficha.' },
+  frontis: {
+    lee: 'ficha.frontis',
+    motivo: 'El frontis se lee y no se escribe: ningún cuerpo del contrato lo lleva, ni el alta ni la actualización.',
+  },
+  posicion: { motivo: 'La posición del predio —esquina, interior, frente a parque— no está en el modelo.' },
+  peligro: { motivo: 'La peligrosidad de la zona no está en el modelo.' },
+  factor: { motivo: 'El factor de distribución de costo lo calcula la determinación de arbitrios con sus tasas, que son de ordenanza local (D-02b); no es un dato de la ficha.' },
+  inafecto: { motivo: 'La inafectación no está en la ficha: la resuelve la determinación, con la condición del contribuyente y la del predio.' },
+};

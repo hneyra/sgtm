@@ -198,7 +198,11 @@ function Fallo({
           : `La cuenta «${cuenta}» no puede hacer esta consulta`
         : error.codigo === 'SIN_MUNICIPALIDAD'
           ? 'La sesión no dice de qué municipalidad es'
-          : error.codigo === 'NO_ENCONTRADO'
+          : /* El 404 del padrón ya no entra por aquí: lo aparta
+               `SinEsteContribuyente` antes de montar la pestaña (#622). La rama
+               se queda porque un 404 de otra causa tiene que decir algo, y
+               caerse al «falló en el servidor» de abajo sería mentir. */
+            error.codigo === 'NO_ENCONTRADO'
             ? 'Eso no está en esta municipalidad'
             : error.codigo === 'VALIDACION' || error.codigo === 'ORDEN_NO_ADMITIDO'
               ? 'El servidor no admite esa consulta'
@@ -303,6 +307,83 @@ function Fallo({
             Reintentar
           </button>
         )}
+      </div>
+    </section>
+  );
+}
+
+/**
+ * El código que no está en el padrón. Es la respuesta, no un fallo (#622).
+ *
+ * Vive al lado de {@link Fallo} y no dentro, y la diferencia es la que separa
+ * «no se pudo leer» de «se leyó, y esto es lo que hay». `Fallo` dibuja el icono
+ * de error, el titular en rojo y —cuando sirve— el botón de reintentar; un
+ * código que no figura en el padrón no es ninguna de las tres cosas: la lectura
+ * salió bien, el servidor contestó lo que sabía, y pulsar otra vez va a
+ * devolver exactamente lo mismo.
+ *
+ * <h2>Por qué el titular lo escribe la pantalla y no el servidor</h2>
+ *
+ * Medido contra el backend en marcha, las nueve lecturas del expediente
+ * contestan el mismo hecho con **tres redacciones**: «En el padron de esta
+ * municipalidad no hay ningun contribuyente con codigo 'C-999999'» en seis, «No
+ * hay ningun contribuyente con el codigo C-999999 en esta municipalidad» en la
+ * unificada y el beneficio, y «No hay ningun contribuyente con el codigo
+ * C-999999» —sin el «en esta municipalidad»— en la constancia. Dibujar el texto
+ * del servidor como titular dejaría a la pestaña «Resumen» y a la de «Deuda»
+ * diciendo dos frases distintas del mismo hecho, y
+ * quien atiende no tiene forma de saber que son el mismo. Así que el titular lo
+ * escribe la pantalla —una vez, igual para las siete— y el texto del servidor
+ * baja a la línea técnica, junto a la ruta y al estado, que es donde vale como
+ * evidencia y no compite con nada.
+ *
+ * <h2>Y por qué no se dibuja ninguna tabla</h2>
+ *
+ * Porque las frases de tabla vacía de este módulo —«Ningún predio a nombre de
+ * este contribuyente», «Ningún pago registrado en el libro para este
+ * contribuyente»— afirman algo de alguien que **está** en el padrón, y aquí no
+ * hay a quién referirlas. Antes de #622 esa era exactamente la mentira: seis de
+ * las siete lecturas devolvían 200 con cero filas para un código inexistente y
+ * las seis tablas decían «no tiene».
+ */
+function SinEsteContribuyente({
+  codigo,
+  error,
+  ruta,
+  onBuscarOtro,
+}: {
+  codigo: string;
+  error: ErrorDeApi;
+  /** Cuál de las nueve contestó. Es la evidencia, no el sitio del defecto. */
+  ruta: string;
+  onBuscarOtro: () => void;
+}) {
+  return (
+    <section style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+      <Aviso tono="warn" titulo="Ese código no está en el padrón">
+        Las seis vistas del estado de cuenta y la constancia preguntan por el mismo código, y las siete contestan lo mismo:{' '}
+        <strong>{codigo || SIN_DATO}</strong> no figura en el padrón de contribuyentes de esta municipalidad. Por eso ninguna
+        dibuja su tabla —«no tiene deuda pendiente», «ningún pago registrado» o «ningún predio a su nombre» son afirmaciones
+        sobre alguien que está en el padrón—, y por eso tampoco se ofrece reintentar: la respuesta no cambia pulsando otra vez.
+        Lo que resuelve es buscar de nuevo.
+      </Aviso>
+      <p style={{ margin: 0, fontFamily: 'var(--font-mono)', fontSize: 10.5, color: 'var(--ink-4)' }}>
+        {ruta} · {error.estado} · «{error.mensaje}»
+      </p>
+      <Nota>
+        Un código llega a esta pantalla desde otra: la fila de un vehículo, la de un valor y el titular de un predio publican el
+        código de su contribuyente, y desde ahí se abre el expediente. También cambia el padrón bajo los pies si la sesión pasa a
+        ser de otra municipalidad, donde ese código no existe. El nombre que sigue en la cabecera es el que publicó la lectura de
+        la que salió el código, no el del padrón: el padrón no lo reconoce.
+      </Nota>
+      <div>
+        <button
+          onClick={onBuscarOtro}
+          className="hov-acento-2"
+          style={{ ...BOTON_LINEA, border: 0, background: 'var(--accent)', color: 'var(--accent-contraste)', fontWeight: 500 }}
+        >
+          Buscar otro
+        </button>
       </div>
     </section>
   );
@@ -449,12 +530,12 @@ export default function Consultas({ dest, onDest }: PantallaProps) {
     enCuenta && vista === 'pagos',
   );
   const misPredios = useRecurso(
-    (s) => prediosDelContribuyente({ contribuyente: cod, fecha: fecha || undefined }, { tamano: 50 }, s),
+    (s) => prediosDelContribuyente({ codContribuyente: cod, fecha: fecha || undefined }, { tamano: 50 }, s),
     [cod, fecha],
     enCuenta && vista === 'unidades',
   );
   const misVehiculos = useRecurso(
-    (s) => buscarVehiculos({ contribuyente: cod, fecha: fecha || undefined }, { tamano: 50 }, s),
+    (s) => buscarVehiculos({ codContribuyente: cod, fecha: fecha || undefined }, { tamano: 50 }, s),
     [cod, fecha],
     enCuenta && vista === 'unidades',
   );
@@ -464,7 +545,7 @@ export default function Consultas({ dest, onDest }: PantallaProps) {
     enCuenta && vista === 'valores',
   );
   const movimientos = useRecurso(
-    (s) => altasYBajas({ codigoCont: cod }, { tamano: 50 }, s),
+    (s) => altasYBajas({ codContribuyente: cod }, { tamano: 50 }, s),
     [cod],
     enCuenta && vista === 'movimientos',
   );
@@ -473,6 +554,40 @@ export default function Consultas({ dest, onDest }: PantallaProps) {
     [cod, fecha],
     enConstancia,
   );
+
+  /* ── El código que no está en el padrón, decidido una sola vez ────────────
+     Las nueve lecturas de este expediente preguntan al padrón ANTES de listar
+     (#622), así que un código que no figura contesta 404 en todas: no es un
+     hecho de la pestaña abierta sino del sujeto, y por eso se decide aquí y no
+     dentro de cada tabla. Se recorre la lista entera y se guarda cuál contestó,
+     que es la evidencia que se enseña abajo.
+
+     Solo la lectura activa puede traer error: `useRecurso` con `activo=false`
+     deja los tres campos en reposo, y al cambiar de contribuyente cambia la
+     llave y el error se limpia. Así que esto no arrastra el 404 de un sujeto al
+     siguiente.
+
+     Y las lecturas NO se apagan con esto, aunque la tentación sea evidente: lo
+     único que sabe que el código no está es la propia petición, así que
+     apagarlas borraría el error —`activo=false` lo pone a `null`— y con él el
+     motivo de haberlas apagado; la pantalla entraría y saldría del aviso sola. */
+  const lecturasDelSujeto: { lectura: { error: ErrorDeApi | null }; ruta: string }[] = [
+    { lectura: ficha, ruta: 'GET /api/v1/consultas/unificada' },
+    { lectura: deuda, ruta: 'GET /api/v1/consultas/deuda' },
+    { lectura: beneficio, ruta: 'GET /api/v1/consultas/deudas-con-beneficio' },
+    { lectura: pagos, ruta: 'GET /api/v1/consultas/pagos' },
+    { lectura: misPredios, ruta: 'GET /api/v1/consultas/predios' },
+    { lectura: misVehiculos, ruta: 'GET /api/v1/consultas/vehiculos' },
+    { lectura: misValores, ruta: 'GET /api/v1/consultas/valores' },
+    { lectura: movimientos, ruta: 'GET /api/v1/consultas/altas-bajas' },
+    { lectura: constancia, ruta: 'GET /api/v1/consultas/constancias/no-adeudo' },
+  ];
+  const ausencia = lecturasDelSujeto.find((x) => x.lectura.error?.codigo === 'NO_ENCONTRADO') ?? null;
+  const codigoAusente = ausencia !== null;
+  /* La pestaña se dibuja si es la elegida Y hay a quién referirla. Las siete
+     comparten esta condición, que es lo que hace que digan lo mismo: no dicen
+     cada una su frase de tabla vacía, no dicen nada y habla el aviso de arriba. */
+  const enPestania = (v: Vista) => vista === v && !codigoAusente;
 
   /* La cifra que la barra de contexto enseña sale de una lectura que publique
      el TOTAL del contribuyente —el resumen de la ficha o la simulación—, nunca
@@ -739,24 +854,31 @@ export default function Consultas({ dest, onDest }: PantallaProps) {
           <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
             {/* La fecha de corte manda sobre la deuda, las unidades y la
                 constancia: en blanco es hoy, que es lo que resuelve el reloj
-                del servidor. */}
-            <div style={{ display: 'flex', alignItems: 'flex-end', gap: 12, flexWrap: 'wrap', padding: '12px 14px', border: '1px solid var(--line-2)', borderRadius: 10, background: 'var(--bg-card)' }}>
-              <label style={{ display: 'block' }}>
-                <span style={{ display: 'block', fontSize: 10.5, fontWeight: 500, textTransform: 'uppercase', letterSpacing: '.1em', color: 'var(--ink-3)', marginBottom: 5 }}>
-                  Fecha de corte
-                </span>
-                <input type="date" value={fecha} onChange={(e) => setFecha(e.target.value)} style={CONTROL} />
-              </label>
-              <Nota style={{ flex: 1, minWidth: 220 }}>
-                En blanco es hoy, resuelto con el reloj del servidor. La deuda no se guarda: se calcula, y cambia cada día. Las cifras de
-                cada tabla dicen a qué fecha están.
-              </Nota>
-              {fecha !== '' && (
-                <button onClick={() => setFecha('')} className="hov-linea" style={BOTON_LINEA}>
-                  Volver a hoy
-                </button>
-              )}
-            </div>
+                del servidor.
+
+                Con el código fuera del padrón no sale, y no es por limpieza: no
+                hay ninguna cifra que pueda mover, así que sería un control que
+                promete acotar algo que no existe —lo mismo que este módulo ya
+                se niega a hacer con los filtros que el servidor no lee—. */}
+            {!codigoAusente && (
+              <div style={{ display: 'flex', alignItems: 'flex-end', gap: 12, flexWrap: 'wrap', padding: '12px 14px', border: '1px solid var(--line-2)', borderRadius: 10, background: 'var(--bg-card)' }}>
+                <label style={{ display: 'block' }}>
+                  <span style={{ display: 'block', fontSize: 10.5, fontWeight: 500, textTransform: 'uppercase', letterSpacing: '.1em', color: 'var(--ink-3)', marginBottom: 5 }}>
+                    Fecha de corte
+                  </span>
+                  <input type="date" value={fecha} onChange={(e) => setFecha(e.target.value)} style={CONTROL} />
+                </label>
+                <Nota style={{ flex: 1, minWidth: 220 }}>
+                  En blanco es hoy, resuelto con el reloj del servidor. La deuda no se guarda: se calcula, y cambia cada día. Las cifras de
+                  cada tabla dicen a qué fecha están.
+                </Nota>
+                {fecha !== '' && (
+                  <button onClick={() => setFecha('')} className="hov-linea" style={BOTON_LINEA}>
+                    Volver a hoy
+                  </button>
+                )}
+              </div>
+            )}
 
             <div style={{ display: 'flex', alignItems: 'center', gap: 14, flexWrap: 'wrap', borderBottom: '1px solid var(--line)' }}>
               {VISTAS.map((v) => {
@@ -784,8 +906,21 @@ export default function Consultas({ dest, onDest }: PantallaProps) {
               })}
             </div>
 
+            {/* El código no está en el padrón: una sola respuesta debajo de la
+                barra, para las seis pestañas. La barra se queda a propósito
+                —recorrerlas y encontrar lo mismo es la comprobación de que
+                dicen lo mismo—; lo que se va es la tabla de cada una. */}
+            {ausencia !== null && (
+              <SinEsteContribuyente
+                codigo={cod}
+                error={ausencia.lectura.error!}
+                ruta={ausencia.ruta}
+                onBuscarOtro={nuevaBusqueda}
+              />
+            )}
+
             {/* ── Resumen ── */}
-            {vista === 'resumen' && (
+            {enPestania('resumen') && (
               <Lectura lectura={ficha} ruta="GET /api/v1/consultas/unificada" acceso="consulta_unificada">
                 {ficha.datos && (
                   <>
@@ -867,7 +1002,7 @@ export default function Consultas({ dest, onDest }: PantallaProps) {
             )}
 
             {/* ── Deuda, con el beneficio al lado ── */}
-            {vista === 'deuda' && (
+            {enPestania('deuda') && (
               <>
                 <BloqueDeBeneficio lectura={beneficio} campania={campania} onCampania={setCampania} />
 
@@ -920,7 +1055,7 @@ export default function Consultas({ dest, onDest }: PantallaProps) {
             )}
 
             {/* ── Pagos ── */}
-            {vista === 'pagos' && (
+            {enPestania('pagos') && (
               <Seccion
                 titulo="Pagos realizados"
                 meta={pagos.datos ? `${pagos.datos.contenido.length} de ${pagos.datos.totalElementos}` : ''}
@@ -946,7 +1081,7 @@ export default function Consultas({ dest, onDest }: PantallaProps) {
             )}
 
             {/* ── Unidades ── */}
-            {vista === 'unidades' && (
+            {enPestania('unidades') && (
               <>
                 <Seccion
                   titulo="Predios"
@@ -1005,7 +1140,7 @@ export default function Consultas({ dest, onDest }: PantallaProps) {
             )}
 
             {/* ── Valores ── */}
-            {vista === 'valores' && (
+            {enPestania('valores') && (
               <Seccion
                 titulo="Valores emitidos"
                 meta={misValores.datos ? plural(misValores.datos.totalElementos, 'valor', 'valores') : ''}
@@ -1040,7 +1175,7 @@ export default function Consultas({ dest, onDest }: PantallaProps) {
             )}
 
             {/* ── Altas y bajas ── */}
-            {vista === 'movimientos' && (
+            {enPestania('movimientos') && (
               <Seccion
                 titulo="Movimientos de la cuenta corriente"
                 meta={movimientos.datos ? `${movimientos.datos.contenido.length} de ${movimientos.datos.totalElementos}` : ''}
@@ -1071,7 +1206,19 @@ export default function Consultas({ dest, onDest }: PantallaProps) {
         )}
 
         {/* ══════════ CONSTANCIA ══════════ */}
-        {enConstancia && (
+        {/* La séptima, y la que más importa que calle: esta pantalla imprime un
+            papel que AFIRMA algo sobre una persona. Con el código fuera del
+            padrón no se dibuja ni la hoja ni los botones que la sacan. */}
+        {enConstancia && ausencia !== null && (
+          <SinEsteContribuyente
+            codigo={cod}
+            error={ausencia.lectura.error!}
+            ruta={ausencia.ruta}
+            onBuscarOtro={nuevaBusqueda}
+          />
+        )}
+
+        {enConstancia && !codigoAusente && (
           <div style={{ display: 'flex', flexDirection: 'column', gap: 16, alignItems: 'center' }}>
             <div data-noprint="1" style={{ width: '100%', maxWidth: 860, display: 'flex', alignItems: 'flex-end', gap: 10, flexWrap: 'wrap' }}>
               <label style={{ display: 'block' }}>

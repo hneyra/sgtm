@@ -1,7 +1,6 @@
 package pe.gob.sgtm.cuentacorriente.aplicacion;
 
 import java.util.ArrayList;
-import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import org.jspecify.annotations.Nullable;
@@ -344,24 +343,21 @@ public class RegistrarMovimientoDeDeuda {
         return List.copyOf(partes);
     }
 
-    /** Lo que debe cada cuota de la obligacion a la fecha valor, de la primera a la ultima. */
+    /**
+     * Lo que debe cada cuota de la obligacion a la fecha valor, de la primera a la ultima.
+     *
+     * <p><b>La cuenta la hace {@link CalculoDeDeuda#deudaPorPeriodoA}</b>, que es la misma que usa
+     * la lectura desglosada de {@code consulta_deuda} (#551). No es un detalle de reutilizacion:
+     * quien atiende lee en pantalla el importe de la cuota y lo manda como baja, asi que las dos
+     * cifras <b>tienen</b> que ser la misma al centimo — dos copias de la cuenta divergen y el acto
+     * empieza a rechazar importes que la pantalla acaba de publicar, o peor, a admitir los que no
+     * (#397).
+     */
     private Map<Integer, DeudaActualizada> deudaPorCuota(MovimientoDeDeuda movimiento) {
-        Map<Integer, List<Asiento>> porCuota = new LinkedHashMap<>();
-        for (Asiento asiento :
-                asientos.deTodosLosPeriodosDe(ClaveDeObligacion.de(movimiento.clave()))) {
-            porCuota.computeIfAbsent(
-                            asiento.periodo() == null ? 0 : asiento.periodo(),
-                            cual -> new ArrayList<>())
-                    .add(asiento);
-        }
-        Map<Integer, DeudaActualizada> deudas = new LinkedHashMap<>();
-        porCuota.forEach(
-                (periodo, delPeriodo) ->
-                        deudas.put(
-                                periodo,
-                                calculo.deudaActualizadaA(
-                                        delPeriodo, movimiento.fechaValor(), redondeo)));
-        return deudas;
+        return calculo.deudaPorPeriodoA(
+                asientos.deTodosLosPeriodosDe(ClaveDeObligacion.de(movimiento.clave())),
+                movimiento.fechaValor(),
+                redondeo);
     }
 
     /**

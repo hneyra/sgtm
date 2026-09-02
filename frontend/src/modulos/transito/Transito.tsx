@@ -3,7 +3,7 @@ import { Shell, type Contexto, type EntradaDePaleta } from '../../shell/Shell';
 import type { PantallaProps } from '../../App';
 import { Icono } from '../../ds/Icono';
 import { ICO } from '../../ds/iconos';
-import { Insignia, type Tono } from '../../ds/componentes';
+import { Insignia, Paginador, type Tono } from '../../ds/componentes';
 import { moduloDe } from '../../shell/modulos';
 import { miles, usarPreferencias } from '../../shell/preferencias';
 import {
@@ -23,11 +23,13 @@ import {
   type Fila,
 } from '../../datos/transito';
 import { useRebote, useRecurso, type Estado } from '../../api/useRecurso';
-import { Descargas } from '../../api/descarga';
+import { Descargas, FORMATOS_DE_DOCUMENTO, type FormatoDeDocumento } from '../../api/descarga';
 import { ErrorDeApi, fijarToken } from '../../api/cliente';
+import { causasDelRechazo } from '../../api/Fallo';
 import { cuentaActual, hayPuerta } from '../../api/sesion';
 import {
   cambiarNumeroDePapeleta,
+  emitirConstanciaLibre,
   estadoDeCuenta,
   expedienteDeLaPapeleta,
   generarValoresDeTransito,
@@ -49,6 +51,7 @@ import {
   resumenDeRecaudacion,
   resumenPorCodigo,
   resumenPorPlaca,
+  type ConstanciaEmitida,
   type EstadoDeInternamiento,
   type EstadoDePapeleta,
   type Internamiento,
@@ -347,7 +350,11 @@ function tituloDelFallo(error: ErrorDeApi | null, que: string): string {
       return 'No existe';
     case 'VALIDACION':
     case 'ORDEN_NO_ADMITIDO':
-      return 'El servidor no admite lo que se le mandó';
+      /* No dice «no admite lo que se le mandó»: registrar un descargo lee su
+         plazo del conjunto sellado, y desde #562 eso contesta 422 nombrando la
+         llave en vez de un 500 con incidencia. Con aquel titular, quien atiende
+         se pone a corregir un formulario que está bien. */
+      return 'El servidor rechazó la operación';
     case 'SIN_RESPUESTA':
       return error.estado === 0 ? 'No se pudo contactar con el servidor' : 'El servidor contestó otra cosa';
     default:
@@ -495,44 +502,6 @@ function Vacio({ titulo, children }: { titulo: string; children: ReactNode }) {
   );
 }
 
-/** La paginación de una tabla. */
-function Paginas({
-  pagina,
-  totalPaginas,
-  hayMas,
-  ir,
-}: {
-  pagina: number;
-  totalPaginas: number;
-  hayMas: boolean;
-  ir: (n: number) => void;
-}) {
-  if (totalPaginas <= 1) return null;
-  return (
-    <div style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '10px 16px', borderTop: '1px solid var(--line)' }}>
-      <button
-        onClick={() => ir(Math.max(0, pagina - 1))}
-        disabled={pagina === 0}
-        className="hov-linea"
-        style={{ ...BOTON_LINEA, opacity: pagina === 0 ? 0.45 : 1, cursor: pagina === 0 ? 'not-allowed' : 'pointer' }}
-      >
-        Anterior
-      </button>
-      <span style={{ fontFamily: 'var(--font-mono)', fontSize: 12, color: 'var(--ink-3)' }}>
-        {pagina + 1} de {totalPaginas}
-      </span>
-      <button
-        onClick={() => ir(pagina + 1)}
-        disabled={!hayMas}
-        className="hov-linea"
-        style={{ ...BOTON_LINEA, opacity: hayMas ? 1 : 0.45, cursor: hayMas ? 'pointer' : 'not-allowed' }}
-      >
-        Siguiente
-      </button>
-    </div>
-  );
-}
-
 /** La cifra de un contador, con «…» mientras llega y «—» si no se pudo. */
 function cifra(e: { datos: { totalElementos: number } | null; cargando: boolean; error: unknown }): string {
   if (e.cargando) return '…';
@@ -578,6 +547,16 @@ export default function Transito({ dest, onDest }: PantallaProps) {
   const [enviando, setEnviando] = useState(false);
   const [falloDelActo, setFalloDelActo] = useState<ErrorDeApi | null>(null);
   const [hechoDelActo, setHechoDelActo] = useState('');
+  /* La constancia libre: el único acto del centro de reportes, y el único de
+     todo el módulo que además NUMERA un papel. Su estado va aparte del de los
+     tres procesos —que se dibujan en otro destino— porque compartirlo dejaría
+     el fallo de uno colgando bajo el otro. */
+  const [emitiendoConstancia, setEmitiendoConstancia] = useState(false);
+  const [confirmandoConstancia, setConfirmandoConstancia] = useState(false);
+  const [constanciaEmitida, setConstanciaEmitida] = useState<
+    (ConstanciaEmitida & { placa: string; verificadaAl: string }) | null
+  >(null);
+  const [falloConstancia, setFalloConstancia] = useState<ErrorDeApi | null>(null);
   /* Lo contado, recordado entre destinos: ver `notasDeDestino` más abajo. */
   const [contado, setContado] = useState<Record<string, string>>({});
 
@@ -587,6 +566,14 @@ export default function Transito({ dest, onDest }: PantallaProps) {
     setVals((x) => ({ ...x, [k]: v }));
     setFalloDelActo(null);
     setHechoDelActo('');
+    /* Tocar un campo DESARMA la confirmación de la constancia: lo que se
+       confirmó era otra placa u otra fecha, y aquí la segunda pulsación numera
+       un documento oficial que no se anula (regla 4). Y se borra lo emitido,
+       para que el número de la anterior no quede al lado del formulario de la
+       siguiente leyéndose como suyo. */
+    setConfirmandoConstancia(false);
+    setFalloConstancia(null);
+    setConstanciaEmitida(null);
   };
 
   const esPapeleta = dest === 'padron' && papeletaAbierta !== null;
@@ -719,6 +706,68 @@ export default function Transito({ dest, onDest }: PantallaProps) {
     : reporte.datos === null
       ? 'No hay hoja leída: no hay qué descargar'
       : undefined;
+
+  /* ── La constancia libre, el único acto del centro de reportes ──────
+     Los cinco campos son EXACTAMENTE los cinco que `PeticionDeConstanciaLibre`
+     lee y que esta pantalla puede resolver; el cuerpo se compone en
+     `emitirConstanciaLibre`, que es donde está escrito por qué los otros dos
+     del `record` no viajan. */
+  const clPlaca = texto('cl_placa').trim().toUpperCase();
+  const clVerificadaAl = texto('cl_verificadaAl');
+  const clSolicitante = texto('cl_solicitante').trim();
+  const clObs = texto('cl_obs').trim();
+  const clFormato = texto('cl_formato', 'PDF') as FormatoDeDocumento;
+  /* El motivo se calcula UNA vez y sirve para las tres cosas que hacen falta:
+     apagar el botón, ponerle su `title` y dibujarlo al lado. Un botón apagado
+     no recibe el foco, así que su `title` no lo lee quien va con el teclado
+     (RNF-082) y el texto tiene que estar además en la página. */
+  const faltaDeLaConstancia =
+    clPlaca === ''
+      ? 'Falta la placa: es sobre lo que se acredita, y el servidor la exige. No hace falta que el vehículo esté en el padrón.'
+      : clVerificadaAl === ''
+        ? 'Falta el día al que se acredita. «No registra papeletas pendientes» es cierto o falso según el día (regla 9, RNF-075), así que se teclea en vez de dejar que lo ponga un reloj.'
+        : clObs.length < 5
+          ? 'Falta la observación: toda modificación se guarda con el motivo de quien la hace, y va de 5 a 500 caracteres (regla 10, RNF-052).'
+          : undefined;
+  const puedeEmitirConstancia = faltaDeLaConstancia === undefined && !emitiendoConstancia;
+
+  const emitirConstancia = async () => {
+    /* Irreversible: emitir gasta el correlativo, asienta la constancia y la
+       deja en la bitácora, y aquí no se borra ni se anula un documento emitido
+       (regla 4). Se pulsa dos veces, con el rótulo y el aviso cambiados en
+       medio: el mismo patrón que la prescripción de Valores. */
+    if (!confirmandoConstancia) {
+      setConfirmandoConstancia(true);
+      return;
+    }
+    setEmitiendoConstancia(true);
+    setFalloConstancia(null);
+    try {
+      const r = await emitirConstanciaLibre({
+        placa: clPlaca,
+        verificadaAl: clVerificadaAl,
+        solicitante: clSolicitante === '' ? undefined : clSolicitante,
+        observacion: clObs,
+        formato: clFormato,
+      });
+      setConstanciaEmitida({ ...r, placa: clPlaca, verificadaAl: clVerificadaAl });
+      /* Se vacía la observación, y con `setVals` en vez de con `set`: lo que
+         rearma la guarda de la regla 10 es precisamente que esté vacía, y así
+         una segunda pulsación no puede numerar otra constancia por inercia. Va
+         por `setVals` porque `set` borraría el número recién emitido. La placa y
+         la fecha se quedan a la vista: son lo que acredita el papel que se
+         acaba de entregar. */
+      setVals((x) => ({ ...x, cl_obs: '' }));
+      toast('Constancia emitida.');
+    } catch (fallo) {
+      setFalloConstancia(
+        fallo instanceof ErrorDeApi ? fallo : new ErrorDeApi('ERROR_INTERNO', 'No se pudo emitir la constancia', 0),
+      );
+    } finally {
+      setEmitiendoConstancia(false);
+      setConfirmandoConstancia(false);
+    }
+  };
 
   /* ── Los tres actos que escriben ─────────────────────────────── */
   const proc = PROCESOS.find((p) => p.k === proceso) ?? PROCESOS[0];
@@ -1181,7 +1230,7 @@ export default function Transito({ dest, onDest }: PantallaProps) {
                         />
                       </table>
                     </div>
-                    <Paginas pagina={p.pagina} totalPaginas={p.totalPaginas} hayMas={p.hayMas} ir={setPagina} />
+                    <Paginador pagina={p.pagina} totalPaginas={p.totalPaginas} hayMas={p.hayMas} ir={setPagina} />
                     <p style={{ ...PIE, borderTop: '1px solid var(--line)' }}>
                       Los dos importes son los del acta, congelados el día de la infracción. Lo que se cobra hoy lleva el interés del
                       libro y no sale en esta lectura. El código de la infracción y el nombre del conductor tampoco: esta operación no los
@@ -1394,7 +1443,7 @@ export default function Transito({ dest, onDest }: PantallaProps) {
                           />
                         </table>
                       </div>
-                      <Paginas pagina={p.pagina} totalPaginas={p.totalPaginas} hayMas={p.hayMas} ir={setPaginaInt} />
+                      <Paginador pagina={p.pagina} totalPaginas={p.totalPaginas} hayMas={p.hayMas} ir={setPaginaInt} />
                       <p style={{ ...PIE, borderTop: '1px solid var(--line)' }}>
                         Los días están contados al {p.contenido[0].calculadoA}. La custodia acumulada no sale como columna: sería
                         multiplicar la tasa por los días en la pantalla, y una cifra de dinero no se compone aquí.
@@ -1579,6 +1628,14 @@ export default function Transito({ dest, onDest }: PantallaProps) {
               <div role="alert" style={{ display: 'flex', flexDirection: 'column', gap: 4, padding: '12px 14px', borderRadius: 8, background: 'var(--bad-bg)', color: 'var(--bad-fg)' }}>
                 <strong style={{ fontSize: 12.5 }}>{tituloDelFallo(falloDelActo, 'el acto')}</strong>
                 <span style={{ fontSize: 12.5, lineHeight: 1.55, textWrap: 'pretty' }}>{falloDelActo.mensaje}</span>
+                {/* Las dos causas de un 422 llegan con el mismo código y la
+                    respuesta no trae ningún discriminador: se dicen las dos y en
+                    qué se reconocen, en vez de clasificar por subcadena (#562). */}
+                {causasDelRechazo(falloDelActo, 'PLAZO:DESCARGO_PAPELETA') !== null && (
+                  <span style={{ fontSize: 12, lineHeight: 1.5, textWrap: 'pretty', opacity: 0.85 }}>
+                    {causasDelRechazo(falloDelActo, 'PLAZO:DESCARGO_PAPELETA')}
+                  </span>
+                )}
                 {falloDelActo.detalles && falloDelActo.detalles.length > 0 && (
                   <span style={{ fontFamily: 'var(--font-mono)', fontSize: 11.5 }}>{falloDelActo.detalles.join(' · ')}</span>
                 )}
@@ -1656,7 +1713,7 @@ export default function Transito({ dest, onDest }: PantallaProps) {
                           />
                         </table>
                       </div>
-                      <Paginas pagina={p.pagina} totalPaginas={p.totalPaginas} hayMas={p.hayMas} ir={setPaginaCod} />
+                      <Paginador pagina={p.pagina} totalPaginas={p.totalPaginas} hayMas={p.hayMas} ir={setPaginaCod} />
                       <p style={{ ...PIE, borderTop: '1px solid var(--line)' }}>
                         El «% UIT» es el porcentaje de la unidad impositiva, no la multa. La multa en soles es ese porcentaje por la UIT
                         del ejercicio, y la UIT sale del conjunto de parámetros sellado: por eso no hay columna de importe.
@@ -1698,8 +1755,17 @@ export default function Transito({ dest, onDest }: PantallaProps) {
                           <span style={{ display: 'block', width: '100%', fontSize: 9.5, fontWeight: 500, textTransform: 'uppercase', letterSpacing: '.13em', color: 'var(--ink-4)', marginBottom: 5 }}>{x.g}</span>
                         )}
                         <span style={{ flex: 1, minWidth: 0, fontSize: 12.5, textWrap: 'pretty' }}>{x.label}</span>
-                        {x.sinLectura && (
-                          <span style={{ fontSize: 10, color: 'var(--warn-fg)', background: 'var(--warn-bg)', borderRadius: 999, padding: '1px 7px', flex: '0 0 auto' }}>sin lectura</span>
+                        {/* «Sin lectura» y «se emite» son dos cosas distintas y
+                            hasta #589 llevaban la misma insignia de aviso: la
+                            constancia libre tampoco se lee, pero desde aquí se
+                            HACE, y una insignia de aviso sobre algo que
+                            funciona se lee como una avería. */}
+                        {x.emision !== undefined ? (
+                          <span style={{ fontSize: 10, color: 'var(--accent-ink)', background: 'var(--accent-soft)', borderRadius: 999, padding: '1px 7px', flex: '0 0 auto' }}>se emite</span>
+                        ) : (
+                          x.sinLectura && (
+                            <span style={{ fontSize: 10, color: 'var(--warn-fg)', background: 'var(--warn-bg)', borderRadius: 999, padding: '1px 7px', flex: '0 0 auto' }}>sin lectura</span>
+                          )
                         )}
                       </button>
                     );
@@ -1720,10 +1786,16 @@ export default function Transito({ dest, onDest }: PantallaProps) {
                       ))}
                     </div>
                   )}
-                  <p style={{ ...PIE, borderTop: '1px solid var(--line)' }}>
-                    Los criterios que este reporte no usa no se dibujan; los que el contrato declara y ningún controlador lee —ordenación,
-                    tipo de cobranza, gravedad— tampoco, porque tecleados no harían nada.
-                  </p>
+                  {/* La prosa de los criterios habla de lo que un REPORTE
+                      filtra, y la hoja que se emite no filtra nada: leerla
+                      encima de un formulario de cinco campos hace pensar que
+                      esos cinco son criterios de búsqueda. */}
+                  {h.emision === undefined && (
+                    <p style={{ ...PIE, borderTop: '1px solid var(--line)' }}>
+                      Los criterios que este reporte no usa no se dibujan; los que el contrato declara y ningún controlador lee
+                      —ordenación, tipo de cobranza, gravedad— tampoco, porque tecleados no harían nada.
+                    </p>
+                  )}
                   {/* Las tres hojas sin lectura ya dicen arriba lo suyo, y lo
                       suyo NO es «su endpoint no declara ?formato»: la constancia
                       libre y las dos resoluciones de gerencia SÍ emiten el
@@ -1731,7 +1803,16 @@ export default function Transito({ dest, onDest }: PantallaProps) {
                       no tienen es lectura ni formulario. Repetir aquí el motivo
                       equivocado sería contradecir el aviso de al lado. */}
                   <div style={{ padding: '12px 16px', borderTop: '1px solid var(--line)' }}>
-                    {h.sinLectura !== undefined ? (
+                    {h.emision !== undefined ? (
+                      /* Aquí NO van los tres botones de `Descargas`: cada uno
+                         sería una pulsación y cada pulsación numera una
+                         constancia distinta. El archivo sale del acto de abajo,
+                         una vez, y en el formato que se elija allí. */
+                      <p style={{ margin: 0, fontSize: 12, lineHeight: 1.55, color: 'var(--ink-3)', textWrap: 'pretty' }}>
+                        El archivo lo entrega el acto de abajo, no un botón de descarga: cada emisión gasta un número de constancia, así
+                        que se pide una vez y en el formato que se elija allí.
+                      </p>
+                    ) : h.sinLectura !== undefined ? (
                       <p style={{ margin: 0, fontSize: 12, lineHeight: 1.55, color: 'var(--ink-3)', textWrap: 'pretty' }}>
                         Sin hoja no hay archivo: el motivo es el de arriba.
                       </p>
@@ -1759,12 +1840,162 @@ export default function Transito({ dest, onDest }: PantallaProps) {
                 </section>
 
                 {h.sinLectura && (
-                  <div role="note" style={{ display: 'flex', gap: 11, padding: '12px 14px', borderRadius: 8, background: 'var(--warn-bg)', color: 'var(--warn-fg)' }}>
+                  <div
+                    role="note"
+                    style={{
+                      display: 'flex',
+                      gap: 11,
+                      padding: '12px 14px',
+                      borderRadius: 8,
+                      /* Neutro cuando además se emite: el amarillo de aviso al
+                         lado de un formulario que funciona se lee como avería.
+                         Las dos resoluciones de gerencia sí lo llevan, porque
+                         ahí de verdad no hay nada que ofrecer. */
+                      background: h.emision !== undefined ? 'var(--bg-elev)' : 'var(--warn-bg)',
+                      color: h.emision !== undefined ? 'var(--ink-3)' : 'var(--warn-fg)',
+                      border: h.emision !== undefined ? '1px solid var(--line)' : undefined,
+                    }}
+                  >
                     <span style={{ fontSize: 12.5, lineHeight: 1.55, textWrap: 'pretty' }}>
-                      <strong style={{ display: 'block', fontWeight: 600, marginBottom: 2 }}>Aquí no hay hoja que dibujar</strong>
+                      <strong style={{ display: 'block', fontWeight: 600, marginBottom: 2, color: h.emision !== undefined ? 'var(--ink-2)' : undefined }}>
+                        {h.emision !== undefined ? 'Esta hoja no se consulta: se emite' : 'Aquí no hay hoja que dibujar'}
+                      </strong>
                       {h.sinLectura}
                     </span>
                   </div>
+                )}
+
+                {/* ── El acto: la constancia libre de infracciones ──────────
+                    Es la única hoja del carril que se PIDE aquí, y numera. Los
+                    cinco campos son los cinco de `PeticionDeConstanciaLibre`
+                    que esta pantalla puede resolver; ninguno más, porque el
+                    cuerpo es lista blanca del lado del servidor y un campo de
+                    más aquí sería un campo que se teclea y no viaja (#331). */}
+                {h.k === 'constancia_libre' && (
+                  <>
+                    <section style={TARJETA}>
+                      <div style={{ ...CABECERA, flexWrap: 'wrap' }}>
+                        <h2 style={H2}>Emitir la constancia</h2>
+                        <code style={{ fontFamily: 'var(--font-mono)', fontSize: 10.5, color: 'var(--ink-3)', background: 'var(--bg-elev)', borderRadius: 999, padding: '4px 10px' }}>
+                          POST /api/v1/transito/constancias-libres
+                        </code>
+                      </div>
+                      <p style={{ margin: 0, padding: '13px 16px', fontFamily: 'var(--font-serif)', fontSize: 15, lineHeight: 1.6, color: 'var(--ink-2)', maxWidth: '80ch', textWrap: 'pretty' }}>
+                        {h.emision}
+                      </p>
+                      <RejillaDeCampos style={{ borderTop: '1px solid var(--line)' }}>
+                        <CampoForm
+                          f={{ k: 'cl_placa', l: 'Placa', t: 'text', ph: 'NB-21169', ayuda: 'Obligatoria. Es sobre lo que se acredita, y el vehículo no tiene por qué estar en el padrón.' }}
+                          valor={val('cl_placa')}
+                          set={set}
+                        />
+                        {/* Sin valor por omisión, y a propósito: el día al que
+                            se acredita es lo que el papel afirma, y el servidor
+                            lo daría por hoy si llegara en blanco. Rellenarlo
+                            con el reloj del navegador —o dejar que lo ponga el
+                            del servidor— es que ese día no lo haya elegido
+                            nadie, que es el defecto de #24 y #54. */}
+                        <CampoForm
+                          f={{ k: 'cl_verificadaAl', l: 'Verificada al', t: 'date', ayuda: 'Obligatoria, y NO es la fecha de emisión: es el día al que se acredita. El papel imprime las dos.' }}
+                          valor={val('cl_verificadaAl')}
+                          set={set}
+                        />
+                        <CampoForm
+                          f={{ k: 'cl_solicitante', l: 'Solicitante', t: 'text', ph: 'Nombre de quien la pide', ayuda: 'Opcional: el servidor lo admite en blanco, y entonces el papel sale con ese renglón vacío.' }}
+                          valor={val('cl_solicitante')}
+                          set={set}
+                        />
+                        {/* Los tres de `FormatoDeDocumento`, leídos de donde se
+                            declaran: escribirlos aquí a mano dejaría la lista
+                            vieja en silencio el día que el backend cambie. */}
+                        <CampoForm
+                          f={{ k: 'cl_formato', l: 'Formato del papel', t: 'sel', o: [...FORMATOS_DE_DOCUMENTO], ayuda: 'Los tres que el servidor admite. Cualquier otro lo rechaza con 422.' }}
+                          valor={val('cl_formato', 'PDF')}
+                          set={set}
+                        />
+                        <CampoForm
+                          f={{ k: 'cl_obs', l: 'Observación', t: 'area', ancho: true, ph: 'Por qué se emite', ayuda: 'Obligatoria: toda modificación se guarda con el motivo de quien la hace. De 5 a 500 caracteres.' }}
+                          valor={val('cl_obs')}
+                          set={set}
+                        />
+                      </RejillaDeCampos>
+                      <p style={{ ...PIE, borderTop: '1px solid var(--line)' }}>
+                        El cuerpo lleva exactamente estos cinco campos. Los otros dos que el servidor declara —el identificador del
+                        vehículo y el de quien la pide— no viajan: son opcionales, no deciden nada (la comprobación va por la placa) y
+                        aquí no hay con qué resolverlos; mandarlos adivinados ataría la constancia a otro vehículo o a otra persona en la
+                        fila que queda guardada, y eso no se ve en el papel.
+                      </p>
+                    </section>
+
+                    {constanciaEmitida !== null && (
+                      <div role="status" style={{ display: 'flex', flexDirection: 'column', gap: 4, padding: '12px 14px', borderRadius: 8, background: 'var(--ok-bg)', color: 'var(--ok-fg)' }}>
+                        {/* El número se enseña porque el archivo se lo lleva:
+                            el navegador renombra el fichero si ya existe y la
+                            barra de descargas se va sola, y un papel numerado
+                            del que no se sabe el número no se puede reclamar
+                            después. Si el servidor no mandó la cabecera se dice
+                            «—» y dónde buscarlo, en vez de inventar uno. */}
+                        <strong style={{ fontSize: 12.5 }}>
+                          Constancia {constanciaEmitida.numero ?? SIN_DATO} emitida para {constanciaEmitida.placa}
+                        </strong>
+                        <span style={{ fontSize: 12.5, lineHeight: 1.55, textWrap: 'pretty' }}>
+                          Acredita que al {constanciaEmitida.verificadaAl} el vehículo no registra papeletas de tránsito pendientes de
+                          pago, y sólo a ese día. El archivo se ha descargado
+                          {constanciaEmitida.archivo === '' ? '.' : ` como «${constanciaEmitida.archivo}».`}
+                          {constanciaEmitida.numero === null &&
+                            ' El servidor no devolvió el número en la cabecera: el de esta constancia se busca en «Relación de constancias emitidas».'}
+                        </span>
+                      </div>
+                    )}
+
+                    {falloConstancia && (
+                      <div role="alert" style={{ display: 'flex', flexDirection: 'column', gap: 5, padding: '12px 14px', borderRadius: 8, background: 'var(--bad-bg)', color: 'var(--bad-fg)' }}>
+                        <strong style={{ fontSize: 12.5 }}>
+                          {falloConstancia.codigo === 'CONFLICTO'
+                            ? `No se emite: ${clPlaca} registra papeletas pendientes`
+                            : tituloDelFallo(falloConstancia, 'la constancia')}
+                        </strong>
+                        <span style={{ fontSize: 12.5, lineHeight: 1.55, textWrap: 'pretty' }}>{falloConstancia.mensaje}</span>
+                        {/* El 409 NO es un error opaco: trae en `detalles` los
+                            números de hasta veinte papeletas, y eso es lo que
+                            quien vino a por la constancia necesita saber —qué
+                            tiene que pagar—. Dejarlo en el mensaje suelto lo
+                            manda a otra ventanilla a preguntar lo que este
+                            mismo servidor acaba de contestar. */}
+                        {falloConstancia.detalles !== undefined && falloConstancia.detalles.length > 0 && (
+                          <>
+                            <span style={{ fontSize: 11.5, textTransform: 'uppercase', letterSpacing: '.08em', opacity: 0.8 }}>
+                              Papeletas que lo impiden
+                            </span>
+                            <ul style={{ margin: 0, paddingLeft: 18, fontFamily: 'var(--font-mono)', fontSize: 12 }}>
+                              {falloConstancia.detalles.map((d) => (
+                                <li key={d}>{d}</li>
+                              ))}
+                            </ul>
+                          </>
+                        )}
+                      </div>
+                    )}
+
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>
+                      <p id="cl-motivo" style={{ margin: 0, flex: 1, minWidth: 180, fontSize: 12, color: 'var(--ink-3)', textWrap: 'pretty' }}>
+                        {faltaDeLaConstancia ??
+                          (confirmandoConstancia
+                            ? 'Se numerará la constancia, quedará asentada en la bitácora y se descargará el papel. Aquí no se anula un documento emitido: vuelve a pulsar para confirmar.'
+                            : 'Emitir numera un documento oficial y es irreversible. Se confirma antes de mandar.')}
+                      </p>
+                      <button
+                        onClick={() => void emitirConstancia()}
+                        disabled={!puedeEmitirConstancia}
+                        title={faltaDeLaConstancia}
+                        aria-describedby="cl-motivo"
+                        className={puedeEmitirConstancia ? 'hov-acento-2' : undefined}
+                        style={{ border: 0, borderRadius: 6, padding: '11px 22px', background: 'var(--accent)', color: '#fff', fontSize: 13.5, fontWeight: 500, cursor: puedeEmitirConstancia ? 'pointer' : 'not-allowed', opacity: puedeEmitirConstancia ? 1 : 0.5 }}
+                      >
+                        {emitiendoConstancia ? 'Emitiendo…' : confirmandoConstancia ? 'Sí: emitir la constancia' : 'Emitir la constancia'}
+                      </button>
+                    </div>
+                  </>
                 )}
 
                 {!h.sinLectura && faltaCriterio && (

@@ -3,8 +3,9 @@ import { Shell, type EntradaDePaleta } from '../../shell/Shell';
 import type { PantallaProps } from '../../App';
 import { Icono } from '../../ds/Icono';
 import { ICO } from '../../ds/iconos';
-import { Insignia, type Tono } from '../../ds/componentes';
+import { Insignia, Paginador, type Tono } from '../../ds/componentes';
 import { usarPreferencias } from '../../shell/preferencias';
+import { causasDelRechazo } from '../../api/Fallo';
 import {
   BANDEJA,
   COLS_ACTOS,
@@ -121,14 +122,6 @@ const ENTRADILLA: CSSProperties = {
   color: 'var(--ink-2)',
   maxWidth: '70ch',
   textWrap: 'pretty',
-};
-const BOTON_SEC: CSSProperties = {
-  border: '1px solid var(--line-2)',
-  borderRadius: 6,
-  padding: '10px 18px',
-  background: 'var(--bg-card)',
-  fontSize: 13,
-  cursor: 'pointer',
 };
 const BOTON_PRI: CSSProperties = {
   border: 0,
@@ -338,7 +331,10 @@ function EstadoDeLectura({
           : e.codigo === 'NO_AUTENTICADO'
             ? 'La sesión no vale'
             : e.codigo === 'VALIDACION'
-              ? 'El servidor no admite esa consulta'
+              ? /* No dice «no admite esa consulta»: un 422 de coactiva puede ser
+                   también el arancel de costas sin publicar (#562), y ese
+                   titular manda a corregir unos criterios que están bien. */
+                'El servidor rechazó esta consulta'
               : 'No se pudo leer'}
       </p>
       <p style={{ margin: 0, maxWidth: '58ch', fontSize: 12.5, lineHeight: 1.55, color: 'var(--ink-3)', textAlign: 'center', textWrap: 'pretty' }}>
@@ -1225,25 +1221,13 @@ export default function Coactiva({ dest, onDest }: PantallaProps) {
                   ])}
                   nota={`Las cifras están actualizadas al ${lista.datos.contenido[0]?.deudaAlDia ?? SIN_DATO} (regla 9). «Cód. obligado» es el código del padrón y no su nombre: ExpedienteResource no publica el nombre —sí lo hace la consulta de deudas—.`}
                 />
-                <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-                  <button
-                    onClick={() => setPagina((p) => Math.max(0, p - 1))}
-                    disabled={pagina === 0}
-                    style={{ ...BOTON_SEC, opacity: pagina === 0 ? 0.5 : 1 }}
-                  >
-                    Anterior
-                  </button>
-                  <span style={{ fontSize: 12, color: 'var(--ink-3)' }}>
-                    Página {lista.datos.pagina + 1} de {Math.max(1, lista.datos.totalPaginas)}
-                  </span>
-                  <button
-                    onClick={() => setPagina((p) => p + 1)}
-                    disabled={!lista.datos.hayMas}
-                    style={{ ...BOTON_SEC, opacity: lista.datos.hayMas ? 1 : 0.5 }}
-                  >
-                    Siguiente
-                  </button>
-                </div>
+                <Paginador
+                  pagina={lista.datos.pagina}
+                  totalPaginas={lista.datos.totalPaginas}
+                  hayMas={lista.datos.hayMas}
+                  ir={setPagina}
+                  style={{ padding: 0, borderTop: 'none' }}
+                />
               </>
             )}
           </>
@@ -1516,6 +1500,18 @@ export default function Coactiva({ dest, onDest }: PantallaProps) {
                       <Franja tono="bad">
                         {falloDeEscritura.mensaje}
                         {falloDeEscritura.incidencia ? ` · ref ${falloDeEscritura.incidencia}` : ''}
+                        {/* Dictar la REC-1 lee su plazo del conjunto sellado, y
+                            desde #562 eso contesta 422 nombrando la llave en vez
+                            de un 500 con incidencia. El 422 llega con el mismo
+                            código que un campo mal puesto, así que la pantalla
+                            no lo adivina: dice las dos causas y en qué se
+                            reconocen. Va sólo aquí —importar valores no lee
+                            ningún parámetro sellado— y sólo en el 422. */}
+                        {causasDelRechazo(falloDeEscritura, 'PLAZO:REC1_CUMPLIMIENTO') !== null && (
+                          <span style={{ display: 'block', marginTop: 6, opacity: 0.85 }}>
+                            {causasDelRechazo(falloDeEscritura, 'PLAZO:REC1_CUMPLIMIENTO')}
+                          </span>
+                        )}
                       </Franja>
                     )}
 
@@ -1789,25 +1785,13 @@ export default function Coactiva({ dest, onDest }: PantallaProps) {
                   </section>
                 )}
 
-                <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-                  <button
-                    onClick={() => setDPagina((p) => Math.max(0, p - 1))}
-                    disabled={dPagina === 0}
-                    style={{ ...BOTON_SEC, opacity: dPagina === 0 ? 0.5 : 1 }}
-                  >
-                    Anterior
-                  </button>
-                  <span style={{ fontSize: 12, color: 'var(--ink-3)' }}>
-                    Página {deudas.datos.pagina + 1} de {Math.max(1, deudas.datos.totalPaginas)}
-                  </span>
-                  <button
-                    onClick={() => setDPagina((p) => p + 1)}
-                    disabled={!deudas.datos.hayMas}
-                    style={{ ...BOTON_SEC, opacity: deudas.datos.hayMas ? 1 : 0.5 }}
-                  >
-                    Siguiente
-                  </button>
-                </div>
+                <Paginador
+                  pagina={deudas.datos.pagina}
+                  totalPaginas={deudas.datos.totalPaginas}
+                  hayMas={deudas.datos.hayMas}
+                  ir={setDPagina}
+                  style={{ padding: 0, borderTop: 'none' }}
+                />
               </>
             )}
           </>

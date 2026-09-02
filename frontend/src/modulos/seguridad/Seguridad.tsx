@@ -3,6 +3,8 @@ import { Icono } from '../../ds/Icono';
 import {
   fijarPermisosDelGrupo,
   gruposDelUsuario,
+  identidadDeLaSesion,
+  iniciarCambioDeClave,
   listarAccesos,
   listarAuditoria,
   listarConjuntosDeParametros,
@@ -10,18 +12,21 @@ import {
   listarModulos,
   listarRespaldos,
   listarUsuarios,
+  miembrosDelGrupo,
   permisosDelGrupo,
   permisosEfectivosDelUsuario,
   OPERACIONES,
   PRIVILEGIOS,
   ROTULO_DEL_PRIVILEGIO,
   type Acceso,
+  type CambioDeClaveIniciado,
   type PermisoEfectivo,
   type Privilegio,
 } from '../../api/seguridad';
 import { FalloDeLectura } from '../../api/Fallo';
-import { Aviso } from '../../ds/componentes';
+import { Aviso, Paginador } from '../../ds/componentes';
 import { ErrorDeApi } from '../../api/cliente';
+import { enElProveedorDeIdentidad } from '../../api/sesion';
 import { useRebote, useRecurso } from '../../api/useRecurso';
 import { ICO } from '../../ds/iconos';
 import { Shell, type EntradaDePaleta } from '../../shell/Shell';
@@ -120,6 +125,61 @@ const DESTINOS: [string, string][] = [
 /** Lo que se dibuja donde el backend no publica el dato. Nunca un cero. */
 const SIN_DATO = '—';
 
+/**
+ * «N miembros», escrito en un solo sitio (#582).
+ *
+ * Lo dicen dos: el nodo del arbol y la cabecera del grupo elegido. Salen de la
+ * MISMA cifra, asi que escribirlo dos veces es dejar que uno diga «0 miembros»
+ * donde el otro dice «sin miembros» por la misma respuesta del servidor —y el
+ * cero es justo el que hay que decir con palabras, porque «0» al lado de un
+ * grupo se lee igual que un dato que no llego—.
+ */
+function cuantosMiembros(n: number): string {
+  if (n === 0) return 'Sin miembros';
+  return n === 1 ? '1 miembro' : n + ' miembros';
+}
+
+/**
+ * Lo que la cabecera dice de un grupo elegido (#582).
+ *
+ * Va aparte del JSX porque son **cinco** estados y ninguno se puede confundir
+ * con otro: todavia leyendo, caido, sin nadie, leido entero y leido a medias.
+ * Los dos ultimos son los que importan, y su diferencia no se ve en la cifra:
+ * `total` lo cuenta el servidor sobre el grupo entero —viaja en el sobre
+ * paginado— y `sinPoderEntrar` lo cuenta la pantalla sobre las filas que
+ * llegaron. Con mas de una pagina esa segunda cuenta seria la de la pagina
+ * presentada como la del grupo: un numero mas pequeno que el real, y ninguna
+ * pantalla lo distinguiria del bueno. Por eso ahi entra `null` y se dice «—»
+ * con el motivo, en vez de un cero que se leeria como «todos pueden entrar».
+ *
+ * Y «no se pudo leer» no se dice callando ni con un cero: quien administra
+ * necesita distinguir un grupo sin miembros de un grupo cuyos miembros no se
+ * han podido consultar, que es lo que separa «nadie hereda esto» de «no lo
+ * sabemos». El detalle —403 sin permiso, 404 grupo inexistente— lo dice el
+ * aviso de debajo, que sale de la misma lectura.
+ */
+function loQueSeSabeDelGrupo(
+  cargando: boolean,
+  fallo: boolean,
+  total: number | null,
+  sinPoderEntrar: number | null,
+): string {
+  if (fallo) return 'Grupo · no se pudo leer quién está dentro';
+  if (total === null) return cargando ? 'Grupo · leyendo quién está dentro…' : 'Grupo';
+  /* Cero miembros es una respuesta del backend, no una falta de dato: el grupo
+     existe —si no existiera seria 404— y no lo tiene nadie. Lo que se dice es
+     la consecuencia, que es lo que hace falta saber al mirar su matriz: sus
+     permisos no se los hereda nadie. Y ahi no cabe la segunda cifra, porque
+     «ninguno deshabilitado» sobre cero personas es cierto y no dice nada. */
+  if (total === 0) return cuantosMiembros(0) + ' · nadie hereda lo que concede';
+  const cuantos = cuantosMiembros(total);
+  if (sinPoderEntrar === null) {
+    return cuantos + ' · cuántos deshabilitados: ' + SIN_DATO + ' (no caben en una página)';
+  }
+  if (sinPoderEntrar === 0) return cuantos + ' · ninguno deshabilitado';
+  return cuantos + ' · ' + sinPoderEntrar + (sinPoderEntrar === 1 ? ' deshabilitado' : ' deshabilitados');
+}
+
 type Seleccion = { tipo: 'usuario' | 'grupo'; id: number };
 
 type CeldaDeMatriz = { privilegio: Privilegio; on: boolean };
@@ -149,6 +209,13 @@ export default function Seguridad({ dest, onDest }: PantallaProps) {
   const [errorAlGuardar, setErrorAlGuardar] = useState<ErrorDeApi | null>(null);
   const [sisTab, setSisTab] = useState(0);
   const [vals, setVals] = useState<Record<string, string | boolean>>({});
+  /* El cambio de contraseña, que es la otra escritura de esta pantalla (#559).
+     `cambioIniciado` no es un rótulo de éxito: es lo que el servidor contestó
+     —quién gestiona la credencial y a qué ruta suya hay que ir—, y se guarda
+     porque ese destino no se puede inventar. */
+  const [cambiandoClave, setCambiandoClave] = useState(false);
+  const [errorAlCambiar, setErrorAlCambiar] = useState<ErrorDeApi | null>(null);
+  const [cambioIniciado, setCambioIniciado] = useState<CambioDeClaveIniciado | null>(null);
 
   const val = (k: string, d: string | boolean) => (vals[k] === undefined ? d : vals[k]);
   const set = (k: string, v: string | boolean) => setVals((s) => ({ ...s, [k]: v }));
@@ -189,6 +256,39 @@ export default function Seguridad({ dest, onDest }: PantallaProps) {
     [sel?.id],
     enAccesos && esGrupo,
   );
+
+  /* ── Quienes estan DENTRO del grupo elegido (#582) ──────────────
+     Se pide **solo del grupo seleccionado**, no de cada nodo del arbol. Un
+     recuento al lado de cada grupo cuesta una peticion por grupo al abrir la
+     pantalla, que es exactamente lo que #583 esta abierto para evitar en el
+     panel, y `listarGrupos` de aqui arriba pide hasta 100: la cuenta no la
+     acota el dato sino la paginacion. Asi son cero peticiones de mas —esta es
+     la que la cabecera necesita igual— y todo numero que se dibuja es uno que
+     se pidio.
+
+     `tamano: 200` es el mismo que el padron de cuentas, y no es holgura: los
+     deshabilitados solo se pueden contar sobre las filas que llegaron, asi que
+     hace falta que quepan todas. Cuando no quepan, `hayMas` lo dice y esa
+     segunda cifra no se da. */
+  const miembrosDelGrupoElegido = useRecurso(
+    (s) => miembrosDelGrupo(sel!.id, { tamano: 200 }, s),
+    [sel?.id],
+    enAccesos && esGrupo,
+  );
+
+  /* Las dos cifras salen de la MISMA lectura y **no de la misma forma**, y esa
+     diferencia es la que hay que respetar: `totalElementos` lo cuenta el
+     servidor sobre el grupo entero, y los deshabilitados los cuenta esta
+     pantalla sobre la pagina. Con mas de una pagina, contar la primera y
+     presentarlo como del grupo daria un numero mas pequeno que el real —el que
+     nadie sabria distinguir del bueno—, asi que ahi vale `null` y la cabecera
+     dice «—» con su motivo. Es la misma guarda que `usuariosCompletos` del
+     panel, sobre otra lectura. */
+  const nMiembros = miembrosDelGrupoElegido.datos?.totalElementos ?? null;
+  const nMiembrosSinPoderEntrar =
+    miembrosDelGrupoElegido.datos !== null && !miembrosDelGrupoElegido.datos.hayMas
+      ? miembrosDelGrupoElegido.datos.contenido.filter((u) => !u.habilitado).length
+      : null;
 
   /* ── Y las dos de un USUARIO, que antes no existian (#543) ──────
      `permisosEfectivosDelUsuario` trae la matriz YA resuelta —una fila por
@@ -332,11 +432,15 @@ export default function Seguridad({ dest, onDest }: PantallaProps) {
         tipo: 'grupo',
         id: g.id,
         label: g.nombre,
-        /* No hay lectura de miembros —`/grupos/{id}/miembros` es sólo POST—, así
-           que aquí va la descripción del grupo y nunca un recuento. Derivarlo
-           costaría una petición POR USUARIO y sólo sería exacto con la página de
-           usuarios completa: pedido en #582. */
-        nota: g.descripcion ?? 'Sin descripción',
+        /* «N miembros» **sólo en el grupo elegido**, que es el único cuyo
+           recuento se ha pedido (#582, #646). Ponerlo en todos costaría una
+           petición por grupo nada más abrir —lo que #583 existe para evitar— y
+           ponerlo sin pedirlo sería dibujar una cifra que nadie contestó. El
+           resto se quedan con su descripción, que es lo que ya decían. */
+        nota:
+          sel?.tipo === 'grupo' && sel.id === g.id && nMiembros !== null
+            ? cuantosMiembros(nMiembros)
+            : (g.descripcion ?? 'Sin descripción'),
         marca: g.habilitado ? '' : 'Deshabilitado',
       }),
     );
@@ -353,7 +457,7 @@ export default function Seguridad({ dest, onDest }: PantallaProps) {
     return lista.filter(
       (n) => filtro === '' || n.label.toLowerCase().indexOf(filtro) >= 0 || n.nota.toLowerCase().indexOf(filtro) >= 0,
     );
-  }, [q, grupos, usuarios]);
+  }, [q, grupos, usuarios, sel?.tipo, sel?.id, nMiembros]);
 
   /* ── Los hallazgos del panel: los que SÍ se pueden calcular ─────
      El artboard listaba cuatro y ninguno se podía. Con #543 uno cambió de
@@ -588,6 +692,68 @@ export default function Seguridad({ dest, onDest }: PantallaProps) {
      este ejercicio», y esa sólo tiene respuesta a nivel de conjunto. */
   const enParametros = dest === 'sistema' && sisIdx === 1;
   const conjuntos = useRecurso((s) => listarConjuntosDeParametros({ tamano: 20, ordenarPor: 'ejercicio', direccion: 'DESCENDENTE' }, s), [], enParametros);
+
+  /* ── Mi contraseña: la segunda escritura de esta pantalla (#559) ──
+     La pestaña se reconoce por su rótulo y no por su índice como las dos de
+     arriba, y la diferencia importa porque de aquí cuelga un acto: un panel
+     insertado delante movería el cambio de contraseña a otra pestaña —dejaría
+     «Cambiar el ejercicio» habilitado y, al pulsarlo, mandaría el `PUT` de la
+     clave—. Un índice movido en «Parámetros» o en «Copias» sólo dibuja una
+     tabla donde no toca. */
+  const enClave = dest === 'sistema' && sisDef.label === 'Mi contraseña';
+  /* Quién eres, que hasta #559 no lo publicaba ninguna lectura al alcance de
+     esta pantalla: `usuario.id` sólo salía del padrón de usuarios y de la matriz
+     de otro, las dos detrás de un permiso de administración mucho mayor que
+     «cambiar mi propia contraseña». */
+  const identidad = useRecurso((s) => identidadDeLaSesion(s), [], enClave);
+  const observacionDelCambio = String(val('cMotivo', '')).trim();
+
+  /* Lo que impide el acto es de ejecución, no estructural: por eso se calcula
+     aquí y `panelesDeSistema` deja el impedimento de esta pestaña vacío. */
+  const impedimentoDelCambioDeClave =
+    identidad.error !== null
+      ? 'No se ha podido leer quién eres en esta municipalidad, y sin tu identificador la petición no puede salir.'
+      : identidad.datos === null
+        ? 'Todavía no se ha leído quién eres en esta municipalidad.'
+        : cambioIniciado !== null
+          ? 'El cambio ya está iniciado: la contraseña se termina de cambiar en el proveedor de identidad, con el enlace de aquí arriba.'
+          : observacionDelCambio === ''
+            ? 'Falta el motivo: toda modificación se registra con el motivo de quien la hace (RNF-052).'
+            : '';
+  const impedimentoDeSistema = enClave ? impedimentoDelCambioDeClave : sisDef.impedimento;
+  const puedeCambiarLaClave = enClave && impedimentoDeSistema === '' && !cambiandoClave;
+
+  /* Al salir de la pestaña se olvida lo que pasó en ella. La confirmación de un
+     cambio ya iniciado, leída al volver, diría de un acto de hace una hora lo
+     mismo que del de hace un segundo. */
+  useEffect(() => {
+    if (enClave) return;
+    setCambioIniciado(null);
+    setErrorAlCambiar(null);
+  }, [enClave]);
+
+  const cambiarLaClave = async () => {
+    const yo = identidad.datos;
+    if (!puedeCambiarLaClave || yo === null) return;
+    setCambiandoClave(true);
+    setErrorAlCambiar(null);
+    try {
+      /* El id sale de la lectura de la sesión y nunca de una lista: el servidor
+         compara la cuenta del token con la del usuario que ese id nombra y
+         contesta 403 si no son la misma. Cambiar la de otro no es administrar,
+         es suplantar. */
+      const iniciado = await iniciarCambioDeClave(yo.usuarioId, observacionDelCambio);
+      setCambioIniciado(iniciado);
+      set('cMotivo', '');
+      toast('Cambio iniciado. Queda en la auditoría con tu usuario.');
+    } catch (fallo) {
+      setErrorAlCambiar(
+        fallo instanceof ErrorDeApi ? fallo : new ErrorDeApi('ERROR_INTERNO', 'No se pudo iniciar el cambio', 0),
+      );
+    } finally {
+      setCambiandoClave(false);
+    }
+  };
 
   /* ── Shell ─────────────────────────────────────────────────── */
   const labelDest = (DESTINOS.find((d) => d[0] === dest) || ['', 'Seguridad'])[1];
@@ -877,9 +1043,15 @@ export default function Seguridad({ dest, onDest }: PantallaProps) {
                         </p>
                         <p style={{ margin: '3px 0 0', fontSize: 12.5, color: 'var(--ink-3)', textWrap: 'pretty' }}>
                           {esGrupo
-                            ? /* Nunca «N miembros»: `/grupos/{id}/miembros` es sólo
-                                 POST, así que ese recuento no existe (#582). */
-                              'Grupo · el backend no publica quién está dentro (#582)'
+                            ? /* Desde #646 la ruta tiene su `GET` y el recuento se puede
+                                 decir. Las dos cifras salen de la misma lectura y no de la
+                                 misma forma: ver `loQueSeSabeDelGrupo`. */
+                              loQueSeSabeDelGrupo(
+                                miembrosDelGrupoElegido.cargando,
+                                miembrosDelGrupoElegido.error !== null,
+                                nMiembros,
+                                nMiembrosSinPoderEntrar,
+                              )
                             : 'Cuenta ' + (usuarioElegido?.cuenta ?? SIN_DATO) + (usuarioElegido?.correo ? ' · ' + usuarioElegido.correo : '')}
                         </p>
                       </div>
@@ -915,6 +1087,31 @@ export default function Seguridad({ dest, onDest }: PantallaProps) {
                           ],
                         ]}
                       />
+                    )}
+                    {/* El fallo de ESTA lectura se dice aquí y no arriba con los
+                        de la página: los de arriba son de listados que valen
+                        para toda la pantalla, y éste es de un grupo concreto.
+
+                        El 404 no es un fallo que reintentar sino una respuesta
+                        —ese grupo no existe en esta municipalidad, y desde el
+                        árbol sólo se llega ahí si alguien lo dio de baja entre
+                        las dos lecturas—. No hace falta separarlo a mano:
+                        `FalloDeLectura` decide por CÓDIGO, y `NO_ENCONTRADO` no
+                        es `reintentable`, así que no ofrece el botón de volver a
+                        intentar e imprime el mensaje del servidor, que es el que
+                        nombra el grupo. Un 403 tampoco lo ofrece —lo que dice
+                        ahí es qué acceso hace falta—, y `alReintentar` se pasa
+                        igual porque una red caída o un 500 sí se arreglan
+                        insistiendo, y ésos son los dos únicos que lo pintan. */}
+                    {esGrupo && miembrosDelGrupoElegido.error !== null && (
+                      <div style={{ padding: '13px 16px 0' }}>
+                        <FalloDeLectura
+                          error={miembrosDelGrupoElegido.error}
+                          que="la lista de miembros del grupo"
+                          acceso="grupos"
+                          alReintentar={miembrosDelGrupoElegido.reintentar}
+                        />
+                      </div>
                     )}
                     {/* Las de una CUENTA, y la tercera es la que este arreglo
                         hizo posible: cuantos de sus permisos son excepcion
@@ -1448,28 +1645,13 @@ export default function Seguridad({ dest, onDest }: PantallaProps) {
               {/* La bitácora del ejercicio son miles de filas y la página son 20.
                   Sin estos dos botones sólo se podía ver una página de 74, y el
                   pie decía «20 de 1 481» como si eso fuera todo. */}
-              {auditoria.datos !== null && auditoria.datos.totalPaginas > 1 && (
-                <div style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '10px 16px', borderTop: '1px solid var(--line)' }}>
-                  <button
-                    onClick={() => setPaginaAud((n) => Math.max(0, n - 1))}
-                    disabled={paginaAud === 0}
-                    className="hov-linea"
-                    style={{ ...BOTON_LINEA, opacity: paginaAud === 0 ? 0.45 : 1, cursor: paginaAud === 0 ? 'not-allowed' : 'pointer' }}
-                  >
-                    Anterior
-                  </button>
-                  <span style={{ fontFamily: 'var(--font-mono)', fontSize: 12, color: 'var(--ink-3)' }}>
-                    {auditoria.datos.pagina + 1} de {auditoria.datos.totalPaginas.toLocaleString('es-PE')}
-                  </span>
-                  <button
-                    onClick={() => setPaginaAud((n) => n + 1)}
-                    disabled={!auditoria.datos.hayMas}
-                    className="hov-linea"
-                    style={{ ...BOTON_LINEA, opacity: auditoria.datos.hayMas ? 1 : 0.45, cursor: auditoria.datos.hayMas ? 'pointer' : 'not-allowed' }}
-                  >
-                    Siguiente
-                  </button>
-                </div>
+              {auditoria.datos !== null && (
+                <Paginador
+                  pagina={auditoria.datos.pagina}
+                  totalPaginas={auditoria.datos.totalPaginas}
+                  hayMas={auditoria.datos.hayMas}
+                  ir={setPaginaAud}
+                />
               )}
 
               <p style={{ margin: 0, padding: '11px 16px', borderTop: '1px solid var(--line)', background: 'var(--bg-elev)', fontSize: 12, lineHeight: 1.5, color: 'var(--ink-3)', textWrap: 'pretty' }}>
@@ -1627,13 +1809,71 @@ export default function Seguridad({ dest, onDest }: PantallaProps) {
                 </div>
               )}
 
+              {/* Quién eres, que es lo único que la petición lleva además del
+                  motivo. El artboard no dibujaba nada de esto: daba por hecho
+                  que la pantalla sabía a quién estaba cambiando la contraseña, y
+                  hasta #559 no lo sabía. */}
+              {enClave && (
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 12, padding: '14px 16px', borderTop: '1px solid var(--line)' }}>
+                  {identidad.error !== null && (
+                    <FalloDeLectura error={identidad.error} que="quién eres en esta municipalidad" alReintentar={identidad.reintentar} />
+                  )}
+                  {identidad.cargando && (
+                    <p style={{ margin: 0, fontSize: 12.5, color: 'var(--ink-3)' }}>Leyendo quién eres…</p>
+                  )}
+                  {identidad.datos !== null && (
+                    <p style={{ margin: 0, fontSize: 12.5, lineHeight: 1.55, color: 'var(--ink-3)', textWrap: 'pretty' }}>
+                      Se cambia la contraseña de{' '}
+                      <strong style={{ fontWeight: 600, color: 'var(--ink-2)' }}>{identidad.datos.nombre}</strong>{' '}
+                      <span style={{ fontFamily: 'var(--font-mono)' }}>({identidad.datos.cuenta})</span>, el usuario n.º{' '}
+                      <span style={{ fontFamily: 'var(--font-mono)' }}>{identidad.datos.usuarioId}</span> de esta municipalidad. Sólo
+                      la propia: el servidor compara la cuenta de tu token con la de ese identificador y rechaza cualquier otro.
+                    </p>
+                  )}
+                  {errorAlCambiar !== null && (
+                    <Aviso tono="bad" titulo="No se inició ningún cambio">
+                      {errorAlCambiar.mensaje}
+                    </Aviso>
+                  )}
+                  {cambioIniciado !== null && (
+                    <Aviso tono="ok" titulo="Cambio iniciado, y anotado en la bitácora">
+                      El backend no ha recibido ninguna contraseña: registró el acto con tu motivo y contestó quién la guarda
+                      —<span style={{ fontFamily: 'var(--font-mono)' }}>{cambioIniciado.gestionadaPor}</span>— y a qué ruta suya
+                      hay que ir —<span style={{ fontFamily: 'var(--font-mono)' }}>{cambioIniciado.destino}</span>—. La ruta es la
+                      que contestó el servidor; lo único que pone esta pantalla es la base, que es el mismo emisor con el que
+                      entraste.
+                      <span style={{ display: 'block', marginTop: 9 }}>
+                        <a
+                          href={enElProveedorDeIdentidad(cambioIniciado.destino)}
+                          className="hov-acento-2"
+                          style={{
+                            display: 'inline-block',
+                            borderRadius: 6,
+                            padding: '9px 18px',
+                            background: 'var(--accent)',
+                            color: '#fff',
+                            fontSize: 12.5,
+                            fontWeight: 500,
+                            textDecoration: 'none',
+                          }}
+                        >
+                          Ir a {enElProveedorDeIdentidad(cambioIniciado.destino)}
+                        </a>
+                      </span>
+                    </Aviso>
+                  )}
+                </div>
+              )}
+
               <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap', padding: '13px 16px', borderTop: '1px solid var(--line)', background: 'var(--bg-elev)' }}>
-                <p style={{ margin: 0, flex: 1, minWidth: 170, fontSize: 12, color: 'var(--ink-3)', textWrap: 'pretty' }}>
-                  {sisDef.impedimento === '' ? sisDef.pie : sisDef.impedimento}
+                <p id="motivo-de-la-primaria" style={{ margin: 0, flex: 1, minWidth: 170, fontSize: 12, color: 'var(--ink-3)', textWrap: 'pretty' }}>
+                  {impedimentoDeSistema === '' ? sisDef.pie : impedimentoDeSistema}
                 </p>
                 <button
-                  disabled={sisDef.impedimento !== ''}
-                  title={sisDef.impedimento || undefined}
+                  onClick={() => void cambiarLaClave()}
+                  disabled={impedimentoDeSistema !== '' || cambiandoClave}
+                  title={impedimentoDeSistema || undefined}
+                  aria-describedby="motivo-de-la-primaria"
                   style={{
                     border: 0,
                     borderRadius: 6,
@@ -1642,11 +1882,11 @@ export default function Seguridad({ dest, onDest }: PantallaProps) {
                     color: '#fff',
                     fontSize: 13,
                     fontWeight: 500,
-                    cursor: sisDef.impedimento === '' ? 'pointer' : 'not-allowed',
-                    opacity: sisDef.impedimento === '' ? 1 : 0.5,
+                    cursor: impedimentoDeSistema === '' && !cambiandoClave ? 'pointer' : 'not-allowed',
+                    opacity: impedimentoDeSistema === '' && !cambiandoClave ? 1 : 0.5,
                   }}
                 >
-                  {sisDef.primaria}
+                  {cambiandoClave ? 'Iniciando…' : sisDef.primaria}
                 </button>
               </div>
             </section>

@@ -14,6 +14,7 @@ import java.util.TreeMap;
 import java.util.TreeSet;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
+import pe.gob.sgtm.fiscalizacion.aplicacion.GenerarMuestra;
 import pe.gob.sgtm.fiscalizacion.infraestructura.web.LiquidacionController;
 import pe.gob.sgtm.fiscalizacion.infraestructura.web.LiquidacionResource;
 import pe.gob.sgtm.fiscalizacion.infraestructura.web.MuestraController;
@@ -139,6 +140,20 @@ class OrdenDeLosListadosTest {
     }
 
     @Test
+    @DisplayName("y el orden con que el SORTEO recorre el padron tambien: no solo el del GET")
+    void elOrdenDelRecorridoDelSorteoEstaAdmitido() {
+        // El hueco que #586 encontro ejecutando. `GenerarMuestra` no es un controlador y por eso
+        // no entraba en la prueba de arriba: recorre el padron por paginas llamando a la MISMA
+        // consulta, y pedia `predio_id`, que #546 saco de la lista blanca —con razon— dejandolo
+        // solo como desempate. Desde ese merge `POST /fiscalizacion/programas/{id}/muestra`
+        // contestaba 422 ORDEN_NO_ADMITIDO para todo programa, y no lo veia nadie porque
+        // `GenerarMuestraTest` habla con un doble que ignora la `Paginacion`.
+        assertThat(DeteccionRepositoryJdbc.ORDEN.camposAdmitidos())
+                .as("el sorteo recorre la deteccion, asi que su orden es de esta lista blanca")
+                .contains(constanteDe(GenerarMuestra.class, "ORDEN_DEL_RECORRIDO"));
+    }
+
+    @Test
     @DisplayName("publicandoComo retira el camelCase automatico: no deja los dos nombres vivos")
     void publicandoComoRetiraElNombreInterno() {
         assertThat(DeteccionRepositoryJdbc.ORDEN.camposAdmitidos())
@@ -164,13 +179,16 @@ class OrdenDeLosListadosTest {
 
     /** La constante privada {@code ORDEN_POR_OMISION} del controlador. */
     private static String ordenPorOmisionDe(Class<?> controlador) {
+        return constanteDe(controlador, "ORDEN_POR_OMISION");
+    }
+
+    /** Una constante de texto privada, leida del propio codigo: una copia a mano envejeceria. */
+    private static String constanteDe(Class<?> clase, String nombre) {
         List<Field> campos =
-                Arrays.stream(controlador.getDeclaredFields())
-                        .filter(campo -> "ORDEN_POR_OMISION".equals(campo.getName()))
+                Arrays.stream(clase.getDeclaredFields())
+                        .filter(campo -> nombre.equals(campo.getName()))
                         .toList();
-        assertThat(campos)
-                .as("%s no declara ORDEN_POR_OMISION", controlador.getSimpleName())
-                .hasSize(1);
+        assertThat(campos).as("%s no declara %s", clase.getSimpleName(), nombre).hasSize(1);
         try {
             Field campo = campos.get(0);
             campo.setAccessible(true);

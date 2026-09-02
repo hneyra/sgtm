@@ -17,6 +17,7 @@ import org.springframework.test.web.servlet.request.MockMvcRequestBuilders;
 import org.springframework.test.web.servlet.setup.MockMvcBuilders;
 import pe.gob.sgtm.auditoria.RegistroDeAuditoria;
 import pe.gob.sgtm.contribuyentes.ResumenDeContribuyente;
+import pe.gob.sgtm.valores.aplicacion.ConsultaDePrescripciones;
 import pe.gob.sgtm.valores.aplicacion.DeclararPrescripcion;
 import pe.gob.sgtm.valores.aplicacion.PlazosParametrizados;
 import pe.gob.sgtm.valores.dobles.ContribuyentesDeMentira;
@@ -55,10 +56,14 @@ class PrescripcionControllerTest {
                     new PlazosParametrizados(parametros),
                     (RegistroDeAuditoria registro) -> {});
 
+    private final ConsultaDePrescripciones consulta =
+            new ConsultaDePrescripciones(prescripciones, contribuyentes);
+
     private final MockMvc mvc =
             MockMvcBuilders.standaloneSetup(
                             new PrescripcionController(
                                     declarar,
+                                    consulta,
                                     contribuyentes,
                                     Clock.fixed(
                                             HOY.atStartOfDay(ZoneOffset.UTC).toInstant(),
@@ -94,6 +99,33 @@ class PrescripcionControllerTest {
         // La resolucion tiene que poder sustentarse: sale el computo de los tres ejercicios.
         assertThat(cuerpo).contains("\"ejercicio\":2020").contains("\"ejercicio\":2022");
         assertThat(cuerpo).contains("\"inicioDelComputo\":\"2021-01-01\"");
+    }
+
+    @Test
+    @DisplayName("y lo declarado sale por la relacion, con los ejercicios que prescribieron (#674)")
+    void loDeclaradoSaleEnLaRelacion() throws Exception {
+        declararRango(
+                """
+                {"codContribuyente":"C-0007","tributo":"PREDIAL",
+                 "ejercicioDesde":2020,"ejercicioHasta":2022,
+                 "fechaDePresentacion":"2026-06-01",
+                 "plazoAplicable":"DECLARACION_PRESENTADA",
+                 "observacion":"Se resuelve la solicitud"}
+                """);
+
+        MvcResult relacion =
+                mvc.perform(MockMvcRequestBuilders.get("/api/v1/coactiva/prescripcion"))
+                        .andReturn();
+
+        assertThat(relacion.getResponse().getStatus()).isEqualTo(200);
+        String cuerpo = relacion.getResponse().getContentAsString();
+        assertThat(cuerpo).contains("\"totalElementos\":1");
+        assertThat(cuerpo)
+                .as("de 2020 a 2022 prescriben los dos primeros: el tercero todavia es exigible")
+                .contains("\"ejerciciosPrescritos\":[2020,2021]");
+        assertThat(cuerpo)
+                .as("ninguna cifra de dinero: la prescripcion no extingue un importe")
+                .doesNotContain("importe");
     }
 
     @Test
@@ -243,6 +275,7 @@ class PrescripcionControllerTest {
                                                 new ValoresEnMemoria(),
                                                 new PlazosParametrizados(lector),
                                                 (RegistroDeAuditoria registro) -> {}),
+                                        consulta,
                                         contribuyentes,
                                         Clock.fixed(
                                                 HOY.atStartOfDay(ZoneOffset.UTC).toInstant(),

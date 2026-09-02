@@ -9,7 +9,7 @@ import {
   listarResultados,
   listarHistorico,
   leerEstadoDeCuenta,
-  ORDEN_DE_OMISOS,
+  type OrdenDeOmisos,
   type ProgramaDeFiscalizacion,
   type FilaDeMuestra,
 } from '../../api/fiscalizacion';
@@ -17,7 +17,7 @@ import { useRecurso, useRebote } from '../../api/useRecurso';
 import { FalloDeLectura } from '../../api/Fallo';
 import type { ErrorDeApi, RespuestaPaginada } from '../../api/cliente';
 import { ICO } from '../../ds/iconos';
-import { Aviso, Insignia, type Tono } from '../../ds/componentes';
+import { Aviso, Insignia, Paginador, PasoAtras, type Tono } from '../../ds/componentes';
 import { moduloDe } from '../../shell/modulos';
 import { usarPreferencias } from '../../shell/preferencias';
 import {
@@ -98,55 +98,130 @@ const estiloDeCelda = (j: number, cols: ColDef[]): CSSProperties =>
   j === 0 ? TD1 : cols[j] && cols[j][1] ? TDN : TD;
 
 /**
- * Cual es la columna que se puede ordenar, y en que sentido va ahora.
+ * Una cabecera de tabla: su rotulo, si es numerica y —si lo es— por que campo
+ * ordena.
  *
- * `columna` es el ROTULO de la unica columna que el backend admite ordenar, no
- * un indice: si alguien reordena las columnas, el boton sigue en la suya.
+ * `C` es el conjunto de ordenes que ESA consulta admite, y lo trae quien la
+ * llama: la deteccion lo instancia con `OrdenDeOmisos`, medido contra el
+ * backend. Por eso una columna no puede ofrecer un orden que no exista —`orden:
+ * 'titular'` no compila— y las tablas que no admiten ninguno se declaran con
+ * `sinOrden(...)`, que fija `C` en `never`: ahi la propiedad no se puede ni
+ * escribir.
+ *
+ * El campo se declara EN la columna y no en una lista aparte, para que sea
+ * imposible que la cabecera que se pulsa y el orden que viaja se separen.
  */
-type OrdenDeTabla = {
-  columna: string;
-  sentido: 'ASCENDENTE' | 'DESCENDENTE' | null;
-  alternar: () => void;
+type ColumnaDeTabla<C extends string> = { rotulo: string; numerica: 0 | 1; orden?: C };
+
+/** Por que campo ordena la tabla ahora mismo, y como se le pide otro. */
+type OrdenDeTabla<C extends string> = {
+  /**
+   * Campo y sentido van JUNTOS o no va ninguno: `null` es «nadie ha pedido
+   * ningun orden», y en ese estado no hay ningun sentido que ensenar. Dos
+   * campos sueltos obligarian a inventarle una direccion por omision al estado
+   * en que no la hay, que es justo la flecha que no se debe pintar.
+   */
+  activo: { campo: C; sentido: 'ASCENDENTE' | 'DESCENDENTE' } | null;
+  alternar: (campo: C) => void;
 };
 
 /**
- * Las cabeceras, y —solo si se le pasa `orden`— **una** de ellas ordenable.
+ * Declara las columnas de una tabla comprobando que **ofrecen todos** los
+ * ordenes que su consulta admite.
  *
- * Ordenable de una en una y por invitacion, no por omision: cinco tablas de
- * este modulo usan este mismo componente y de todas sus columnas el backend
- * admite ordenar exactamente por una (`ORDEN_DE_OMISOS`, medido). Una cabecera
- * que se pulsa y contesta «orden no admitido» es peor que una que no se pulsa,
- * asi que la que no esta invitada se dibuja como siempre, sin boton y sin
- * `aria-sort`.
+ * Esto existe por como nacio este issue. La deteccion se dejaba ordenar por
+ * tres campos desde que el backend los admitio, y la pantalla seguia ofreciendo
+ * **uno**: las dos listas eran dos, vivian en dos sitios y se separaron sin que
+ * nada lo dijera —no hay sintoma, la tabla ordena, solo que por menos cosas de
+ * las que se puede—. Con esto, ampliar `OrdenDeOmisos` sin darle su cabecera a
+ * la columna que lo ensena **no compila**: el arreglo del backend no se puede
+ * quedar a medio camino en la interfaz.
+ *
+ * Lo que NO comprueba, y por eso la columna se elige a mano: que el orden este
+ * en la cabecera de la columna que ensena ese dato. Poner `orden: 'sector'` en
+ * «Condición» compila igual de bien, y seria una cabecera que mueve las filas
+ * por algo que no esta en pantalla. Contra eso solo hay leerlo.
  */
-function Cabeceras({ cols, orden }: { cols: ColDef[]; orden?: OrdenDeTabla }) {
+function columnasQueOfrecenTodo<C extends string>() {
+  /* La comprobacion va en el tipo de RETORNO y no en el del argumento, y no es
+     un detalle: puesta en el argumento, el molde de la rama del fallo se traga
+     el error de la lista blanca —una columna con `orden: 'titular'` dejaba de
+     decir «no es asignable a OrdenDeOmisos» y pasaba a quejarse de la
+     cobertura, que es otra cosa—. Asi cada defecto se queja de lo suyo: el
+     orden inexistente contra la restriccion de `T`, y el orden sin cabecera
+     contra el tipo con el que se anota `COLUMNAS_DE_OMISOS`, que lo NOMBRA. */
+  return <const T extends readonly ColumnaDeTabla<C>[]>(
+    cols: T,
+  ): [C] extends [Extract<T[number], { orden: string }>['orden']]
+    ? readonly ColumnaDeTabla<C>[]
+    : { 'orden admitido al que ninguna columna le da cabecera': Exclude<C, Extract<T[number], { orden: string }>['orden']> } =>
+    cols as never;
+}
+
+/**
+ * Las columnas de una tabla que no ofrece ningun orden.
+ *
+ * Convierte los `ColDef` del prototipo —pares `[rotulo, numerica]`— en columnas
+ * sin `orden`. Existe para que «esta tabla no se ordena» sea algo que se
+ * escribe una vez y se ve en el sitio de la llamada, en vez de deducirse de que
+ * a `Cabeceras` no se le paso `orden`.
+ */
+function sinOrden(cols: ColDef[]): ColumnaDeTabla<never>[] {
+  return cols.map((c) => ({ rotulo: c[0], numerica: c[1] }));
+}
+
+/**
+ * Las cabeceras, y las que traigan `orden` se pueden pulsar.
+ *
+ * <h2>Por invitacion y una a una, no por omision</h2>
+ *
+ * Cinco tablas de este modulo usan este componente y solo la deteccion admite
+ * ordenar; de sus ocho columnas, **tres** (#608). Una cabecera que se pulsa y
+ * contesta «orden no admitido» es peor que una que no se pulsa: el 422 llega
+ * como un fallo de lectura, la tabla desaparece y quien la pulso no tiene como
+ * saber que lo que fallo fue el orden. Asi que la que no esta invitada se
+ * dibuja como siempre —sin boton, sin flecha y **sin `aria-sort`**—, que es lo
+ * que le dice a un lector de pantalla que esa columna no ordena.
+ *
+ * <h2>Y una cabecera no ordena por lo que no ensena</h2>
+ *
+ * El backend admite ordenar por `sector`, asi que la tabla dibuja la columna
+ * «Sector». Ofrecer el orden sin la columna deja a quien lo pulsa viendo las
+ * filas moverse sin poder ver segun que, que es un orden que no se puede
+ * comprobar.
+ */
+function Cabeceras<C extends string>({ cols, orden }: { cols: readonly ColumnaDeTabla<C>[]; orden?: OrdenDeTabla<C> }) {
   return (
     <>
       {cols.map((c) => {
-        const ordenable = orden !== undefined && orden.columna === c[0];
-        if (!ordenable) {
+        const campo = c.orden;
+        if (orden === undefined || campo === undefined) {
           return (
-            <th key={c[0]} style={c[1] ? THN : TH}>
-              {c[0]}
+            <th key={c.rotulo} style={c.numerica ? THN : TH}>
+              {c.rotulo}
             </th>
           );
         }
-        const flecha = orden.sentido === null ? '↕' : orden.sentido === 'ASCENDENTE' ? '↑' : '↓';
+        /* Activa es la que ordena AHORA, y solo puede haber una: `aria-sort`
+           no admite dos columnas ordenadas a la vez, y de hecho el backend
+           tampoco —`ordenarPor` es un solo campo—. Las otras dos siguen
+           pulsables y dicen «none», que no es «no ordena» sino «no ahora». */
+        const sentido = orden.activo !== null && orden.activo.campo === campo ? orden.activo.sentido : null;
+        const activa = sentido !== null;
+        const flecha = sentido === null ? '↕' : sentido === 'ASCENDENTE' ? '↑' : '↓';
         return (
           <th
-            key={c[0]}
-            style={c[1] ? THN : TH}
-            /* «none» no es «sin ordenar por nada»: es «esta columna no ordena
-               ahora», que es lo que pasa mientras nadie la ha pulsado. */
-            aria-sort={orden.sentido === null ? 'none' : orden.sentido === 'ASCENDENTE' ? 'ascending' : 'descending'}
+            key={c.rotulo}
+            style={c.numerica ? THN : TH}
+            aria-sort={sentido === null ? 'none' : sentido === 'ASCENDENTE' ? 'ascending' : 'descending'}
           >
             <button
               type="button"
-              onClick={orden.alternar}
+              onClick={() => orden.alternar(campo)}
               title={
-                orden.sentido === null
-                  ? 'Ordenar por esta columna. Es la única que el backend admite ordenar.'
-                  : orden.sentido === 'ASCENDENTE'
+                sentido === null
+                  ? 'Ordenar por esta columna, de menor a mayor.'
+                  : sentido === 'ASCENDENTE'
                     ? 'Ordenado de menor a mayor. Pulsa para invertirlo.'
                     : 'Ordenado de mayor a menor. Pulsa para invertirlo.'
               }
@@ -160,12 +235,16 @@ function Cabeceras({ cols, orden }: { cols: ColDef[]; orden?: OrdenDeTabla }) {
                 font: 'inherit',
                 letterSpacing: 'inherit',
                 textTransform: 'inherit',
-                color: orden.sentido === null ? 'inherit' : 'var(--accent-ink)',
+                /* El sentido no se dice solo con la flecha: la activa ademas
+                   cambia de color y de peso, porque una flecha de 11 px es lo
+                   primero que se pierde en una tabla de ocho columnas. */
+                color: activa ? 'var(--accent-ink)' : 'inherit',
+                fontWeight: activa ? 600 : 'inherit',
                 cursor: 'pointer',
               }}
             >
-              {c[0]}
-              <span aria-hidden="true" style={{ fontSize: 11, opacity: orden.sentido === null ? 0.55 : 1 }}>
+              {c.rotulo}
+              <span aria-hidden="true" style={{ fontSize: 11, opacity: activa ? 1 : 0.55 }}>
                 {flecha}
               </span>
             </button>
@@ -352,52 +431,6 @@ const BOTON_APAGADO: CSSProperties = {
   cursor: 'not-allowed',
 };
 
-/** La paginacion de la tabla de deteccion. */
-function Paginas({
-  pagina,
-  totalPaginas,
-  hayMas,
-  ir,
-}: {
-  pagina: number;
-  totalPaginas: number;
-  hayMas: boolean;
-  ir: (n: number) => void;
-}) {
-  if (totalPaginas <= 1) return null;
-  const linea: CSSProperties = { border: '1px solid var(--line-2)', borderRadius: 6, padding: '7px 14px', background: 'var(--bg-card)', fontSize: 12.5 };
-  /* No hace falta apagarlos mientras la siguiente viaja —y en Catacaos viaja
-     8,5 s (#561)—: `useRecurso` vacia `datos` en cuanto la pregunta cambia, asi
-     que durante la espera no hay paginador que pulsar ni filas viejas debajo
-     del numero nuevo. Medido: a 0,5 / 1,5 / 3 / 5 s de pulsar «Siguiente» la
-     tabla tiene 0 filas y el pie dice «Consultando el padron…». */
-  const atras = pagina === 0;
-  const alante = hayMas;
-  return (
-    <div style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '10px 16px', borderTop: '1px solid var(--line)' }}>
-      <button
-        onClick={() => ir(Math.max(0, pagina - 1))}
-        disabled={atras}
-        className="hov-linea"
-        style={{ ...linea, opacity: atras ? 0.45 : 1, cursor: atras ? 'not-allowed' : 'pointer' }}
-      >
-        Anterior
-      </button>
-      <span style={{ fontFamily: 'var(--font-mono)', fontSize: 12, color: 'var(--ink-3)' }}>
-        Página {pagina + 1} de {totalPaginas}
-      </span>
-      <button
-        onClick={() => ir(pagina + 1)}
-        disabled={!alante}
-        className="hov-linea"
-        style={{ ...linea, opacity: alante ? 1 : 0.45, cursor: alante ? 'pointer' : 'not-allowed' }}
-      >
-        Siguiente
-      </button>
-    </div>
-  );
-}
-
 /**
  * Lo que la tabla de deteccion dice de si misma: cuantas filas hay y de cuantas.
  *
@@ -573,16 +606,34 @@ export default function Fiscalizacion({ dest, onDest }: PantallaProps) {
   const [condicionDet, setCondicionDet] = useState('');
   const [paginaDet, setPaginaDet] = useState(0);
   /**
-   * Por que sentido va la unica columna que se puede ordenar (#546).
+   * Por que campo y en que sentido esta ordenada la deteccion (#546, #608).
    *
-   * Nace en `null` —«nadie ha pedido ningun orden»— y no vuelve nunca a el: el
-   * primer clic pide ASCENDENTE y a partir de ahi alterna. `null` no es lo
-   * mismo que ASCENDENTE aunque hoy el backend devuelva las dos igual: sin
-   * `ordenarPor` el orden es el que quiera la consulta, y afirmar en la
-   * cabecera que esta ordenada por codigo cuando nadie lo pidio es prometer un
-   * orden que nada garantiza.
+   * Nace en `null` —«nadie ha pedido ningun orden»— y no vuelve nunca a el.
+   * `null` no es lo mismo que «por codigo, ascendente» aunque hoy el backend
+   * conteste igual a las dos: sin `ordenarPor` el orden lo elige la consulta
+   * —el controlador pone `codRefCatastral` por omision, pero eso es suyo y
+   * puede cambiar—, y pintar la flecha en una cabecera que nadie pulso es
+   * afirmar un orden que la pantalla no pidio.
+   *
+   * `campo` esta tipado con `OrdenDeOmisos`, asi que aqui tampoco se puede
+   * guardar un orden que el backend no admita.
    */
-  const [ordenDet, setOrdenDet] = useState<'ASCENDENTE' | 'DESCENDENTE' | null>(null);
+  const [ordenDet, setOrdenDet] = useState<{ campo: OrdenDeOmisos; sentido: 'ASCENDENTE' | 'DESCENDENTE' } | null>(null);
+
+  /**
+   * Pulsar una cabecera: la activa se invierte, otra empieza por ascendente.
+   *
+   * Cambiar de columna **no hereda** el sentido de la anterior: «de mayor a
+   * menor» dice cosas distintas en el codigo predial y en la diferencia de
+   * area, y arrastrarlo dejaria la tabla abierta por el final de una columna
+   * que se acaba de elegir sin haberlo pedido.
+   */
+  const alternarOrdenDet = (campo: OrdenDeOmisos) =>
+    setOrdenDet((s) =>
+      s !== null && s.campo === campo
+        ? { campo, sentido: s.sentido === 'ASCENDENTE' ? 'DESCENDENTE' : 'ASCENDENTE' }
+        : { campo, sentido: 'ASCENDENTE' },
+    );
   useEffect(() => setPaginaDet(0), [sectorDet, condicionDet, pref.ejercicio, ordenDet]);
 
   /* La seleccion pertenece a la consulta que la produjo. Cambiar de sector, de
@@ -608,11 +659,12 @@ export default function Fiscalizacion({ dest, onDest }: PantallaProps) {
         {
           pagina: paginaDet,
           tamano: TAMANO_DE_PAGINA,
-          /* Los dos van juntos o no va ninguno: `direccion` sin `ordenarPor` no
-             ordena nada, y `ordenarPor` con una `direccion` que el backend no
-             conoce es un 422 («no admite el valor 'PATATA'», medido). */
-          ordenarPor: ordenDet === null ? undefined : ORDEN_DE_OMISOS,
-          direccion: ordenDet ?? undefined,
+          /* Los dos salen del MISMO estado, asi que van juntos o no va ninguno:
+             `direccion` sin `ordenarPor` no ordena nada, y `ordenarPor` con una
+             `direccion` que el backend no conoce es un 422 («El parametro
+             'direccion' no admite el valor 'PATATA'», medido). */
+          ordenarPor: ordenDet?.campo,
+          direccion: ordenDet?.sentido,
         },
         senal,
       ),
@@ -670,6 +722,11 @@ export default function Fiscalizacion({ dest, onDest }: PantallaProps) {
     titular: o.titular,
     celdas: [
       o.codRefCatastral,
+      /* El sector, que hasta #608 viajaba y no se dibujaba. Puede ser nulo —la
+         consulta lo une con un `LEFT JOIN`, y el predio sin sector es uno de
+         los casos que la deteccion busca—, asi que sale «—» en vez de en
+         blanco: en blanco no se distingue de una celda que no se cargo. */
+      o.sector ?? SIN_DATO,
       <CeldaDelTitular key="t" titular={o.titular} codigo={o.codigoDelTitular} cuantos={o.titulares.length} />,
       /* Dos hechos, dos insignias: el hallazgo del cruce y —si lo hay— que la
          declaracion llego vencido el plazo (#570). */
@@ -1096,7 +1153,7 @@ export default function Fiscalizacion({ dest, onDest }: PantallaProps) {
                   <span style={{ flex: 1, minWidth: 0 }}>
                     <span style={{ display: 'block', fontSize: 13.5, fontWeight: 500 }}>{f.codRefCatastral}</span>
                     <span style={{ display: 'block', fontSize: 12, color: 'var(--ink-3)', marginTop: 2, textWrap: 'pretty' }}>
-                      {f.titular} · sector {f.sector ?? SIN_DATO}
+                      {f.titular ?? 'Sin titular vigente'} · sector {f.sector ?? SIN_DATO}
                     </span>
                   </span>
                   {/* Ni hora ni riesgo: la muestra no publica ninguno de los
@@ -1217,14 +1274,16 @@ export default function Fiscalizacion({ dest, onDest }: PantallaProps) {
                         ))}
                       </select>
                     </label>
-                    {/* «Ordenar por» del artboard ofrece tres campos y los tres
-                        siguen dando 422 ORDEN_NO_ADMITIDO. El desplegable no se
-                        dibuja; lo que si se puede ordenar —una columna, la del
-                        codigo predial— se pide desde su propia cabecera (#546). */}
+                    {/* El orden no es un desplegable: se pide desde la
+                        cabecera de la columna, que es donde se ve por que se
+                        esta ordenando. Lo que este parrafo dice es lo que NO se
+                        puede ordenar, porque un campo del manual que falta sin
+                        explicacion se lee como un descuido (#608). */}
                     <p style={{ margin: 0, gridColumn: '1 / -1', fontSize: 11.5, lineHeight: 1.5, color: 'var(--ink-4)', textWrap: 'pretty' }}>
-                      «Ordenar por» no se ofrece como desplegable: de los tres campos que el manual propone —impuesto omitido, diferencia de
-                      valor, sector— el backend rechaza los tres con «orden no admitido». Lo único que admite ordenar es el código de
-                      referencia catastral, y se pide pulsando su cabecera.
+                      El orden se pide pulsando la cabecera de la columna, no con un desplegable. Se puede ordenar por código de referencia
+                      catastral, por sector y por diferencia de área. De los tres campos que el manual propone en su «Ordenar por» sólo
+                      queda sector: «impuesto omitido» y «diferencia de valor» son importes, y llegan sin cifra en todas las filas mientras
+                      no se pueda valorizar un predio (D-02a), así que ordenar por ellos no movería nada.
                     </p>
                   </>
                 ) : (
@@ -1269,26 +1328,22 @@ export default function Fiscalizacion({ dest, onDest }: PantallaProps) {
               )}
 
               <div style={{ overflowX: 'auto' }}>
-                <table style={{ width: '100%', borderCollapse: 'collapse', minWidth: detAct.min }}>
+                <table style={{ width: '100%', borderCollapse: 'collapse', minWidth: detTab === 0 ? ANCHO_MINIMO_DE_OMISOS : detAct.min }}>
                   <thead>
                     <tr>
                       <th style={{ padding: '10px 14px', width: 38, background: 'var(--bg-elev)' }} />
-                      {/* La cabecera de la deteccion predial invita a ordenar
-                          por su primera columna, que es la unica que el backend
-                          admite. La del cruce vehicular no invita a ninguna: no
-                          hay operacion que la sirva. */}
-                      <Cabeceras
-                        cols={detTab === 0 ? COLUMNAS_DE_OMISOS : detAct.cols}
-                        orden={
-                          detTab === 0
-                            ? {
-                                columna: COLUMNAS_DE_OMISOS[0]![0],
-                                sentido: ordenDet,
-                                alternar: () => setOrdenDet((s) => (s === 'ASCENDENTE' ? 'DESCENDENTE' : 'ASCENDENTE')),
-                              }
-                            : undefined
-                        }
-                      />
+                      {/* Las dos cabeceras se escriben por separado y no con un
+                          ternario dentro de `cols`: son dos tablas distintas y
+                          solo una admite orden. La de la deteccion ofrece las
+                          TRES columnas que el backend deja ordenar —cada una lo
+                          declara en `COLUMNAS_DE_OMISOS`— y la del cruce
+                          vehicular ninguna, porque no hay operacion que la
+                          sirva. */}
+                      {detTab === 0 ? (
+                        <Cabeceras cols={COLUMNAS_DE_OMISOS} orden={{ activo: ordenDet, alternar: alternarOrdenDet }} />
+                      ) : (
+                        <Cabeceras cols={sinOrden(detAct.cols)} />
+                      )}
                     </tr>
                   </thead>
                   <tbody>
@@ -1317,10 +1372,11 @@ export default function Fiscalizacion({ dest, onDest }: PantallaProps) {
                               style={{ accentColor: 'var(--accent)', width: 16, height: 16 }}
                             />
                           </td>
-                          {/* La celda 1 —el titular con su codigo debajo— es la
+                          {/* La celda 2 —el titular con su codigo debajo— es la
                               unica de dos lineas, asi que es la unica que
-                              necesita envolver. */}
-                          <Celdas fila={f.celdas} cols={COLUMNAS_DE_OMISOS} envuelve={[1]} />
+                              necesita envolver. Era la 1 hasta que «Sector» se
+                              metio delante (#608). */}
+                          <Celdas fila={f.celdas} cols={CELDAS_DE_OMISOS} envuelve={[2]} />
                         </tr>
                       );
                     })}
@@ -1334,7 +1390,7 @@ export default function Fiscalizacion({ dest, onDest }: PantallaProps) {
                 <EstadoDeLaDeteccion cargando={omisos.cargando} filas={filasDeOmisos.length} pagina={paginaDeOmisos} />
               )}
               {detTab === 0 && paginaDeOmisos !== null && (
-                <Paginas pagina={paginaDeOmisos.pagina} totalPaginas={paginaDeOmisos.totalPaginas} hayMas={paginaDeOmisos.hayMas} ir={setPaginaDet} />
+                <Paginador pagina={paginaDeOmisos.pagina} totalPaginas={paginaDeOmisos.totalPaginas} hayMas={paginaDeOmisos.hayMas} ir={setPaginaDet} />
               )}
               {detTab === 1 && (
                 <div style={{ padding: '11px 16px', borderTop: '1px solid var(--line)' }}>
@@ -1565,14 +1621,14 @@ export default function Fiscalizacion({ dest, onDest }: PantallaProps) {
                     <table style={{ width: '100%', borderCollapse: 'collapse', minWidth: 720 }}>
                       <thead>
                         <tr>
-                          <Cabeceras cols={COLUMNAS_DE_MUESTRA} />
+                          <Cabeceras cols={sinOrden(COLUMNAS_DE_MUESTRA)} />
                         </tr>
                       </thead>
                       <tbody>
                         {(muestra.datos?.contenido ?? []).map((f) => (
                           <tr key={String(f.predioId) + '·' + String(f.contribuyenteId)} className="hov-elev" style={{ borderTop: '1px solid var(--line)' }}>
                             <td style={TD1}>{f.codRefCatastral}</td>
-                            <td style={TD}>{f.titular}</td>
+                            <td style={TD}>{f.titular ?? 'Sin titular vigente'}</td>
                             {/* «Uso declarado» y «Riesgo» no los publica
                                 `MuestraResource`. El riesgo, ademas, no es un
                                 concepto del backend: lo que hay es la CONDICION
@@ -1613,7 +1669,7 @@ export default function Fiscalizacion({ dest, onDest }: PantallaProps) {
                   ) : null}
 
                   {muestra.datos !== null && (
-                    <Paginas pagina={muestra.datos.pagina} totalPaginas={muestra.datos.totalPaginas} hayMas={muestra.datos.hayMas} ir={setPaginaMuestra} />
+                    <Paginador pagina={muestra.datos.pagina} totalPaginas={muestra.datos.totalPaginas} hayMas={muestra.datos.hayMas} ir={setPaginaMuestra} />
                   )}
 
                   <p style={{ ...PIE, borderTop: '1px solid var(--line)' }}>
@@ -1830,26 +1886,11 @@ export default function Fiscalizacion({ dest, onDest }: PantallaProps) {
             )}
 
             <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>
-              <button
-                onClick={() => setPaso(Math.max(pasoIdx - 1, 0))}
-                aria-disabled={pasoIdx === 0}
-                className="hov-linea"
-                style={{
-                  display: 'flex',
-                  alignItems: 'center',
-                  gap: 7,
-                  border: '1px solid var(--line-2)',
-                  borderRadius: 6,
-                  padding: grande ? '13px 20px' : '10px 18px',
-                  background: 'var(--bg-card)',
-                  fontSize: 13,
-                  cursor: 'pointer',
-                  opacity: pasoIdx === 0 ? 0.5 : 1,
-                }}
-              >
-                <Icono d={ICO.flechaIzq} tam={14} grosor={1.8} />
-                Anterior
-              </button>
+              <PasoAtras
+                paso={pasoIdx}
+                atras={() => setPaso(pasoIdx - 1)}
+                style={grande ? { padding: '13px 20px' } : undefined}
+              />
               <p style={{ margin: 0, flex: 1, minWidth: 170, fontSize: 12, color: 'var(--ink-3)', textWrap: 'pretty' }}>
                 {pasoIdx >= PASOS_ACTA.length - 1
                   ? 'Cerrar el acta es el punto sin retorno del procedimiento.'
@@ -1984,7 +2025,7 @@ export default function Fiscalizacion({ dest, onDest }: PantallaProps) {
                   <table style={{ width: '100%', borderCollapse: 'collapse', minWidth: 860 }}>
                     <thead>
                       <tr>
-                        <Cabeceras cols={COLUMNAS_DE_RESULTADOS} />
+                        <Cabeceras cols={sinOrden(COLUMNAS_DE_RESULTADOS)} />
                       </tr>
                     </thead>
                     <tbody>
@@ -2021,7 +2062,7 @@ export default function Fiscalizacion({ dest, onDest }: PantallaProps) {
                 ) : null}
 
                 {resultados.datos !== null && (
-                  <Paginas pagina={resultados.datos.pagina} totalPaginas={resultados.datos.totalPaginas} hayMas={resultados.datos.hayMas} ir={setPaginaRes} />
+                  <Paginador pagina={resultados.datos.pagina} totalPaginas={resultados.datos.totalPaginas} hayMas={resultados.datos.hayMas} ir={setPaginaRes} />
                 )}
 
                 <p style={{ ...PIE, borderTop: '1px solid var(--line)' }}>
@@ -2066,7 +2107,7 @@ export default function Fiscalizacion({ dest, onDest }: PantallaProps) {
                   <table style={{ width: '100%', borderCollapse: 'collapse', minWidth: 760 }}>
                     <thead>
                       <tr>
-                        <Cabeceras cols={COLUMNAS_DE_ESTADO_DE_CUENTA} />
+                        <Cabeceras cols={sinOrden(COLUMNAS_DE_ESTADO_DE_CUENTA)} />
                       </tr>
                     </thead>
                     <tbody>
@@ -2191,7 +2232,7 @@ export default function Fiscalizacion({ dest, onDest }: PantallaProps) {
                 ) : null}
 
                 {historico.datos !== null && (
-                  <Paginas pagina={historico.datos.pagina} totalPaginas={historico.datos.totalPaginas} hayMas={historico.datos.hayMas} ir={setPaginaHist} />
+                  <Paginador pagina={historico.datos.pagina} totalPaginas={historico.datos.totalPaginas} hayMas={historico.datos.hayMas} ir={setPaginaHist} />
                 )}
 
                 <p style={PIE}>
@@ -2308,7 +2349,7 @@ export default function Fiscalizacion({ dest, onDest }: PantallaProps) {
               <table style={{ width: '100%', borderCollapse: 'collapse' }}>
                 <thead>
                   <tr>
-                    <Cabeceras cols={REP_COLS} />
+                    <Cabeceras cols={sinOrden(REP_COLS)} />
                   </tr>
                 </thead>
                 <tbody>
@@ -2387,15 +2428,18 @@ export default function Fiscalizacion({ dest, onDest }: PantallaProps) {
 }
 
 /**
- * Las columnas de la deteccion predial, en la forma del recurso.
+ * Las columnas de «Omisos y subvaluadores», con lo que cada una es de verdad.
+ *
+ * Es el UNICO sitio donde se dice que columna hay y cual se puede ordenar: el
+ * campo del orden va dentro de la columna que lo ofrece, tipado con
+ * `OrdenDeOmisos` —los tres que el backend admite, medidos—, asi que una
+ * cabecera no puede ofrecer un orden que no exista ni ordenar por otra cosa que
+ * la que ensena.
  *
  * «Valor catastral», «Valor declarado» y «Diferencia S/» del artboard se
  * sustituyen por las areas, que es lo unico que el backend cuantifica hoy. El
  * impuesto omitido se queda —es la cifra que da sentido a la pantalla— y sale
  * «—» mientras D-02a impida calcularlo.
- */
-/**
- * Las columnas de «Omisos y subvaluadores», con lo que cada una es de verdad.
  *
  * <h2>Las tres de area SI son numeros, y la unidad va en la cabecera (#546)</h2>
  *
@@ -2419,16 +2463,71 @@ export default function Fiscalizacion({ dest, onDest }: PantallaProps) {
  * decimales estan en la misma vertical— y con el separador de miles que pone
  * `areaEnMetros`, que hace falta: en Catacaos hay areas de cuatro cifras
  * (10 422.90 m², medido). La unidad la dice la cabecera una vez.
+ *
+ * <h2>«Sector» es columna desde #608, y no es un adorno de la ordenacion</h2>
+ *
+ * El backend admite ordenar por sector, y hasta este issue la tabla no lo
+ * dibujaba: era solo un filtro, una caja donde teclear «01» sin saber que
+ * sectores hay. Ofrecer la cabecera sin la columna habria dejado a quien la
+ * pulsa viendo las filas moverse sin poder ver segun que, asi que la columna
+ * entra con el orden.
+ *
+ * El dato ya viajaba —`OmisoResource.sector`— y **puede ser nulo**: la consulta
+ * une el sector con un `LEFT JOIN` a proposito, porque un predio sin sector es
+ * uno de los casos que esta deteccion existe para encontrar. Ese predio salia
+ * en la lista y su unica senal no se veia en ninguna parte; ahora su celda dice
+ * «—». Medido hoy: en Catacaos las 14 422 filas traen sector —'00' casi todas,
+ * y '04', '08', '16', '99' en la cola— y en la muni 1 van de '01' a '04'.
+ *
+ * Va en la segunda columna, pegada al codigo, porque el sector **es** un tramo
+ * de ese codigo de 23 digitos: separarlos obligaria a leer el codigo entero
+ * para saber donde cae el predio.
+ *
+ * <h2>Las cinco que NO ordenan, y por que no es lo mismo en todas</h2>
+ *
+ * «Titular» y «Condición» no las admite el repositorio y no piden ningun dato
+ * nuevo para admitirlas: son columnas de la propia consulta. Las tres de
+ * dinero y de area que quedan sin `orden` es otra cosa —«Área catastral»,
+ * «Área declarada» e «Impuesto omitido S/»—: la primera y la segunda tampoco
+ * estan en la lista blanca, y la tercera no podria ordenar aunque lo estuviera,
+ * porque llega sin cifra en todas las filas mientras D-02a siga abierta.
  */
-const COLUMNAS_DE_OMISOS: ColDef[] = [
-  ['Cód. ref. catastral', 0],
-  ['Titular', 0],
-  ['Condición', 0],
-  ['Área catastral m²', 1],
-  ['Área declarada m²', 1],
-  ['Diferencia de área m²', 1],
-  ['Impuesto omitido S/', 1],
-];
+const COLUMNAS_DE_OMISOS: readonly ColumnaDeTabla<OrdenDeOmisos>[] = columnasQueOfrecenTodo<OrdenDeOmisos>()([
+  { rotulo: 'Cód. ref. catastral', numerica: 0, orden: 'codRefCatastral' },
+  { rotulo: 'Sector', numerica: 0, orden: 'sector' },
+  { rotulo: 'Titular', numerica: 0 },
+  { rotulo: 'Condición', numerica: 0 },
+  { rotulo: 'Área catastral m²', numerica: 1 },
+  { rotulo: 'Área declarada m²', numerica: 1 },
+  { rotulo: 'Diferencia de área m²', numerica: 1, orden: 'diferenciaDeArea' },
+  { rotulo: 'Impuesto omitido S/', numerica: 1 },
+]);
+
+/**
+ * Las mismas columnas en la forma que `Celdas` necesita para alinear.
+ *
+ * Se DERIVA de la de arriba, no se escribe otra vez: dos listas de columnas de
+ * la misma tabla se separan en cuanto alguien anade una, y lo que se descuadra
+ * es la alineacion de todas las celdas a partir de ahi.
+ */
+const CELDAS_DE_OMISOS: ColDef[] = COLUMNAS_DE_OMISOS.map((c) => [c.rotulo, c.numerica]);
+
+/**
+ * El suelo de ancho de la tabla de deteccion, ahora que son ocho columnas.
+ *
+ * No sale de `DET_PREDIAL.min` —los 820 px del artboard, para siete columnas
+ * que ya no son estas—, sino de medir la tabla conectada: con las ocho, siete
+ * de ellas `nowrap`, ocupa **1 213 px** en Catacaos y su contenedor desplaza en
+ * horizontal por debajo de eso (medido a 1 600, 1 100 y 820 px de ventana).
+ *
+ * O sea que hoy este suelo **no llega a actuar**, ni actuaba el de 820: una
+ * columna que no parte no se deja estrechar por debajo de su contenido. Se
+ * declara igual y con el numero de ESTA tabla porque es lo que sujeta el caso
+ * en que las celdas vengan cortas —un ejercicio con cuatro filas de codigos
+ * breves y sin titular—, donde sin suelo las ocho columnas se reparten el ancho
+ * de la ventana y la cabecera queda separada de su dato.
+ */
+const ANCHO_MINIMO_DE_OMISOS = '960px';
 
 /**
  * Las seis columnas de la muestra, con lo que el recurso publica de cada una.
