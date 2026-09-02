@@ -611,6 +611,16 @@ export default function Catastro({ dest, onDest }: PantallaProps) {
 
   /* ── Las secciones de la ficha ───────────────────────────────── */
 
+  /* Que seccion se esta mirando, para que el indice lo diga (#682).
+     Las seis entradas salian identicas —mismo peso, mismo color, sin
+     `aria-current`— arriba del todo y con la ultima seccion en pantalla, asi que
+     el indice servia para ir y no para saber donde se estaba.
+
+     Con `IntersectionObserver` y no mirando el scroll: el navegador ya sabe que
+     hay en pantalla, y calcularlo a mano obliga a leer la posicion de las seis
+     secciones en cada gesto de rueda. */
+  const [seccionALaVista, setSeccionALaVista] = useState<string>('');
+
   const secciones = useMemo<SeccionResuelta[]>(() => {
     if (!esPredio) return [];
     const grupos = GRUPOS.map((g) => {
@@ -661,6 +671,39 @@ export default function Catastro({ dest, onDest }: PantallaProps) {
       };
     });
   }, [esPredio, esNuevo, modalidades, modo, cerradas, vals, d]);
+
+  /* El indice marca la seccion a la vista. Se mira la que este mas arriba de las
+     que cruzan la franja alta de la ventana: con «la mas visible» el marcador
+     salta hacia atras al llegar al final, porque la ultima seccion suele ser mas
+     corta que la ventana y nunca gana. */
+  useEffect(() => {
+    if (secciones.length === 0) return;
+    const nodos = secciones
+      .map((x) => document.getElementById(x.id))
+      .filter((n): n is HTMLElement => n !== null);
+    if (nodos.length === 0) return;
+    const visibles = new Set<string>();
+    const observador = new IntersectionObserver(
+      (entradas) => {
+        for (const e of entradas) {
+          if (e.isIntersecting) visibles.add(e.target.id);
+          else visibles.delete(e.target.id);
+        }
+        /* Sin `if`: cuando ninguna cruza la franja —arriba del todo, sobre la
+           cabecera— la respuesta honesta es ninguna. Conservar la ultima deja el
+           indice marcando «Terreno y construccion» con el titulo del predio en
+           pantalla, que es el mismo defecto de #682 con otra cara. */
+        const primera = secciones.find((x) => visibles.has(x.id));
+        setSeccionALaVista(primera?.id ?? '');
+      },
+      /* La franja alta: desde 120 px bajo el borde superior —lo que ocupa la
+         cabecera pegajosa— hasta el 60 % de la ventana. */
+      { rootMargin: '-120px 0px -40% 0px', threshold: 0 },
+    );
+    for (const n of nodos) observador.observe(n);
+    return () => observador.disconnect();
+  }, [secciones]);
+
 
   const paso = Math.min(pasoEstado, Math.max(secciones.length - 1, 0));
 
@@ -3582,9 +3625,20 @@ export default function Catastro({ dest, onDest }: PantallaProps) {
                     En esta ficha
                   </p>
                   {secciones.map((x) => (
-                    <a
+                    /* El artboard enlaza con `href="#ident"`; aqui la ruta vive
+                       en el hash, asi que un ancla la reescribe, el router no
+                       reconoce `#ubic` y cae a Inicio: la ficha desaparece **y se
+                       lleva lo tecleado sin preguntar** (#682). Desplaza con
+                       `scrollIntoView`, que es lo que la pantalla gemela de
+                       Rentas ya hacia y lo que el propio modo «Por pasos» hace.
+
+                       Y es un `<button>` y no un `<a>` porque no navega a ningun
+                       sitio: mueve la vista. */
+                    <button
                       key={x.id}
-                      href={'#' + x.id}
+                      type="button"
+                      onClick={() => document.getElementById(x.id)?.scrollIntoView({ behavior: 'smooth', block: 'start' })}
+                      aria-current={seccionALaVista === x.id ? 'true' : undefined}
                       className="hov-acento"
                       style={{
                         display: 'flex',
@@ -3593,16 +3647,18 @@ export default function Catastro({ dest, onDest }: PantallaProps) {
                         border: 0,
                         borderRadius: 7,
                         padding: '8px 10px',
-                        textDecoration: 'none',
+                        textAlign: 'left',
+                        cursor: 'pointer',
+                        background: seccionALaVista === x.id ? 'var(--accent-soft)' : 'transparent',
                         color: 'var(--ink-2)',
                         borderBottom: '1px solid transparent',
                       }}
                     >
-                      <span style={{ flex: 1, minWidth: 0, fontSize: 12.5 }}>{x.label}</span>
+                      <span style={{ flex: 1, minWidth: 0, fontSize: 12.5, fontWeight: seccionALaVista === x.id ? 600 : 400 }}>{x.label}</span>
                       <span style={{ fontFamily: 'var(--font-mono)', fontSize: 11, flex: '0 0 auto', color: x.viajan > 0 && x.faltan === 0 ? 'var(--ok-fg)' : 'var(--warn-fg)' }}>
                         {x.viajan > 0 && x.faltan === 0 ? '✓' : '·'}
                       </span>
-                    </a>
+                    </button>
                   ))}
                 </nav>
               )}
