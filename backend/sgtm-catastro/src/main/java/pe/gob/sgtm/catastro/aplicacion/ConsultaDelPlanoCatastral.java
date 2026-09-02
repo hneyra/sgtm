@@ -3,9 +3,11 @@ package pe.gob.sgtm.catastro.aplicacion;
 import java.util.List;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import pe.gob.sgtm.catastro.dominio.AcotacionDelPlano;
 import pe.gob.sgtm.catastro.dominio.CatastroRepository;
 import pe.gob.sgtm.catastro.dominio.FiltroDelPlano;
 import pe.gob.sgtm.catastro.dominio.LoteDelPlano;
+import pe.gob.sgtm.catastro.dominio.MarcoDeLoLevantado;
 import pe.gob.sgtm.catastro.dominio.PlanoDelCatastro;
 
 /**
@@ -68,6 +70,33 @@ public class ConsultaDelPlanoCatastral {
             throw new MarcoConDemasiadosLotes(catastro.lotesEnElMarco(filtro), limite);
         }
         return new PlanoDelCatastro(lotes, catastro.prediosSinGeometria(filtro));
+    }
+
+    /**
+     * El rectangulo que envuelve la geometria ya cargada, para saber por donde abrir (#612).
+     *
+     * <p>Es la lectura que hasta ahora faltaba: {@link #lotesDe(FiltroDelPlano, int)} exige un
+     * marco y <b>ninguna operacion del contrato decia donde esta la municipalidad</b>, asi que
+     * quien dibuja el plano no tenia de donde sacar el primero. Sin ella el visor abre sobre un
+     * marco declarado —el pais entero—, y el dia que haya geometria cargada ese marco contiene mas
+     * lotes que el tope: la respuesta pasa a ser «acercate» y desde la pantalla no se sabe hacia
+     * donde.
+     *
+     * <p><b>No lleva tope ni se puede negar</b>, al reves que su hermana: es un agregado de cuatro
+     * cifras y una cuenta, asi que su respuesta pesa lo mismo con un lote que con cien mil. Por eso
+     * tampoco necesita el {@code limite + 1} de aquella.
+     *
+     * <p>Recibe la <b>misma</b> acotacion que el plano, y eso es lo que hace que el encuadre
+     * contenga lo que despues se dibuja. Recibe {@link AcotacionDelPlano} y no {@link
+     * FiltroDelPlano} porque un marco no se puede exigir a la lectura que existe para calcularlo.
+     *
+     * <p>Transaccional por lo de siempre: sin la anotacion no se emite el {@code SET LOCAL
+     * app.municipalidad_id} y la politica RLS no devuelve vacio, <b>revienta</b> (#486). No audita,
+     * por lo mismo que el plano: no publica ni un identificador de predio.
+     */
+    @Transactional(readOnly = true)
+    public MarcoDeLoLevantado marcoDe(AcotacionDelPlano acotacion) {
+        return catastro.marcoDeLoLevantado(acotacion);
     }
 
     /**

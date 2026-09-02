@@ -108,6 +108,25 @@ public interface CatastroRepository {
      */
     long prediosSinGeometria(FiltroDelPlano filtro);
 
+    /**
+     * El rectangulo que envuelve la geometria ya cargada, con los <b>mismos</b> filtros y sin marco
+     * (#612).
+     *
+     * <p>Es lo unico que el sistema sabe decir sobre <b>donde esta</b> esta municipalidad, y sale
+     * de un agregado sobre las cuatro columnas de {@code V65} —las que ya usa {@link
+     * #lotesDelPlano(FiltroDelPlano, int)} para acotar—, no de {@code ST_Extent}: el agregado de
+     * PostGIS trabaja sobre la geometria y estas columnas son las que el motor deriva de ella y
+     * mantiene junto a cada fila.
+     *
+     * <p>Recibe {@link AcotacionDelPlano} y no {@link FiltroDelPlano} porque esta es la lectura que
+     * <b>no puede</b> tener marco: existe para calcularlo. Que el tipo sea el mismo que compone
+     * aquel es lo que garantiza que las dos respondan sobre el mismo conjunto de predios.
+     *
+     * <p>Nunca devuelve {@code null} ni {@link java.util.Optional}: la ausencia de marco es una
+     * respuesta con su cuenta, no una fila que falta (ver {@link MarcoDeLoLevantado}).
+     */
+    MarcoDeLoLevantado marcoDeLoLevantado(AcotacionDelPlano acotacion);
+
     Predio guardar(Predio predio);
 
     /**
