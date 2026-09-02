@@ -32,30 +32,30 @@ import pe.gob.sgtm.web.ProblemaDeNegocio;
  * <p>Las lecturas van en el mismo servicio y marcadas {@code readOnly}: no abren transaccion de
  * escritura y por tanto no exigen observacion, que es lo que la regla 10 distingue.
  *
- * <h2>Las ocho escrituras que ningun endpoint publica, censadas (#543)</h2>
+ * <h2>Las ocho escrituras, ya publicadas (#543 las censo, #572 las publica)</h2>
  *
  * <p>{@link #registrarGrupo}, {@link #inhabilitarGrupo}, {@link #habilitarGrupo}, {@link
  * #fijarVigenciaDeGrupo}, {@link #registrarUsuario}, {@link #inhabilitarUsuario}, {@link
- * #habilitarUsuario} y {@link #fijarVigenciaDeUsuario} <b>solo las llaman las pruebas y {@code
- * ImplantarMunicipalidad}</b>: no hay ninguna ruta en el contrato que llegue a ellas. Quedan
- * nombradas aqui para que deje de ser un hallazgo cada vez que alguien mira, y porque el motivo no
- * es el mismo para las dos mitades:
+ * #habilitarUsuario} y {@link #fijarVigenciaDeUsuario} existian sin ninguna ruta que llegara a
+ * ellas. Las cuatro de grupo solo esperaban su controlador; las cuatro de usuario esperaban una
+ * <b>decision</b>, porque un usuario son <b>dos mitades</b> —la fila de {@code usuario} y la cuenta
+ * del proveedor de identidad (ADR-0005)— y la segunda se administra declarativamente.
  *
- * <ul>
- *   <li><b>Las cuatro de grupo</b> no tienen mas obstaculo que no habersele escrito su controlador:
- *       un grupo es una fila de esta base y de ninguna otra.
- *   <li><b>Las cuatro de usuario</b> si lo tienen, y es de diseño: un usuario son <b>dos
- *       mitades</b> —la fila de {@code usuario} y la cuenta del proveedor de identidad (ADR-0005,
- *       ADR-0012)—, y hoy la segunda se administra <b>declarativamente</b>, con un archivo por
- *       municipalidad en {@code despliegue/identidad/} que reconcilia un guion. Publicar {@code
- *       POST /seguridad/usuarios} exige decidir antes como se coordinan las dos —quien crea la
- *       cuenta, que pasa si una de las dos falla, y que hace la reconciliacion con lo creado por
- *       pantalla—, y eso es una decision que este issue no toma. Tiene issue propio: <b>#572</b>.
- * </ul>
+ * <p>La decision esta en <b>ADR-0012 §5</b>, y lo que la sostiene es una medida: la cuenta de
+ * Keycloak la crea {@code reconciliar-identidades.sh} para <b>todos</b> los usuarios declarados, y
+ * la fila de {@code usuario} la creaba {@code ImplantarMunicipalidad} para <b>uno solo</b>, el
+ * administrador. Nada mas la creaba. De modo que declarar un segundo usuario en el archivo dejaba
+ * una cuenta que autentica y a la que el guardia niega todo, <b>sin forma de arreglarlo</b>. El
+ * alta por pantalla no introduce ese estado: le da dueño a la mitad que no lo tenia.
  *
- * <p>{@code AdministrarPermisos.fijarParaUsuario} esta en la misma situacion y por un motivo
- * propio: es la excepcion de usuario, y escribirla sin poder <b>leerla</b> antes era administrar a
- * ciegas. Leerla ya se puede ({@code GET /seguridad/usuarios/&#123;id&#125;/permisos}, #543).
+ * <p>Cada mitad conserva su dueño, entonces: el archivo declarativo crea la cuenta y esta pantalla
+ * crea la fila. La aplicacion no habla con Keycloak —no tiene con que ni debe tenerlo (ADR-0011
+ * §3)— y por eso {@link #registrarUsuario} <b>no promete la otra mitad</b>: escribe una fila, en
+ * una transaccion, y quien la lee tiene que saber que la cuenta se declara aparte.
+ *
+ * <p>{@code AdministrarPermisos.fijarParaUsuario} sigue sin ruta, y por un motivo propio que no es
+ * este: es la excepcion de usuario —no una mitad de nadie—, y su lectura entro en #543 ({@code GET
+ * /seguridad/usuarios/&#123;id&#125;/permisos}).
  */
 @Service
 public class AdministrarSeguridad {
@@ -130,8 +130,20 @@ public class AdministrarSeguridad {
 
     // ------------------------------------------------------------------ grupos
 
+    /**
+     * Alta de un grupo (#572).
+     *
+     * <p>El nombre es unico por municipalidad ({@code grupo_nombre_uq}, V5), y quien de verdad lo
+     * garantiza es esa restriccion: la comprobacion previa de aqui no protege contra una carrera
+     * —dos altas simultaneas del mismo nombre la superan las dos—, y lo unico que aporta es
+     * <b>nombrar</b> el grupo repetido en vez de dejar salir un choque de clave. Es la misma
+     * reparticion que #489 midio para el alta de predio.
+     */
     @Transactional
     public Grupo registrarGrupo(Grupo grupo, Observacion observacion) {
+        if (grupo.id() == null && repositorio.grupoPorNombre(grupo.nombre()).isPresent()) {
+            throw new GrupoRepetido(grupo.nombre());
+        }
         Grupo guardado = repositorio.guardar(grupo);
         auditar("grupo", guardado.id(), Operacion.ALTA, observacion, descripcion(guardado));
         return guardado;
@@ -171,8 +183,31 @@ public class AdministrarSeguridad {
 
     // ------------------------------------------------------------------ usuarios
 
+    /**
+     * Alta de un usuario: <b>la fila del padron, no la cuenta del proveedor</b> (#572, ADR-0012
+     * §5).
+     *
+     * <p>Escribe una fila en una transaccion, asi que desde el punto de vista de quien atiende es
+     * atomica. Lo que no es atomico —ni puede serlo— es el par (cuenta, fila): la cuenta la crea el
+     * archivo declarativo de {@code despliegue/identidad/}, y quien da de alta aqui tiene que saber
+     * que le falta ese paso. Sin la cuenta, esta fila aparece en el padron, admite permisos y <b>no
+     * puede entrar</b>: es el estado inofensivo de los dos, frente al de una cuenta sin fila —que
+     * autentica y recibe un 403 en todo—.
+     *
+     * <p><b>{@code sujetoOidc} se queda nulo, a proposito.</b> Nadie lo escribe hoy y nadie lo lee
+     * —el guardia resuelve por {@code cuenta}—, y las dos formas de rellenarlo son peores que
+     * dejarlo: pedirle a quien atiende un UUID del proveedor, o escribirlo en el primer acceso, que
+     * seria una escritura sin observacion en el camino de lectura del guardia. ADR-0012 §5.4 lo
+     * razona entero.
+     *
+     * <p>La cuenta es unica por municipalidad ({@code usuario_cuenta_uq}, V5) y esa restriccion es
+     * la que de verdad lo garantiza; la comprobacion de aqui solo la <b>nombra</b>.
+     */
     @Transactional
     public Usuario registrarUsuario(Usuario usuario, Observacion observacion) {
+        if (usuario.id() == null && repositorio.usuarioPorCuenta(usuario.cuenta()).isPresent()) {
+            throw new CuentaRepetida(usuario.cuenta());
+        }
         Usuario guardado = repositorio.guardar(usuario);
         auditar("usuario", guardado.id(), Operacion.ALTA, observacion, descripcion(guardado));
         return guardado;
@@ -297,5 +332,23 @@ public class AdministrarSeguridad {
 
     private static String comillas(@Nullable Object valor) {
         return valor == null ? "null" : "\"" + valor + "\"";
+    }
+
+    /** Ya hay un grupo con ese nombre en esta municipalidad. */
+    public static final class GrupoRepetido extends RuntimeException {
+        @java.io.Serial private static final long serialVersionUID = 1L;
+
+        GrupoRepetido(String nombre) {
+            super("Ya hay un grupo llamado '" + nombre + "' en esta municipalidad");
+        }
+    }
+
+    /** Ya hay un usuario con esa cuenta en esta municipalidad. */
+    public static final class CuentaRepetida extends RuntimeException {
+        @java.io.Serial private static final long serialVersionUID = 1L;
+
+        CuentaRepetida(String cuenta) {
+            super("Ya hay un usuario con la cuenta '" + cuenta + "' en esta municipalidad");
+        }
     }
 }

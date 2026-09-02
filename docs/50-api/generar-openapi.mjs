@@ -1504,6 +1504,73 @@ const OPERACIONES_ADICIONALES = {
       `),
     },
   ],
+  // Las cuatro escrituras de grupo que `AdministrarSeguridad` tenia desde #543
+  // sin ninguna ruta que llegara a ellas (#572). No dependian de ninguna
+  // decision: un grupo es una fila de esta base y de ninguna otra.
+  grupos: [
+    {
+      operationId: 'registrar_grupo',
+      metodo: 'post',
+      titulo: 'Alta de un grupo de usuarios',
+      descripcion: bloque(`
+        Da de alta un grupo (#572, RF-120). Los permisos se otorgan al grupo y los usuarios se
+        afilian: dar de alta a alguien es meterlo en «Mesa de Partes», no repetirle veinte
+        permisos.
+
+        El grupo nace **habilitado**; la vigencia es opcional y sus dos extremos significan cosas
+        distintas —sin \`vigenciaDesde\` vale desde siempre, sin \`vigenciaHasta\` vale
+        indefinidamente (RF-123)—.
+
+        Un nombre ya usado en esta municipalidad es **409**: lo garantiza \`grupo_nombre_uq\`.
+        Exige \`REGISTRO\` sobre \`grupos\` y la observación del usuario, obligatoria (RNF-052).
+      `),
+    },
+    {
+      operationId: 'inhabilitar_grupo',
+      metodo: 'post',
+      ruta: '/api/v1/seguridad/grupos/{id}/baja',
+      titulo: 'Baja de un grupo',
+      descripcionesDeRuta: {
+        id: 'El grupo, por el `id` que publica cada fila de `GET /seguridad/grupos`',
+      },
+      descripcion: bloque(`
+        Inhabilita el grupo: **retira el acceso de todos sus miembros de golpe** y no borra
+        ninguna relación (RNF-051). Las filas de \`miembro\` siguen ahí diciendo quién pudo hacer
+        qué y hasta cuándo, y volver a habilitarlo devuelve el acceso a los mismos.
+
+        Exige \`ELIMINACION\` sobre \`grupos\` —quita acceso a gente— y la observación del
+        usuario.
+      `),
+    },
+    {
+      operationId: 'habilitar_grupo',
+      metodo: 'post',
+      ruta: '/api/v1/seguridad/grupos/{id}/reactivacion',
+      titulo: 'Reactivación de un grupo',
+      descripcionesDeRuta: {
+        id: 'El grupo, por el `id` que publica cada fila de `GET /seguridad/grupos`',
+      },
+      descripcion:
+        'Vuelve a habilitar un grupo inhabilitado: sus miembros recuperan el acceso que tenían,' +
+        ' sin repetir un solo permiso. Exige `MODIFICACION` sobre `grupos` y la observación del' +
+        ' usuario (RNF-052).',
+    },
+    {
+      operationId: 'fijar_vigencia_de_grupo',
+      metodo: 'put',
+      ruta: '/api/v1/seguridad/grupos/{id}/vigencia',
+      titulo: 'Vigencia de un grupo',
+      descripcionesDeRuta: {
+        id: 'El grupo, por el `id` que publica cada fila de `GET /seguridad/grupos`',
+      },
+      descripcion: bloque(`
+        Fija desde cuándo y hasta cuándo vale el grupo (RF-123). El cuerpo declara la vigencia
+        **entera**: mandar los dos extremos nulos es *quitar* la caducidad, no «no cambiar nada».
+
+        Exige \`MODIFICACION\` sobre \`grupos\` y la observación del usuario (RNF-052).
+      `),
+    },
+  ],
   // La pantalla «Usuarios del sistema» dibuja una columna «Grupo» y su endpoint
   // —el listado— no la puede llenar: la pertenencia vive en `miembro`, y de esa
   // tabla solo habia el POST que afilia (#543).
@@ -1531,6 +1598,79 @@ const OPERACIONES_ADICIONALES = {
 
         Un \`id\` que no existe en esta municipalidad es **404**; no pertenecer a ningún
         grupo es una página vacía con **200**.
+      `),
+    },
+    {
+      operationId: 'registrar_usuario',
+      metodo: 'post',
+      titulo: 'Alta de un usuario',
+      descripcion: bloque(`
+        Da de alta **la fila del padrón de usuarios**, y sólo eso (#572, ADR-0012 §5).
+
+        Un usuario del SGTM son **dos mitades**: esta fila y la cuenta del proveedor de identidad
+        (ADR-0005). Esta operación escribe la primera; **la segunda se declara aparte**, en
+        \`despliegue/identidad/municipalidades/<ubigeo>.json\`, que es la fuente versionada de las
+        cuentas y la que las reproduce si el clúster se reconstruye. Mientras esa cuenta no
+        exista, la persona figura en los listados, admite permisos y **no puede entrar**.
+
+        **No hay campo de clave, y no puede haberlo**: la credencial vive en el proveedor y este
+        sistema no la recibe nunca. Tampoco hay campo para el identificador OIDC del sujeto: sería
+        pedir un dato que quien atiende no tiene por qué tener, y tecleado mal enlazaría esta fila
+        con nadie (ADR-0012 §5.4). El enlace entre las dos mitades es la **cuenta**, que tiene que
+        ser el mismo \`preferred_username\` con el que la persona entra.
+
+        Una cuenta ya usada en esta municipalidad es **409**: lo garantiza \`usuario_cuenta_uq\`.
+        Exige \`REGISTRO\` sobre \`usuarios\` y la observación del usuario (RNF-052).
+      `),
+    },
+    {
+      operationId: 'inhabilitar_usuario',
+      metodo: 'post',
+      ruta: '/api/v1/seguridad/usuarios/{id}/baja',
+      titulo: 'Baja de un usuario',
+      descripcionesDeRuta: {
+        id: 'El usuario, por el `id` que publica cada fila de `GET /seguridad/usuarios`',
+      },
+      descripcion: bloque(`
+        Inhabilita la cuenta: deja de poder entrar y **no se borra** (RNF-051). Su fila sigue ahí
+        para que la bitácora pueda seguir diciendo quién hizo qué.
+
+        **No toca la cuenta del proveedor de identidad**, que esta aplicación no administra: esa
+        persona seguirá autenticando y el guardia le negará todo, que es exactamente lo que una
+        baja significa aquí. Retirarle además la cuenta es un acto del proveedor.
+
+        Exige \`ELIMINACION\` sobre \`usuarios\` y la observación del usuario (RNF-052).
+      `),
+    },
+    {
+      operationId: 'habilitar_usuario',
+      metodo: 'post',
+      ruta: '/api/v1/seguridad/usuarios/{id}/reactivacion',
+      titulo: 'Reactivación de un usuario',
+      descripcionesDeRuta: {
+        id: 'El usuario, por el `id` que publica cada fila de `GET /seguridad/usuarios`',
+      },
+      descripcion:
+        'Vuelve a habilitar una cuenta inhabilitada: recupera los permisos que tenía —los del' +
+        ' grupo y sus excepciones—, sin repetir ninguno. Exige `MODIFICACION` sobre `usuarios` y' +
+        ' la observación del usuario (RNF-052).',
+    },
+    {
+      operationId: 'fijar_vigencia_de_usuario',
+      metodo: 'put',
+      ruta: '/api/v1/seguridad/usuarios/{id}/vigencia',
+      titulo: 'Vigencia de un usuario',
+      descripcionesDeRuta: {
+        id: 'El usuario, por el `id` que publica cada fila de `GET /seguridad/usuarios`',
+      },
+      descripcion: bloque(`
+        Fija desde cuándo y hasta cuándo vale la cuenta (RF-123). Es lo que el manual pide para el
+        personal por contrato: su acceso **caduca solo** el día que termina, sin depender de que
+        alguien se acuerde de retirarlo.
+
+        El cuerpo declara la vigencia **entera**: mandar los dos extremos nulos es *quitar* la
+        caducidad. Exige \`MODIFICACION\` sobre \`usuarios\` y la observación del usuario
+        (RNF-052).
       `),
     },
   ],

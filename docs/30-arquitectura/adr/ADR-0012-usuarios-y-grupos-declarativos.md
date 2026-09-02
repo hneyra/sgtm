@@ -92,6 +92,101 @@ stack; en el compose, `datos-de-implantacion.sh <ubigeo>` deriva `SGTM_ADMINISTR
 archivo. Así la cuenta no puede divergir entre Keycloak y la fila de `usuario` —que es lo único
 que une las dos mitades (ADR-0005)—.
 
+### 5. Las dos mitades tienen dueños distintos, y el alta por pantalla es la del padrón (#572)
+
+Un usuario del SGTM vive en **dos sitios**: la cuenta del proveedor de identidad y la fila de
+`usuario` (ADR-0005). Publicar `POST /seguridad/usuarios` exigía decidir antes cómo se coordinan,
+y la decisión se tomó **midiendo el reparto que ya existe**, no eligiendo el que parecía razonable.
+
+Lo medido, sobre `main` del 2026-09-02:
+
+| Mitad | Quién la crea hoy | Para quién |
+|---|---|---|
+| Cuenta en Keycloak | `reconciliar-identidades.sh`, de `municipalidades/<ubigeo>.json` | **todos** los declarados |
+| Fila de `usuario` | `ImplantarMunicipalidad` (perfil `batch`) | **sólo** el marcado `administrador: true` |
+
+Y nada más creaba filas de `usuario`: `registrarUsuario` no tenía ruta, y en
+[`infra/carga-de-datos/`](../../../infra/carga-de-datos/README.md) hay un `cargar-cajas.sh` para
+`area` y `caja` (#430) y **ninguno** para usuarios. De modo que **declarar un segundo usuario en el
+archivo producía exactamente el estado malo**: cuenta sin fila, alguien que autentica y a quien el
+guardia niega todo — y **sin ninguna forma de arreglarlo por el sistema**. El alta por pantalla no
+introduce ese estado: le da dueño a la mitad que no lo tenía.
+
+**La decisión, entonces: cada mitad conserva su dueño. El archivo declarativo sigue creando la
+cuenta; la pantalla crea la fila. La aplicación no habla con Keycloak.**
+
+#### 5.1 Quién crea la cuenta de Keycloak — la sigue creando el guion
+
+La aplicación **no** la crea, y no es una preferencia de estilo. Medido: el backend no tiene **ni
+un** cliente HTTP saliente en `src/main` —cero `RestClient`, `WebClient`, `RestTemplate` o
+`HttpClient`—, y el `Deployment` sólo recibe `SGTM_OIDC_EMISOR` y `SGTM_OIDC_JWKS`, que son los dos
+extremos **públicos y de lectura** con los que Spring Security valida una firma. Para crear una
+cuenta haría falta una credencial de administración del realm, que es justo la clase de credencial
+que [`ADR-0011`](ADR-0011-infraestructura-como-codigo.md) §3 mantiene fuera del alcance de la
+aplicación —«claves de `sgtm_owner`, `sgtm_app`, administrador de Keycloak: **no están en
+Pulumi**»—.
+
+El precio de dársela no es teórico: el proceso que atiende el padrón pasaría a llevar dentro una
+credencial capaz de crear cuentas —y de fijarles claves— **en todos los realms del servidor**, no
+sólo en el de una municipalidad. Es más poder del que la pantalla necesita, en el proceso más
+expuesto, para ahorrar un paso de provisión.
+
+#### 5.2 Qué pasa si una de las dos mitades falla
+
+Con el reparto de arriba **no hay escritura repartida**: el alta escribe **una fila en una
+transacción**, así que desde el punto de vista de quien atiende es atómica. Lo que no es —ni puede
+ser— atómico es el par, y por eso lo que el sistema tiene que hacer es **no fingir que lo es**:
+
+- **Fila sin cuenta** — lo que produce esta pantalla. Aparece en el padrón, se le pueden dar
+  permisos y **no puede entrar**. Es visible (está en `GET /seguridad/usuarios`), reversible
+  (`POST /seguridad/usuarios/{id}/baja`) e inofensiva: sin la otra mitad no hay token que el
+  guardia acepte. Se completa declarando la cuenta en `municipalidades/<ubigeo>.json`.
+- **Cuenta sin fila** — la mitad peligrosa, la que existía y esta pantalla **cierra**: autentica y
+  el guardia le niega todo, con el síntoma de un permiso mal configurado.
+
+El endpoint no promete la otra mitad: su respuesta es la fila que escribió, y su documentación en
+el contrato dice —con esas palabras— que **la cuenta se declara aparte**. Prometer «usuario
+creado» sería la única forma de que quien atiende no supiera que le falta un paso.
+
+#### 5.3 Qué hace la reconciliación con lo creado por pantalla — nada, y está medido
+
+`reconciliar-identidades.sh` no tiene **ni una** sentencia de borrado: la única aparición de
+«borra» en sus 521 líneas es el comentario que lo promete. Crea lo que falta, actualiza lo
+declarado, y su comprobación final recorre **los usuarios declarados** —que existan, estén
+`enabled`, tengan el atributo y estén en su grupo—. Una fila creada por pantalla vive en otra base
+y el guion no la ve; una cuenta que el archivo no nombre se queda como está.
+
+El costo, que hay que escribir porque no se ve: **una cuenta creada fuera del archivo no es
+reproducible.** Reconstruir el clúster recrea lo que el archivo declara y nada más, que es
+exactamente lo que este ADR existe para garantizar. Por eso la regla es que **la cuenta va al
+archivo**: la pantalla da de alta la fila, y quien provisiona añade la línea. La alternativa
+—descubrir en la reconstrucción que faltan las cuentas creadas en ventanilla— es el defecto que
+`crear-usuario.sh` tenía y que este ADR cerró.
+
+#### 5.4 De dónde sale `sujeto_oidc` — de ningún sitio, y por ahora sigue así
+
+`usuario.sujeto_oidc` existe desde `V5` y es único por municipalidad. Medido: **nadie lo escribe**
+—`Usuario.nuevo` pasa `null`, y no hay una sola llamada en `src/main` ni en `src/test` que ponga
+otra cosa— y **nadie lo lee**: `ComprobadorDeAccesoJdbc` resuelve por `u.cuenta = :usuario`. El
+enlace entre las dos mitades es, hoy, la **cuenta**.
+
+El alta lo deja nulo, y las dos salidas que parecían mejores se descartaron por escrito:
+
+- **Que el operador teclee el `sub`.** Es un UUID que quien atiende no tiene ningún motivo para
+  tener. Tecleado mal enlaza con nadie, y `usuario_sujeto_uq` haría además que la persona correcta
+  ya no se pudiera enlazar. Un dato que sólo puede estar bien copiándolo de una consola es un dato
+  que va a estar mal.
+- **Enlazarlo en el primer acceso.** Sería una escritura en el camino de lectura del guardia, sin
+  observación de usuario (regla 10, RNF-052), y **seguiría sin distinguir** «no hay cuenta» de «hay
+  cuenta y no ha entrado nunca», que es lo único que justificaría el mecanismo.
+
+Lo que hace seguro que el enlace sea la cuenta es que **la cuenta no se puede cambiar**: ninguno de
+los casos de uso de usuario la toca —`inhabilitarUsuario`, `habilitarUsuario` y
+`fijarVigenciaDeUsuario` conservan la que hay— y el alta es lo único que la fija. Eso no es una
+propiedad que se pueda dar por hecha, así que **la fija una prueba**: si algún día un endpoint
+publica una corrección de `cuenta`, se pondrá roja, y entonces habrá que resolver `sujeto_oidc`
+antes de mezclarla.
+
 ## Consecuencias
 
 **Positivas**

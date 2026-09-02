@@ -15,6 +15,7 @@ import {
   miembrosDelGrupo,
   permisosDelGrupo,
   permisosEfectivosDelUsuario,
+  registrarUsuario,
   OPERACIONES,
   PRIVILEGIOS,
   ROTULO_DEL_PRIVILEGIO,
@@ -213,6 +214,22 @@ export default function Seguridad({ dest, onDest }: PantallaProps) {
      `cambioIniciado` no es un rótulo de éxito: es lo que el servidor contestó
      —quién gestiona la credencial y a qué ruta suya hay que ir—, y se guarda
      porque ese destino no se puede inventar. */
+  /* ── El alta de usuario (#572) ─────────────────────────────────
+     Escribe LA FILA del padron. La cuenta del proveedor de identidad se
+     declara aparte, en `despliegue/identidad/` (ADR-0012 §5), y esta pantalla
+     no la crea ni puede crearla: la aplicacion no habla con Keycloak. Por eso
+     lo que se dice al terminar nombra la mitad que falta, en vez de anunciar
+     «usuario creado» —que seria la unica forma de que quien da de alta no
+     supiera que le queda un paso—. */
+  const [altaCuenta, setAltaCuenta] = useState('');
+  const [altaNombre, setAltaNombre] = useState('');
+  const [altaCorreo, setAltaCorreo] = useState('');
+  const [altaVigencia, setAltaVigencia] = useState('');
+  const [altaObservacion, setAltaObservacion] = useState('');
+  const [dandoDeAlta, setDandoDeAlta] = useState(false);
+  const [errorDelAlta, setErrorDelAlta] = useState<ErrorDeApi | null>(null);
+  const [altaHecha, setAltaHecha] = useState<string | null>(null);
+
   const [cambiandoClave, setCambiandoClave] = useState(false);
   const [errorAlCambiar, setErrorAlCambiar] = useState<ErrorDeApi | null>(null);
   const [cambioIniciado, setCambioIniciado] = useState<CambioDeClaveIniciado | null>(null);
@@ -421,6 +438,55 @@ export default function Seguridad({ dest, onDest }: PantallaProps) {
       );
     } finally {
       setGuardando(false);
+    }
+  };
+
+  /* El impedimento se dice entero, y no se reparte: un boton apagado sin
+     motivo legible es RNF-082 incumplido. La fecha va con el formato que el
+     backend lee (`LocalDate`), asi que un texto que no sea `AAAA-MM-DD` se
+     para aqui en vez de viajar y volver como un 422 que no dice cual campo. */
+  const vigenciaBienEscrita = altaVigencia.trim() === '' || /^\d{4}-\d{2}-\d{2}$/.test(altaVigencia.trim());
+  const impedimentoDelAlta =
+    altaCuenta.trim() === ''
+      ? 'Falta la cuenta: es lo único que une esta fila con la identidad con la que la persona entra (ADR-0005).'
+      : altaNombre.trim() === ''
+        ? 'Falta el nombre: es lo que la bitácora y los listados muestran.'
+        : !vigenciaBienEscrita
+          ? 'La vigencia se escribe AAAA-MM-DD, o se deja en blanco para que no caduque.'
+          : altaObservacion.trim() === ''
+            ? 'Falta la observación: toda modificación se guarda con el motivo de quien la hace (RNF-052).'
+            : '';
+  const puedeDarDeAlta = impedimentoDelAlta === '' && !dandoDeAlta;
+
+  const darDeAlta = async () => {
+    if (!puedeDarDeAlta) return;
+    setDandoDeAlta(true);
+    setErrorDelAlta(null);
+    setAltaHecha(null);
+    try {
+      const creado = await registrarUsuario(
+        {
+          cuenta: altaCuenta.trim(),
+          nombre: altaNombre.trim(),
+          correo: altaCorreo.trim() === '' ? null : altaCorreo.trim(),
+          vigenciaHasta: altaVigencia.trim() === '' ? null : altaVigencia.trim(),
+        },
+        altaObservacion.trim(),
+      );
+      setAltaCuenta('');
+      setAltaNombre('');
+      setAltaCorreo('');
+      setAltaVigencia('');
+      setAltaObservacion('');
+      setAltaHecha(creado.cuenta);
+      usuariosReales.reintentar();
+      toast('Fila del padrón creada. Falta su cuenta en el proveedor de identidad.');
+    } catch (fallo) {
+      setErrorDelAlta(
+        fallo instanceof ErrorDeApi ? fallo : new ErrorDeApi('ERROR_INTERNO', 'No se pudo dar de alta', 0),
+      );
+    } finally {
+      setDandoDeAlta(false);
     }
   };
 
@@ -1928,10 +1994,11 @@ export default function Seguridad({ dest, onDest }: PantallaProps) {
                 <path d="M12 8.4v.02M12 11.4v4.2" />
               </svg>
               <p style={{ margin: 0, flex: 1, fontSize: 13, lineHeight: 1.55, color: 'var(--warn-fg)', textWrap: 'pretty' }}>
-                <strong>Esta alta todavía no se puede hacer desde aquí.</strong> No hay <code>POST /seguridad/usuarios</code> en el
-                contrato, y una cuenta son dos mitades —la fila del padrón y la cuenta en el proveedor de identidad (ADR-0012)—, así que
-                el alta completa exige decidir antes cómo se coordinan. Está pedido en el issue <strong>#572</strong>. Mientras tanto se
-                dan de alta con el mecanismo declarativo del despliegue.
+                <strong>Esta alta crea la fila del padrón, no la cuenta con la que se entra.</strong> Una persona son{' '}
+                <strong>dos mitades</strong>: esta fila y su cuenta en el proveedor de identidad. La segunda se declara en{' '}
+                <code>despliegue/identidad/municipalidades/&lt;ubigeo&gt;.json</code>, que es la fuente versionada que la recrea si el
+                servidor se reconstruye (ADR-0012 §5). Mientras esa cuenta no exista, esta persona aparece en los listados, admite
+                permisos y <strong>no puede entrar</strong>.
               </p>
             </div>
 
@@ -1939,39 +2006,44 @@ export default function Seguridad({ dest, onDest }: PantallaProps) {
               <div style={{ padding: '14px 16px', borderBottom: '1px solid var(--line)' }}>
                 <p style={{ margin: 0, fontFamily: 'var(--font-serif)', fontSize: 16, fontWeight: 600 }}>Nuevo usuario</p>
                 <p style={{ margin: '3px 0 0', fontSize: 12.5, lineHeight: 1.5, color: 'var(--ink-3)', maxWidth: '76ch', textWrap: 'pretty' }}>
-                  Esto es lo que el alta pedirá. Los campos están apagados porque no hay a dónde mandarlos, y no hay ninguno de
-                  contraseña: la credencial la guarda el proveedor de identidad y este sistema no la recibe nunca.
+                  <strong>No hay campo de contraseña, y no puede haberlo</strong>: la credencial la guarda el proveedor de identidad y
+                  este sistema no la recibe nunca (ADR-0005). El <em>Usuario</em> es lo que une esta fila con esa cuenta, así que tiene
+                  que ser el mismo con el que la persona entra.
                 </p>
               </div>
               <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit,minmax(192px,1fr))', gap: '15px 16px', padding: '15px 16px 17px' }}>
                 <CampoDelSistema
-                  campo={{ k: 'nUsuario', l: 'Usuario', t: 'text', ph: 'Sin espacios ni tildes', ayuda: 'Es el nombre con el que firma cada acto en la bitácora' }}
-                  valor=""
-                  onCambio={() => undefined}
-                  apagado
+                  campo={{ k: 'nUsuario', l: 'Usuario', t: 'text', ph: 'Sin espacios ni tildes', ayuda: 'Es el nombre con el que firma cada acto en la bitácora, y el que tiene que coincidir con su cuenta del proveedor' }}
+                  valor={altaCuenta}
+                  onCambio={(v) => setAltaCuenta(String(v))}
                 />
                 <CampoDelSistema
                   campo={{ k: 'nNombre', l: 'Nombre y apellidos', t: 'text', ancho: true, ph: 'APELLIDOS, NOMBRES' }}
-                  valor=""
-                  onCambio={() => undefined}
-                  apagado
+                  valor={altaNombre}
+                  onCambio={(v) => setAltaNombre(String(v))}
                 />
                 <CampoDelSistema
                   campo={{ k: 'nCorreo', l: 'Correo', t: 'text', ph: 'Para el enlace del proveedor de identidad' }}
-                  valor=""
-                  onCambio={() => undefined}
-                  apagado
+                  valor={altaCorreo}
+                  onCambio={(v) => setAltaCorreo(String(v))}
                 />
                 <CampoDelSistema
-                  campo={{ k: 'nVigencia', l: 'Vigencia hasta', t: 'text', ph: 'Opcional', ayuda: 'Pasada esa fecha la cuenta deja de valer' }}
-                  valor=""
-                  onCambio={() => undefined}
-                  apagado
+                  campo={{ k: 'nVigencia', l: 'Vigencia hasta', t: 'text', ph: 'AAAA-MM-DD · opcional', ayuda: 'Pasada esa fecha la cuenta deja de valer, sin que nadie tenga que acordarse' }}
+                  valor={altaVigencia}
+                  onCambio={(v) => setAltaVigencia(String(v))}
+                />
+                <CampoDelSistema
+                  campo={{ k: 'nMotivo', l: 'Motivo del alta', t: 'text', ancho: true, ph: 'Obligatorio: queda en la auditoría con tu usuario', ayuda: 'Toda modificación se guarda con el motivo de quien la hace (RNF-052)' }}
+                  valor={altaObservacion}
+                  onCambio={(v) => setAltaObservacion(String(v))}
                 />
               </div>
               <div style={{ padding: '0 16px 17px' }}>
                 <p style={{ margin: '0 0 8px', fontSize: 11.5, fontWeight: 500, color: 'var(--ink-3)' }}>
-                  Grupos a los que podría entrar · los de esta municipalidad
+                  Grupos de esta municipalidad ·{' '}
+                  <span style={{ fontWeight: 400 }}>
+                    el alta no afilia a ninguno: eso se hace después, y es lo que le da permisos
+                  </span>
                 </p>
                 {gruposReales.error !== null && (
                   <FalloDeLectura error={gruposReales.error} que="los grupos" acceso="grupos" alReintentar={gruposReales.reintentar} />
@@ -1994,16 +2066,37 @@ export default function Seguridad({ dest, onDest }: PantallaProps) {
                   )}
                 </div>
               </div>
+              {errorDelAlta !== null && (
+                <div style={{ margin: '0 16px 14px', padding: '11px 13px', border: '1px solid var(--line-2)', borderLeft: '3px solid var(--bad-fg)', borderRadius: 8, background: 'var(--bad-bg)' }}>
+                  <p style={{ margin: 0, fontSize: 12.5, lineHeight: 1.5, color: 'var(--bad-fg)', textWrap: 'pretty' }}>
+                    {errorDelAlta.mensaje}
+                  </p>
+                </div>
+              )}
+              {altaHecha !== null && (
+                <div style={{ margin: '0 16px 14px', padding: '11px 13px', border: '1px solid var(--line-2)', borderLeft: '3px solid var(--warn-fg)', borderRadius: 8, background: 'var(--warn-bg)' }}>
+                  <p style={{ margin: 0, fontSize: 12.5, lineHeight: 1.5, color: 'var(--warn-fg)', textWrap: 'pretty' }}>
+                    <strong>«{altaHecha}» ya está en el padrón, y todavía no puede entrar.</strong> Faltan las dos cosas que esta
+                    pantalla no hace: declarar su cuenta en <code>despliegue/identidad/</code> —que es lo que le da con qué
+                    autenticarse— y afiliarla a un grupo, que es lo que le da permisos.
+                  </p>
+                </div>
+              )}
               <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap', padding: '13px 16px', borderTop: '1px solid var(--line)', background: 'var(--bg-elev)' }}>
-                <p style={{ margin: 0, flex: 1, minWidth: 170, fontSize: 12, color: 'var(--ink-3)', textWrap: 'pretty' }}>
-                  Sin <code>POST /seguridad/usuarios</code> no hay a dónde mandar el alta (#572).
+                <p id="motivo-del-alta" style={{ margin: 0, flex: 1, minWidth: 170, fontSize: 12, color: 'var(--ink-3)', textWrap: 'pretty' }}>
+                  {impedimentoDelAlta !== ''
+                    ? impedimentoDelAlta
+                    : 'Se creará la fila del padrón. La cuenta del proveedor de identidad se declara aparte.'}
                 </p>
                 <button
-                  disabled
-                  title="No hay POST /seguridad/usuarios en el contrato: el alta no se puede mandar a ninguna parte (#572)."
-                  style={{ border: 0, borderRadius: 6, padding: '10px 20px', background: 'var(--accent)', color: '#fff', fontSize: 13, fontWeight: 500, cursor: 'not-allowed', opacity: 0.5 }}
+                  onClick={() => void darDeAlta()}
+                  disabled={!puedeDarDeAlta}
+                  title={impedimentoDelAlta || undefined}
+                  aria-describedby="motivo-del-alta"
+                  className={puedeDarDeAlta ? 'hov-acento-2' : undefined}
+                  style={{ border: 0, borderRadius: 6, padding: '10px 20px', background: 'var(--accent)', color: '#fff', fontSize: 13, fontWeight: 500, cursor: puedeDarDeAlta ? 'pointer' : 'not-allowed', opacity: puedeDarDeAlta ? 1 : 0.5 }}
                 >
-                  Crear el usuario
+                  {dandoDeAlta ? 'Creando…' : 'Crear la fila del padrón'}
                 </button>
               </div>
             </section>

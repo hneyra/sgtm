@@ -195,6 +195,19 @@ class ContratoDeApiTest {
                     "GET /seguridad/grupos/{grupo}/miembros",
                     "PUT /seguridad/grupos/{id}/permisos",
                     "GET /seguridad/grupos/{id}/permisos",
+                    // #572 — las ocho escrituras que #543 dejo censadas sin ruta. Las de
+                    // grupo solo esperaban su controlador; las de usuario esperaban la
+                    // decision de ADR-0012 §5 sobre como se coordinan las dos mitades de
+                    // una persona: esta pantalla escribe la fila del padron y el archivo
+                    // declarativo de `despliegue/identidad/` crea la cuenta del proveedor.
+                    "POST /seguridad/grupos",
+                    "POST /seguridad/grupos/{id}/baja",
+                    "POST /seguridad/grupos/{id}/reactivacion",
+                    "PUT /seguridad/grupos/{id}/vigencia",
+                    "POST /seguridad/usuarios",
+                    "POST /seguridad/usuarios/{id}/baja",
+                    "POST /seguridad/usuarios/{id}/reactivacion",
+                    "PUT /seguridad/usuarios/{id}/vigencia",
                     "GET /seguridad/sesion/permisos",
                     // #555 — a quien pertenecen las cifras de la pantalla. Ninguna
                     // operacion publicaba el nombre de la municipalidad de la sesion, asi
