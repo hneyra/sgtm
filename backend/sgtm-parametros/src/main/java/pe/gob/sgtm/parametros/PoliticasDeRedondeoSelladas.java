@@ -349,8 +349,14 @@ public final class PoliticasDeRedondeoSelladas {
         }
     }
 
-    /** La llave de la fila de un punto, {@code REDONDEO:‹punto›}. */
-    private static String llaveDe(PuntoDeRedondeo punto) {
+    /**
+     * La llave de la fila de un punto, {@code REDONDEO:‹punto›}.
+     *
+     * <p>Deja de ser privada para que {@link FaltaPublicar} componga con ella la llave del punto
+     * que el dominio puro no sabe llavear (#691): {@code PuntoSinPolitica} conoce el punto y no el
+     * ejercicio, y esta clase conoce el formato.
+     */
+    static String llaveDe(PuntoDeRedondeo punto) {
         return TIPO + ":" + punto;
     }
 }

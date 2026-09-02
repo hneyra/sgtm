@@ -21,6 +21,7 @@ import pe.gob.sgtm.cuentacorriente.SeleccionDeObligacion;
 import pe.gob.sgtm.dominio.Alicuota;
 import pe.gob.sgtm.dominio.Ejercicio;
 import pe.gob.sgtm.dominio.Observacion;
+import pe.gob.sgtm.parametros.FaltaPublicar;
 import pe.gob.sgtm.tesoreria.ConvenioCoactivo;
 import pe.gob.sgtm.tesoreria.FraccionamientoCoactivo;
 import pe.gob.sgtm.web.Api;
@@ -135,13 +136,18 @@ public class ConvenioCoactivoController {
             // 409: la peticion esta bien formada; lo que no admite la operacion es el estado del
             // expediente.
             throw new ProblemaDeNegocio(CodigoDeError.CONFLICTO, mensajeDe(enConflicto));
-        } catch (FraccionarEnCoactiva.DeudaAjenaAlProcedimiento
-                | FraccionamientoCoactivo.SinDeudaCoactivaQueFraccionar
-                | FraccionamientoCoactivo.CondicionesSinPublicar
-                | IllegalArgumentException invalido) {
+        } catch (FraccionamientoCoactivo.CondicionesSinPublicar falta) {
             // `CondicionesSinPublicar` no es un fallo del servidor: es que nadie ha publicado
             // todavia el interes, el maximo de cuotas o la politica de redondeo del ejercicio
             // (D-02a, D-03c). Ver la cabecera de la clase (#562).
+            // Falta publicar una cifra normativa, no un campo de la peticion: el 422 sale con
+            // el miembro `parametroQueFalta` (#604, #691). Sin el, la interfaz no puede decir UNA
+            // de las dos cosas —«corrige el formulario» o «hay que publicar una cifra»— y acaba
+            // enumerando las dos, que es peor que no decir nada.
+            throw FaltaPublicar.problema(falta);
+        } catch (FraccionarEnCoactiva.DeudaAjenaAlProcedimiento
+                | FraccionamientoCoactivo.SinDeudaCoactivaQueFraccionar
+                | IllegalArgumentException invalido) {
             throw new ProblemaDeNegocio(CodigoDeError.VALIDACION, mensajeDe(invalido));
         }
     }

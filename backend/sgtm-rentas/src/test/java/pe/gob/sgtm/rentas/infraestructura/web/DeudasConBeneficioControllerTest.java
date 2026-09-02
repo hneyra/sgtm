@@ -135,6 +135,13 @@ class DeudasConBeneficioControllerTest {
         assertThat(cuerpo)
                 .as("el operador tiene que poder pedir el parametro que falta por su nombre")
                 .contains("BENEFICIO:AMNISTÍA ORDENANZA 018-2026");
+        assertThat(cuerpo)
+                .as(
+                        "#691 — y por programa: esta ruta no estaba ni en el censo del enunciado,"
+                                + " que solo nombraba seis excepciones y esta es una septima")
+                .contains(
+                        "\"parametroQueFalta\":{\"ejercicio\":2026,"
+                                + "\"llave\":\"BENEFICIO:AMNISTÍA ORDENANZA 018-2026\"}");
         assertThat(cuerpo).doesNotContain("\"simulacion\"");
     }
 

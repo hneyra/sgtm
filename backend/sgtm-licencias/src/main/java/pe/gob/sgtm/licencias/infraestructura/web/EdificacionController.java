@@ -43,6 +43,7 @@ import pe.gob.sgtm.licencias.dominio.SeccionDelFue;
 import pe.gob.sgtm.licencias.dominio.TipoDeObra;
 import pe.gob.sgtm.licencias.dominio.TipoDeProfesional;
 import pe.gob.sgtm.licencias.dominio.TipoDeTramiteDeEdificacion;
+import pe.gob.sgtm.parametros.FaltaPublicar;
 import pe.gob.sgtm.parametros.LectorDeParametros;
 import pe.gob.sgtm.web.Api;
 import pe.gob.sgtm.web.CodigoDeError;
@@ -365,7 +366,11 @@ public class EdificacionController {
             // 422 y no 500: la peticion esta bien y el sistema tampoco esta roto. Lo que falta es
             // un dato de configuracion, y quien opera tiene que enterarse de cual.
             // `EjercicioSinSellar` es el mismo caso y hasta #562 salia como 500 con incidencia.
-            throw new ProblemaDeNegocio(CodigoDeError.VALIDACION, mensajeDe(sinParametro));
+            // Falta publicar una cifra normativa, no un campo de la peticion: el 422 sale con
+            // el miembro `parametroQueFalta` (#604, #691). Sin el, la interfaz no puede decir UNA
+            // de las dos cosas —«corrige el formulario» o «hay que publicar una cifra»— y acaba
+            // enumerando las dos, que es peor que no decir nada.
+            throw FaltaPublicar.problema(sinParametro);
         } catch (IllegalArgumentException invalida) {
             throw new ProblemaDeNegocio(CodigoDeError.VALIDACION, mensajeDe(invalida));
         }
@@ -405,7 +410,11 @@ public class EdificacionController {
             throw new ProblemaDeNegocio(CodigoDeError.VALIDACION, mensajeDe(sinPagar));
         } catch (DerechosDeTramiteParametrizados.DerechoSinParametrizar
                 | LectorDeParametros.EjercicioSinSellar sinParametro) {
-            throw new ProblemaDeNegocio(CodigoDeError.VALIDACION, mensajeDe(sinParametro));
+            // Falta publicar una cifra normativa, no un campo de la peticion: el 422 sale con
+            // el miembro `parametroQueFalta` (#604, #691). Sin el, la interfaz no puede decir UNA
+            // de las dos cosas —«corrige el formulario» o «hay que publicar una cifra»— y acaba
+            // enumerando las dos, que es peor que no decir nada.
+            throw FaltaPublicar.problema(sinParametro);
         } catch (IllegalArgumentException invalida) {
             throw new ProblemaDeNegocio(CodigoDeError.VALIDACION, mensajeDe(invalida));
         }

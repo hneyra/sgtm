@@ -296,6 +296,10 @@ class VehicularControllerTest {
 
         assertThat(resultado.getResponse().getStatus()).isEqualTo(422);
         assertThat(resultado.getResponse().getContentAsString()).contains("VEHICULAR_MINIMO");
+        assertThat(resultado.getResponse().getContentAsString())
+                .as("#691 — y la llave viaja legible por programa, no solo dentro del mensaje")
+                .contains(
+                        "\"parametroQueFalta\":{\"ejercicio\":2026,\"llave\":\"VEHICULAR_MINIMO\"}");
         assertThat(determinaciones.insertadas).isZero();
     }
 
@@ -461,6 +465,9 @@ class VehicularControllerTest {
         assertThat(cuerpo)
                 .as("un 500 traeria identificador de incidencia; esto no es una incidencia")
                 .doesNotContain("incidencia");
+        assertThat(cuerpo)
+                .as("#691 — sin conjunto sellado no hay llave: viaja el ejercicio solo")
+                .contains("\"parametroQueFalta\":{\"ejercicio\":2026}");
         assertThat(determinaciones.insertadas).isZero();
     }
 
@@ -486,6 +493,14 @@ class VehicularControllerTest {
         assertThat(resultado.getResponse().getContentAsString())
                 .contains("V1H-882")
                 .doesNotContain("incidencia");
+        assertThat(resultado.getResponse().getContentAsString())
+                .as(
+                        "#691 — CONTRASTE: esta NO lleva el discriminador, y no por descuido. El"
+                                + " valor referencial no es una fila del conjunto sellado sino del"
+                                + " cuadro nacional del MEF por marca, modelo y ano (D-13,"
+                                + " ADR-0017): lo que falta se busca en otro sitio, asi que darle"
+                                + " el mismo miembro diria por contrato que no")
+                .doesNotContain("parametroQueFalta");
     }
 
     @Test

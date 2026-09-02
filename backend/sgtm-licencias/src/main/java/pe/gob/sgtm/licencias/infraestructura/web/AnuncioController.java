@@ -31,6 +31,7 @@ import pe.gob.sgtm.licencias.dominio.ClaseDeAnuncio;
 import pe.gob.sgtm.licencias.dominio.CriterioDeAnuncios;
 import pe.gob.sgtm.licencias.dominio.MovimientoDeAnuncioRepository;
 import pe.gob.sgtm.licencias.dominio.TipoDeAnuncio;
+import pe.gob.sgtm.parametros.FaltaPublicar;
 import pe.gob.sgtm.parametros.LectorDeParametros;
 import pe.gob.sgtm.web.Api;
 import pe.gob.sgtm.web.CodigoDeError;
@@ -202,7 +203,11 @@ public class AnuncioController {
             // un dato de configuracion —la ordenanza de D-02b, #199— y quien opera tiene que
             // enterarse de cual para poder pedirlo. `EjercicioSinSellar` —que no haya NINGUN
             // conjunto sellado— es el mismo caso y hasta #562 salia como 500 con incidencia.
-            throw new ProblemaDeNegocio(CodigoDeError.VALIDACION, mensajeDe(sinTarifa));
+            // Falta publicar una cifra normativa, no un campo de la peticion: el 422 sale con
+            // el miembro `parametroQueFalta` (#604, #691). Sin el, la interfaz no puede decir UNA
+            // de las dos cosas —«corrige el formulario» o «hay que publicar una cifra»— y acaba
+            // enumerando las dos, que es peor que no decir nada.
+            throw FaltaPublicar.problema(sinTarifa);
         } catch (AnuncioRepository.ClaveRepetida carrera) {
             throw new ProblemaDeNegocio(CodigoDeError.CONFLICTO, mensajeDe(carrera));
         } catch (AnuncioRepository.NumeroDuplicado repetido) {
@@ -241,7 +246,11 @@ public class AnuncioController {
             throw new ProblemaDeNegocio(CodigoDeError.CONFLICTO, mensajeDe(dosVeces));
         } catch (TasaDeAnunciosParametrizada.TasaSinParametrizar
                 | LectorDeParametros.EjercicioSinSellar sinTarifa) {
-            throw new ProblemaDeNegocio(CodigoDeError.VALIDACION, mensajeDe(sinTarifa));
+            // Falta publicar una cifra normativa, no un campo de la peticion: el 422 sale con
+            // el miembro `parametroQueFalta` (#604, #691). Sin el, la interfaz no puede decir UNA
+            // de las dos cosas —«corrige el formulario» o «hay que publicar una cifra»— y acaba
+            // enumerando las dos, que es peor que no decir nada.
+            throw FaltaPublicar.problema(sinTarifa);
         } catch (RenovarAnuncio.AnteriorALaAutorizacion | RenovarAnuncio.VigenciaHaciaAtras mal) {
             throw new ProblemaDeNegocio(CodigoDeError.VALIDACION, mensajeDe(mal));
         }

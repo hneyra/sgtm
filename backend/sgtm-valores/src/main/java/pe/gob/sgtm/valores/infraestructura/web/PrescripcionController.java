@@ -22,6 +22,7 @@ import pe.gob.sgtm.contribuyentes.DirectorioDeContribuyentes;
 import pe.gob.sgtm.contribuyentes.ResumenDeContribuyente;
 import pe.gob.sgtm.dominio.Ejercicio;
 import pe.gob.sgtm.dominio.Observacion;
+import pe.gob.sgtm.parametros.FaltaPublicar;
 import pe.gob.sgtm.parametros.LectorDeParametros;
 import pe.gob.sgtm.valores.aplicacion.ConsultaDePrescripciones;
 import pe.gob.sgtm.valores.aplicacion.DeclararPrescripcion;
@@ -179,10 +180,14 @@ public class PrescripcionController {
                             observacion);
             return ResponseEntity.status(HttpStatus.CREATED)
                     .body(PrescripcionResource.de(guardada, contribuyente.codigo()));
-        } catch (DeclararPrescripcion.RangoInvertido
-                | PlazosParametrizados.PlazoSinParametrizar
-                | LectorDeParametros.EjercicioSinSellar
-                | IllegalArgumentException invalido) {
+        } catch (PlazosParametrizados.PlazoSinParametrizar
+                | LectorDeParametros.EjercicioSinSellar falta) {
+            // Falta publicar una cifra normativa, no un campo de la peticion: el 422 sale con
+            // el miembro `parametroQueFalta` (#604, #691). Sin el, la interfaz no puede decir UNA
+            // de las dos cosas —«corrige el formulario» o «hay que publicar una cifra»— y acaba
+            // enumerando las dos, que es peor que no decir nada.
+            throw FaltaPublicar.problema(falta);
+        } catch (DeclararPrescripcion.RangoInvertido | IllegalArgumentException invalido) {
             throw new ProblemaDeNegocio(CodigoDeError.VALIDACION, mensajeDe(invalido));
         }
     }

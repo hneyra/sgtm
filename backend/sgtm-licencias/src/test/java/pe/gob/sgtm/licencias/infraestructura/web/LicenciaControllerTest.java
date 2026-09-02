@@ -257,6 +257,11 @@ class LicenciaControllerTest {
                             cuerpoDeEmision(RECIBO, null),
                             422);
             assertThat(cuerpo).contains("VALIDACION");
+            assertThat(cuerpo)
+                    .as(
+                            "#691 — CONTRASTE: el mismo 422, y sin el miembro. Esto lo arregla"
+                                    + " quien atiende, aqui mismo: escribir la observacion")
+                    .doesNotContain("parametroQueFalta");
         }
 
         @Test
@@ -302,6 +307,13 @@ class LicenciaControllerTest {
                             cuerpoDeEmision(RECIBO, "Se emite en la prueba"),
                             422);
             assertThat(cuerpo).contains("TUPA:DERECHO_LICENCIA_FUNCIONAMIENTO");
+            assertThat(cuerpo)
+                    .as(
+                            "#691 — y la llave viaja legible por programa, no solo dentro del"
+                                    + " texto: el texto se reescribe y el contrato no")
+                    .contains(
+                            "\"parametroQueFalta\":{\"ejercicio\":2026,"
+                                    + "\"llave\":\"TUPA:DERECHO_LICENCIA_FUNCIONAMIENTO\"}");
         }
 
         @Test

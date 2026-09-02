@@ -690,6 +690,117 @@ class PredialControllerTest {
                 .doesNotContain("incidencia");
     }
 
+    // ------------------------------------------- y el 422 dice CUAL de las dos cosas (#691)
+
+    @Test
+    @DisplayName("#691 — sin conjunto sellado, el 422 trae el ejercicio y ninguna llave")
+    void sinConjuntoSelladoTraeElMiembro() throws Exception {
+        predios.con(11L, "10001", "AV. GRAU 100", Porcentaje.total());
+        mvc = montarCon(lectorSinSellar());
+
+        MvcResult resultado = mvc.perform(simularIndividual()).andReturn();
+
+        assertThat(resultado.getResponse().getStatus()).isEqualTo(422);
+        assertThat(resultado.getResponse().getContentAsString())
+                .as("lo que falta es el conjunto entero: no hay ninguna fila que nombrar")
+                .contains("\"parametroQueFalta\":{\"ejercicio\":2026}");
+    }
+
+    @Test
+    @DisplayName("#691 — y la corrida masiva contesta el mismo miembro, no solo el mismo texto")
+    void laCorridaMasivaTambienTraeElMiembro() throws Exception {
+        predios.con(11L, "10001", "AV. GRAU 100", Porcentaje.total());
+        sembrarUnPadronQueSeRecalcula();
+        mvc = montarCon(lectorSinSellar());
+
+        MvcResult resultado = mvc.perform(recalcularElPadron()).andReturn();
+
+        assertThat(resultado.getResponse().getStatus()).isEqualTo(422);
+        assertThat(resultado.getResponse().getContentAsString())
+                .contains("\"parametroQueFalta\":{\"ejercicio\":2026}");
+    }
+
+    @Test
+    @DisplayName("#691 — la cifra del cuadro que falta viaja como llave, no solo dentro del texto")
+    void laCifraDelCuadroTraeSuLlave() throws Exception {
+        predios.con(11L, "10001", "AV. GRAU 100", Porcentaje.total());
+        mvc = montar(cuadroSinDerechoDeEmision());
+
+        MvcResult resultado = mvc.perform(simularIndividual()).andReturn();
+
+        assertThat(resultado.getResponse().getStatus()).isEqualTo(422);
+        assertThat(resultado.getResponse().getContentAsString())
+                .as("la interfaz reacciona al miembro, nunca al texto: el texto se reescribe")
+                .contains(
+                        "\"parametroQueFalta\":{\"ejercicio\":2026,\"llave\":\"DERECHO_EMISION_PREDIAL\"}");
+    }
+
+    @Test
+    @DisplayName("#691 — sin ningun punto observado, la llave es el TIPO solo")
+    void sinPuntosObservadosLaLlaveEsElTipo() throws Exception {
+        predios.con(11L, "10001", "AV. GRAU 100", Porcentaje.total());
+        mvc = montar(cuadroSinRedondeo());
+
+        MvcResult resultado = mvc.perform(simularIndividual()).andReturn();
+
+        assertThat(resultado.getResponse().getStatus()).isEqualTo(422);
+        assertThat(resultado.getResponse().getContentAsString())
+                .as(
+                        "falta el bloque entero y nadie sabe cual de los trece puntos queria el que"
+                                + " llamo: nombrar uno seria verosimil y equivocado")
+                .contains("\"parametroQueFalta\":{\"ejercicio\":2026,\"llave\":\"REDONDEO\"}");
+    }
+
+    @Test
+    @DisplayName("#691 — con media politica, la llave es la fila del punto")
+    void laMediaPoliticaTraeLaFila() throws Exception {
+        predios.con(11L, "10001", "AV. GRAU 100", Porcentaje.total());
+        mvc = montar(cuadroConMediaPolitica());
+
+        MvcResult resultado = mvc.perform(simularIndividual()).andReturn();
+
+        assertThat(resultado.getResponse().getStatus()).isEqualTo(422);
+        assertThat(resultado.getResponse().getContentAsString())
+                .contains(
+                        "\"parametroQueFalta\":{\"ejercicio\":2026,\"llave\":\"REDONDEO:CUOTA\"}");
+    }
+
+    @Test
+    @DisplayName("#691 — y la del dominio puro tambien, con el ejercicio puesto desde fuera")
+    void elPuntoSinPoliticaTraeSuLlave() throws Exception {
+        predios.con(11L, "10001", "AV. GRAU 100", Porcentaje.total());
+        mvc = montar(cuadroSinElPuntoDeLaCuota());
+
+        MvcResult resultado = mvc.perform(simularIndividual()).andReturn();
+
+        assertThat(resultado.getResponse().getStatus()).isEqualTo(422);
+        assertThat(resultado.getResponse().getContentAsString())
+                .as(
+                        "`PuntoSinPolitica` es dominio puro y no sabe de que ejercicio son sus"
+                                + " politicas (regla 7): el ejercicio lo pone quien lo pidio, y la"
+                                + " llave se compone con el punto que la excepcion si nombra")
+                .contains(
+                        "\"parametroQueFalta\":{\"ejercicio\":2026,\"llave\":\"REDONDEO:CUOTA\"}");
+    }
+
+    @Test
+    @DisplayName("#691 — CONTRASTE: el predio sin autovaluo NO lo lleva, y es el mismo 422")
+    void elPredioSinAutovaluoNoLlevaElMiembro() throws Exception {
+        predios.con(11L, "10001", "AV. GRAU 100", Porcentaje.total());
+        predios.con(22L, "10002", "JR. LIMA 250", Porcentaje.total());
+
+        MvcResult resultado = mvc.perform(simularIndividual()).andReturn();
+
+        assertThat(resultado.getResponse().getStatus())
+                .as("tambien es 422 VALIDACION: eso es justo lo que hacia falta discriminar")
+                .isEqualTo(422);
+        assertThat(resultado.getResponse().getContentAsString())
+                .as(
+                        "esto lo arregla quien atiende, declarando el autovaluo del otro predio."
+                                + " Ponerlo en todos seria tan inutil como no ponerlo en ninguno")
+                .doesNotContain("parametroQueFalta");
+    }
+
     @Test
     @DisplayName("y ninguna de las seis escribe una incidencia en el registro de errores")
     void loQueFaltaPublicarNoEnsuciaElRegistro() throws Exception {

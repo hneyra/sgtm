@@ -37,6 +37,26 @@ import pe.gob.sgtm.dominio.Ejercicio;
  * falta exactamente una fila, y el {@code TIPO} solo cuando falta el bloque entero.</b> Nunca se
  * inventa una clave para rellenar el hueco.
  *
+ * <h2>Quien la declara, y por que importa que sean todas</h2>
+ *
+ * <p>#604 la creo con seis implementaciones —las de convenios— y dejo veintidos puntos de
+ * traduccion sin discriminador en seis modulos. #691 los cerro, y para eso la declaran <b>trece</b>
+ * excepciones mas: las de los plazos de coactiva, valores y sanciones, el arancel de costas, la
+ * tasa de anuncios, el derecho del TUPA, la cifra del cuadro del predial, las tres de las campanas
+ * de beneficio, la fila que falta de {@link ParametrosSellados} y el envoltorio de frontera de
+ * {@code FraccionamientoCoactivo}.
+ *
+ * <p>Declararla no es documentacion: es lo que hace a la excepcion <b>traducible</b>. {@code
+ * FaltaPublicar} acota su parametro a {@code RuntimeException & ParametroSinPublicar} —el tipo que
+ * da un {@code catch} multiple—, asi que una excepcion que no la declare no se puede pasar por ahi,
+ * y una guarda del codigo fuente exige que todo {@code catch} que la nombre y conteste 422 pase por
+ * ahi ({@code DiscriminadorDeLoQueFaltaPublicarTest}).
+ *
+ * <p>La <b>unica</b> excepcion de esa familia que no puede declararla es {@code
+ * PoliticasDeRedondeo.PuntoSinPolitica}: vive en {@code sgtm-dominio-compartido}, que esta por
+ * debajo de este modulo en el grafo, y ademas no sabe de que ejercicio salieron sus politicas
+ * (regla 7). Se traduce con una sobrecarga que recibe el ejercicio de quien lo pidio.
+ *
  * <h2>Lo que no lleva</h2>
  *
  * <p>Ni tabla, ni columna, ni restriccion, ni SQL (RNF-033). El ejercicio y la llave son datos del

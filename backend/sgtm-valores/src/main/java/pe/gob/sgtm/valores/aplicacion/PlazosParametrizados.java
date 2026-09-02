@@ -3,12 +3,14 @@ package pe.gob.sgtm.valores.aplicacion;
 import java.time.LocalDate;
 import java.time.format.DateTimeParseException;
 import java.util.LinkedHashSet;
+import java.util.Optional;
 import java.util.Set;
 import org.springframework.stereotype.Service;
 import pe.gob.sgtm.dominio.CalendarioHabil;
 import pe.gob.sgtm.dominio.Ejercicio;
 import pe.gob.sgtm.dominio.Plazo;
 import pe.gob.sgtm.parametros.LectorDeParametros;
+import pe.gob.sgtm.parametros.ParametroSinPublicar;
 import pe.gob.sgtm.parametros.ParametrosSellados;
 import pe.gob.sgtm.valores.dominio.CausalDePrescripcion;
 import pe.gob.sgtm.valores.dominio.TipoValor;
@@ -183,9 +185,16 @@ public class PlazosParametrizados {
      * corpus. Que falle aqui, nombrando la llave, es preferible a que la operacion siga con un
      * numero inventado.
      */
-    public static final class PlazoSinParametrizar extends RuntimeException {
+    public static final class PlazoSinParametrizar extends RuntimeException
+            implements ParametroSinPublicar {
 
         @java.io.Serial private static final long serialVersionUID = 1L;
+
+        // El aviso [serial] no aplica: `Ejercicio` es un record del dominio que no
+        // implementa Serializable, y una excepcion de negocio nunca se serializa —se
+        // lanza, se traduce a problem+json y muere ahi (ManejadorDeErrores)—.
+        @SuppressWarnings("serial")
+        private final Ejercicio ejercicio;
 
         private final String llave;
 
@@ -199,12 +208,19 @@ public class PlazosParametrizados {
                             + clave
                             + ". Sin el no hay plazo que aplicar, y un plazo inventado produce"
                             + " expedientes coactivos nulos (regla 5, #192)");
+            this.ejercicio = ejercicio;
             this.llave = TIPO_PLAZO + ":" + clave;
         }
 
+        @Override
+        public Ejercicio ejercicio() {
+            return ejercicio;
+        }
+
         /** La llave que falta, {@code tipo:clave}, legible por programa. */
-        public String llave() {
-            return llave;
+        @Override
+        public Optional<String> llave() {
+            return Optional.of(llave);
         }
     }
 }

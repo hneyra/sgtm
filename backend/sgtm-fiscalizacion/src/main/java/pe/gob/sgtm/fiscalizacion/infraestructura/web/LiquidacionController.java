@@ -33,6 +33,7 @@ import pe.gob.sgtm.fiscalizacion.dominio.CriterioDeLiquidaciones;
 import pe.gob.sgtm.fiscalizacion.dominio.EstadoDeLiquidacion;
 import pe.gob.sgtm.fiscalizacion.dominio.Liquidacion;
 import pe.gob.sgtm.fiscalizacion.dominio.TipoDeFiscalizacion;
+import pe.gob.sgtm.parametros.FaltaPublicar;
 import pe.gob.sgtm.parametros.LectorDeParametros;
 import pe.gob.sgtm.web.Api;
 import pe.gob.sgtm.web.CodigoDeError;
@@ -199,7 +200,11 @@ public class LiquidacionController {
         } catch (LectorDeParametros.EjercicioSinSellar sinSellar) {
             // 422 y no 500: la peticion esta bien formada; lo que falta es que alguien selle el
             // conjunto de ese ejercicio, y el mensaje lo nombra.
-            throw new ProblemaDeNegocio(CodigoDeError.VALIDACION, mensajeDe(sinSellar));
+            // Falta publicar una cifra normativa, no un campo de la peticion: el 422 sale con
+            // el miembro `parametroQueFalta` (#604, #691). Sin el, la interfaz no puede decir UNA
+            // de las dos cosas —«corrige el formulario» o «hay que publicar una cifra»— y acaba
+            // enumerando las dos, que es peor que no decir nada.
+            throw FaltaPublicar.problema(sinSellar);
         } catch (IllegalArgumentException invalido) {
             throw new ProblemaDeNegocio(CodigoDeError.VALIDACION, mensajeDe(invalido));
         }
