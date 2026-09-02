@@ -1418,6 +1418,19 @@ export default function Rentas({ dest, onDest }: PantallaProps) {
      que la tabla elige una fila y no un conjunto. Antes eran cuatro casillas
      premarcadas sobre filas de la maqueta que además nadie leía al mandar. */
   const [obligacionMarcada, setObligacionMarcada] = useState<number | null>(null);
+  /**
+   * Dónde corta la tabla de la baja: por obligación o por cuota (#551).
+   *
+   * Son dos actos distintos, no dos formas de ver el mismo, y por eso se elige
+   * antes de marcar nada: la obligación entera se extingue con el total del
+   * acto y `repartir`, y una cuota con su propio desglose. La lectura es la
+   * misma operación con `porPeriodo`, así que cambiar aquí vuelve a pedirla.
+   *
+   * Empieza **por obligación**, que es lo que la prescripción de un ejercicio
+   * necesita y lo que la pantalla hacía: la cuota es para el caso en que la
+   * resolución alcanza a una y no a las otras.
+   */
+  const [bajaPorCuota, setBajaPorCuota] = useState(false);
   /* La hoja resumen es la de UNA declaración jurada, y hasta ahora la pantalla no
      preguntaba por ninguna: dibujaba la de la maqueta con cualquier sesión y sin
      haber abierto a nadie. El número lo teclea quien atiende —es el que lleva
@@ -2011,27 +2024,41 @@ export default function Rentas({ dest, onDest }: PantallaProps) {
   );
 
   /**
-   * La deuda que se puede dar de baja, **a la fecha de la resolución**.
+   * La deuda que se puede dar de baja, **a la fecha de la resolución** y con el
+   * corte que la tabla tenga puesto.
    *
-   * No es una comodidad: `RegistrarMovimientoDeDeuda` compara parte por parte
-   * contra `deudaActualizadaA(fechaValor)`, y `fechaValor` es esa fecha. Leerla a
-   * hoy y darla de baja con una resolución de julio produciría
+   * La fecha no es una comodidad: `RegistrarMovimientoDeDeuda` compara parte por
+   * parte contra `deudaActualizadaA(fechaValor)`, y `fechaValor` es esa fecha.
+   * Leerla a hoy y darla de baja con una resolución de julio produciría
    * `BajaMayorQueLaDeuda` sobre unas cifras que la pantalla acababa de enseñar.
+   *
+   * `porPeriodo` es lo que #551 añadió, y sólo se manda cuando está puesto: sin
+   * él la respuesta es la de siempre. Es la misma operación, así que el permiso,
+   * el 404 del código que no está en el padrón y el orden no cambian; lo único
+   * que cambia es dónde se corta cada fila.
    */
   const fechaDeLaBaja = texto('fechaRes').trim();
   const deudaParaLaBaja = useRecurso(
     (s2) =>
       deudaDelContribuyente(
-        { codContribuyente: sujetoDeDeuda!.codigo, fechaDeCorte: fechaDeLaBaja === '' ? undefined : fechaDeLaBaja },
+        {
+          codContribuyente: sujetoDeDeuda!.codigo,
+          fechaDeCorte: fechaDeLaBaja === '' ? undefined : fechaDeLaBaja,
+          porPeriodo: bajaPorCuota ? true : undefined,
+        },
         { tamano: 50 },
         s2,
       ),
-    [sujetoDeDeuda?.codigo, fechaDeLaBaja],
+    [sujetoDeDeuda?.codigo, fechaDeLaBaja, bajaPorCuota],
     esDeuda && hoja === 'baja' && sujetoDeDeuda !== null,
   );
   const obligaciones = deudaParaLaBaja.datos?.contenido ?? [];
-  /* Al cambiar de contribuyente o de fecha, lo marcado deja de significar nada. */
-  useEffect(() => setObligacionMarcada(null), [sujetoDeDeuda?.codigo, fechaDeLaBaja, hoja]);
+  /* Al cambiar de contribuyente, de fecha o de corte, lo marcado deja de
+     significar nada: `obligacionMarcada` es la posición en la lista, y las tres
+     cosas la reescriben. Sin el corte en la lista, pasar de «por obligación» a
+     «por cuota» dejaría marcada la fila número 3 de otra tabla —y con ella un
+     acto sobre una obligación que nadie eligió—. */
+  useEffect(() => setObligacionMarcada(null), [sujetoDeDeuda?.codigo, fechaDeLaBaja, hoja, bajaPorCuota]);
   const obligacionDeLaBaja: ObligacionConDeuda | null =
     obligacionMarcada === null ? null : (obligaciones[obligacionMarcada] ?? null);
 
@@ -2098,10 +2125,13 @@ export default function Rentas({ dest, onDest }: PantallaProps) {
   const [declaraTitularAnteriorEnLaBaja, setDeclaraTitularAnteriorEnLaBaja] = useState(false);
   const cruceDeLaBaja = useRecurso(
     (s2) => resolverElCruceDeLaBaja(obligacionDeLaBaja!, sujetoDeDeuda!.codigo, fechaDeLaBaja, s2),
-    [obligacionMarcada, sujetoDeDeuda?.codigo, fechaDeLaBaja],
+    [obligacionMarcada, sujetoDeDeuda?.codigo, fechaDeLaBaja, bajaPorCuota],
     esDeuda && hoja === 'baja' && sujetoDeDeuda !== null && obligacionDeLaBaja !== null && fechaDeLaBaja !== '',
   );
-  useEffect(() => setDeclaraTitularAnteriorEnLaBaja(false), [obligacionMarcada, sujetoDeDeuda?.codigo, fechaDeLaBaja, hoja]);
+  useEffect(
+    () => setDeclaraTitularAnteriorEnLaBaja(false),
+    [obligacionMarcada, sujetoDeDeuda?.codigo, fechaDeLaBaja, hoja, bajaPorCuota],
+  );
 
   /**
    * Lo que impide registrar la transferencia, o `undefined` si nada lo impide.
@@ -2381,7 +2411,11 @@ export default function Rentas({ dest, onDest }: PantallaProps) {
     if (sujetoDeDeuda === null) return 'Elige primero el contribuyente cuya deuda se extingue';
     if (fechaDeLaBaja === '') return 'Falta la fecha de la resolución: es la fecha con efecto tributario de la baja';
     if (obligacionDeLaBaja === null)
-      return 'Elige arriba la obligación que se extingue: la baja es sobre una obligación concreta, no sobre la cuenta entera';
+      /* El rótulo sigue al corte: con la tabla por cuota, «la obligación» manda
+         a buscar una fila que ahí no existe —lo que hay son cuotas—. */
+      return bajaPorCuota
+        ? 'Elige arriba la cuota que se extingue: la baja es sobre una obligación concreta, no sobre la cuenta entera'
+        : 'Elige arriba la obligación que se extingue: la baja es sobre una obligación concreta, no sobre la cuenta entera';
     /* Lo destapó marcar la primera fila elegible de un contribuyente real: su
        obligación de 2027 está en cero, y `MovimientoDeDeuda` rechaza en su
        constructor un movimiento sin ninguna cifra. Sin esta guarda el acto sale y
@@ -2509,6 +2543,27 @@ export default function Rentas({ dest, onDest }: PantallaProps) {
    * —tributo, ejercicio y unidad, **sin** la fase—, así que «la obligación
    * entera» y «esta fila» son lo mismo, y la fase que se manda es la más
    * avanzada del grupo, que es la que el recurso publica.
+   *
+   * <h2>Y con el corte por cuota, el cuerpo es otro (#551)</h2>
+   *
+   * Cuando la tabla lee con `porPeriodo`, la fila **es** una cuota y trae su
+   * propio desglose, así que no hay nada que repartir: viajan `cuota` y los
+   * cuatro importes de esa obligación, que es contra lo que
+   * `RegistrarMovimientoDeDeuda.registrar` valida parte por parte. Mandar
+   * además `repartir` sería pedirle al servidor que reparta un total que ya
+   * está repartido; el resultado sería el mismo y el cuerpo diría otra cosa de
+   * la que se hizo.
+   *
+   * **Y la `fase` deja de ser la del grupo, que es lo que más cambia.** La fila
+   * agregada publica la más avanzada de sus cuotas, y esa no es la de las
+   * cuotas que de verdad deben. Medido contra el backend sobre `C-000001`:
+   * «ARBITRIOS 2026 · predio 1» sale agregada como `VALOR` con 146,00, y por
+   * cuota sale `VALOR` la cuota 0 —que debe 0— y `ORDINARIA` las cuotas 1 a 4,
+   * que son las que deben esos 146,00. Dando de baja la fila agregada, los
+   * cuatro abonos se asientan con `fase: VALOR` y `ProyeccionDelSaldo` se queda
+   * con la fase del último asiento: las cuatro cuotas pasan a decir que las
+   * rige un valor que nadie emitió. Con el corte por cuota viaja la de cada
+   * una, y eso no ocurre.
    */
   const darDeBajaLaDeuda = async () => {
     setRegistrando(true);
@@ -2518,14 +2573,18 @@ export default function Rentas({ dest, onDest }: PantallaProps) {
          antepone a la observación —que es donde queda auditada— en vez de
          perderse en un desplegable que no viaja. */
       const causal = texto('causal').trim();
-      const cuotas = o.periodoDesde === o.periodoHasta ? { cuota: o.periodoDesde } : {};
+      /* Por cuota: la fila ES una obligación, así que su periodo viaja como
+         `cuota` y no se reparte nada. Por obligación: se reparte, y la cuota
+         sólo se nombra cuando la fila agrega una sola —un rango no puede
+         empezar en 0, y sin cuota el acto cubre la fila entera—. */
+      const cuotas = bajaPorCuota || o.periodoDesde === o.periodoHasta ? { cuota: o.periodoDesde } : {};
       const cuerpo: PeticionDeMovimientoDeDeuda = {
         observacion: causal === '' ? observacionDelActo.trim() : `${causal}. ${observacionDelActo.trim()}`,
         codContribuyente: sujetoDeDeuda!.codigo,
         tributo: o.tributo,
         ano: String(o.ejercicio),
         ...cuotas,
-        repartir: true,
+        ...(bajaPorCuota ? {} : { repartir: true }),
         ...(declaracionDeLaBaja ? { deudaDeTitularAnterior: true } : {}),
         predioId: o.predioId ?? undefined,
         vehiculoId: o.vehiculoId ?? undefined,
@@ -4057,8 +4116,38 @@ export default function Rentas({ dest, onDest }: PantallaProps) {
               <section style={TARJETA}>
                 <div style={CABECERA}>
                   <h2 style={H2}>Deuda seleccionable para baja</h2>
+                  {/* El corte, ANTES de la tabla y no después: elegirlo cambia
+                      lo que cada fila significa, y una casilla marcada sobre la
+                      tabla anterior sería un acto sobre otra obligación. Dos
+                      pastillas y no un desplegable por lo mismo que arriba: las
+                      dos opciones se leen a la vez y se ve cuál está puesta. */}
+                  <div style={{ display: 'flex', gap: 6 }} role="group" aria-label="Cómo corta la tabla">
+                    {(
+                      [
+                        [false, 'Por obligación'],
+                        [true, 'Por cuota'],
+                      ] as [boolean, string][]
+                    ).map((c) => (
+                      <button
+                        key={c[1]}
+                        onClick={() => setBajaPorCuota(c[0])}
+                        aria-pressed={bajaPorCuota === c[0]}
+                        className="hov-linea"
+                        style={{ ...pastilla(bajaPorCuota === c[0]), padding: '5px 12px', fontSize: 12 }}
+                      >
+                        {c[1]}
+                      </button>
+                    ))}
+                  </div>
+                  {/* «N de M», no «N»: la lectura pide 50 y no pagina, así que
+                      con el corte por cuota —que multiplica las filas por tres o
+                      cuatro— una obligación podría quedarse fuera de la página
+                      sin que nada lo dijera. La nota de abajo lo dice cuando
+                      pasa. */}
                   <span style={META}>
-                    {deudaParaLaBaja.datos ? `${obligaciones.length} obligaciones` : '—'}
+                    {deudaParaLaBaja.datos
+                      ? `${obligaciones.length} de ${deudaParaLaBaja.datos.totalElementos} ${bajaPorCuota ? 'cuotas' : 'obligaciones'}`
+                      : '—'}
                     {obligacionDeLaBaja !== null ? ' · 1 marcada' : ''}
                   </span>
                 </div>
@@ -4108,8 +4197,23 @@ export default function Rentas({ dest, onDest }: PantallaProps) {
                              Hasta entonces esta casilla venía apagada, porque
                              repartir el desglose del grupo aquí habría sido
                              componer dinero en la pantalla (RNF-083) sobre
-                             cifras que esta lectura no publica. */
+                             cifras que esta lectura no publica.
+
+                             Con el corte por cuota `agrupada` es siempre falso:
+                             el servidor devuelve `periodoDesde === periodoHasta`
+                             en todas. Se deja calculado del dato y no del
+                             conmutador para que la fila diga lo que trae y no lo
+                             que se pidió — si alguna vez las dos cosas dejaran de
+                             coincidir, la que manda es la respuesta. */
                           const agrupada = o.periodoDesde !== o.periodoHasta;
+                          /* El 0 no es la cuota cero: es la obligación anual, la
+                             que no se divide. Se escribe con su nombre cuando va
+                             sola; dentro de un rango se queda en cifra, porque
+                             «Anual - 4» no nombra ningún tramo. */
+                          const cuota = agrupada ? `${o.periodoDesde} - ${o.periodoHasta}` : o.periodoDesde === 0 ? 'Anual' : String(o.periodoDesde);
+                          const queEs = agrupada
+                            ? `${o.tributo} ${o.ejercicio}, cuotas ${o.periodoDesde} a ${o.periodoHasta}`
+                            : `${o.tributo} ${o.ejercicio}, ${o.periodoDesde === 0 ? 'obligación anual' : `cuota ${o.periodoDesde}`}`;
                           const on = obligacionMarcada === i;
                           return (
                             <tr
@@ -4126,11 +4230,7 @@ export default function Rentas({ dest, onDest }: PantallaProps) {
                                   name="obligacion-de-la-baja"
                                   checked={on}
                                   onChange={() => setObligacionMarcada(i)}
-                                  aria-label={
-                                    agrupada
-                                      ? `Elegir ${o.tributo} ${o.ejercicio}, cuotas ${o.periodoDesde} a ${o.periodoHasta}`
-                                      : `Elegir ${o.tributo} ${o.ejercicio}, cuota ${o.periodoDesde}`
-                                  }
+                                  aria-label={`Elegir ${queEs}`}
                                   style={{ accentColor: 'var(--accent)', width: 15, height: 15 }}
                                 />
                               </td>
@@ -4140,7 +4240,7 @@ export default function Rentas({ dest, onDest }: PantallaProps) {
                                   no el código predial ni la placa, que es lo que
                                   aquí se leería. */}
                               <td style={TD}>—</td>
-                              <td style={TD}>{agrupada ? `${o.periodoDesde} - ${o.periodoHasta}` : String(o.periodoDesde)}</td>
+                              <td style={TD}>{cuota}</td>
                               <td style={TD}>{o.tributo}</td>
                               <td style={TD}>{o.fase}</td>
                               <td style={TDN}>{o.deuda.insoluto.importe}</td>
@@ -4186,9 +4286,20 @@ export default function Rentas({ dest, onDest }: PantallaProps) {
                 >
                   <span style={{ flex: 1, minWidth: 150, fontSize: 12.5, color: 'var(--ink-3)', textWrap: 'pretty' }}>
                     Una baja queda en la bitácora de auditoría con quién la hizo, cuándo y con qué resolución. Se extingue{' '}
-                    <strong>una obligación por acto</strong> —la fila marcada, con todas las cuotas que agrupe—: para varias, se repite.
+                    <strong>una fila por acto</strong> —la marcada—: para varias, se repite.
                   </span>
-                  <span style={{ fontSize: 11, textTransform: 'uppercase', letterSpacing: '.1em', color: 'var(--ink-3)' }}>A extinguir</span>
+                  {/* Qué abarca el acto, dicho con palabras y no sólo por la
+                      pastilla de arriba: es lo último que se lee antes de
+                      firmar, y «PREDIAL 2026» entero y «PREDIAL 2026 cuota 3»
+                      se parecen demasiado para dejarlo a la memoria. Sale de la
+                      fila marcada, así que dice lo que va a viajar. */}
+                  <span style={{ fontSize: 11, textTransform: 'uppercase', letterSpacing: '.1em', color: 'var(--ink-3)' }}>
+                    {obligacionDeLaBaja === null
+                      ? 'A extinguir'
+                      : obligacionDeLaBaja.periodoDesde !== obligacionDeLaBaja.periodoHasta
+                        ? `A extinguir · ${obligacionDeLaBaja.tributo} ${obligacionDeLaBaja.ejercicio}, cuotas ${obligacionDeLaBaja.periodoDesde} a ${obligacionDeLaBaja.periodoHasta}`
+                        : `A extinguir · ${obligacionDeLaBaja.tributo} ${obligacionDeLaBaja.ejercicio}, ${obligacionDeLaBaja.periodoDesde === 0 ? 'obligación anual' : `cuota ${obligacionDeLaBaja.periodoDesde}`}`}
+                  </span>
                   {/* El importe es el que el servidor publicó para esa obligación
                       a esa fecha, no una suma de columnas (RNF-083): es contra
                       esas cuatro cifras contra las que valida la baja. */}
@@ -4204,12 +4315,29 @@ export default function Rentas({ dest, onDest }: PantallaProps) {
                     ruido, no honestidad. */}
                 {obligaciones.length > 0 && (
                   <p style={PIE}>
-                    {obligaciones.some((o) => o.periodoDesde !== o.periodoHasta) && (
+                    {bajaPorCuota ? (
                       <>
-                        Una fila con dos periodos —«0 - 9»— agrupa las cuotas de esa obligación y publica un solo desglose para todo el
-                        grupo, no el de cada cuota. Se da de baja igual: lo que se declara es el total del acto y el reparto entre las cuotas
-                        lo hace el servidor, sin que ninguna reciba más de lo que debe a la fecha de la resolución; las que no deben nada no
-                        producen asiento, y el aviso de después dice cuáles se movieron (#598).{' '}
+                        Cada fila es <strong>una cuota</strong>, con el desglose que el servidor calculó para ella a la fecha de la
+                        resolución. La baja va con esa cuota y esos cuatro importes, sin repartir nada: es el corte que hace falta cuando la
+                        resolución alcanza a una cuota y no a las otras. La cuota «Anual» es la obligación que no se divide —la tasa de una
+                        licencia, la de un anuncio, una costa—, no la cuota cero.{' '}
+                      </>
+                    ) : (
+                      obligaciones.some((o) => o.periodoDesde !== o.periodoHasta) && (
+                        <>
+                          Una fila con dos periodos —«0 - 9»— agrupa las cuotas de esa obligación y publica un solo desglose para todo el
+                          grupo, no el de cada cuota. Se da de baja igual: lo que se declara es el total del acto y el reparto entre las
+                          cuotas lo hace el servidor, sin que ninguna reciba más de lo que debe a la fecha de la resolución; las que no deben
+                          nada no producen asiento, y el aviso de después dice cuáles se movieron (#598). La «Fase» de una fila agregada es
+                          la más avanzada de sus cuotas, así que para extinguir sólo lo que está en una fase concreta hay que verlas por
+                          cuota.{' '}
+                        </>
+                      )
+                    )}
+                    {deudaParaLaBaja.datos !== null && deudaParaLaBaja.datos.totalElementos > obligaciones.length && (
+                      <>
+                        Se leen las primeras {obligaciones.length} de {deudaParaLaBaja.datos.totalElementos}: esta lectura no pagina todavía,
+                        así que lo que falta no está en pantalla y no se puede marcar.{' '}
                       </>
                     )}
                     La columna «Unidad» sale «—» porque el recurso publica el identificador interno del predio, no su código.
@@ -4334,9 +4462,15 @@ export default function Rentas({ dest, onDest }: PantallaProps) {
             )}
             <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>
               <p style={{ margin: 0, flex: 1, minWidth: 180, fontSize: 12, color: 'var(--ink-3)', textWrap: 'pretty' }}>
+                {/* La frase de la baja depende del corte, porque lo que hace el
+                    servidor con el importe es distinto: por obligación reparte,
+                    por cuota no hay nada que repartir. Dejar la de repartir para
+                    las dos diría de un acto lo que hace el otro. */}
                 {hoja === 'alta'
                   ? 'Un alta manual entra en la cuenta corriente y se cobra como cualquier otra deuda. Queda en la bitácora con tu usuario. Con «Cuota desde» y «Cuota hasta» se registra una obligación por cuota, y el desglose se repite en cada una.'
-                  : 'Elige arriba la obligación que se extingue: una por acto. El importe que se da de baja es el que el servidor publicó para ella a la fecha de la resolución, y si la fila agrupa varias cuotas es él quien lo reparte entre ellas; la causal se antepone a la observación, porque el cuerpo no tiene campo propio para ella.'}
+                  : bajaPorCuota
+                    ? 'Elige arriba la cuota que se extingue: una por acto. El importe que se da de baja es el que el servidor publicó para esa cuota a la fecha de la resolución, y viaja tal cual —no se reparte nada—; la causal se antepone a la observación, porque el cuerpo no tiene campo propio para ella.'
+                    : 'Elige arriba la obligación que se extingue: una por acto. El importe que se da de baja es el que el servidor publicó para ella a la fecha de la resolución, y si la fila agrupa varias cuotas es él quien lo reparte entre ellas; la causal se antepone a la observación, porque el cuerpo no tiene campo propio para ella.'}
               </p>
               <label style={{ flex: 1, minWidth: 220 }}>
                 <span style={{ display: 'block', fontSize: 11, fontWeight: 500, color: 'var(--ink-3)', marginBottom: 4 }}>

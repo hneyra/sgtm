@@ -578,6 +578,28 @@ export type PeticionDeMovimientoDeDeuda = {
    *
    * **Un alta no se reparte** y el backend la rechaza con 422: incorporar deuda
    * que no estaba no tiene tope contra el que repartir.
+   *
+   * <h2>Cuando NO se manda (#551)</h2>
+   *
+   * Desde que `GET /consultas/deuda` sabe cortar por cuota
+   * —`FiltroDeDeuda.porPeriodo`—, la baja tiene dos cuerpos y este campo separa
+   * uno del otro:
+   *
+   * - de una fila **agregada** salen el desglose del grupo y `repartir: true`,
+   *   porque lo declarado es el total del acto y quien sabe cuanto queda vivo
+   *   en cada cuota a la fecha valor es el servidor;
+   * - de una fila **por cuota** salen `cuota: <la suya>`, su propio desglose y
+   *   **ningun `repartir`**: no hay nada que repartir, los cuatro importes son
+   *   los de esa obligacion y es contra ellos contra los que
+   *   `RegistrarMovimientoDeDeuda.registrar` valida parte por parte.
+   *
+   * Y con el cuerpo cambia la `fase`, que es el otro dato que el corte decide:
+   * la fila agregada publica la mas avanzada del grupo. Medido: dar de baja
+   * «ARBITRIOS 2026 predio 1» agregada —`fase: VALOR`, 146.00, `repartir`—
+   * asienta los cuatro abonos con `fase: VALOR` sobre unas cuotas que estaban
+   * en `ORDINARIA`, y la proyeccion se queda con la fase del ultimo asiento
+   * (`ProyeccionDelSaldo`), asi que las cuotas 1 a 4 pasan a decir que las rige
+   * un valor que nadie emitio.
    */
   repartir?: boolean;
   /**

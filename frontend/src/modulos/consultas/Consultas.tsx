@@ -42,6 +42,7 @@ import {
   COLS_VALORES,
   COLS_VEHICULOS,
   FORMAS,
+  NOTA_DEUDA_POR_CUOTA,
   NOTAS,
   OPCIONES,
   SIN_DATO,
@@ -406,8 +407,17 @@ function unidadDe(predioId: number | null, vehiculoId: number | null): string {
   return 'Sin unidad';
 }
 
-/** El rango de cuotas, sin repetirlo cuando es una sola. */
-const cuotasDe = (desde: number, hasta: number) => (desde === hasta ? String(desde) : `${desde} – ${hasta}`);
+/**
+ * El rango de cuotas, sin repetirlo cuando es una sola.
+ *
+ * El `0` a solas se escribe «Anual» porque no es la cuota cero: es la obligación
+ * que no se divide —así asienta `GeneradorDeCargos` la tasa de una licencia, la
+ * de un anuncio o una costa—, y con el corte por cuota (#551) esa fila aparece
+ * junto a las demás, donde un «0» suelto se lee como un tramo más. Dentro de un
+ * rango se queda en cifra: «Anual – 4» no nombra ningún tramo.
+ */
+const cuotasDe = (desde: number, hasta: number) =>
+  desde === hasta ? (desde === 0 ? 'Anual' : String(desde)) : `${desde} – ${hasta}`;
 
 /** El tipo de asiento, en el vocabulario del manual: CARGO es alta, ABONO baja. */
 const sentidoDe = (tipo: string) => (tipo === 'CARGO' ? 'Alta' : tipo === 'ABONO' ? 'Baja' : tipo);
@@ -449,6 +459,19 @@ export default function Consultas({ dest, onDest }: PantallaProps) {
   /** La fecha de corte. En blanco es «hoy», que es lo que resuelve el servidor. */
   const [fecha, setFecha] = useState('');
   const [fase, setFase] = useState<'' | Fase>('');
+  /**
+   * Dónde corta la tabla de deuda: una fila por obligación o una por cuota (#551).
+   *
+   * Aquí no se escribe nada, así que las dos vistas son igual de legítimas y la
+   * elección es de quien mira: la agregada es la deuda del ejercicio, y la de
+   * cuotas es la única que contesta «¿cuál debo?» —la fila agregada dice
+   * «PREDIAL 2026 · cuotas 0-9 · 444,90» y no dice que son 148,30 en la 1, la 2
+   * y la 3 y cero en las demás—.
+   *
+   * Empieza agregada porque es lo que el manual dibuja y lo que la pantalla
+   * enseñaba; el corte se pide, no se hereda.
+   */
+  const [porCuota, setPorCuota] = useState(false);
   const [campania, setCampania] = useState('');
   const [predioAResolver, setPredioAResolver] = useState<PredioDelCatastro | null>(null);
 
@@ -515,8 +538,13 @@ export default function Consultas({ dest, onDest }: PantallaProps) {
     enCuenta && vista === 'resumen',
   );
   const deuda = useRecurso(
-    (s) => deudaDelContribuyente({ codContribuyente: cod, fechaDeCorte: fecha || undefined, fase: fase || undefined }, { tamano: 50 }, s),
-    [cod, fecha, fase],
+    (s) =>
+      deudaDelContribuyente(
+        { codContribuyente: cod, fechaDeCorte: fecha || undefined, fase: fase || undefined, porPeriodo: porCuota ? true : undefined },
+        { tamano: 50 },
+        s,
+      ),
+    [cod, fecha, fase, porCuota],
     enCuenta && vista === 'deuda',
   );
   const beneficio = useRecurso(
@@ -1008,21 +1036,55 @@ export default function Consultas({ dest, onDest }: PantallaProps) {
 
                 <Seccion
                   titulo="Deuda pendiente"
-                  meta={deuda.datos ? `${deuda.datos.contenido.length} de ${plural(deuda.datos.totalElementos, 'obligación', 'obligaciones')}` : ''}
-                  acciones={
-                    <label style={{ display: 'flex', alignItems: 'center', gap: 7, fontSize: 12, color: 'var(--ink-3)' }}>
-                      Fase
-                      <select value={fase} onChange={(e) => setFase(e.target.value as '' | Fase)} style={{ ...CONTROL, padding: '6px 9px', fontSize: 12.5 }}>
-                        <option value="">Todas</option>
-                        {FASES.map((f) => (
-                          <option key={f} value={f}>
-                            {f}
-                          </option>
-                        ))}
-                      </select>
-                    </label>
+                  meta={
+                    deuda.datos
+                      ? `${deuda.datos.contenido.length} de ${plural(deuda.datos.totalElementos, porCuota ? 'cuota' : 'obligación', porCuota ? 'cuotas' : 'obligaciones')}`
+                      : ''
                   }
-                  pie={NOTAS.deuda}
+                  acciones={
+                    <>
+                      {/* El corte, al lado de la fase y con la misma forma: las
+                          dos acotan la misma lectura y ninguna escribe nada. El
+                          desplegable enseña cuál está puesto, que es lo que hace
+                          falta para no confundir «PREDIAL 2026» con «PREDIAL
+                          2026 cuota 3». */}
+                      {/* El `aria-label` no sobra teniendo el `<label>` que los
+                          envuelve: el nombre accesible de un control envuelto es
+                          el texto ENTERO de la etiqueta, y ahí dentro están
+                          también las opciones —medido: «CortePor obligaciónPor
+                          cuota»—, así que quien navega con lector oye la lista
+                          dos veces antes de saber qué acota el control. */}
+                      <label style={{ display: 'flex', alignItems: 'center', gap: 7, fontSize: 12, color: 'var(--ink-3)' }}>
+                        Corte
+                        <select
+                          aria-label="Corte"
+                          value={porCuota ? 'cuota' : 'obligacion'}
+                          onChange={(e) => setPorCuota(e.target.value === 'cuota')}
+                          style={{ ...CONTROL, padding: '6px 9px', fontSize: 12.5 }}
+                        >
+                          <option value="obligacion">Por obligación</option>
+                          <option value="cuota">Por cuota</option>
+                        </select>
+                      </label>
+                      <label style={{ display: 'flex', alignItems: 'center', gap: 7, fontSize: 12, color: 'var(--ink-3)' }}>
+                        Fase
+                        <select
+                          aria-label="Fase"
+                          value={fase}
+                          onChange={(e) => setFase(e.target.value as '' | Fase)}
+                          style={{ ...CONTROL, padding: '6px 9px', fontSize: 12.5 }}
+                        >
+                          <option value="">Todas</option>
+                          {FASES.map((f) => (
+                            <option key={f} value={f}>
+                              {f}
+                            </option>
+                          ))}
+                        </select>
+                      </label>
+                    </>
+                  }
+                  pie={porCuota ? NOTA_DEUDA_POR_CUOTA : NOTAS.deuda}
                 >
                   <Lectura lectura={deuda} ruta="GET /api/v1/consultas/deuda" acceso="consulta_deuda" plana>
                     <TablaDeTextos
