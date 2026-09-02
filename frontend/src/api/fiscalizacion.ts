@@ -196,11 +196,17 @@ export type FilaDeMuestra = {
   programaId: number;
   predioId: number;
   codRefCatastral: string;
-  contribuyenteId: number;
-  codContribuyente: string;
-  /** El nombre, como en `FilaDeOmisos` desde #545. Aqui nunca es nulo: la
-   *  muestra sortea predios con titular resuelto y trae ademas su codigo. */
-  titular: string;
+  /** Los tres son nulos a la vez cuando el predio **no tiene titular vigente**
+   *  a la fecha del sorteo (#586, V73). NULO NO ES UN DATO QUE FALTE: es el
+   *  predio que nadie reclama —no hay a quien notificarle, no hay quien
+   *  declare—, o sea el candidato de primer orden, y la visita es lo que
+   *  resuelve quien lo ocupa. Antes la muestra los excluia en silencio porque
+   *  `programa_muestra.contribuyente_id` era `NOT NULL`, y eran 4 977 de los
+   *  14 422 predios de Catacaos. */
+  contribuyenteId: number | null;
+  codContribuyente: string | null;
+  /** El nombre, como en `FilaDeOmisos` desde #545. */
+  titular: string | null;
   sector: string | null;
   condicion: string;
   areaCatastral: string | null;

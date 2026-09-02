@@ -1096,7 +1096,7 @@ export default function Fiscalizacion({ dest, onDest }: PantallaProps) {
                   <span style={{ flex: 1, minWidth: 0 }}>
                     <span style={{ display: 'block', fontSize: 13.5, fontWeight: 500 }}>{f.codRefCatastral}</span>
                     <span style={{ display: 'block', fontSize: 12, color: 'var(--ink-3)', marginTop: 2, textWrap: 'pretty' }}>
-                      {f.titular} · sector {f.sector ?? SIN_DATO}
+                      {f.titular ?? 'Sin titular vigente'} · sector {f.sector ?? SIN_DATO}
                     </span>
                   </span>
                   {/* Ni hora ni riesgo: la muestra no publica ninguno de los
@@ -1572,7 +1572,7 @@ export default function Fiscalizacion({ dest, onDest }: PantallaProps) {
                         {(muestra.datos?.contenido ?? []).map((f) => (
                           <tr key={String(f.predioId) + '·' + String(f.contribuyenteId)} className="hov-elev" style={{ borderTop: '1px solid var(--line)' }}>
                             <td style={TD1}>{f.codRefCatastral}</td>
-                            <td style={TD}>{f.titular}</td>
+                            <td style={TD}>{f.titular ?? 'Sin titular vigente'}</td>
                             {/* «Uso declarado» y «Riesgo» no los publica
                                 `MuestraResource`. El riesgo, ademas, no es un
                                 concepto del backend: lo que hay es la CONDICION
