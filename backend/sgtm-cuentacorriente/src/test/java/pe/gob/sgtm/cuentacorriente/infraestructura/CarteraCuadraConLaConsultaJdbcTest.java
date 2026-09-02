@@ -36,6 +36,7 @@ import pe.gob.sgtm.cuentacorriente.PendienteDeUnTributo;
 import pe.gob.sgtm.cuentacorriente.aplicacion.CarteraDelLibroCuentaCorriente;
 import pe.gob.sgtm.cuentacorriente.aplicacion.ConsultarDeuda;
 import pe.gob.sgtm.cuentacorriente.aplicacion.ReconstruirSaldo;
+import pe.gob.sgtm.cuentacorriente.dominio.Agregacion;
 import pe.gob.sgtm.cuentacorriente.dominio.Asiento;
 import pe.gob.sgtm.cuentacorriente.dominio.CalculoDeDeuda;
 import pe.gob.sgtm.cuentacorriente.dominio.Concepto;
@@ -593,7 +594,14 @@ class CarteraCuadraConLaConsultaJdbcTest {
                             estado ->
                                     consulta.porContribuyente(
                                             new CriterioDeDeudaPorContribuyente(
-                                                    codigo, aLaFecha, null),
+                                                    codigo,
+                                                    aLaFecha,
+                                                    null,
+                                                    // Esta prueba cuadra la cartera contra la
+                                                    // consulta POR OBLIGACION, que es lo que la
+                                                    // lectura devolvia -y sigue devolviendo- sin
+                                                    // `porPeriodo` (#551).
+                                                    Agregacion.POR_OBLIGACION),
                                             new Paginacion(
                                                     actual,
                                                     2,

@@ -30,6 +30,7 @@ import pe.gob.sgtm.auditoria.OrigenContext;
 import pe.gob.sgtm.compartido.Pagina;
 import pe.gob.sgtm.compartido.Paginacion;
 import pe.gob.sgtm.compartido.TenantContext;
+import pe.gob.sgtm.cuentacorriente.dominio.Agregacion;
 import pe.gob.sgtm.cuentacorriente.dominio.Asiento;
 import pe.gob.sgtm.cuentacorriente.dominio.CalculoDeDeuda;
 import pe.gob.sgtm.cuentacorriente.dominio.Concepto;
@@ -312,7 +313,7 @@ class ConsultarDeudaTest {
     private static Pagina<ObligacionConDeuda> consultar(
             String codigo, LocalDate fecha, @Nullable Fase fase, int pagina, int tamano) {
         CriterioDeDeudaPorContribuyente criterio =
-                new CriterioDeDeudaPorContribuyente(codigo, fecha, fase);
+                new CriterioDeDeudaPorContribuyente(codigo, fecha, fase, Agregacion.POR_OBLIGACION);
         return consulta.porContribuyente(
                 criterio,
                 new Paginacion(pagina, tamano, "ejercicio", Paginacion.Direccion.ASCENDENTE));

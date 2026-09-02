@@ -5934,6 +5934,16 @@ paths:
           required: false
           description: "Filtro «Incluye convenios» de la pantalla"
           schema: { type: string }
+        - name: porPeriodo
+          in: query
+          required: false
+          description: >-
+            Una fila por cuota («true») o una por obligacion con sus periodos agregados
+            (ausente o «false»). Cualquier otra palabra es 422: un «si» tecleado que se leyera
+            como «false» devolveria filas agregadas a quien pidio cuotas, y esa respuesta es
+            indistinguible de la correcta hasta que alguien intenta dar una de baja.
+          schema: { type: string, enum: [true, false] }
+          example: "true"
         - name: pagina
           in: query
           required: false
