@@ -1,6 +1,8 @@
 package pe.gob.sgtm.tesoreria.dominio;
 
 import java.util.Optional;
+import pe.gob.sgtm.compartido.Pagina;
+import pe.gob.sgtm.compartido.Paginacion;
 
 /**
  * Las ventanillas de la municipalidad. Ningun metodo recibe la municipalidad (regla 2): la filtra
@@ -10,6 +12,19 @@ public interface CajaRepository {
 
     /** La caja con ese codigo, si existe en esta municipalidad. */
     Optional<Caja> porCodigo(String codigo);
+
+    /**
+     * El catalogo de ventanillas de esta municipalidad, paginado (#618).
+     *
+     * <p>Hasta aqui este puerto solo sabia resolver <b>una</b> caja de la que ya se supiera el
+     * codigo o el identificador, y no habia ninguna forma de <b>enumerarlas</b>. El efecto no era
+     * teorico: cinco pantallas de Tesoreria piden el codigo de la caja antes de poder pedir nada
+     * —dos en el cuerpo del cobro, dos para resolver el turno y una como filtro—, asi que quien
+     * atiende tenia que saberselo de memoria.
+     *
+     * <p>Devuelve <b>todas</b>, activas y dadas de baja: por que, en {@link CajaEnConsulta}.
+     */
+    Pagina<CajaEnConsulta> listar(Paginacion paginacion);
 
     /**
      * La caja con ese identificador, si existe en esta municipalidad.

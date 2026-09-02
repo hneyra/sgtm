@@ -3044,6 +3044,46 @@ const OPERACIONES_ADICIONALES = {
         ' certificado» de la pantalla.',
     },
   ],
+  // `caja_tributaria` declara «POST /api/v1/tesoreria/caja/cobranza» como su
+  // unico endpoint, y ese cuerpo EXIGE el codigo de la caja. Lo mismo el de
+  // `caja_tasas` y el de `cierre_caja`, y como parametro de consulta el de
+  // `avance_recaudacion` y el del listado de recibos de #548: cinco opciones
+  // del catalogo que piden el codigo de una ventanilla antes de poder pedir
+  // nada, y ninguna lectura que lo publicara. Medido contra el backend local el
+  // 2026-09-01, `GET /api/v1/tesoreria/cajas` contestaba 404 —no estaba sin
+  // implementar: no estaba en el contrato—, asi que la interfaz ponia una caja
+  // de texto y quien atiende tenia que saberse el codigo de memoria.
+  //
+  // Cuelga de `caja_tributaria` porque es la opcion cuyo acceso la guarda; las
+  // otras cuatro llegan por `oTambien` (#548), censadas en
+  // AccesosCompartidosTest.
+  //
+  // No es la situacion de `GET /tesoreria/tasas`, que #430 midio y decidio no
+  // publicar: alli nada en produccion escribe la tabla y sus cifras son D-02b.
+  // Aqui `cargar-cajas.sh` es el paso 4 de la siembra desde #460 y la tabla
+  // tiene filas en cuanto una municipalidad se implanta.
+  caja_tributaria: [
+    {
+      operationId: 'cajas_listado',
+      metodo: 'get',
+      antes: true,
+      ruta: '/api/v1/tesoreria/cajas',
+      paginacion: true,
+      titulo: 'Ventanillas de la municipalidad',
+      descripcion:
+        'El catálogo de cajas: código, rótulo, el área a la que se imputa lo que recaudan y si' +
+        ' siguen abiertas. Es lo que llena el desplegable «Caja» de las cinco pantallas de' +
+        ' Tesorería que hoy piden ese código tecleado —las dos ventanillas de cobro, el cierre y' +
+        ' arqueo, el avance de recaudación y el filtro del listado de recibos—. Sin filtros: una' +
+        ' municipalidad tiene cuatro ventanillas, no cuarenta mil, y quien ya sabe el código no' +
+        ' necesita el catálogo. **Salen también las dadas de baja**, con `activa: false`, porque' +
+        ' sus recibos siguen existiendo (RNF-051) y el filtro «Caja» del duplicado tiene que' +
+        ' poder nombrarlas; devolver sólo las abiertas recortaría la lista en silencio. El área' +
+        ' viaja legible —código y nombre— y es nula en la caja tributaria general, que no cuelga' +
+        ' de ninguna. Una municipalidad recién implantada y todavía sin ventanillas devuelve una' +
+        ' página vacía con `totalElementos: 0`, no un 404.',
+    },
+  ],
   // `duplicado_recibo` declara «GET /api/v1/tesoreria/recibos/{nro}/duplicado»
   // como su unico endpoint, y esa ruta EXIGE el numero impreso. Su pantalla, en
   // cambio, dibuja una grilla —«Recibos localizados»— con filtros por
