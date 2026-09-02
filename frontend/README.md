@@ -31,6 +31,9 @@ yarn errores    # el catálogo de errores contra el del backend, la puerta contr
                 # respuestas fabricadas, y las pantallas ante un 405 y un 500
 yarn paleta     # la paleta de comandos se opera sólo con el teclado
 yarn vocabularios  # los desplegables, contra el enumerado del backend
+yarn ficha-catastral  # los 123 campos de la ficha del predio: cada uno dice de qué
+                # lectura sale y por qué clave del cuerpo viaja, o por qué no viaja;
+                # y el guardado, roto, se niega nombrando lo que falta
 yarn flujos     # opera los botones contra el backend real; necesita SGTM_TOKEN
 ```
 
