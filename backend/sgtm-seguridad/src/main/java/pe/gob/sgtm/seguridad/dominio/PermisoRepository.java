@@ -6,6 +6,8 @@ import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
 import pe.gob.sgtm.autorizacion.Privilegio;
+import pe.gob.sgtm.compartido.Pagina;
+import pe.gob.sgtm.compartido.Paginacion;
 
 /**
  * Puerto de persistencia de los permisos (RF-121).
@@ -59,6 +61,45 @@ public interface PermisoRepository {
      * @see PermisoEfectivo
      */
     List<PermisoEfectivo> efectivosConOrigenDe(long usuarioId, LocalDate fecha);
+
+    /**
+     * La misma matriz, <b>sin exigir que la cuenta pueda operar hoy</b>: lo configurado (#583).
+     *
+     * <p>No es un relajamiento de la de arriba, es otra pregunta. Aquella contesta lo que la cuenta
+     * <b>puede</b>, y por eso aplica la regla del guardia entera: una cuenta deshabilitada o fuera
+     * de vigencia recibe la lista vacia, porque ensenar en la matriz privilegios que despues
+     * responden 403 seria peor que no ensenar nada. Su efecto secundario es que <b>una cuenta
+     * deshabilitada que conserva permisos y una que nunca tuvo ninguno devuelven el mismo JSON</b>,
+     * y quien audita necesita separarlas: deshabilitar no retira nada, y rehabilitar lo devuelve
+     * entero.
+     *
+     * <p>Lo unico que se quita es la guarda del <b>usuario</b>. La del grupo y la de la pertenencia
+     * se quedan, y eso tambien es deliberado: lo que se pregunta es que volveria a poder el dia que
+     * alguien reactive <b>la cuenta</b>, y reactivar una cuenta no reactiva un grupo inhabilitado
+     * ni devuelve a nadie a un grupo del que salio.
+     *
+     * <p>La precedencia es la misma expresion —y el mismo SQL— que {@link
+     * #efectivosConOrigenDe(long, LocalDate)}: escribirla dos veces es como dos copias del mismo
+     * {@code CASE} acaban divergiendo, y aqui la copia divergente decidiria quien entra donde.
+     */
+    List<PermisoEfectivo> configuradosDe(long usuarioId, LocalDate fecha);
+
+    /**
+     * Que cuentas pueden hoy ejercer un privilegio sobre un acceso, en <b>una</b> consulta (#583).
+     *
+     * <p>La pregunta inversa de {@link #efectivosConOrigenDe(long, LocalDate)}, y no se compone con
+     * ella: contestarla cuenta por cuenta es una peticion por usuario del padron, y acotar por
+     * grupo no vale porque la excepcion propia <b>sustituye</b> a lo que el grupo da —alguien cuyo
+     * grupo no tiene el privilegio puede tenerlo por excepcion, y al reves—.
+     *
+     * <p>Misma regla que el guardia: solo las cuentas habilitadas y vigentes, con sus grupos
+     * vigentes y sus pertenencias activas (RF-123). Lo que una cuenta que hoy no puede operar
+     * <b>conserva</b> lo contesta {@link #configuradosDe(long, LocalDate)}.
+     *
+     * @see TitularDelPrivilegio
+     */
+    Pagina<TitularDelPrivilegio> quienesTienen(
+            long accesoId, Privilegio privilegio, LocalDate fecha, Paginacion paginacion);
 
     /**
      * Cuantos usuarios habilitados y vigentes pueden hoy administrar permisos.
