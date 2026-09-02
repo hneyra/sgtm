@@ -33,15 +33,22 @@ import pe.gob.sgtm.web.RespuestaPaginada;
  * cuenta_corriente_asiento.acto} (V68), y las consecuencias de que esa columna nazca vacia en las
  * filas viejas estan en {@code AsientoRepositoryJdbc#altasYBajas}.
  *
- * <p><b>{@code autoManual} es un filtro que el contrato declara y esta pantalla no resuelve.</b> Lo
- * que el manual llama «automatica» es un alta o una baja que produjo un proceso —su columna «Doc.
- * Aprob.» dice «BAJA AUTOMÁTICA: POR NO CORRESPONDER DEUDA…»—, no un cobro; y hoy <b>todo</b> lo
- * que este sistema estampa con acto viene de las dos pantallas que lo registran a mano, asi que el
- * filtro tendria una sola respuesta posible y «AUTOMÁTICA» devolveria la tabla vacia, que se lee
- * como «no hay ninguna» en vez de «este sistema todavia no las produce» (#427, #431). Cuando {@code
- * ExtincionDeDeuda} estampe su acto —el defecto gemelo que #601 dejo censado— habra un segundo
- * origen y entonces la distincion tendra contra que medirse. Desde #539 el parametro no se ignora:
- * {@code GuardiaDeParametros} lo rechaza con 422 nombrandolo.
+ * <p><b>Desde #662 salen tambien las bajas que asienta {@code ExtincionDeDeuda}</b>: la que una
+ * resolucion de gerencia dicta al dejar una multa sin efecto o al declarar fundado un descargo
+ * (#50, RF-064). Es una baja de deuda como la de RF-044 —los mismos asientos y las mismas
+ * causales—, y hasta entonces no aparecia aqui: la pantalla del control se saltaba la via por la
+ * que se extingue deuda con mas consecuencias.
+ *
+ * <p><b>{@code autoManual} sigue siendo un filtro que el contrato declara y esta pantalla no
+ * resuelve.</b> Lo que el manual llama «automatica» es un alta o una baja que produjo un proceso
+ * —su columna «Doc. Aprob.» dice «BAJA AUTOMÁTICA: POR NO CORRESPONDER DEUDA…»—, no un cobro. Con
+ * #662 ese segundo origen ya existe, asi que el motivo por el que el filtro no se sirve
+ * <b>cambia</b> y conviene decirlo: no es que haya una sola respuesta posible, es que el origen no
+ * es una columna que se pueda consultar. {@code acto} contesta «de que acto nace la fila» y meterle
+ * ademas «quien la produjo» seria hacer que una columna conteste dos preguntas —el defecto de las
+ * dos verdades—; lo unico que hoy distingue los dos origenes es {@code documento_origen}, que es
+ * texto libre que teclea quien registra. Desde #539 el parametro no se ignora: {@code
+ * GuardiaDeParametros} lo rechaza con 422 nombrandolo.
  */
 @RestController
 @RequestMapping(Api.RAIZ + "/consultas/altas-bajas")

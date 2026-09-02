@@ -211,10 +211,15 @@ public class AsientoRepositoryJdbc extends RepositorioJdbc implements AsientoRep
      *
      * <p>Un cobro de ventanilla no es una baja de deuda ni el cargo de la emision masiva es un
      * alta, aunque los tres se escriban con los mismos conceptos del desglose. Se acota por {@code
-     * acto IS NOT NULL} porque es lo unico que los separa: {@link
+     * acto IS NOT NULL} porque es lo unico que los separa: un asiento sin acto no es uno del que se
+     * ignore el origen, es uno que <b>no nacio</b> de un alta ni de una baja (V68 §2).
+     *
+     * <p>Los sitios que estampan la columna son <b>dos</b> desde #662: {@link
      * pe.gob.sgtm.cuentacorriente.dominio.MovimientoDeDeuda#enAsientos} —los actos de RF-043 y
-     * RF-044— es el unico sitio del sistema que estampa la columna, y un asiento sin acto no es uno
-     * del que se ignore el origen, es uno que <b>no nacio</b> de un alta ni de una baja (V68 §2).
+     * RF-044, tecleados en Rentas— y {@code ExtincionDeDeudaCuentaCorriente}, que asienta la misma
+     * baja cuando la ordena una resolucion de gerencia (#50, RF-064). Antes de #662 esa segunda
+     * baja no salia aqui, que es tanto como decir que la pantalla del control se saltaba la via por
+     * la que se extingue deuda con mas consecuencias.
      *
      * <h2>Los asientos anteriores a V68, dicho en vez de callado</h2>
      *

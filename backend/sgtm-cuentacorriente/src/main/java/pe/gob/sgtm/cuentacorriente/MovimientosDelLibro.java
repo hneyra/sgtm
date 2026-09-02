@@ -79,7 +79,11 @@ public interface MovimientosDelLibro {
      * del desglose que un acto, asi que el concepto no los separa; lo hace la columna que el libro
      * estampa desde V68.
      *
-     * <p>Los asientos anteriores a esa migracion nacieron sin ella y <b>no salen</b>; ver {@code
+     * <p>Una baja de deuda es la de RF-044 la teclee quien la teclee: desde #662 salen aqui tambien
+     * las que asienta {@code ExtincionDeDeuda} cuando una resolucion de gerencia deja una multa sin
+     * efecto, que son los mismos asientos y las mismas causales.
+     *
+     * <p>Los asientos anteriores a V68 nacieron sin la columna y <b>no salen</b>; ver {@code
      * AsientoRepositoryJdbc#altasYBajas} para por que no se pueden reparar.
      *
      * @param codigoContribuyente el codigo del titular
