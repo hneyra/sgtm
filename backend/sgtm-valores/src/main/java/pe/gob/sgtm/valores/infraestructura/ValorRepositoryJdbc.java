@@ -286,30 +286,7 @@ public class ValorRepositoryJdbc extends RepositorioJdbc implements ValorReposit
             CriterioDeConsultaDeValores criterio, Paginacion paginacion) {
 
         Map<String, Object> parametros = new LinkedHashMap<>();
-        StringBuilder condiciones = new StringBuilder("1 = 1");
-
-        if (criterio.numero() != null) {
-            condiciones.append(" AND v.numero = :numero");
-            parametros.put("numero", criterio.numero());
-        }
-        if (criterio.contribuyenteId() != null) {
-            condiciones.append(" AND v.contribuyente_id = :contribuyenteId");
-            parametros.put("contribuyenteId", criterio.contribuyenteId());
-        }
-        if (criterio.tipo() != null) {
-            condiciones.append(" AND v.tipo = :tipo");
-            parametros.put("tipo", criterio.tipo().codigo());
-        }
-        if (criterio.ejercicio() != null) {
-            condiciones.append(" AND v.ejercicio = :ejercicio");
-            parametros.put("ejercicio", criterio.ejercicio());
-        }
-        if (criterio.situacion() != null) {
-            condiciones.append(" AND ").append(condicionDe(criterio.situacion()));
-            parametros.put("fechaSituacion", criterio.fecha());
-        }
-
-        String desde = " FROM valor v WHERE " + condiciones;
+        String desde = desdeDeLaConsulta(criterio, parametros);
         String seleccion =
                 "SELECT "
                         + COLUMNAS_VALOR_CON_PREFIJO
@@ -335,6 +312,64 @@ public class ValorRepositoryJdbc extends RepositorioJdbc implements ValorReposit
                 paginacion,
                 ORDEN,
                 (fila, numeroDeFila) -> mapearEnConsulta(fila, criterio.fecha()));
+    }
+
+    /**
+     * El mismo {@code count(*)} que {@link #consultar} ejecuta para paginar, y nada mas (#549).
+     *
+     * <p>Comparte {@link #desdeDeLaConsulta} con la grilla a proposito: si la condicion de una
+     * situacion cambia, las dos cifras cambian juntas. Escribir aqui un {@code WHERE} propio seria
+     * una segunda definicion de «sin notificar», y la que se lee primero es la del panel de la
+     * pantalla de aterrizaje (AC 2.4 de #549).
+     */
+    @Override
+    public long contar(CriterioDeConsultaDeValores criterio) {
+        Map<String, Object> parametros = new LinkedHashMap<>();
+        String desde = desdeDeLaConsulta(criterio, parametros);
+
+        return jdbc().sql("SELECT count(*)" + desde)
+                .params(parametros)
+                .query(Long.class)
+                .optional()
+                .orElse(0L);
+    }
+
+    /**
+     * El {@code FROM} y el {@code WHERE} de la consulta de valores, en un solo sitio.
+     *
+     * <p>Lo usan {@link #consultar} —para la pagina y para su conteo— y {@link #contar}. La
+     * condicion de {@link SituacionDelValor} no es una columna sino una expresion sobre tres
+     * tablas, asi que tenerla escrita dos veces es exactamente el defecto que #397 midio en el
+     * «Estado» de la infraccion administrativa: las dos copias divergen y la que se lee en pantalla
+     * acaba no siendo la que filtro.
+     */
+    private String desdeDeLaConsulta(
+            CriterioDeConsultaDeValores criterio, Map<String, Object> parametros) {
+
+        StringBuilder condiciones = new StringBuilder("1 = 1");
+
+        if (criterio.numero() != null) {
+            condiciones.append(" AND v.numero = :numero");
+            parametros.put("numero", criterio.numero());
+        }
+        if (criterio.contribuyenteId() != null) {
+            condiciones.append(" AND v.contribuyente_id = :contribuyenteId");
+            parametros.put("contribuyenteId", criterio.contribuyenteId());
+        }
+        if (criterio.tipo() != null) {
+            condiciones.append(" AND v.tipo = :tipo");
+            parametros.put("tipo", criterio.tipo().codigo());
+        }
+        if (criterio.ejercicio() != null) {
+            condiciones.append(" AND v.ejercicio = :ejercicio");
+            parametros.put("ejercicio", criterio.ejercicio());
+        }
+        if (criterio.situacion() != null) {
+            condiciones.append(" AND ").append(condicionDe(criterio.situacion()));
+            parametros.put("fechaSituacion", criterio.fecha());
+        }
+
+        return " FROM valor v WHERE " + condiciones;
     }
 
     /**

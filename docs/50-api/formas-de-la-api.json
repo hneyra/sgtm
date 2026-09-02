@@ -1835,6 +1835,10 @@
     "ejercicio": "entero",
     "fechaCalculo": "fecha",
     "calculadoEn": "instante",
+    "cargado": {
+      "importe": "texto",
+      "actualizadoA": "fecha"
+    },
     "kpis": [
       {
         "label": "texto",
@@ -1860,9 +1864,35 @@
             "importe": {
               "importe": "texto",
               "actualizadoA": "fecha"
+            },
+            "cargado": {
+              "importe": "texto",
+              "actualizadoA": "fecha"
+            },
+            "pendiente": {
+              "importe": "texto",
+              "actualizadoA": "fecha"
             }
           }
         ]
+      }
+    ]
+  },
+  "GET /indicadores/trabajo-parado": {
+    "ejercicio": "entero",
+    "fechaCalculo": "fecha",
+    "calculadoEn": "instante",
+    "frentes": [
+      {
+        "frente": "texto",
+        "modulo": "texto",
+        "queEstaParado": "texto",
+        "porQueCuestaDinero": "texto",
+        "cuantos": "entero",
+        "importe": {
+          "importe": "texto",
+          "actualizadoA": "fecha"
+        }
       }
     ]
   },

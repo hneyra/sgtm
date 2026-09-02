@@ -25,6 +25,32 @@ dependencies {
     // recaudacion podrian decir cifras distintas del mismo dia.
     implementation(project(":sgtm-tesoreria"))
 
+    // --- El trabajo parado por modulo (#549) -------------------------------
+    //
+    // Cuatro contextos mas, y las cuatro lineas se escriben con su motivo porque
+    // es lo que este archivo pide. Lo que las justifica es que la pregunta —«que
+    // esta esperando un acto y no cobra mientras espera»— NO se puede contestar
+    // desde un solo modulo: son cuatro poblaciones de cuatro contextos, y la
+    // alternativa era que la pantalla de aterrizaje hiciera cuatro peticiones
+    // mas, cada una con su permiso, e inventara en el cliente el concepto
+    // «parado». Cada uno entra por UN puerto de su paquete raiz que devuelve un
+    // AGREGADO —un recuento, a lo sumo con su suma—, nunca filas: es el AC 4 de
+    // #56 otra vez, y `PanelSinRecorrerElLibroTest` lo comprueba tambien sobre
+    // `ConsultaDeTrabajoParado`.
+    //
+    // Papeletas de transito impuestas y sin notificar, por PapeletasSinNotificar.
+    implementation(project(":sgtm-sanciones"))
+    // Valores emitidos y sin notificar a una fecha, por ValoresSinNotificar.
+    implementation(project(":sgtm-valores"))
+    // Expedientes coactivos que siguen en INICIADO, por ExpedientesSinRec.
+    implementation(project(":sgtm-coactiva"))
+    // Predios con ficha y sin declaracion jurada del ejercicio, por
+    // PrediosSinConciliar — que NO cuenta por su cuenta: delega en el resumen de
+    // #564, el mismo que publica GET /catastro/fichas/conciliacion/resumen. El
+    // frente es de Catastro y la dependencia es de `rentas` porque el derivado
+    // sale de `declaracion_jurada`, que es de rentas (ADR-0015).
+    implementation(project(":sgtm-rentas"))
+
     // MockMvc para el endpoint: transporte sin base de datos. El panel no persiste
     // nada, asi que no hay una sola prueba contra PostgreSQL en este modulo; las que
     // demuestran que las cifras cuadran con el libro y que RLS las separa viven donde

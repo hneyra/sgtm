@@ -640,7 +640,58 @@ class PredialControllerTest {
     }
 
     @Test
-    @DisplayName("y ninguna de las cuatro escribe una incidencia en el registro de errores")
+    @DisplayName("#633 — un conjunto que observa puntos y no el de la cuota es 422, no 500")
+    void elPuntoDeLaCuotaSinObservarSeNombra() throws Exception {
+        predios.con(11L, "10001", "AV. GRAU 100", Porcentaje.total());
+        mvc = montar(cuadroSinElPuntoDeLaCuota());
+
+        MvcResult resultado = mvc.perform(simularIndividual()).andReturn();
+
+        assertThat(resultado.getResponse().getStatus())
+                .as(
+                        "hasta #633 ningun catch del backend nombraba `PuntoSinPolitica`: la"
+                                + " determinacion entera contestaba 500 con su incidencia")
+                .isEqualTo(422);
+        String cuerpo = resultado.getResponse().getContentAsString();
+        assertThat(cuerpo)
+                .as("«falta publicar» solo sirve si dice QUE punto falta")
+                .contains("VALIDACION")
+                .contains("CUOTA");
+        assertThat(cuerpo)
+                .as("y los que si estan: quien va a observar el que falta necesita saber que hay")
+                .contains("IMPUESTO_POR_TRAMO");
+        assertThat(cuerpo)
+                .as(
+                        "no es «el conjunto no observa ningun punto»: ese lo traducia #540 desde"
+                                + " el lector, y sembrarlo dejaria esta prueba en verde con el"
+                                + " defecto dentro")
+                .doesNotContain("no tiene ninguna fila REDONDEO");
+        assertThat(cuerpo)
+                .as("un 500 traeria identificador de incidencia; esto no es una incidencia")
+                .doesNotContain("incidencia");
+    }
+
+    @Test
+    @DisplayName("#633 — y la corrida masiva contesta lo mismo, en vez de observar a 30 000")
+    void laCorridaMasivaTambienNombraElPuntoDeLaCuota() throws Exception {
+        predios.con(11L, "10001", "AV. GRAU 100", Porcentaje.total());
+        sembrarUnPadronQueSeRecalcula();
+        mvc = montar(cuadroSinElPuntoDeLaCuota());
+
+        MvcResult resultado = mvc.perform(recalcularElPadron()).andReturn();
+
+        assertThat(resultado.getResponse().getStatus())
+                .as(
+                        "la falta es del conjunto y no de un contribuyente: el bucle no la observa"
+                                + " una vez por cada uno, corta y lo dice")
+                .isEqualTo(422);
+        assertThat(resultado.getResponse().getContentAsString())
+                .contains("CUOTA")
+                .doesNotContain("incidencia");
+    }
+
+    @Test
+    @DisplayName("y ninguna de las seis escribe una incidencia en el registro de errores")
     void loQueFaltaPublicarNoEnsuciaElRegistro() throws Exception {
         predios.con(11L, "10001", "AV. GRAU 100", Porcentaje.total());
         ch.qos.logback.classic.Logger registro =
@@ -659,6 +710,9 @@ class PredialControllerTest {
             mvc.perform(simularIndividual());
             mvc = montar(cuadroConMediaPolitica());
             mvc.perform(simularIndividual());
+            mvc = montar(cuadroSinElPuntoDeLaCuota());
+            mvc.perform(simularIndividual());
+            mvc.perform(recalcularElPadron());
         } finally {
             registro.detachAppender(anotados);
         }
@@ -863,6 +917,34 @@ class PredialControllerTest {
                 .numero("PREDIAL_MINIMO", null, ValorNormativo.de("0.6"))
                 .numero("DERECHO_EMISION_PREDIAL", null, ValorNormativo.de("4.50"))
                 .texto("PREDIAL_VENCIMIENTO", "1", "2026-02-27")
+                .construir();
+    }
+
+    /**
+     * El cuadro completo, con <b>tres</b> de los cuatro puntos de redondeo y sin el de la cuota.
+     *
+     * <p>Es el tercer estado (#633), y no es {@link #cuadroSinRedondeo()} con otro nombre: alli no
+     * hay ninguna fila {@code REDONDEO} y quien falla es el lector, con {@code
+     * SinPuntosObservados}, que #540 ya traducia —sembrarlo dejaria la prueba en verde con el
+     * defecto dentro—. Aqui las politicas se leen enteras, la determinacion recorre {@code
+     * BASE_IMPONIBLE_DEL_PREDIO}, {@code BASE_DEL_CONTRIBUYENTE} e {@code IMPUESTO_POR_TRAMO} sin
+     * tropezar, y revienta al repartir el cronograma: {@code politicas.en(CUOTA)}.
+     */
+    private static ParametrosSellados cuadroSinElPuntoDeLaCuota() {
+        return ParametrosSellados.de(EJERCICIO, 1)
+                .numero("UIT", null, ValorNormativo.de("5500.00"))
+                .numero("TRAMO_PREDIAL", "1", ValorNormativo.de("0.2"))
+                .numero("TRAMO_PREDIAL_LIMITE", "1", ValorNormativo.de("15"))
+                .numero("TRAMO_PREDIAL", "2", ValorNormativo.de("1.0"))
+                .numero("PREDIAL_MINIMO", null, ValorNormativo.de("0.6"))
+                .numero("DERECHO_EMISION_PREDIAL", null, ValorNormativo.de("4.50"))
+                .texto("PREDIAL_VENCIMIENTO", "1", "2026-02-27")
+                .numero("REDONDEO", "IMPUESTO_POR_TRAMO", ValorNormativo.de("2"))
+                .texto("REDONDEO", "IMPUESTO_POR_TRAMO", "HALF_UP")
+                .numero("REDONDEO", "BASE_DEL_CONTRIBUYENTE", ValorNormativo.de("2"))
+                .texto("REDONDEO", "BASE_DEL_CONTRIBUYENTE", "HALF_UP")
+                .numero("REDONDEO", "BASE_IMPONIBLE_DEL_PREDIO", ValorNormativo.de("2"))
+                .texto("REDONDEO", "BASE_IMPONIBLE_DEL_PREDIO", "HALF_UP")
                 .construir();
     }
 

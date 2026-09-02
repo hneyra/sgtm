@@ -1175,6 +1175,54 @@ const VOCABULARIOS = {
  *   que este archivo devuelva el contrato tal como esta comprometido (#312).
  */
 const OPERACIONES_ADICIONALES = {
+  // El trabajo parado por modulo de la pantalla de aterrizaje (#549, RF-130).
+  // Sale de `inicio` —es la segunda lectura de esa misma pantalla— y no de
+  // ninguna de los cuatro modulos que cuenta: la pregunta es transversal, y
+  // partirla en cuatro peticiones dejaria a la interfaz inventando el concepto
+  // «parado» y componiendo permisos en el cliente.
+  inicio: [
+    {
+      operationId: 'inicio_trabajo_parado',
+      metodo: 'get',
+      ruta: '/api/v1/indicadores/trabajo-parado',
+      titulo: 'Trabajo parado, por módulo',
+      descripcion: literal(`
+        Lo que está esperando un acto de la administración y no cobra mientras espera,
+        con su recuento por módulo y el importe **cuando se puede cifrar**.
+
+        **La lista trae sólo los frentes que el perfil puede ver.** Cada uno lleva
+        detrás el permiso de lectura de la pantalla del módulo donde se desatasca
+        —\`transito_padron\`, \`consulta_valores\`, \`coactiva_expedientes\` y
+        \`consulta_fichas\`—, y el que no se autoriza **no aparece**: ni vacío, ni con un
+        guion, ni con una nota. Una fila vacía ya dice que ahí hay algo que mirar
+        (ADR-0016 §2).
+
+        **\`importe\` nulo no es cero.** Sólo el frente de Tránsito se cifra —la misma
+        consulta que cuenta las papeletas suma su \`importe_a_pagar\`—; los otros tres
+        salen con \`importe: null\` porque la consulta que sostiene su pantalla no suma
+        ninguna cifra, y sumarla aquí sería una segunda definición. Un frente cifrado con
+        cero filas sí trae \`"0.00"\`, y ésa es la diferencia que hay que poder dibujar.
+
+        Cada recuento sale de **la misma** consulta que la grilla de su módulo, no de una
+        segunda: si «sin notificar» significara una cosa aquí y otra allí, las dos cifras
+        se contradirían y la de la pantalla de aterrizaje es la que se lee primero.
+
+        **Faltan dos de los seis frentes del manual, y no por descuido.** El de Licencias
+        —solicitudes con el plazo agotado— necesita el plazo del silencio positivo, que es
+        un valor normativo sin publicar (D-02c, regla 5); el de Fiscalización —actas con
+        diferencia sin liquidar— no tiene ninguna consulta de módulo que reutilizar,
+        porque ninguna pantalla lista actas.
+      `),
+      parametros: [
+        {
+          nombre: 'ejercicio',
+          ejemplo: '2026',
+          descripcion:
+            'Ejercicio contra el que se concilia el padrón de predios; el del reloj si no viene',
+        },
+      ],
+    },
+  ],
   // La consulta del ciudadano sobre SU PROPIA situacion (#57, ADR-0020, RF-131).
   // No sale de la pantalla `portal` —esa es la vista del funcionario y sigue sin
   // backend (ADR-0016 §3)— sino de la sesion propia del contribuyente, que no

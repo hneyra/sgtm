@@ -20,6 +20,7 @@ import pe.gob.sgtm.autorizacion.RequiereAcceso;
 import pe.gob.sgtm.dominio.Dinero;
 import pe.gob.sgtm.dominio.Ejercicio;
 import pe.gob.sgtm.dominio.Observacion;
+import pe.gob.sgtm.dominio.PoliticasDeRedondeo;
 import pe.gob.sgtm.parametros.LectorDeParametros;
 import pe.gob.sgtm.parametros.ParametrosSellados;
 import pe.gob.sgtm.parametros.PoliticasDeRedondeoSelladas;
@@ -98,6 +99,21 @@ import pe.gob.sgtm.web.RespuestaPaginada;
  *       registro de errores se llenaba de lo que no es un error. Es el mismo razonamiento por el
  *       que #486 saco de ahi las peticiones ilegibles.
  * </ul>
+ *
+ * <p><b>Y una tercera, que se escapo de las dos anteriores</b> (#633). Un conjunto sellado que
+ * <b>si</b> observa puntos de redondeo pero no el que este calculo atraviesa no es ninguna de las
+ * dos de arriba: {@code SinPuntosObservados} no se lanza —hay filas—, y lo que sale es {@code
+ * PoliticasDeRedondeo.PuntoSinPolitica}, del dominio compartido, que hasta #633 no capturaba nadie
+ * en todo el backend. Las cuatro determinaciones que este controlador sirve atraviesan cuatro
+ * puntos —{@code BASE_IMPONIBLE_DEL_PREDIO}, {@code BASE_DEL_CONTRIBUYENTE}, {@code
+ * IMPUESTO_POR_TRAMO} y {@code CUOTA}—, asi que basta con que la campana de observacion vaya por el
+ * tercero para que la emision entera conteste 500.
+ *
+ * <p><b>Y sale sin el miembro {@code parametroQueFalta}</b>, igual que las otras seis de aqui: este
+ * controlador no publica el discriminador de #604 en ninguno de sus 422 —lo hizo solo {@code
+ * ConvenioController}—, y darselo a una de las siete diria por contrato que las otras seis son
+ * campos que quien atiende puede corregir. Extenderlo a los cinco controladores que faltan es su
+ * propio trabajo, no un efecto lateral de este.
  *
  * <p>Lo que <b>no</b> cambia: un fallo de verdad del servidor sigue siendo 500 con su incidencia.
  * Una traduccion demasiado ancha —convertirlo todo en 422— es peor que el defecto que arregla, y
@@ -247,7 +263,8 @@ public class PredialController {
                 | PoliticasDeRedondeoSelladas.SinPuntosObservados
                 | PoliticasDeRedondeoSelladas.MediaPolitica
                 | PoliticasDeRedondeoSelladas.EscalaNoEntera
-                | PoliticasDeRedondeoSelladas.ModoDesconocido falta) {
+                | PoliticasDeRedondeoSelladas.ModoDesconocido
+                | PoliticasDeRedondeo.PuntoSinPolitica falta) {
             throw new ProblemaDeNegocio(CodigoDeError.VALIDACION, mensajeDe(falta));
         }
     }
@@ -289,7 +306,8 @@ public class PredialController {
                 | PoliticasDeRedondeoSelladas.SinPuntosObservados
                 | PoliticasDeRedondeoSelladas.MediaPolitica
                 | PoliticasDeRedondeoSelladas.EscalaNoEntera
-                | PoliticasDeRedondeoSelladas.ModoDesconocido falta) {
+                | PoliticasDeRedondeoSelladas.ModoDesconocido
+                | PoliticasDeRedondeo.PuntoSinPolitica falta) {
             throw new ProblemaDeNegocio(CodigoDeError.VALIDACION, mensajeDe(falta));
         } catch (IllegalArgumentException mal) {
             throw new ProblemaDeNegocio(CodigoDeError.VALIDACION, mensajeDe(mal));

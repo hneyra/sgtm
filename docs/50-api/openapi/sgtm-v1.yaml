@@ -73,6 +73,54 @@ paths:
           $ref: "#/components/responses/SinMunicipalidad"
         "422":
           $ref: "#/components/responses/ErrorDeValidacion"
+  "/indicadores/trabajo-parado":
+    get:
+      operationId: inicio_trabajo_parado
+      summary: "Trabajo parado, por módulo"
+      description: |
+        Lo que está esperando un acto de la administración y no cobra mientras espera,
+        con su recuento por módulo y el importe **cuando se puede cifrar**.
+
+        **La lista trae sólo los frentes que el perfil puede ver.** Cada uno lleva
+        detrás el permiso de lectura de la pantalla del módulo donde se desatasca
+        —`transito_padron`, `consulta_valores`, `coactiva_expedientes` y
+        `consulta_fichas`—, y el que no se autoriza **no aparece**: ni vacío, ni con un
+        guion, ni con una nota. Una fila vacía ya dice que ahí hay algo que mirar
+        (ADR-0016 §2).
+
+        **`importe` nulo no es cero.** Sólo el frente de Tránsito se cifra —la misma
+        consulta que cuenta las papeletas suma su `importe_a_pagar`—; los otros tres
+        salen con `importe: null` porque la consulta que sostiene su pantalla no suma
+        ninguna cifra, y sumarla aquí sería una segunda definición. Un frente cifrado con
+        cero filas sí trae `"0.00"`, y ésa es la diferencia que hay que poder dibujar.
+
+        Cada recuento sale de **la misma** consulta que la grilla de su módulo, no de una
+        segunda: si «sin notificar» significara una cosa aquí y otra allí, las dos cifras
+        se contradirían y la de la pantalla de aterrizaje es la que se lee primero.
+
+        **Faltan dos de los seis frentes del manual, y no por descuido.** El de Licencias
+        —solicitudes con el plazo agotado— necesita el plazo del silencio positivo, que es
+        un valor normativo sin publicar (D-02c, regla 5); el de Fiscalización —actas con
+        diferencia sin liquidar— no tiene ninguna consulta de módulo que reutilizar,
+        porque ninguna pantalla lista actas.
+      tags: ["Inicio"]
+      parameters:
+        - name: ejercicio
+          in: query
+          required: false
+          description: "Ejercicio contra el que se concilia el padrón de predios; el del reloj si no viene"
+          schema: { type: string }
+          example: "2026"
+      responses:
+        200:
+          description: Operacion realizada
+          content:
+            application/json:
+              schema: { type: object }
+        "403":
+          $ref: "#/components/responses/SinMunicipalidad"
+        "422":
+          $ref: "#/components/responses/ErrorDeValidacion"
   "/portal/deuda":
     get:
       operationId: portal

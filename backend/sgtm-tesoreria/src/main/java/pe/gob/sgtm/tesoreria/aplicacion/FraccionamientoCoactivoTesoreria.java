@@ -4,7 +4,6 @@ import java.util.ArrayList;
 import java.util.List;
 import org.springframework.stereotype.Service;
 import pe.gob.sgtm.dominio.Observacion;
-import pe.gob.sgtm.dominio.PoliticasDeRedondeo;
 import pe.gob.sgtm.parametros.LectorDeParametros;
 import pe.gob.sgtm.parametros.PoliticasDeRedondeoSelladas;
 import pe.gob.sgtm.tesoreria.ConvenioCoactivo;
@@ -32,6 +31,12 @@ import pe.gob.sgtm.tesoreria.dominio.TipoDeConvenio;
  * en subpaquetes de {@code tesoreria}, asi que {@code coactiva} no las puede nombrar sin que Spring
  * Modulith lo rechace. Salen como {@link FraccionamientoCoactivo.SinDeudaCoactivaQueFraccionar} y
  * {@link FraccionamientoCoactivo.CondicionesSinPublicar}, con su mensaje intacto (#42, #562).
+ *
+ * <p>La sexta era {@code PoliticasDeRedondeo.PuntoSinPolitica}, y desde #633 no puede llegar aqui:
+ * el unico sitio de tesoreria que resuelve un punto —{@code CondicionesParametrizadas}— lo pide por
+ * {@link PoliticasDeRedondeoSelladas#en}, que la traduce a {@code PuntoSinObservar} para que la
+ * respuesta pueda decir <b>de que ejercicio</b> es la fila que falta. Se nombra la que llega y no
+ * la que ya no puede llegar: un {@code catch} que no se puede disparar no protege nada.
  *
  * <p>Si esta clase tuviera una regla propia seria la senal de que el fraccionamiento coactivo no es
  * el mismo mecanismo, y entonces habria dos sitios donde arreglar un defecto del cronograma. El
@@ -69,7 +74,7 @@ public class FraccionamientoCoactivoTesoreria implements FraccionamientoCoactivo
                 | PoliticasDeRedondeoSelladas.MediaPolitica
                 | PoliticasDeRedondeoSelladas.EscalaNoEntera
                 | PoliticasDeRedondeoSelladas.ModoDesconocido
-                | PoliticasDeRedondeo.PuntoSinPolitica falta) {
+                | PoliticasDeRedondeoSelladas.PuntoSinObservar falta) {
             throw new CondicionesSinPublicar(mensajeDeLoQueFalta(falta), falta);
         }
 
@@ -112,7 +117,7 @@ public class FraccionamientoCoactivoTesoreria implements FraccionamientoCoactivo
                 | PoliticasDeRedondeoSelladas.MediaPolitica
                 | PoliticasDeRedondeoSelladas.EscalaNoEntera
                 | PoliticasDeRedondeoSelladas.ModoDesconocido
-                | PoliticasDeRedondeo.PuntoSinPolitica falta) {
+                | PoliticasDeRedondeoSelladas.PuntoSinObservar falta) {
             throw new CondicionesSinPublicar(mensajeDeLoQueFalta(falta), falta);
         }
 
