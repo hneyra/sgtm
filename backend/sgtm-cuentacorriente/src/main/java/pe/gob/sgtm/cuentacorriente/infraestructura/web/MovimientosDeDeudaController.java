@@ -17,6 +17,7 @@ import pe.gob.sgtm.autorizacion.Privilegio;
 import pe.gob.sgtm.autorizacion.RequiereAcceso;
 import pe.gob.sgtm.cuentacorriente.aplicacion.ConsultasDelLibro;
 import pe.gob.sgtm.cuentacorriente.aplicacion.RegistrarMovimientoDeDeuda;
+import pe.gob.sgtm.cuentacorriente.dominio.AsientoRepository;
 import pe.gob.sgtm.cuentacorriente.dominio.ClaveDeSaldo;
 import pe.gob.sgtm.cuentacorriente.dominio.Fase;
 import pe.gob.sgtm.cuentacorriente.dominio.MovimientoDeDeuda;
@@ -86,6 +87,25 @@ import pe.gob.sgtm.web.ProblemaDeNegocio;
  * diga: el rotulo del manual es «Insoluto (S/)» a secas junto a «Cuota desde» y «Cuota hasta», y no
  * dice si esa cifra es la del ano o la de cada cuota. Quien porte la pantalla (#574) tiene que
  * rotularlo, porque las dos lecturas son plausibles y se diferencian en un factor {@code n}.
+ *
+ * <h2>Un alta repetida es 409, y lo decide la base (#588)</h2>
+ *
+ * <p>Hasta #588 <b>nada</b> impedia dar de alta dos veces la misma obligacion: {@code
+ * documento_numero_uq} (V15) no ve el {@code documentoOrigen} y el alta no tiene el limite que si
+ * tiene la baja —{@code verificarQueNoExcedeLaDeuda}—, porque incorporar deuda que no estaba es
+ * exactamente para lo que existe. El resultado era <b>201</b> con su documento emitido y el mismo
+ * cargo dos veces sobre el mismo contribuyente: no hay ninguna cifra que parezca mal, y solo se
+ * descubre cuando alguien paga y el saldo no queda en cero.
+ *
+ * <p>Lo cierra {@code asiento_alta_unica_uq} (V75) —la obligacion, el {@code documentoOrigen} y el
+ * {@code concepto}—, no una comprobacion previa en Java: entre leer y escribir cabe otra peticion.
+ * El repositorio traduce el choque a {@link AsientoRepository.AltaYaAsentada} nombrando lo que ya
+ * estaba, y aqui sale como {@code 409}. Y como los asientos se escriben <b>antes</b> del documento,
+ * un alta rechazada no gasta correlativo.
+ *
+ * <p>El {@code 409} no lo emite la propia excepcion sino este {@code catch}: lo que llega del motor
+ * es {@code DuplicateKeyException}, que sin traducir seria un {@code 500} con incidencia —«vuelve a
+ * intentarlo» sobre algo que no va a cambiar nunca—.
  *
  * <h2>La baja lee sus tres datos tambien de la consulta (#425)</h2>
  *
@@ -226,6 +246,12 @@ public class MovimientosDeDeudaController {
             throw new ProblemaDeNegocio(CodigoDeError.VALIDACION, mensajeDe(excede));
         } catch (RegistrarMovimientoDeDeuda.UnidadAjena ajena) {
             throw new ProblemaDeNegocio(CodigoDeError.VALIDACION, mensajeDe(ajena));
+        } catch (AsientoRepository.AltaYaAsentada repetida) {
+            // 409 y no 422: el cuerpo esta bien formado y el acto seria valido; lo que
+            // pasa es que ya esta hecho. Es lo mismo que contestan el predio ya inscrito
+            // (#489) y el expediente ya importado (#40), y lo que permite que quien
+            // reenvia tras un tiempo de espera agotado lea «ya estaba» y no «no vale».
+            throw new ProblemaDeNegocio(CodigoDeError.CONFLICTO, mensajeDe(repetida));
         }
         return MovimientoDeDeudaResource.de(
                 sentido.name(), registro.asientos(), registro.numeroDeDocumento());
