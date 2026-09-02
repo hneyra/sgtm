@@ -217,6 +217,7 @@ public class ConvenioController {
             } catch (CondicionesParametrizadas.CondicionSinParametrizar
                     | LectorDeParametros.EjercicioSinSellar
                     | PoliticasDeRedondeoSelladas.SinPuntosObservados
+                    | PoliticasDeRedondeoSelladas.PuntoSinObservar
                     | PoliticasDeRedondeoSelladas.MediaPolitica
                     | PoliticasDeRedondeoSelladas.EscalaNoEntera
                     | PoliticasDeRedondeoSelladas.ModoDesconocido falta) {
@@ -251,6 +252,7 @@ public class ConvenioController {
         } catch (CondicionesParametrizadas.CondicionSinParametrizar
                 | LectorDeParametros.EjercicioSinSellar
                 | PoliticasDeRedondeoSelladas.SinPuntosObservados
+                | PoliticasDeRedondeoSelladas.PuntoSinObservar
                 | PoliticasDeRedondeoSelladas.MediaPolitica
                 | PoliticasDeRedondeoSelladas.EscalaNoEntera
                 | PoliticasDeRedondeoSelladas.ModoDesconocido falta) {
@@ -389,6 +391,7 @@ public class ConvenioController {
         } catch (CondicionesParametrizadas.CondicionSinParametrizar
                 | LectorDeParametros.EjercicioSinSellar
                 | PoliticasDeRedondeoSelladas.SinPuntosObservados
+                | PoliticasDeRedondeoSelladas.PuntoSinObservar
                 | PoliticasDeRedondeoSelladas.MediaPolitica
                 | PoliticasDeRedondeoSelladas.EscalaNoEntera
                 | PoliticasDeRedondeoSelladas.ModoDesconocido falta) {
