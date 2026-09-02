@@ -42,7 +42,7 @@ class IndicadoresControllerTest {
                     .conRecaudado("PREDIAL", new Ejercicio(2026), 3, "500.00", 4)
                     .conCargado("PREDIAL", "1000.00", 10)
                     .conCargado("ARBITRIOS", "400.00", 8)
-                    .conPendiente("PREDIAL", "200.00", 3, Instant.parse("2026-08-12T03:00:00Z"));
+                    .conPendiente("PREDIAL", "200.00", 3);
 
     private final MockMvc mvc =
             MockMvcBuilders.standaloneSetup(

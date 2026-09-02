@@ -97,6 +97,39 @@ class DeterminarPredialTest {
     }
 
     @Test
+    @DisplayName("#659 — lo que cuesta al centimo determinar 2026 con la UIT de otro año")
+    void loQueCuestaLaUitEquivocada() {
+        // El caso que #659 midio contra el compose: un solo predio, 85 000,00 al 100 %.
+        predios.con(11L, "10001", "AV. GRAU 100", Porcentaje.total());
+
+        // Con la UIT que toca —5 500,00, la del ejercicio 2026— el primer tramo llega a 82 500,00:
+        // 82 500 x 0.2 % = 165.00 ; 2 500 x 0.6 % = 15.00 ; total 180.00
+        assertThat(determinar(declarado(11L, "85000.00"), null).impuestoInsoluto())
+                .isEqualTo(Dinero.de("180.00"));
+
+        // Con la UIT de 2022 —4 600,00, que es la que sobrevivia al defecto del lector— el primer
+        // tramo llega a 69 000,00: 69 000 x 0.2 % = 138.00 ; 16 000 x 0.6 % = 96.00 ; total 234.00.
+        // Un 30 % de mas sobre el mismo autovaluo, a todo el padron y sin ningun error de por
+        // medio; ninguna cifra del recibo lo diria. Quien elige la vigencia es
+        // LectorDeParametrosSellados, y que elija la correcta lo demuestra
+        // LectorDeParametrosSelladosTest contra PostgreSQL: esta prueba fija lo que esa eleccion
+        // vale en soles.
+        determinaciones = new DeterminacionesEnMemoria();
+        List<DeterminarPredial.PredioDeclarado> uno = new ArrayList<>();
+        uno.add(declarado(11L, "85000.00"));
+        DeterminacionPredialCalculada conLaDeOtroAnio =
+                servicioCon(
+                                conjunto()
+                                        .numero("UIT", null, ValorNormativo.de("4600.00"))
+                                        .construir())
+                        .determinar(
+                                new DeterminarPredial.Peticion(
+                                        EJERCICIO, "C-001", uno, "TRIMESTRAL", false),
+                                PORQUE);
+        assertThat(conLaDeOtroAnio.impuestoInsoluto()).isEqualTo(Dinero.de("234.00"));
+    }
+
+    @Test
     @DisplayName("el % de propiedad sale del padron y pondera el aporte de cada predio")
     void elPorcentajePondera() {
         predios.con(11L, "10001", "AV. GRAU 100", Porcentaje.de("50"));

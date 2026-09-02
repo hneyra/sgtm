@@ -97,6 +97,7 @@ class FraccionamientoCoactivoTesoreriaTest {
                         () ->
                                 puerto().registrar(
                                                 solicitud(SIN_SELLAR),
+                                                null,
                                                 Observacion.de("Se registra el convenio coactivo")))
                 .isInstanceOf(FraccionamientoCoactivo.CondicionesSinPublicar.class)
                 .hasMessageContaining("2027");

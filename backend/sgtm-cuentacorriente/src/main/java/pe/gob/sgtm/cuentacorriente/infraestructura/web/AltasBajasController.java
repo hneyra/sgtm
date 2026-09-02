@@ -22,16 +22,33 @@ import pe.gob.sgtm.web.RespuestaPaginada;
 /**
  * Consulta de altas y bajas: {@code GET /api/v1/consultas/altas-bajas} (RF-045).
  *
- * <p>Devuelve los asientos que son movimientos de deuda, con el documento que los sustenta y el
- * motivo con que se registraron. Es lo que responde «por que debe esto» sobre una deuda restante:
- * la lista de lo que entro y lo que salio, cada linea con su resolucion.
+ * <p>Devuelve los <b>actos</b> de alta y de baja de deuda —los de RF-043 y RF-044—, con el
+ * documento que los sustenta y el motivo con que se registraron. Es lo que responde «quien movio
+ * esta deuda a mano y con que resolucion»: el control sobre un acto que extingue deuda del
+ * municipio.
  *
- * <p><b>{@code autoManual} es un filtro que el contrato declara y esta pantalla no resuelve</b>, y
- * conviene decir por que en vez de fingirlo: hoy nada distingue en el libro un movimiento
- * registrado a mano de uno que produjo una emision, porque no hay ninguna columna que lo marque y
- * la emision masiva todavia no existe —es #30, mas adelante en la secuencia—. Cuando exista habra
- * que decidir como se marca; mientras tanto el filtro se ignora en vez de fallar la peticion, igual
- * que {@code situacion} en {@code CuentaCorrienteController}.
+ * <p><b>No es el libro entero</b> (#640). Un cobro de ventanilla no aparece aqui —es un pago, y
+ * tiene su propia consulta (RF-048)— ni el cargo de la emision masiva, aunque los tres se escriban
+ * con los mismos conceptos del desglose. Que se pudieran separar depende de {@code
+ * cuenta_corriente_asiento.acto} (V68), y las consecuencias de que esa columna nazca vacia en las
+ * filas viejas estan en {@code AsientoRepositoryJdbc#altasYBajas}.
+ *
+ * <p><b>Desde #662 salen tambien las bajas que asienta {@code ExtincionDeDeuda}</b>: la que una
+ * resolucion de gerencia dicta al dejar una multa sin efecto o al declarar fundado un descargo
+ * (#50, RF-064). Es una baja de deuda como la de RF-044 —los mismos asientos y las mismas
+ * causales—, y hasta entonces no aparecia aqui: la pantalla del control se saltaba la via por la
+ * que se extingue deuda con mas consecuencias.
+ *
+ * <p><b>{@code autoManual} sigue siendo un filtro que el contrato declara y esta pantalla no
+ * resuelve.</b> Lo que el manual llama «automatica» es un alta o una baja que produjo un proceso
+ * —su columna «Doc. Aprob.» dice «BAJA AUTOMÁTICA: POR NO CORRESPONDER DEUDA…»—, no un cobro. Con
+ * #662 ese segundo origen ya existe, asi que el motivo por el que el filtro no se sirve
+ * <b>cambia</b> y conviene decirlo: no es que haya una sola respuesta posible, es que el origen no
+ * es una columna que se pueda consultar. {@code acto} contesta «de que acto nace la fila» y meterle
+ * ademas «quien la produjo» seria hacer que una columna conteste dos preguntas —el defecto de las
+ * dos verdades—; lo unico que hoy distingue los dos origenes es {@code documento_origen}, que es
+ * texto libre que teclea quien registra. Desde #539 el parametro no se ignora: {@code
+ * GuardiaDeParametros} lo rechaza con 422 nombrandolo.
  */
 @RestController
 @RequestMapping(Api.RAIZ + "/consultas/altas-bajas")

@@ -2,6 +2,7 @@ package pe.gob.sgtm.rentas.infraestructura.web;
 
 import org.jspecify.annotations.Nullable;
 import pe.gob.sgtm.catastro.FichaDelPadron;
+import pe.gob.sgtm.dominio.AreaM2;
 import pe.gob.sgtm.rentas.aplicacion.ConsultaDeConciliacion.FichaConciliada;
 
 /**
@@ -29,6 +30,12 @@ import pe.gob.sgtm.rentas.aplicacion.ConsultaDeConciliacion.FichaConciliada;
  * <p>Tampoco lleva el {@code titularId} ni el codigo del contribuyente titular —solo su nombre,
  * como la grilla de catastro—: publicarlos es una decision de frontera aparte y hoy no esta tomada
  * (ADR-0015 §2.4). Mientras no lo este, el titular no enlaza.
+ *
+ * <p><b>Las areas viajan tipadas</b> (#607). Las escribe el serializador que {@code
+ * ConfiguracionDeJson} registra para {@code AreaM2}, o sea la cifra sola —{@code "360.00"}—, y la
+ * unidad la pone la cabecera de la columna. Metida dentro del dato obliga a cada consumidor a
+ * recortarla antes de comparar, y era la diferencia por la que el mismo predio decia «360.00 m2»
+ * aqui y «360.00» en fiscalizacion.
  */
 public record FichaConciliadaResource(
         long id,
@@ -39,8 +46,8 @@ public record FichaConciliadaResource(
         @Nullable String lote,
         String tipo,
         int version,
-        String areaTerreno,
-        @Nullable String areaConstruida,
+        AreaM2 areaTerreno,
+        @Nullable AreaM2 areaConstruida,
         String uso,
         String vigenciaDesde,
         @Nullable String titular,
@@ -58,8 +65,8 @@ public record FichaConciliadaResource(
                 ficha.lote(),
                 ficha.tipo(),
                 ficha.version(),
-                ficha.areaTerreno().toString(),
-                ficha.areaConstruida() == null ? null : ficha.areaConstruida().toString(),
+                ficha.areaTerreno(),
+                ficha.areaConstruida(),
                 ficha.uso(),
                 ficha.vigenciaDesde().toString(),
                 ficha.titular(),

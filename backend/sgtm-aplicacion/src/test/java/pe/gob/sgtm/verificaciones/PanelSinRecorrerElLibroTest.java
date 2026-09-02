@@ -132,25 +132,36 @@ class PanelSinRecorrerElLibroTest {
     }
 
     @Test
-    @DisplayName("la cartera se apoya en el saldo proyectado, no en releer el libro")
-    void laCarteraSeApoyaEnElSaldoProyectado() throws Exception {
-        // #23 existe justamente para esto: recorrer el libro en cada consulta cuesta mas
-        // que leer un campo, y la caja no puede esperar (RNF-020, ../srtm). La consulta del panel
-        // agrupa `saldo_proyectado` en el motor; que lo haga se comprueba sobre la fuente,
-        // porque es donde el defecto se escribiria.
+    @DisplayName("la cartera la agrega el motor, y la corta a la fecha que se le pide")
+    void laCarteraLaAgregaElMotorYLaCortaALaFecha() throws Exception {
+        // Hasta #639 esta comprobacion miraba `SaldoRepositoryJdbc`: la cartera salia de la
+        // proyeccion, que no sabe aplicar una fecha de corte. Lo que #56 defendia sigue en
+        // pie —la suma la hace PostgreSQL, no un bucle en Java— y se le suma lo que #639
+        // encontro que faltaba: el corte. Sin el, la cifra es la misma preguntando por enero
+        // que por diciembre, y estampar en ella la fecha del panel es afirmar que en enero ya
+        // se debia la cuota de noviembre (regla 9).
         java.nio.file.Path fuente =
                 raizDelBackend()
                         .resolve("sgtm-cuentacorriente/src/main/java/pe/gob/sgtm/cuentacorriente")
-                        .resolve("infraestructura/SaldoRepositoryJdbc.java");
+                        .resolve("infraestructura/AsientoRepositoryJdbc.java");
         assertThat(fuente).as("la fuente tiene que existir para poder revisarla").exists();
 
         String codigo =
                 java.nio.file.Files.readString(fuente, java.nio.charset.StandardCharsets.UTF_8);
+        int desde = codigo.indexOf("public List<PendienteAgregado> pendientePorTributo(");
+        assertThat(desde).as("la consulta de la cartera tiene que existir aqui").isGreaterThan(0);
+        String consulta = codigo.substring(desde, codigo.indexOf("\n    }", desde));
 
-        assertThat(codigo)
-                .as("la suma la hace PostgreSQL, no un bucle en Java")
-                .contains("sum(insoluto_saldo)")
+        assertThat(consulta)
+                .as("la suma y el conteo los hace PostgreSQL, no un bucle en Java")
+                .contains("sum(insoluto)")
+                .contains("count(*)")
                 .contains("GROUP BY tributo");
+        assertThat(consulta)
+                .as(
+                        "y la corta a la fecha de corte: sin esta condicion la cartera incluye la"
+                                + " cuota que aun no vence y la cifra no cambia con la fecha (#639)")
+                .contains("a.fecha_valor <= :aLaFecha");
     }
 
     /**

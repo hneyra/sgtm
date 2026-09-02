@@ -4,6 +4,7 @@ import java.util.List;
 import org.jspecify.annotations.Nullable;
 import pe.gob.sgtm.catastro.aplicacion.ReporteDeFichaDelContribuyente.Reporte;
 import pe.gob.sgtm.catastro.aplicacion.ReporteDeFichaDelContribuyente.UnidadAfecta;
+import pe.gob.sgtm.dominio.AreaM2;
 
 /**
  * El contenido de la ficha del contribuyente, tal como sale por HTTP.
@@ -14,6 +15,12 @@ import pe.gob.sgtm.catastro.aplicacion.ReporteDeFichaDelContribuyente.UnidadAfec
  *
  * <p>Ni un importe. El autovaluo de cada unidad es una regla de calculo bloqueada por D-02a; lo que
  * sale es superficie, uso y porcentaje.
+ *
+ * <p><b>Las areas viajan tipadas</b> (#607). Las escribe el serializador que {@code
+ * ConfiguracionDeJson} registra para {@code AreaM2}, o sea la cifra sola —{@code "360.00"}—, y la
+ * unidad la pone la cabecera de la columna. Metida dentro del dato obliga a cada consumidor a
+ * recortarla antes de comparar, y era la diferencia por la que el mismo predio decia «360.00 m2»
+ * aqui y «360.00» en fiscalizacion.
  */
 public record ReporteResource(
         String aLaFecha,
@@ -45,7 +52,7 @@ public record ReporteResource(
             String direccion,
             String condicion,
             String porcentaje,
-            @Nullable String areaTerreno,
+            @Nullable AreaM2 areaTerreno,
             @Nullable String uso,
             @Nullable Integer version) {
 
@@ -55,7 +62,7 @@ public record ReporteResource(
                     unidad.direccion(),
                     unidad.condicion(),
                     unidad.porcentaje().toString(),
-                    unidad.area() == null ? null : unidad.area().toString(),
+                    unidad.area(),
                     unidad.uso(),
                     unidad.version());
         }

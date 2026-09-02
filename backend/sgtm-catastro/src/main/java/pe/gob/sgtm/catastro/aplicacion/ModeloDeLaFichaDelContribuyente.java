@@ -17,6 +17,14 @@ import pe.gob.sgtm.documentos.Tabla;
  * <p><b>Aqui se formatea, y solo aqui.</b> El paquete de documentos recibe texto ya hecho porque no
  * tiene por que saber cuantos decimales lleva un porcentaje —decidirlo alli seria decidir D-03 por
  * la puerta de atras—.
+ *
+ * <p><b>La unidad va en la cabecera de la columna, nunca dentro de la celda</b> (#607). Es la misma
+ * regla que ya seguian {@code ModeloDelFue} —«Area del terreno (m2)»—, {@code ModeloDeLaLicencia} y
+ * {@code ModeloDeLaResolucionDeDeterminacion}; esta hoja era la unica de las cuatro que rotulaba
+ * «Área de terreno» a secas y metia los «m2» en el dato, de modo que la celda no era un numero para
+ * nadie y la misma superficie del mismo predio salia de dos formas segun el papel. Por eso esta
+ * clase esta en la lista de excepciones del escaner: compone la cifra a mano porque un documento no
+ * tiene serializador, pero la compone <b>sin</b> la unidad.
  */
 public final class ModeloDeLaFichaDelContribuyente {
 
@@ -44,7 +52,15 @@ public final class ModeloDeLaFichaDelContribuyente {
                             unidad.porcentaje().toString(),
                             // Un predio registrado y todavia sin ficha sale asi, no en cero: un
                             // cero se leeria como un terreno de cero metros, que es una cifra.
-                            unidad.area() == null ? "Sin ficha" : unidad.area().toString(),
+                            //
+                            // La cifra desnuda, sin unidad: la lleva la cabecera de la columna
+                            // (#607). Con «360.00 m2» dentro de la celda, quien exporte la hoja
+                            // a un calculo se encuentra texto donde esperaba un numero, y la
+                            // misma superficie del mismo predio se lee de dos formas segun de
+                            // que papel salga.
+                            unidad.area() == null
+                                    ? "Sin ficha"
+                                    : unidad.area().valor().toPlainString(),
                             unidad.uso() == null ? "—" : unidad.uso()));
         }
 
@@ -56,7 +72,7 @@ public final class ModeloDeLaFichaDelContribuyente {
                                 "Dirección",
                                 "Condición",
                                 "% propiedad",
-                                "Área de terreno",
+                                "Área de terreno (m2)",
                                 "Uso"),
                         filas);
 

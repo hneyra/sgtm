@@ -112,6 +112,11 @@ class AltaDeDeudaSobreUnVehiculoFronteraTest {
     /** Otro contribuyente del mismo padron, para poder medir la unidad ajena (#635). */
     private static final String AJENO = "C-VEH-635";
 
+    /** Identificadores que no apuntan a ninguna fila: la forma del defecto de #660. */
+    private static final long COLGADO_PREDIO = 9_999_998L;
+
+    private static final long COLGADO_VEHICULO = 9_999_999L;
+
     private static final String PLACA = "V5D-554";
     private static final Ejercicio EJERCICIO = new Ejercicio(2026);
     private static final LocalDate FECHA = LocalDate.of(2026, 5, 10);
@@ -372,6 +377,105 @@ class AltaDeDeudaSobreUnVehiculoFronteraTest {
                                 + " entonces: bloquear sin salida dejaria ese acto sin poder"
                                 + " registrarse")
                 .isEqualTo(201);
+
+        // #653: mirar solo el 201 dejaba pasar la mitad que faltaba. La declaracion tiene que
+        // quedar ESCRITA, y se compara contra un alta identica sobre la unidad PROPIA: si las dos
+        // filas salen iguales, el acto legitimo y el error de teclear el predio equivocado son
+        // indistinguibles para quien audite el circuito manana.
+        mvc.perform(
+                        post("/api/v1/rentas/deuda/altas")
+                                .contentType(MediaType.APPLICATION_JSON)
+                                .content(cuerpoDelAlta(CODIGO, vehiculo, "RES-2026-6357")))
+                .andReturn();
+
+        assertThat(declaracionDe("RES-2026-6354"))
+                .as("la fila del libro dice que se declaro")
+                .containsOnly(true);
+        assertThat(declaracionDe("RES-2026-6357"))
+                .as("y la del alta sobre la unidad propia dice que nadie declaro nada")
+                .containsOnly(false);
+        assertThat(auditadoDe("RES-2026-6354"))
+                .as("y la bitacora lo lleva dentro, que es donde se lee despues")
+                // `datos_nuevos` es jsonb: PostgreSQL lo devuelve reserializado y con espacios
+                // detras de los dos puntos, asi que se compara sin ellos.
+                .allMatch(
+                        descripcion ->
+                                descripcion
+                                        .replace(" ", "")
+                                        .contains("\"unidadDeTitularAnterior\":true"));
+        assertThat(auditadoDe("RES-2026-6357"))
+                .allMatch(
+                        descripcion ->
+                                descripcion
+                                        .replace(" ", "")
+                                        .contains("\"unidadDeTitularAnterior\":false"));
+    }
+
+    @Test
+    @DisplayName("#653 — la marca sin ninguna unidad no declara nada, y no rompe el CHECK")
+    void laMarcaSinUnidadNoDeclaraNada() throws Exception {
+        // El cuerpo declara la unidad y la marca por separado, asi que la marca puede llegar sola.
+        // Grabarla entonces afirmaria de una obligacion sin predio ni vehiculo que «su unidad es de
+        // otro», que no significa nada — y ademas violaria `asiento_titular_anterior_ck` (V71), que
+        // es lo que la convierte en una invariante y no en una restriccion que el propio sistema
+        // puede romper. Se carga sobre AJENO y no sobre CODIGO porque las obligaciones de este
+        // ultimo las cuenta `elAltaQuedaAsentadaConElVehiculo`, y las pruebas comparten la base.
+        MvcResult resultado =
+                mvc.perform(
+                                post("/api/v1/rentas/deuda/altas")
+                                        .contentType(MediaType.APPLICATION_JSON)
+                                        .content(
+                                                cuerpoSinUnidad(AJENO, "RES-2026-6360")
+                                                        .replace(
+                                                                "\"observacion\"",
+                                                                "\"deudaDeTitularAnterior\":true,"
+                                                                        + "\"observacion\"")))
+                        .andReturn();
+
+        assertThat(resultado.getResponse().getStatus())
+                .as("respuesta: %s", resultado.getResponse().getContentAsString())
+                .isEqualTo(201);
+        assertThat(declaracionDe("RES-2026-6360"))
+                .as("sin unidad no hay nada que declarar")
+                .containsOnly(false);
+    }
+
+    @Test
+    @DisplayName("#653 — la baja declarada tambien deja la declaracion escrita")
+    void laBajaDeclaradaTambienLaDeja() throws Exception {
+        // Primero hay deuda que dar de baja, sobre la unidad ajena y declarandolo.
+        mvc.perform(
+                        post("/api/v1/rentas/deuda/altas")
+                                .contentType(MediaType.APPLICATION_JSON)
+                                .content(
+                                        cuerpoDelAlta(AJENO, vehiculo, "RES-2026-6358")
+                                                .replace(
+                                                        "\"observacion\"",
+                                                        "\"deudaDeTitularAnterior\":true,"
+                                                                + "\"observacion\"")))
+                .andReturn();
+
+        MvcResult baja =
+                mvc.perform(
+                                post("/api/v1/rentas/deuda/bajas")
+                                        .contentType(MediaType.APPLICATION_JSON)
+                                        .content(
+                                                cuerpoDelAlta(AJENO, vehiculo, "RES-2026-6359")
+                                                        .replace(
+                                                                "\"observacion\"",
+                                                                "\"deudaDeTitularAnterior\":true,"
+                                                                        + "\"observacion\"")))
+                        .andReturn();
+
+        assertThat(baja.getResponse().getStatus())
+                .as("respuesta: %s", baja.getResponse().getContentAsString())
+                .isEqualTo(201);
+        assertThat(declaracionDe("RES-2026-6359"))
+                .as(
+                        "arreglar solo el alta dejaria la baja admitiendo la unidad ajena sin"
+                                + " decirlo: los dos caminos reciben la misma ComprobacionDeUnidad"
+                                + " y ninguno la propagaba")
+                .containsOnly(true);
     }
 
     @Test
@@ -392,6 +496,159 @@ class AltaDeDeudaSobreUnVehiculoFronteraTest {
                         "y por el motivo que es: una baja sobre una obligacion sin deuda tambien"
                                 + " contesta 422 —«solo se deben 0.00»—, asi que mirar solo el"
                                 + " codigo no distingue las dos guardas")
+                .contains(CODIGO)
+                .doesNotContain("solo se deben");
+    }
+
+    @Test
+    @DisplayName("#653 — y la baja REPARTIDA, que va por el otro camino, tambien")
+    void laBajaRepartidaTambienLaDeja() throws Exception {
+        mvc.perform(
+                        post("/api/v1/rentas/deuda/altas")
+                                .contentType(MediaType.APPLICATION_JSON)
+                                .content(
+                                        cuerpoDelAlta(AJENO, vehiculo, "RES-2026-6361")
+                                                .replace(
+                                                        "\"observacion\"",
+                                                        "\"deudaDeTitularAnterior\":true,"
+                                                                + "\"observacion\"")))
+                .andReturn();
+
+        // `repartir` manda la peticion a `registrarRepartido`, que es un camino DISTINTO de
+        // `registrar` y recibe la misma ComprobacionDeUnidad. Sin una prueba que pase por aqui,
+        // arreglar solo `registrar` deja la mitad sin arreglar y nada lo dice: la baja repartida es
+        // la que la pantalla usa para una fila de la grilla que agrega varios periodos (#598).
+        MvcResult baja =
+                mvc.perform(
+                                post("/api/v1/rentas/deuda/bajas")
+                                        .contentType(MediaType.APPLICATION_JSON)
+                                        .content(
+                                                cuerpoDelAlta(AJENO, vehiculo, "RES-2026-6362")
+                                                        .replace(
+                                                                "\"observacion\"",
+                                                                "\"repartir\":true,"
+                                                                        + "\"deudaDeTitularAnterior\":true,"
+                                                                        + "\"observacion\"")))
+                        .andReturn();
+
+        assertThat(baja.getResponse().getStatus())
+                .as("respuesta: %s", baja.getResponse().getContentAsString())
+                .isEqualTo(201);
+        assertThat(declaracionDe("RES-2026-6362")).containsOnly(true);
+    }
+
+    @Test
+    @DisplayName("#660 — un alta con un vehiculoId que no apunta a nada sigue siendo 422")
+    void elAltaConVehiculoColgadoSigueSiendo422() throws Exception {
+        MvcResult resultado =
+                mvc.perform(
+                                post("/api/v1/rentas/deuda/altas")
+                                        .contentType(MediaType.APPLICATION_JSON)
+                                        .content(
+                                                cuerpoConUnidad(
+                                                        "\"vehiculoId\":" + COLGADO_VEHICULO + ",",
+                                                        AJENO,
+                                                        7,
+                                                        "RES-2026-6601")))
+                        .andReturn();
+
+        assertThat(resultado.getResponse().getStatus())
+                .as(
+                        "escribir deuda nueva sobre una clave que ninguna consulta va a mirar es lo"
+                                + " que #635 vino a impedir, y sigue impedido")
+                .isEqualTo(422);
+        assertThat(resultado.getResponse().getContentAsString())
+                .contains(String.valueOf(COLGADO_VEHICULO));
+    }
+
+    @Test
+    @DisplayName("#660 — un alta con un predioId que no apunta a nada sigue siendo 422")
+    void elAltaConPredioColgadoSigueSiendo422() throws Exception {
+        MvcResult resultado =
+                mvc.perform(
+                                post("/api/v1/rentas/deuda/altas")
+                                        .contentType(MediaType.APPLICATION_JSON)
+                                        .content(
+                                                cuerpoConUnidad(
+                                                        "\"predioId\":" + COLGADO_PREDIO + ",",
+                                                        AJENO,
+                                                        6,
+                                                        "RES-2026-6602")))
+                        .andReturn();
+
+        assertThat(resultado.getResponse().getStatus()).isEqualTo(422);
+        assertThat(resultado.getResponse().getContentAsString())
+                .contains(String.valueOf(COLGADO_PREDIO));
+    }
+
+    @Test
+    @DisplayName("#660 — la baja de una deuda con el vehiculo colgado SI se puede registrar")
+    void laBajaConVehiculoColgadoSePuede() throws Exception {
+        // El asiento se siembra por SQL directo a proposito: es la forma de las filas que ya
+        // estan escritas —nada lo impedia, porque V2 no declara clave foranea sobre `vehiculo`—
+        // y que el circuito de hoy ya no deja crear. Sin ellas el issue no se puede reproducir.
+        sembrarCargoColgado(5, null, COLGADO_VEHICULO, "RES-2026-6603");
+
+        MvcResult resultado =
+                mvc.perform(
+                                post("/api/v1/rentas/deuda/bajas")
+                                        .contentType(MediaType.APPLICATION_JSON)
+                                        .content(
+                                                cuerpoConUnidad(
+                                                        "\"vehiculoId\":" + COLGADO_VEHICULO + ",",
+                                                        AJENO,
+                                                        5,
+                                                        "RES-2026-6604")))
+                        .andReturn();
+
+        assertThat(resultado.getResponse().getStatus())
+                .as(
+                        "esta deuda no se puede borrar (regla 4) ni reescribir desde el migrador"
+                                + " (RLS con FORCE): si la baja tambien la rechaza, queda viva y"
+                                + " sin forma de extinguirla. Respuesta: %s",
+                        resultado.getResponse().getContentAsString())
+                .isEqualTo(201);
+    }
+
+    @Test
+    @DisplayName("#660 — y la del predio colgado tambien")
+    void laBajaConPredioColgadoSePuede() throws Exception {
+        sembrarCargoColgado(4, COLGADO_PREDIO, null, "RES-2026-6605");
+
+        MvcResult resultado =
+                mvc.perform(
+                                post("/api/v1/rentas/deuda/bajas")
+                                        .contentType(MediaType.APPLICATION_JSON)
+                                        .content(
+                                                cuerpoConUnidad(
+                                                        "\"predioId\":" + COLGADO_PREDIO + ",",
+                                                        AJENO,
+                                                        4,
+                                                        "RES-2026-6606")))
+                        .andReturn();
+
+        assertThat(resultado.getResponse().getStatus())
+                .as("respuesta: %s", resultado.getResponse().getContentAsString())
+                .isEqualTo(201);
+    }
+
+    @Test
+    @DisplayName(
+            "#660 — la baja sobre una unidad que existe y es de otro sigue pidiendo declararlo")
+    void laBajaSobreUnidadAjenaQueExisteSigueExigiendoDeclararlo() throws Exception {
+        MvcResult resultado =
+                mvc.perform(
+                                post("/api/v1/rentas/deuda/bajas")
+                                        .contentType(MediaType.APPLICATION_JSON)
+                                        .content(cuerpoDelAlta(AJENO, vehiculo, "RES-2026-6607")))
+                        .andReturn();
+
+        assertThat(resultado.getResponse().getStatus())
+                .as(
+                        "abrir «la unidad no existe» no puede abrir de paso «la unidad es de"
+                                + " otro»: son dos casos distintos y solo uno es irreparable")
+                .isEqualTo(422);
+        assertThat(resultado.getResponse().getContentAsString())
                 .contains(CODIGO)
                 .doesNotContain("solo se deben");
     }
@@ -439,6 +696,17 @@ class AltaDeDeudaSobreUnVehiculoFronteraTest {
                 + "\"documentoOrigen\":\""
                 + documento
                 + "\",\"observacion\":\"Alta de prueba de la unidad\"}";
+    }
+
+    /** El mismo alta, sin ninguna unidad: ni predio ni vehiculo. */
+    private static String cuerpoSinUnidad(String codigo, String documento) {
+        return "{\"codContribuyente\":\""
+                + codigo
+                + "\",\"tributo\":\"VEHICULAR\",\"ano\":\"2026\",\"cuota\":8,"
+                + "\"insoluto\":\"10.00\",\"fechaValor\":\"2026-05-10\","
+                + "\"documentoOrigen\":\""
+                + documento
+                + "\",\"observacion\":\"Alta de prueba sin unidad\"}";
     }
 
     // ------------------------------------------------------------------
@@ -512,6 +780,106 @@ class AltaDeDeudaSobreUnVehiculoFronteraTest {
         fabrica.addAdvice(
                 new TransactionInterceptor(gestor, new AnnotationTransactionAttributeSource()));
         return (T) fabrica.getProxy();
+    }
+
+    /** Lo que la fila del libro dice de la declaracion de #653, por documento de origen. */
+    private static List<Boolean> declaracionDe(String documento) throws SQLException {
+        try (Connection app = base.conexion(BaseDeDatosDePrueba.APP)) {
+            ContextoDeTenant.fijar(app, municipalidad);
+            try (PreparedStatement sentencia =
+                    app.prepareStatement(
+                            "SELECT unidad_de_titular_anterior FROM cuenta_corriente_asiento"
+                                    + " WHERE documento_origen = ?")) {
+                sentencia.setString(1, documento);
+                try (ResultSet filas = sentencia.executeQuery()) {
+                    List<Boolean> declaraciones = new java.util.ArrayList<>();
+                    while (filas.next()) {
+                        declaraciones.add(filas.getBoolean(1));
+                    }
+                    return declaraciones;
+                }
+            }
+        }
+    }
+
+    /** Lo que la bitacora guardo de cada asiento de ese documento. */
+    private static List<String> auditadoDe(String documento) throws SQLException {
+        try (Connection app = base.conexion(BaseDeDatosDePrueba.APP)) {
+            ContextoDeTenant.fijar(app, municipalidad);
+            try (PreparedStatement sentencia =
+                    app.prepareStatement(
+                            "SELECT a.datos_nuevos::text FROM auditoria a"
+                                    + " JOIN cuenta_corriente_asiento c"
+                                    + "   ON c.id::text = a.clave"
+                                    + " WHERE a.tabla = 'cuenta_corriente_asiento'"
+                                    + "   AND c.documento_origen = ?")) {
+                sentencia.setString(1, documento);
+                try (ResultSet filas = sentencia.executeQuery()) {
+                    List<String> descripciones = new java.util.ArrayList<>();
+                    while (filas.next()) {
+                        descripciones.add(filas.getString(1));
+                    }
+                    return descripciones;
+                }
+            }
+        }
+    }
+
+    /** Un cuerpo de movimiento con la unidad que se le indique —o ninguna—, y su cuota. */
+    private static String cuerpoConUnidad(
+            String unidad, String codigo, int cuota, String documento) {
+        return "{"
+                + unidad
+                + "\"codContribuyente\":\""
+                + codigo
+                + "\",\"tributo\":\"VEHICULAR\",\"ano\":\"2026\",\"cuota\":"
+                + cuota
+                + ",\"insoluto\":\"10.00\",\"fechaValor\":\"2026-05-10\","
+                + "\"documentoOrigen\":\""
+                + documento
+                + "\",\"observacion\":\"Movimiento de prueba de la unidad colgada\"}";
+    }
+
+    /**
+     * Un cargo escrito por SQL directo con una unidad que no apunta a nada (#660).
+     *
+     * <p>Es la forma de las filas que <b>ya estan en el libro</b>: V2 no declara clave foranea
+     * sobre {@code predio} ni sobre {@code vehiculo}, asi que nada lo impidio durante toda la vida
+     * de la tabla, y el circuito de hoy —desde #635— ya no permite crearlas. Sin sembrarla asi el
+     * caso no se puede reproducir.
+     */
+    private static void sembrarCargoColgado(
+            int cuota, Long predioId, Long vehiculoId, String documento) throws SQLException {
+        try (Connection app = base.conexion(BaseDeDatosDePrueba.APP)) {
+            ContextoDeTenant.fijar(app, municipalidad);
+            try (PreparedStatement sentencia =
+                    app.prepareStatement(
+                            "INSERT INTO cuenta_corriente_asiento (municipalidad_id, ejercicio,"
+                                    + " contribuyente_id, tributo, concepto, tipo, fase, periodo,"
+                                    + " predio_id, vehiculo_id, monto, fecha_valor,"
+                                    + " documento_origen, usuario_id, motivo, acto)"
+                                    + " VALUES (?, 2026, ?, 'VEHICULAR', 'INSOLUTO', 'CARGO',"
+                                    + " 'ORDINARIA', ?, ?, ?, 10.00, DATE '2026-05-10', ?,"
+                                    + " 'prueba', 'Cargo sembrado con la unidad colgada',"
+                                    + " 'ALTA_DEUDA')")) {
+                sentencia.setLong(1, municipalidad);
+                sentencia.setLong(2, ajeno);
+                sentencia.setInt(3, cuota);
+                if (predioId == null) {
+                    sentencia.setNull(4, java.sql.Types.BIGINT);
+                } else {
+                    sentencia.setLong(4, predioId);
+                }
+                if (vehiculoId == null) {
+                    sentencia.setNull(5, java.sql.Types.BIGINT);
+                } else {
+                    sentencia.setLong(5, vehiculoId);
+                }
+                sentencia.setString(6, documento);
+                sentencia.executeUpdate();
+                app.commit();
+            }
+        }
     }
 
     private static long crearMunicipalidad(String ubigeo, String nombre) throws SQLException {

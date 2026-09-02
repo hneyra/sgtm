@@ -1,6 +1,7 @@
 package pe.gob.sgtm.tesoreria.dominio;
 
 import java.util.Optional;
+import org.jspecify.annotations.Nullable;
 import pe.gob.sgtm.compartido.Pagina;
 import pe.gob.sgtm.compartido.Paginacion;
 import pe.gob.sgtm.dominio.Ejercicio;
@@ -29,12 +30,26 @@ public interface ConvenioRepository {
      * Guarda el convenio con su deuda acogida y su cronograma. Devuelve el convenio con su
      * identificador.
      *
+     * @param claveDeIdempotencia la cabecera {@code Idempotency-Key} del intento, si vino. Es lo
+     *     que hace que un reenvio no abra un segundo convenio sobre la misma deuda (#606). Nula en
+     *     el preconvenio que nace de una reformulacion: ese acto lo reclama el movimiento de cierre
      * @throws CronogramaDuplicado si ese convenio ya tenia sus cuotas o su deuda acogida. Lo decide
      *     la base —{@code convenio_cuota_uq} y {@code convenio_deuda_uq}—, no un {@code SELECT}
      *     previo: dos peticiones simultaneas pasarian las dos por cualquier comprobacion escrita en
      *     Java, y el cronograma saldria por duplicado
+     * @throws ClaveRepetida si esa clave ya registro otro convenio. Lo decide {@code
+     *     convenio_idempotencia_uq}, por lo mismo
      */
-    Convenio registrar(Convenio convenio);
+    Convenio registrar(Convenio convenio, @Nullable String claveDeIdempotencia);
+
+    /**
+     * El convenio que se registro con esa clave de idempotencia, si ya existe.
+     *
+     * <p>Es lo que convierte un reenvio en una respuesta correcta en vez de en un error. Por si
+     * sola una lectura no garantiza nada —dos peticiones simultaneas no verian nada las dos—, y por
+     * eso la garantia final sigue siendo {@code convenio_idempotencia_uq} (V70).
+     */
+    Optional<Convenio> porClaveDeIdempotencia(String clave);
 
     /** El convenio con ese numero, con su deuda acogida y su cronograma. */
     Optional<Convenio> porNumero(NumeroDeConvenio numero);
@@ -58,6 +73,23 @@ public interface ConvenioRepository {
         @java.io.Serial private static final long serialVersionUID = 1L;
 
         public CronogramaDuplicado(String mensaje, Throwable causa) {
+            super(mensaje, causa);
+        }
+    }
+
+    /**
+     * Esa clave de idempotencia ya registro un convenio.
+     *
+     * <p>No es el reenvio inocente que el caso de uso atiende leyendo primero: es la <b>carrera</b>
+     * —dos envios del mismo intento a la vez, que pasan los dos por el {@code SELECT} y llegan los
+     * dos al {@code INSERT}—. La que llega segunda no puede devolver el convenio de la primera,
+     * porque todavia no esta confirmado. Quien llama responde 409.
+     */
+    final class ClaveRepetida extends RuntimeException {
+
+        @java.io.Serial private static final long serialVersionUID = 1L;
+
+        public ClaveRepetida(String mensaje, Throwable causa) {
             super(mensaje, causa);
         }
     }

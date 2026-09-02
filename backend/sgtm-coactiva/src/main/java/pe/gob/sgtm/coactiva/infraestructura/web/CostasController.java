@@ -69,6 +69,16 @@ import pe.gob.sgtm.web.RespuestaPaginada;
  * <p>El mensaje es el de la propia excepcion: nombra la llave —{@code ARANCEL_COSTA:REC1}— o, si lo
  * que falta es el conjunto entero y no hay llave que nombrar, el <b>ejercicio</b>. Un fallo de
  * verdad del servidor sigue siendo 500 con su incidencia.
+ *
+ * <p><b>Y ese {@code catch} de {@code ArancelSinParametrizar} no sobra</b> (#634). #562 lo dio por
+ * inalcanzable, y lo era solo por la rama «todo el expediente»: pidiendo actos por su identificador
+ * siempre ha llegado hasta aqui, asi que retirarlo convertiria un 422 correcto en un 500 con
+ * incidencia. Lo que #634 corrige es la otra rama —liquidar el expediente entero cuando
+ * <b>nadie</b> publico el arancel—, que contestaba «este expediente no tiene ningun acto pendiente
+ * de liquidar»: el mismo 422, con un mensaje que se lee como «no hay nada que cobrar» en vez de
+ * «falta publicar {@code ARANCEL_COSTA:REC1}». Que la ordenanza <b>no tarife</b> un acto sigue
+ * siendo {@code SinActosQueLiquidar}, porque eso si es una decision de la ordenanza; la diferencia
+ * la establece {@code LiquidarCostas.candidatosDe}.
  */
 @RestController
 @RequestMapping(Api.RAIZ + "/coactiva")
@@ -99,8 +109,10 @@ public class CostasController {
      * Liquida las costas del expediente y asienta su cargo (RF-104).
      *
      * <p>Responde <b>201</b> con la liquidacion. Con D-02c abierta (#193) responde <b>422</b>
-     * nombrando la llave del arancel que falta, que es exactamente lo que tiene que pasar mientras
-     * la ordenanza no este cargada: no hay cifra con la que liquidar.
+     * nombrando la llave del arancel que falta —{@code ARANCEL_COSTA:REC1}—, que es exactamente lo
+     * que tiene que pasar mientras la ordenanza no este cargada: no hay cifra con la que liquidar.
+     * Por las <b>dos</b> rutas desde #634: pidiendo actos concretos y liquidando el expediente
+     * entero.
      *
      * <p><b>{@code nroExpedCoact} tambien viaja por la consulta</b> (#425). Es el filtro «Nro.
      * Exped. Coact.» que la pantalla dibuja y el contrato lo declara {@code in: query}; leerlo solo

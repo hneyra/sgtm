@@ -10,6 +10,7 @@ import pe.gob.sgtm.cuentacorriente.DeudaAcogida;
 import pe.gob.sgtm.cuentacorriente.ExtincionDeDeuda;
 import pe.gob.sgtm.cuentacorriente.MovimientoAsentado;
 import pe.gob.sgtm.cuentacorriente.SeleccionDeObligacion;
+import pe.gob.sgtm.cuentacorriente.dominio.ActoDelLibro;
 import pe.gob.sgtm.cuentacorriente.dominio.Asiento;
 import pe.gob.sgtm.cuentacorriente.dominio.AsientoRepository;
 import pe.gob.sgtm.cuentacorriente.dominio.CalculoDeDeuda;
@@ -39,6 +40,22 @@ import pe.gob.sgtm.dominio.PoliticaDeRedondeo;
  * papeleta cuyo descargo se resuelve cuando ya paso a valor o a coactiva tiene su deuda ahi, y
  * abonar en otra fase dejaria la fase real intacta y crearia un saldo a favor en una que no debia
  * nada.
+ *
+ * <h2>Cada asiento nace estampado como {@code BAJA_DEUDA} (#662)</h2>
+ *
+ * <p>Hasta #662 no estampaba ninguno, y la consecuencia era triple y silenciosa: la extincion no
+ * salia en la relacion de altas y bajas —la pantalla que existe para auditar como se extingue deuda
+ * del municipio (RF-045)—, la deuda extinguida <b>seguia contando</b> como emision del ejercicio
+ * —el denominador de todas las barras del panel— y, lo peor, se publicaba como <b>recaudacion</b>:
+ * el abono de una extincion es un {@code ABONO} de concepto {@code INSOLUTO}, columna a columna el
+ * mismo asiento que el de una cobranza.
+ *
+ * <p>El acto es {@code BAJA_DEUDA} y <b>no uno propio</b>. Lo que se escribe aqui es una baja de
+ * deuda: los mismos asientos, por las mismas causales que el desplegable de RF-044 ofrece
+ * —«PRESCRIPCIÓN DECLARADA», «RESOLUCIÓN QUE DEJA SIN EFECTO»— y con el mismo efecto sobre el
+ * padron; lo unico distinto es que oficina la tramita. Un acto propio que se comportara igual en
+ * las tres consultas que leen la columna no distinguiria nada, y tres sitios donde nombrar dos
+ * valores son tres sitios donde olvidar uno. El razonamiento entero esta en {@link ActoDelLibro}.
  *
  * <h2>Los candados, en el mismo orden que la cobranza</h2>
  *
@@ -133,7 +150,7 @@ public class ExtincionDeDeudaCuentaCorriente implements ExtincionDeDeuda {
             @Nullable String referenciaExterna,
             Observacion observacion) {
         registrar.asentar(
-                Asiento.nuevo(
+                Asiento.nuevoDelActo(
                         cuota.ejercicio(),
                         cuota.contribuyenteId(),
                         cuota.tributo(),
@@ -150,7 +167,12 @@ public class ExtincionDeDeudaCuentaCorriente implements ExtincionDeDeuda {
                         referenciaExterna,
                         monto,
                         fecha,
-                        documentoOrigen),
+                        documentoOrigen,
+                        // BAJA_DEUDA, y no un acto propio (#662): esto ES una baja de deuda
+                        // —los mismos asientos, por las mismas causales que el desplegable de
+                        // RF-044 ofrece— y lo unico que cambia es que oficina la tramita. Ver
+                        // ActoDelLibro para la decision entera.
+                        ActoDelLibro.BAJA_DEUDA),
                 observacion);
     }
 
