@@ -24,6 +24,7 @@ import {
   listarValoresUnitarios,
   listarVias,
   marcoDe,
+  marcoDelPlano,
   planoCatastral,
   reactivar,
   registrarTitular,
@@ -235,14 +236,17 @@ const CAMPOS_QUE_VIAJAN_EN_EL_ALTA = new Set(['numMun']);
 /**
  * El marco con que abre el plano: el Perú continental.
  *
- * **No sale de ninguna lectura, y eso es lo que hay que decir.** `bbox` es
- * obligatorio (ADR-0022 §2) y ninguna operación del contrato publica dónde está
- * la municipalidad —ni su extensión, ni la de un sector, ni la de una manzana—,
- * así que la pantalla no puede encuadrar sobre sus datos antes de tenerlos. Se
- * abre sobre el país entero, que es lo único cierto, y **el dibujo se encuadra
- * después sobre los polígonos que vuelven**. Su consecuencia el día que haya
- * geometría cargada está anotada en la pantalla y en #612: un marco tan ancho
- * contestará «hay N lotes, acércate», y desde aquí no se sabe hacia dónde.
+ * **Es el respaldo, no el encuadre.** Desde #612 el plano pregunta primero por
+ * `GET /catastro/predios/plano/marco`, que publica el rectángulo de lo ya
+ * digitalizado con los mismos filtros; este marco es al que se cae cuando esa
+ * lectura falla o cuando **no hay marco que dar**, que es el estado de hoy en
+ * las dos municipalidades: cero polígonos cargados (ADR-0021).
+ *
+ * Se sigue necesitando porque `bbox` es obligatorio (ADR-0022 §2) y una pantalla
+ * sin marco no puede pedir nada. Es el país entero, que es lo único cierto sin
+ * datos, y **el dibujo se encuadra después sobre los polígonos que vuelven**. De
+ * cuál de los tres casos se trata lo dice la propia pantalla, porque un encuadre
+ * equivocado sobre un plano sin base cartográfica no se ve.
  *
  * Los cuatro son negativos —el Perú está al sur y al oeste— salvo el norte, que
  * se escribe `-0.02` porque el país acaba justo antes del ecuador.
@@ -943,6 +947,42 @@ export default function Catastro({ dest, onDest }: PantallaProps) {
     enPanel,
   );
 
+  /* ── Donde esta la municipalidad, para abrir sobre ella (#612) ─────────
+     Se pide con LOS MISMOS filtros que el plano: un marco calculado sobre otro
+     conjunto de predios encuadraria sobre algo que despues no se dibuja, y sobre
+     un plano sin base cartografica eso NO SE VE. */
+  const encuadre = useRecurso(
+    (s2) => marcoDelPlano({ codigoDeSector: mapaSector || undefined, codigoDeManzana: mapaManzana || undefined }, s2),
+    [mapaSector, mapaManzana],
+    dest === 'mapa',
+  );
+
+  /* Para que filtros esta ya resuelto el encuadre: la clave de los filtros con
+     que se resolvio, o `null` mientras no lo este.
+
+     Es ESTADO y no un `ref` a proposito, porque el plano se sujeta a el. Con un
+     `ref` no hay render entre «llego el marco» y «se aplico», asi que el plano
+     ya habria salido con el del pais: medido, dos peticiones y la primera con
+     `bbox=-81.4,-18.4,-68.6,-0.02`.
+
+     Y se resuelve UNA VEZ por juego de filtros, tambien cuando NO hay marco:
+     sin eso, el plano no se pediria nunca en el estado de hoy —cero poligonos—,
+     y cada vuelta de la lectura devolveria la vista al encuadre inicial, de modo
+     que acercarse seria imposible porque el zoom se desharia solo. */
+  const [encuadreResuelto, setEncuadreResuelto] = useState<string | null>(null);
+  const filtrosDelMapa = (mapaSector || '') + '|' + (mapaManzana || '');
+  useEffect(() => {
+    if (dest !== 'mapa') return;
+    if (encuadreResuelto === filtrosDelMapa) return;
+    if (encuadre.datos === null && encuadre.error === null) return;
+    const m = encuadre.datos?.marco ?? null;
+    if (m !== null) {
+      setMarco(m);
+      setMarcoTecleado(comoBbox(m));
+    }
+    setEncuadreResuelto(filtrosDelMapa);
+  }, [dest, encuadre.datos, encuadre.error, filtrosDelMapa, encuadreResuelto]);
+
   /* ── El plano, contra `GET /api/v1/catastro/predios/plano` (#536) ──────
      `bbox` es obligatorio y no tiene valor por omision en el servidor: sin el,
      422. El que viaja es el del estado, y su cadena es la llave —comparar el
@@ -960,7 +1000,11 @@ export default function Catastro({ dest, onDest }: PantallaProps) {
         s2,
       ),
     [bbox, mapaSector, mapaManzana],
-    dest === 'mapa',
+    /* Espera a que el encuadre conteste, aunque conteste que no hay marco. Sin
+       esperar salen DOS peticiones y la primera va con el marco del pais: sobre
+       un padron con carga cartografica esa primera es exactamente el «hay N
+       lotes, acercate» que #612 existe para no tener que obedecer a ciegas. */
+    dest === 'mapa' && encuadreResuelto === filtrosDelMapa,
   );
 
   /* Las manzanas del sector elegido en el mapa. Se piden al elegirlo y no al
@@ -1020,10 +1064,16 @@ export default function Catastro({ dest, onDest }: PantallaProps) {
   };
   const acercarElMarco = () => escalarMarco(0.5);
   const alejarElMarco = () => escalarMarco(2);
-  /* Con el marco ya en el inicial, «Restablecer» no restablece nada: ni pide,
-     ni cambia el dibujo, ni dice por que. Un boton que se pulsa y no hace nada
-     es peor que uno apagado, porque el apagado al menos dice que no se puede. */
-  const marcoEsElInicial = bbox === comoBbox(MARCO_INICIAL);
+  /* A donde vuelve «Restablecer»: al encuadre de la municipalidad cuando lo hay,
+     y al pais cuando no. Devolverlo siempre al pais era lo correcto mientras
+     nadie publicaba donde esta la municipalidad; desde #612 seria mandar la
+     vista lejos de sus datos, que es justo lo que este issue vino a evitar.
+
+     Con el marco ya ahi, «Restablecer» no restablece nada: ni pide, ni cambia el
+     dibujo, ni dice por que. Un boton que se pulsa y no hace nada es peor que
+     uno apagado, porque el apagado al menos dice que no se puede. */
+  const marcoAlQueVolver = encuadre.datos?.marco ?? MARCO_INICIAL;
+  const marcoEsElInicial = bbox === comoBbox(marcoAlQueVolver);
 
   /* Las dos cifras del «acercate», leidas del propio rechazo (#611).
      Se leen SIEMPRE, tambien cuando el codigo es otro, y entonces salen las dos
@@ -4075,11 +4125,13 @@ export default function Catastro({ dest, onDest }: PantallaProps) {
                   </span>
                 </div>
 
-                {/* El marco. Se teclea porque no hay de dónde sacarlo: ninguna
-                    operación del contrato publica dónde está la municipalidad
-                    —ni su extensión, ni la de un sector—, y `bbox` es
-                    obligatorio. Se dice aquí y no en una franja de arriba
-                    porque es exactamente aquí donde se nota. */}
+                {/* El marco. Desde #612 SÍ hay de dónde sacarlo —el rectángulo
+                    de lo digitalizado, con los mismos filtros—, y se sigue
+                    pudiendo teclear porque ese rectángulo puede no existir:
+                    `bbox` es obligatorio y el estado de hoy en las dos
+                    municipalidades es cero polígonos cargados. De dónde salió el
+                    que se aplicó se dice debajo, y se dice aquí y no en una
+                    franja de arriba porque es exactamente aquí donde se nota. */}
                 <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap', padding: '9px 14px', borderBottom: '1px solid var(--line)', background: 'var(--bg-elev)' }}>
                   <label htmlFor="marco-del-plano" style={{ fontSize: 11.5, color: 'var(--ink-3)' }}>
                     Marco
@@ -4107,18 +4159,33 @@ export default function Catastro({ dest, onDest }: PantallaProps) {
                     Alejar
                   </button>
                   <button
-                    onClick={() => cambiarMarco(MARCO_INICIAL)}
+                    onClick={() => cambiarMarco(marcoAlQueVolver)}
                     disabled={marcoEsElInicial}
-                    title={marcoEsElInicial ? 'El marco ya es el inicial' : undefined}
+                    title={marcoEsElInicial ? 'El marco ya es aquel con el que abrio' : undefined}
                     className="hov-linea"
                     style={{ ...BOTON_LINEA, padding: '6px 12px', fontSize: 12, opacity: marcoEsElInicial ? 0.5 : 1 }}
                   >
                     Restablecer
                   </button>
+                  {/* Y de dónde salió el marco con que se abrió, que son tres
+                      respuestas distintas y hasta #612 sólo había una. Decirlo
+                      importa porque un encuadre equivocado sobre un plano SIN
+                      base cartográfica no se ve: no hay calles debajo con las
+                      que notar que se está mirando otro sitio. */}
                   <span id="marco-nota" style={{ width: '100%', fontSize: 11, color: 'var(--ink-4)', lineHeight: 1.5, textWrap: 'pretty' }}>
-                    <code style={{ fontFamily: 'var(--font-mono)' }}>oeste,sur,este,norte</code> en grados. Abre sobre el Perú entero
-                    porque ninguna lectura publica dónde está esta municipalidad (#612): el dibujo se encuadra después, sobre los
-                    polígonos que vuelvan.
+                    <code style={{ fontFamily: 'var(--font-mono)' }}>oeste,sur,este,norte</code> en grados.{' '}
+                    {encuadre.cargando
+                      ? 'Preguntando dónde está lo digitalizado…'
+                      : encuadre.error !== null
+                        ? 'Abre sobre el Perú entero: no se pudo leer dónde está lo digitalizado de esta municipalidad, así que el encuadre es el declarado y no el de sus datos.'
+                        : encuadre.datos === null || encuadre.datos.marco === null
+                          ? 'Abre sobre el Perú entero: ' +
+                            (encuadre.datos?.notaDelMarco ?? 'no hay marco que publicar') +
+                            '. El dibujo se encuadra después, sobre los polígonos que vuelvan.'
+                          : 'Abrió sobre lo digitalizado de esta municipalidad — ' +
+                            encuadre.datos.lotes +
+                            (encuadre.datos.lotes === 1 ? ' lote con polígono' : ' lotes con polígono') +
+                            ' —, y desde ahí se acerca o se teclea otro.'}
                   </span>
                 </div>
 
@@ -4173,7 +4240,7 @@ export default function Catastro({ dest, onDest }: PantallaProps) {
                           Acercar el marco
                         </button>
                         <button
-                          onClick={() => cambiarMarco(MARCO_INICIAL)}
+                          onClick={() => cambiarMarco(marcoAlQueVolver)}
                           disabled={marcoEsElInicial}
                           title={marcoEsElInicial ? 'El marco ya es el inicial: lo que hay que hacer es acercarlo' : undefined}
                           className="hov-linea"
@@ -4203,7 +4270,7 @@ export default function Catastro({ dest, onDest }: PantallaProps) {
                       </Aviso>
                       <div style={{ display: 'flex', gap: 8 }}>
                         <button
-                          onClick={() => cambiarMarco(MARCO_INICIAL)}
+                          onClick={() => cambiarMarco(marcoAlQueVolver)}
                           disabled={marcoEsElInicial}
                           title={marcoEsElInicial ? 'El marco ya es el inicial: corrígelo en la caja de arriba' : undefined}
                           className="hov-acento-2"

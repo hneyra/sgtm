@@ -489,6 +489,46 @@ export function planoCatastral(filtro: FiltroDelPlano, senal?: AbortSignal): Pro
 }
 
 /**
+ * Dónde está la municipalidad: el rectángulo que envuelve lo ya digitalizado
+ * (#612, PR #689). Es `MarcoDelPlanoResource`.
+ *
+ * **`marco` puede venir nulo, y las dos ausencias son distintas** porque se
+ * arreglan distinto:
+ *
+ *   - `lotes: 0` es que **ningún predio que alcancen esos filtros tiene polígono
+ *     cargado**. Lo que falta es la carga cartográfica, y es el estado de hoy en
+ *     las dos municipalidades: medido, `{"marco":null,"lotes":0,…}`.
+ *   - `lotes > 0` con `marco` nulo es que lo levantado **no encuadra**: PostGIS
+ *     admite un `MULTIPOLYGON` de vértices colineales, así que hay geometría y su
+ *     rectángulo es degenerado.
+ *
+ * Nunca llega `0,0,0,0`, y eso importa: ese rectángulo es un punto en el golfo
+ * de Guinea y encuadrar sobre él no se distingue de encuadrar bien cuando no hay
+ * base cartográfica debajo. `notaDelMarco` dice cuál de las dos es.
+ */
+export type MarcoDeLoLevantado = {
+  marco: MarcoDelPlano | null;
+  lotes: number;
+  notaDelMarco: string;
+};
+
+/**
+ * El encuadre inicial del plano.
+ *
+ * Se pide con **los mismos filtros** que el plano y no sin ellos: un marco
+ * calculado sobre otro conjunto de predios encuadraría sobre algo que después no
+ * se dibuja, y sobre un plano sin base cartográfica eso no se ve. Por eso el
+ * parámetro es el `FiltroDelPlano` sin su `bbox` —que es justo lo que esta
+ * lectura viene a averiguar— ni su `limite`, que aquí no significa nada.
+ */
+export function marcoDelPlano(
+  filtro: Omit<FiltroDelPlano, 'bbox' | 'limite'>,
+  senal?: AbortSignal,
+): Promise<MarcoDeLoLevantado> {
+  return solicitar('/catastro/predios/plano/marco', { parametros: { ...filtro }, senal });
+}
+
+/**
  * Las dos cifras del «acércate», leídas de `detalles` y no de la frase.
  *
  * `PlanoCatastralController` las manda como dato —`["lotes=3","tope=2"]`— por lo
