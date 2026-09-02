@@ -1,13 +1,26 @@
 package pe.gob.sgtm.tesoreria.dobles;
 
+import java.util.Comparator;
 import java.util.LinkedHashMap;
+import java.util.List;
 import java.util.Locale;
 import java.util.Map;
 import java.util.Optional;
+import pe.gob.sgtm.compartido.Pagina;
+import pe.gob.sgtm.compartido.Paginacion;
 import pe.gob.sgtm.tesoreria.dominio.Caja;
+import pe.gob.sgtm.tesoreria.dominio.CajaEnConsulta;
 import pe.gob.sgtm.tesoreria.dominio.CajaRepository;
 
-/** Las cajas, en memoria. */
+/**
+ * Las cajas, en memoria.
+ *
+ * <p>El area <b>no</b> se modela: {@link Caja} guarda su identificador y este doble no tiene tabla
+ * de areas que consultar, asi que {@link #listar} devuelve las dos columnas del area nulas. Es
+ * deliberado y esta escrito porque es justo lo que un doble no puede demostrar: que el catalogo
+ * resuelve el area legible lo mide {@code CatalogoDeCajasFronteraTest} contra PostgreSQL, que es
+ * donde vive el {@code LEFT JOIN}.
+ */
 public final class CajasEnMemoria implements CajaRepository {
 
     private final Map<String, Caja> porCodigo = new LinkedHashMap<>();
@@ -15,6 +28,25 @@ public final class CajasEnMemoria implements CajaRepository {
     public CajasEnMemoria con(Caja caja) {
         porCodigo.put(caja.codigo().toUpperCase(Locale.ROOT), caja);
         return this;
+    }
+
+    @Override
+    public Pagina<CajaEnConsulta> listar(Paginacion paginacion) {
+        List<CajaEnConsulta> todas =
+                porCodigo.values().stream()
+                        .sorted(Comparator.comparing(Caja::codigo))
+                        .map(
+                                caja ->
+                                        new CajaEnConsulta(
+                                                caja.codigo(),
+                                                caja.nombre(),
+                                                null,
+                                                null,
+                                                caja.activa()))
+                        .toList();
+        int desde = Math.min(paginacion.desplazamiento(), todas.size());
+        int hasta = Math.min(desde + paginacion.tamano(), todas.size());
+        return Pagina.de(todas.subList(desde, hasta), paginacion, todas.size());
     }
 
     @Override

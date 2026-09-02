@@ -467,6 +467,36 @@ export function fijarPermisosDelGrupo(
 }
 
 /**
+ * Alta de un usuario: **la fila del padron, no la cuenta del proveedor** (#572).
+ *
+ * Un usuario del SGTM son **dos mitades** —esta fila y la cuenta del proveedor
+ * de identidad (ADR-0005)— y esta operacion escribe la primera. La cuenta se
+ * declara aparte, en `despliegue/identidad/municipalidades/<ubigeo>.json`, que
+ * es la fuente versionada que la reproduce si el cluster se reconstruye
+ * (ADR-0012 §5). Mientras esa cuenta no exista, la persona figura en el padron,
+ * admite permisos y **no puede entrar**.
+ *
+ * **No hay campo de clave, y no puede haberlo**: la credencial vive en el
+ * proveedor y este sistema no la recibe nunca. Tampoco hay campo para el
+ * identificador OIDC: el enlace entre las dos mitades es la `cuenta`, que tiene
+ * que ser el mismo `preferred_username` con el que la persona entra.
+ *
+ * Una cuenta ya usada en esta municipalidad es **409**.
+ */
+export function registrarUsuario(
+  alta: {
+    cuenta: string;
+    nombre: string;
+    correo?: string | null;
+    vigenciaDesde?: string | null;
+    vigenciaHasta?: string | null;
+  },
+  observacion: string,
+): Promise<Usuario> {
+  return solicitar('/seguridad/usuarios', { metodo: 'POST', cuerpo: { ...alta, observacion } });
+}
+
+/**
  * Una copia de seguridad registrada. Es `RespaldoResource`.
  *
  * **No publica ninguna fecha de restauracion probada**, que es la unica columna
