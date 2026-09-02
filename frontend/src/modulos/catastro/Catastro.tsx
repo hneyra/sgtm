@@ -4901,7 +4901,10 @@ export default function Catastro({ dest, onDest, sujeto, onSujeto, filtros, onFi
               ) : lecturaDeValores.error ? (
                 <span style={{ marginLeft: 'auto', display: 'flex', alignItems: 'center', gap: 7, fontSize: 11.5, color: 'var(--bad-fg)', background: 'var(--bad-bg)', borderRadius: 999, padding: '4px 11px' }}>
                   <Icono d={ICO.aviso} tam={12} grosor={2.2} />
-                  No se pudo leer
+                  {/* La insignia distingue el 405, como el resto (#678): «No se
+                      pudo leer» es lo que se dice de un servidor que no
+                      contesta, y aquí el que pidió mal fue esta interfaz. */}
+                  {lecturaDeValores.error.codigo === 'METODO_NO_ADMITIDO' ? 'La interfaz pidió mal' : 'No se pudo leer'}
                 </span>
               ) : filasDeValores(valTab, aranceles.datos, unitarios.datos, deprec.datos).length === 0 ? (
                 <span style={{ marginLeft: 'auto', display: 'flex', alignItems: 'center', gap: 7, fontSize: 11.5, color: 'var(--bad-fg)', background: 'var(--bad-bg)', borderRadius: 999, padding: '4px 11px' }}>

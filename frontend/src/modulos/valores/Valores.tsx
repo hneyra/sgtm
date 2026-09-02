@@ -6,8 +6,8 @@ import { ICO } from '../../ds/iconos';
 import { Aviso, Dato, Entradilla, Insignia, Nota, Seccion, filaPulsable, type Tono } from '../../ds/componentes';
 import { usarPreferencias } from '../../shell/preferencias';
 import { ErrorDeApi, fijarToken } from '../../api/cliente';
-import { causasDelRechazo } from '../../api/Fallo';
-import { cuentaActual, hayPuerta } from '../../api/sesion';
+import { causasDelRechazo, tituloDelFallo } from '../../api/Fallo';
+import { hayPuerta } from '../../api/sesion';
 import { useRebote, useRecurso } from '../../api/useRecurso';
 import {
   consultarValores,
@@ -160,31 +160,15 @@ function Fallo({
 }) {
   const { toast } = usarPreferencias();
   const [tokenPegado, setTokenPegado] = useState('');
-  const cuenta = cuentaActual();
-  const titulo =
-    error.codigo === 'NO_AUTENTICADO'
-      ? 'La sesión no vale'
-      : error.codigo === 'SIN_PRIVILEGIO'
-        ? cuenta === null
-          ? 'Esta sesión no puede hacer esto'
-          : `La cuenta «${cuenta}» no puede hacer esto`
-        : error.codigo === 'SIN_MUNICIPALIDAD'
-          ? 'La sesión no dice de qué municipalidad es'
-          : error.codigo === 'NO_ENCONTRADO'
-            ? 'Eso no está en esta municipalidad'
-            : error.codigo === 'VALIDACION'
-              ? /* No dice «no admite eso»: desde #562 la notificación de un
-                   valor y la prescripción contestan 422 cuando falta publicar
-                   el plazo al conjunto sellado, y ese titular pone a corregir
-                   un formulario que está bien. */
-                'El servidor rechazó la operación'
-              : error.codigo === 'CONFLICTO'
-                ? 'Eso ya estaba hecho'
-                : error.codigo === 'SIN_RESPUESTA'
-                  ? error.estado === 0
-                    ? 'No se pudo contactar con el servidor'
-                    : 'El servidor contestó otra cosa'
-                  : 'Falló en el servidor';
+  /* Del sitio compartido y no de una cadena de ternarios propia (#678): sin
+     rama para `METODO_NO_ADMITIDO`, un 405 caía en el `else` y esta pantalla
+     decía «Falló en el servidor» de un defecto de la propia interfaz. Y lo que
+     la hacía irreparable es que `tsc` no puede ayudar con un ternario
+     encadenado: añadir un código al enumerado no rompe ninguna compilación.
+
+     Se conserva «hacer esto» —y no «esta consulta»— porque este aviso cubre
+     también los actos del módulo, no sólo sus lecturas. */
+  const titulo = tituloDelFallo(error, 'hacer esto');
   const explicacion =
     error.codigo === 'SIN_PRIVILEGIO'
       ? `Hace falta el acceso «${acceso}». Que la cuenta entre no basta: tiene que estar dada de alta en esta municipalidad, y el permiso lo concede Seguridad.`

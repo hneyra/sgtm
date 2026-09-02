@@ -86,6 +86,12 @@ export function tituloDelFallo(error: ErrorDeApi | null, que: string): string {
       return 'La sesión no dice de qué municipalidad es';
     case 'NO_ENCONTRADO':
       return `No se encontró ${que}`;
+    case 'CONFLICTO':
+      /* Llega aquí desde la copia que Sanciones tenía aparte (#678). Las dos
+         funciones habían divergido en las DOS direcciones —ésta no tenía
+         `CONFLICTO`, aquélla no tenía `METODO_NO_ADMITIDO`—, que es lo que pasa
+         con dos copias de la misma cosa. */
+      return 'El acto choca con algo que ya está registrado';
     case 'METODO_NO_ADMITIDO':
       /* Es un defecto de la propia interfaz: pidio con el verbo que no era.
          Se dice asi para que no se confunda con un fallo del servidor, que es
@@ -123,6 +129,10 @@ export function explicacionDelFallo(error: ErrorDeApi | null, acceso?: string): 
       return 'No hay valor por omisión: sin municipalidad en el token no hay nada que consultar.';
     case 'NO_ENCONTRADO':
     case 'METODO_NO_ADMITIDO':
+      return error.mensaje;
+    /* Llega de las copias que Transito y Sanciones tenian aparte (#678): las
+       tres decian lo mismo y ninguna las tres cosas. */
+    case 'CONFLICTO':
       return error.mensaje;
     case 'VALIDACION':
     case 'ORDEN_NO_ADMITIDO':

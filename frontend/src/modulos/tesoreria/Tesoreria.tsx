@@ -3495,9 +3495,24 @@ function queSePuedeHacer(error: ErrorDeApi): string {
     case 'SIN_RESPUESTA':
       return 'No llegó a haber respuesta, así que reintentar puede funcionar en cuanto el servidor conteste.';
     default:
+      /* Se DERIVA del propio error y no se afirma (#678). Este `default` decía
+         «trae referencia: reintentar puede funcionar» de todo lo que no tuviera
+         rama, y con el 405 pelado —el del proxy, sin cuerpo `problem+json`— eso
+         era falso dos veces: no hay incidencia que buscar y el botón de
+         reintentar no está, porque `reintentable` es falso. La pantalla se
+         contradecía en el mismo golpe de vista y mandaba a buscar un número que
+         no existe.
+
+         Un código nuevo del backend ya no puede volver a hacerlo: lo que se dice
+         sale de `reintentable` y de si vino `incidencia`, que son hechos de la
+         respuesta. */
       return (
-        'Esto sí es un fallo del servidor, y por eso trae referencia: reintentar puede funcionar, y con ' +
-        'esa referencia se busca en su registro qué pasó.'
+        (error.reintentable
+          ? 'Puede haber sido un tropiezo del servidor: reintentar puede funcionar'
+          : 'Reintentar no lo cambia: la petición, tal cual, no se puede atender') +
+        (error.incidencia === undefined
+          ? '. Esta respuesta no trae referencia de incidencia.'
+          : ', y con la referencia de arriba se busca en el registro del servidor qué pasó.')
       );
   }
 }
@@ -3533,9 +3548,15 @@ function explicacionDelFallo(error: ErrorDeApi | null): string {
         ? 'El servidor no contestó. Puede estar apagado o no alcanzable desde aquí.'
         : error.mensaje;
     default:
+      /* La referencia se promete SÓLO si vino (#678). Este `default` la
+         anunciaba de todo lo que no tuviera rama, y con el 405 pelado —el del
+         proxy, sin cuerpo `problem+json`— no hay ninguna que buscar: quien
+         atiende se queda mirando abajo un número que no está. */
       return (
         (error?.mensaje ?? 'La operación falló en el servidor').replace(/\.?$/, '.') +
-        ' Con la referencia de abajo se puede buscar la incidencia en el registro del servidor.'
+        (error?.incidencia === undefined
+          ? ' Esta respuesta no trae referencia de incidencia.'
+          : ' Con la referencia de abajo se puede buscar la incidencia en el registro del servidor.')
       );
   }
 }

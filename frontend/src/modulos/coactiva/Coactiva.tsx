@@ -5,7 +5,7 @@ import { Icono } from '../../ds/Icono';
 import { ICO } from '../../ds/iconos';
 import { Insignia, Paginador, type Tono } from '../../ds/componentes';
 import { usarPreferencias } from '../../shell/preferencias';
-import { causasDelRechazo } from '../../api/Fallo';
+import { causasDelRechazo, tituloDelFallo } from '../../api/Fallo';
 import {
   BANDEJA,
   COLS_ACTOS,
@@ -326,16 +326,14 @@ function EstadoDeLectura({
         <path d="M12 7.5v5M12 16.2h.02" />
       </svg>
       <p style={{ margin: 0, fontFamily: 'var(--font-serif)', fontSize: 16, fontWeight: 600, color: 'var(--error-texto)' }}>
-        {e.codigo === 'SIN_PRIVILEGIO'
-          ? 'Tu perfil no llega a esta consulta'
-          : e.codigo === 'NO_AUTENTICADO'
-            ? 'La sesión no vale'
-            : e.codigo === 'VALIDACION'
-              ? /* No dice «no admite esa consulta»: un 422 de coactiva puede ser
-                   también el arancel de costas sin publicar (#562), y ese
-                   titular manda a corregir unos criterios que están bien. */
-                'El servidor rechazó esta consulta'
-              : 'No se pudo leer'}
+        {/* El rótulo sale del sitio COMPARTIDO y no de una cadena de ternarios
+            propia (#678). Las de módulo no tenían rama para
+            `METODO_NO_ADMITIDO`, así que un 405 caía en su `else` y ocho
+            pantallas decían del mismo hecho ocho cosas distintas —una de ellas
+            prometiendo una referencia que no llegó—. Y `tsc` no podía ayudar:
+            un ternario encadenado no es un `switch` exhaustivo, así que añadir
+            un código al enumerado no rompe ninguna compilación. */}
+        {tituloDelFallo(e, 'esta consulta')}
       </p>
       <p style={{ margin: 0, maxWidth: '58ch', fontSize: 12.5, lineHeight: 1.55, color: 'var(--ink-3)', textAlign: 'center', textWrap: 'pretty' }}>
         {e.mensaje}

@@ -310,17 +310,54 @@ async function recorrer(respuesta) {
     return r.fulfill(respuesta);
   });
   const ofrecen = [];
+  const mienten = [];
   for (const ruta of paradas) {
     await pagina.goto(`${BASE}/${ruta}`, { waitUntil: 'domcontentloaded' });
     await pagina.waitForTimeout(600);
+    /* Lo que la pantalla DICE del fallo, no solo lo que ofrece (#678).
+       El rotulo se escribia en once sitios de nueve archivos —el compartido de
+       `Fallo.tsx`, que si tiene su rama, y ocho cadenas de ternarios propias sin
+       rama para `METODO_NO_ADMITIDO`—, asi que un 405 caia en el `else` de cada
+       uno y ocho pantallas decian del mismo hecho ocho cosas distintas. Una
+       prometia una referencia de incidencia que la respuesta no trae y un
+       reintento bajo un boton que no esta.
+
+       Se busca lo PROHIBIDO y no lo correcto: una pantalla que ante este 405 no
+       llega a fallar —porque pide sujeto antes de leer— no dibuja ningun aviso,
+       y exigirle la frase buena la pondria roja por no tener ninguno. */
+    const texto = (await pagina.locator('main').innerText()).replace(/\s+/g, ' ');
+    for (const frase of FRASES_QUE_NO_PUEDE_DECIR) {
+      if (frase.test(texto)) mienten.push(`${ruta} · «${(texto.match(frase) ?? [''])[0]}»`);
+    }
     /* Se cuenta en el DOM y no por el papel accesible a propósito: un botón
        dentro de una sección plegada seguiría siendo un botón ofrecido, y
        contarlo sólo cuando se ve dejaría un escondite. */
     const cuantos = await pagina.locator('button', { hasText: /^\s*Reintentar\s*$/ }).count();
     if (cuantos > 0) ofrecen.push(ruta);
   }
-  return { ofrecen, pedidas };
+  return { ofrecen, pedidas, mienten };
 }
+
+/* Lo que ninguna pantalla puede decir de un 405 pelado: que fue un fallo del
+   servidor —es un defecto de la propia interfaz, que pidio con el verbo que no
+   era—, que trae referencia —no trae ninguna— o que reintentar puede funcionar
+   —el boton no esta, porque `reintentable` es falso—. */
+const FRASES_QUE_NO_PUEDE_DECIR = [
+  /fall[oó][^.]{0,30}en el servidor/i,
+  /reintentar puede funcionar/i,
+  /Con la referencia de abajo/i,
+  /* «No se pudo leer» a SECAS, que es lo que Coactiva y Licencias decían de
+     todo lo que no tuviera rama. Seguidas de qué —«No se pudo leer lo
+     configurado de las cuentas caídas»— son frases legítimas de otras
+     pantallas, y un patrón que las cazara pondría rojo lo que está bien:
+     medido, dos falsos positivos en Seguridad. */
+  /No se pudo leer(?=\s*$|\s+[A-ZÁÉÍÓÚ¿«])/,
+  /* La forma AFIRMATIVA, y sólo ella: el arreglo honesto dice «esta respuesta
+     **no** trae referencia de incidencia», y un patrón que casara con las dos
+     pondría rojo justo lo que este issue vino a poner. Medido: la primera
+     versión daba cuatro falsos positivos en Tesorería sobre el texto corregido. */
+  /(?<!no )trae referencia/i,
+];
 
 const conElVerbo = await recorrer({ status: 405, contentType: 'text/html', body: HTML_DE_NGINX });
 const conElFallo = await recorrer({
@@ -335,6 +372,9 @@ if (conElVerbo.pedidas === 0) {
      recorrido informaría en verde sin haber mirado nada — el mismo agujero que
      `mirar.mjs` cerró con el token caducado. */
   fallos.push(`la pantalla · ninguna de las ${paradas.length} pantallas pidió nada al API: no se ha medido nada`);
+}
+for (const m of conElVerbo.mienten) {
+  fallos.push(`la pantalla · ${m} — de un 405 pelado, que no es un fallo del servidor y no trae incidencia`);
 }
 for (const ruta of conElVerbo.ofrecen) {
   fallos.push(`la pantalla · ${ruta} ofrece «Reintentar» ante un 405: el verbo equivocado no cambia por insistir`);

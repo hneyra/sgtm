@@ -25,7 +25,7 @@ import {
 import { useRebote, useRecurso, type Estado } from '../../api/useRecurso';
 import { Descargas, FORMATOS_DE_DOCUMENTO, type FormatoDeDocumento } from '../../api/descarga';
 import { ErrorDeApi, fijarToken } from '../../api/cliente';
-import { causasDelRechazo } from '../../api/Fallo';
+import { causasDelRechazo, explicacionDelFallo } from '../../api/Fallo';
 import { cuentaActual, hayPuerta } from '../../api/sesion';
 import {
   cambiarNumeroDePapeleta,
@@ -362,29 +362,6 @@ function tituloDelFallo(error: ErrorDeApi | null, que: string): string {
   }
 }
 
-function explicacionDelFallo(error: ErrorDeApi | null, acceso: string): string {
-  switch (error?.codigo) {
-    case 'NO_AUTENTICADO':
-      return 'Vuelve a entrar: el token caducó o no es de este emisor.';
-    case 'SIN_PRIVILEGIO':
-      return (
-        `Hace falta el acceso «${acceso}». Que Keycloak la deje entrar no basta: la cuenta tiene que estar además ` +
-        'dada de alta en esta municipalidad, y el permiso lo concede Seguridad.'
-      );
-    case 'SIN_MUNICIPALIDAD':
-      return 'No hay valor por omisión: sin municipalidad en el token no hay padrón que consultar.';
-    case 'NO_ENCONTRADO':
-    case 'VALIDACION':
-    case 'ORDEN_NO_ADMITIDO':
-      return error?.mensaje ?? 'Revisa los criterios.';
-    case 'SIN_RESPUESTA':
-      return error.estado === 0
-        ? 'El servidor no contestó. Puede estar apagado o no alcanzable desde aquí.'
-        : error.mensaje;
-    default:
-      return 'La consulta falló en el servidor.';
-  }
-}
 
 /**
  * Los cuatro estados de una lectura, dibujados una sola vez.
