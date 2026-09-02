@@ -156,6 +156,12 @@ jobs:
       - name: La ficha catastral dice lo que el backend publica
         run: SGTM_BASE=http://localhost:5210 node verificaciones/ficha-catastral.mjs
 
+      # Fabrica la respuesta —todas las lecturas en 500—, asi que no necesita
+      # backend ni token: con el backend delante los catalogos vienen llenos y
+      # un desplegable que se queda mudo no se ve nunca (#718).
+      - name: Ningun desplegable se queda sin nada que ofrecer y mudo
+        run: SGTM_BASE=http://localhost:5210 node verificaciones/desplegables.mjs
+
       # Este no abre navegador —mide dos funciones puras— y se reejecuta solo
       # con `TZ=America/Lima`: en UTC los casos pasan con el defecto dentro.
       - name: La fecha sin zona no se convierte, y el instante si

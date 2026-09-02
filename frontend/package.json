@@ -17,6 +17,7 @@
     "sin-red": "node verificaciones/sin-red.mjs",
     "paleta": "node verificaciones/paleta.mjs",
     "impedimentos": "node verificaciones/impedimentos.mjs",
+    "desplegables": "node verificaciones/desplegables.mjs",
     "vocabularios": "node verificaciones/vocabularios.mjs",
     "errores": "node verificaciones/errores.mjs",
     "impresion": "node verificaciones/impresion.mjs",
