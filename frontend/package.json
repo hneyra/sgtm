@@ -12,7 +12,10 @@
     "flujos": "node verificaciones/flujos.mjs",
     "sin-red": "node verificaciones/sin-red.mjs",
     "paleta": "node verificaciones/paleta.mjs",
-    "vocabularios": "node verificaciones/vocabularios.mjs"
+    "impedimentos": "node verificaciones/impedimentos.mjs",
+    "vocabularios": "node verificaciones/vocabularios.mjs",
+    "errores": "node verificaciones/errores.mjs",
+    "ficha-catastral": "node verificaciones/ficha-catastral.mjs"
   },
   "dependencies": {
     "react": "^19.1.0",

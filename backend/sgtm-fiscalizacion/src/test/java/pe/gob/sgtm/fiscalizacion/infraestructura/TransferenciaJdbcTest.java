@@ -4,6 +4,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 import java.io.IOException;
+import java.nio.charset.StandardCharsets;
 import java.sql.Connection;
 import java.sql.PreparedStatement;
 import java.sql.ResultSet;
@@ -68,6 +69,7 @@ import pe.gob.sgtm.dominio.MunicipalidadId;
 import pe.gob.sgtm.dominio.Observacion;
 import pe.gob.sgtm.esquema.BaseDeDatosDePrueba;
 import pe.gob.sgtm.esquema.ContextoDeTenant;
+import pe.gob.sgtm.fiscalizacion.aplicacion.ConsultaDeResoluciones;
 import pe.gob.sgtm.fiscalizacion.aplicacion.TransferirARentas;
 import pe.gob.sgtm.fiscalizacion.dominio.CondicionFiscalizada;
 import pe.gob.sgtm.fiscalizacion.dominio.EstadoDeLiquidacion;
@@ -140,6 +142,12 @@ class TransferenciaJdbcTest {
     private static FichaCatastralRepositoryJdbc fichas;
     private static TransferirARentas transferir;
 
+    /** El emisor REAL contra la tabla {@code documento}: emite el papel y lo vuelve a sacar. */
+    private static EmitirDocumento documentos;
+
+    /** La lectura que sirve la descarga de #593, con sus repositorios reales. */
+    private static ConsultaDeResoluciones consulta;
+
     private static final AtomicInteger SIGUIENTE = new AtomicInteger(1);
     private static final java.util.Map<Long, Long> CONJUNTOS = new java.util.HashMap<>();
 
@@ -164,7 +172,35 @@ class TransferenciaJdbcTest {
         resoluciones = new ResolucionDeDeterminacionRepositoryJdbc(jdbc);
         fichas = new FichaCatastralRepositoryJdbc(jdbc);
 
+        documentos =
+                envolver(
+                        new EmitirDocumento(
+                                new DocumentoRepositoryJdbc(
+                                        jdbc,
+                                        JsonMapper.builder()
+                                                .addModule(
+                                                        new pe.gob.sgtm.web.ConfiguracionDeJson()
+                                                                .moduloDeObjetosDeValor())
+                                                .build()),
+                                new GeneradorDeDocumentos(
+                                        List.of(
+                                                new RenderizadorPdf(),
+                                                new RenderizadorXls(),
+                                                new RenderizadorRtf()),
+                                        RegimenDeLaInstalacion.REAL),
+                                new AuditoriaJdbc(jdbc, RELOJ),
+                                RELOJ));
+
         transferir = envolver(armar(resoluciones));
+        consulta =
+                envolver(
+                        new ConsultaDeResoluciones(
+                                resoluciones,
+                                liquidaciones,
+                                new DirectorioJdbc(
+                                        new ContribuyenteRepositoryJdbc(jdbc),
+                                        new FichaRepositoryJdbc(jdbc)),
+                                documentos));
     }
 
     /**
@@ -189,25 +225,6 @@ class TransferenciaJdbcTest {
                                 new SaldoRepositoryJdbc(jdbc),
                                 auditoria,
                                 RELOJ));
-        EmitirDocumento documentos =
-                envolver(
-                        new EmitirDocumento(
-                                new DocumentoRepositoryJdbc(
-                                        jdbc,
-                                        JsonMapper.builder()
-                                                .addModule(
-                                                        new pe.gob.sgtm.web.ConfiguracionDeJson()
-                                                                .moduloDeObjetosDeValor())
-                                                .build()),
-                                new GeneradorDeDocumentos(
-                                        List.of(
-                                                new RenderizadorPdf(),
-                                                new RenderizadorXls(),
-                                                new RenderizadorRtf()),
-                                        RegimenDeLaInstalacion.REAL),
-                                auditoria,
-                                RELOJ));
-
         return new TransferirARentas(
                 liquidaciones,
                 movimientos,
@@ -625,6 +642,86 @@ class TransferenciaJdbcTest {
             assertThat(desdeB)
                     .as("la politica RLS, no un WHERE que alguien puede olvidar")
                     .isEmpty();
+        }
+    }
+
+    @Nested
+    @DisplayName("#593 — El papel se descarga de lo guardado, y descargarlo no emite nada")
+    class DeLaDescargaDelPapel {
+
+        @Test
+        @DisplayName("la copia sale de la tabla «documento_emitido», y dos copias son la misma")
+        void laCopiaSaleDeLoGuardado() {
+            Escenario escenario = sembrar(municipalidadA, Dinero.de("450.00"));
+            TransferirARentas.Transferencia hecha = transferir(escenario);
+            String numero = hecha.resolucion().numero();
+            long documentosAntes = contar("documento_emitido");
+
+            byte[] primera = copia(numero, FormatoDeDocumento.PDF);
+            byte[] segunda = copia(numero, FormatoDeDocumento.PDF);
+
+            assertThat(new String(primera, 0, 5, StandardCharsets.ISO_8859_1)).isEqualTo("%PDF-");
+            assertThat(segunda)
+                    .as("dos descargas del mismo papel son el mismo papel, byte a byte")
+                    .isEqualTo(primera);
+            assertThat(contar("documento_emitido"))
+                    .as("mirar no es emitir: no se gasta un segundo correlativo (#593, AC 2)")
+                    .isEqualTo(documentosAntes);
+            assertThat(
+                            contarDonde(
+                                    "documento_emitido",
+                                    "numero = '" + numero + "' AND reimpresiones = 0"))
+                    .as("ni se registra una reimpresion")
+                    .isEqualTo(1);
+            assertThat(new String(primera, StandardCharsets.ISO_8859_1))
+                    .as("y no sale marcado: es la primera vez que estos bytes salen del sistema")
+                    .doesNotContain("DUPLICADO");
+        }
+
+        @Test
+        @DisplayName("y sale en el formato que se pida, no en el de la emision")
+        void saleEnElFormatoQueSePide() {
+            Escenario escenario = sembrar(municipalidadA, Dinero.de("450.00"));
+            TransferirARentas.Transferencia hecha = transferir(escenario);
+            String numero = hecha.resolucion().numero();
+
+            // La emision fue en PDF (ver `transferir`). Quien la recibio tiene derecho a
+            // pedir la misma resolucion en hoja de calculo: se guardan los datos, no el archivo.
+            String texto =
+                    new String(copia(numero, FormatoDeDocumento.RTF), StandardCharsets.US_ASCII);
+
+            assertThat(texto).startsWith("{\\rtf1");
+            assertThat(texto)
+                    .contains("Resolucion de determinacion")
+                    .contains(escenario.numeroDeLiquidacion)
+                    .as("con el cuadro fechado el dia de la resolucion (regla 9)")
+                    .contains("Determinacion al " + HOY);
+        }
+
+        @Test
+        @DisplayName("desde B no se descarga el papel de A")
+        void desdeBNoSeDescargaElDeA() {
+            Escenario escenario = sembrar(municipalidadA, Dinero.de("450.00"));
+            TransferirARentas.Transferencia deLaA = transferir(escenario);
+
+            TenantContext.fijar(new MunicipalidadId(municipalidadB));
+            Optional<ConsultaDeResoluciones.CopiaDeLaResolucion> desdeB =
+                    consulta.copiaDe(deLaA.resolucion().numero(), FormatoDeDocumento.PDF);
+
+            assertThat(desdeB)
+                    .as("la politica RLS, no un WHERE que alguien puede olvidar")
+                    .isEmpty();
+        }
+
+        private byte[] copia(String numero, FormatoDeDocumento formato) {
+            return consulta.copiaDe(numero, formato)
+                    .orElseThrow(
+                            () ->
+                                    new IllegalStateException(
+                                            "La resolucion "
+                                                    + numero
+                                                    + " tiene que traer su papel"))
+                    .contenido();
         }
     }
 

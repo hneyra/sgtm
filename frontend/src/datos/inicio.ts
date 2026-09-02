@@ -39,14 +39,11 @@ export const PARADO: [string, 'warn' | 'bad', string, string, number, number, st
   ['Catastro', 'warn', '208 predios sin conciliar con rentas', 'Tienen ficha catastral y no generan deuda predial.', 208, 0, 'catastro'],
 ];
 
-/** Emitido contra recaudado del ejercicio, por tributo. */
-export const AVANCE: [string, number, number][] = [
-  ['Impuesto predial', 9418204.6, 8420118.4],
-  ['Arbitrios municipales', 5884110.2, 5112440.8],
-  ['Patrimonio vehicular', 2884000.0, 1882400.0],
-  ['Alcabala', 1420880.0, 1420880.0],
-  ['Multas y papeletas', 4118200.0, 1588412.0],
-];
+/* `AVANCE` se ha ido. Eran cinco tributos con su emitido y su recaudado —«9 418
+   204,60» de predial— de la maqueta del prototipo, cinco pares de cifras que
+   ninguna lectura habia calculado. Se fue cuando el panel paso a leer del
+   backend: las cifras y sus barras salen de `/indicadores/recaudacion`, que las
+   compone en el motor y no aqui (RNF-083). */
 
 export const PAGOS = [
   { fecha: '12/08/2026', concepto: 'Impuesto predial 2026 · cuotas 1 y 2', monto: 301.8, recibo: '0003-0041182' },

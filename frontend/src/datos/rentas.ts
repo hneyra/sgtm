@@ -55,13 +55,20 @@ export type TablaDef = {
  * «Predios y vehículos» hasta #541: dos predios de la maqueta con su ubicación,
  * su área y un autovalúo de S/ 132,196.75, bajo el nombre de la persona que se
  * acabara de abrir.
+ *
+ * Desde #552 son seis, y las cuatro nuevas se reparten en dos familias que se
+ * dibujan distinto porque **se piden distinto**: `domicilios`, `contactos` y
+ * `responsables` son tres listas de la MISMA lectura —la ficha, que las trae en
+ * una sola transacción— y llegan como arreglos sin paginar; `predios`,
+ * `vehiculos` y `beneficios` son tres lecturas propias, cada una con su permiso
+ * y su sobre paginado.
  */
 export type BloqueDef = {
   titulo?: string;
   nota?: string;
   campos: CampoDef[];
   tabla?: TablaDef;
-  lectura?: 'predios' | 'vehiculos';
+  lectura?: 'predios' | 'vehiculos' | 'beneficios' | 'domicilios' | 'contactos' | 'responsables';
 };
 
 export type SeccionDef = { id: string; label: string; hint: string; conteo: string; bloques: BloqueDef[] };
@@ -76,30 +83,102 @@ export const EXPEDIENTE: SeccionDef[] = [
     id: 'ident',
     label: 'Identificación',
     hint: 'Quién es y cómo está calificado',
-    conteo: '14 campos',
+    conteo: '2 bloques',
     bloques: [
       {
+        titulo: 'Quién es',
+        nota:
+          'Sale de «GET /rentas/contribuyentes/{id}/ficha» y no se corrige aquí. El código y el documento son la identidad —el ' +
+          'código enlaza sus predios, sus recibos y sus asientos, y del documento se deriva la cuenta del ciudadano en el portal—, ' +
+          'así que cambiarlos no es corregir una ficha sino decidir que dos filas eran la misma persona: es otro acto, y el PUT no ' +
+          'lo admite.',
         campos: [
           { k: 'codigo', l: 'Código', t: 'ro' },
-          { k: 'tipoPersona', l: 'Tipo de persona', t: 'sel', o: ['NATURAL', 'JURÍDICA', 'SUCESIÓN INDIVISA', 'SOCIEDAD CONYUGAL'] },
-          { k: 'apPaterno', l: 'Apellido paterno', t: 'text' },
-          { k: 'apMaterno', l: 'Apellido materno', t: 'text' },
-          { k: 'nombres', l: 'Nombres', t: 'text' },
-          { k: 'razonSocial', l: 'Razón social', t: 'text', ancho: true, ph: 'Solo persona jurídica' },
-          { k: 'dni', l: 'D.N.I.', t: 'text' },
-          { k: 'ruc', l: 'R.U.C.', t: 'text' },
-          { k: 'nacimiento', l: 'Fecha de nacimiento', t: 'date' },
-          { k: 'sexo', l: 'Sexo', t: 'sel', o: ['MASCULINO', 'FEMENINO'] },
-          { k: 'estadoCivil', l: 'Estado civil', t: 'sel', o: ['SOLTERO(A)', 'CASADO(A)', 'VIUDO(A)', 'DIVORCIADO(A)', 'CONVIVIENTE'] },
-          { k: 'conyuge', l: 'Cónyuge', t: 'text' },
           {
-            k: 'calificacion',
-            l: 'Calificación del contribuyente',
-            t: 'sel',
-            o: ['001 — PRINCIPAL CONTRIBUYENTE', '002 — MEDIANO CONTRIBUYENTE', '003 — PEQUEÑO CONTRIBUYENTE'],
-            ayuda: 'Decide el trato de cobranza, no el impuesto',
+            k: 'documento',
+            l: 'Documento de identidad',
+            t: 'ro',
+            /* El manual dibuja dos cajas, «D.N.I.» y «R.U.C.», y el padrón
+               admite SEIS tipos —DNI, RUC, CE, PASAPORTE, PARTIDA y OTRO—: con
+               dos cajas, el carné de extranjería de un extranjero y la partida
+               de una sucesión indivisa no tendrían dónde salir, y la ficha se
+               leería como si esa persona no tuviera documento. Es una sola
+               caja porque el padrón guarda un solo documento, con su tipo. */
+            ayuda: 'El padrón guarda uno, con su tipo. El manual dibuja dos cajas —D.N.I. y R.U.C.— y los tipos admitidos son seis.',
           },
-          { k: 'estado', l: 'Estado', t: 'sel', o: ['A — ACTIVO', 'I — INACTIVO', 'B — BAJA', 'F — FALLECIDO', 'N — NO HABIDO'] },
+          {
+            k: 'tipoPersona',
+            l: 'Tipo de persona',
+            t: 'ro',
+            ayuda: 'Decide qué se puede guardar: una persona jurídica no tiene fecha de nacimiento ni condición especial. El PUT no lo cambia.',
+          },
+          {
+            k: 'estado',
+            l: 'Estado',
+            t: 'ro',
+            /* Los cinco valores del manual —ACTIVO, INACTIVO, BAJA, FALLECIDO,
+               NO HABIDO— no existen en el sistema: `contribuyente` tiene un
+               `activo` booleano y nada más, así que ese desplegable ofrecía
+               tres estados que no se pueden guardar y dos que son el mismo. No
+               se traduce ninguno, por lo mismo que #427 no tradujo «ACTIVA» a
+               VIGENTE: parecerse no es serlo. */
+            ayuda: 'Activo o inactivo, que es lo que el padrón guarda. La baja es otro acto: exige el privilegio ELIMINACIÓN y esta pantalla todavía no la ofrece.',
+          },
+        ],
+      },
+      {
+        titulo: 'Lo que se corrige aquí',
+        /* Los cinco campos que `PUT /rentas/contribuyentes/{id}` admite, y
+           ninguno más. Se van cuatro del manual y no por descuido:
+
+           - «Apellido paterno», «Apellido materno», «Nombres» y «Razón social»
+             son cuatro cajas para lo que el padrón guarda en UNA —
+             `nombre_razon_social`—: partirlo exigiría decidir en qué orden se
+             recompone, y el backend no lo puede decir. Van como el campo que
+             existe, con el rótulo de la grilla del propio manual.
+           - «Sexo» y «Calificación del contribuyente» no tienen columna ni en
+             la tabla ni en la petición: dibujarlos es prometer que se guardan.
+           - «Cónyuge» era una caja de texto para un nombre y lo que el padrón
+             enlaza es el IDENTIFICADOR de otro contribuyente; teclear ahí un
+             nombre habría mandado un 422 sobre alguien que sí está en el
+             padrón, que es el defecto que #427 midió con el «Solicitante» del
+             certificado. */
+        nota:
+          'Estos cinco viajan en «PUT /rentas/contribuyentes/{id}» y exigen la observación de quien guarda (regla 10). Lo que se ' +
+          'deja en blanco BORRA el dato —es una instrucción, no una omisión—; lo que no se toca no se manda.',
+        campos: [
+          { k: 'nombreRazonSocial', l: 'Nombre / razón social', t: 'text', ancho: true, ayuda: 'El padrón lo guarda entero, en un solo campo. El manual lo parte en apellidos, nombres y razón social; recomponerlo exigiría decidir el orden.' },
+          {
+            k: 'condicionEspecial',
+            l: 'Condición especial',
+            t: 'sel',
+            /* La primera opción es la vacía a propósito: es la que BORRA, y
+               sin ella el desplegable no tendría forma de decir «ninguna».
+               Los tres valores son los del `enum CondicionEspecial`, letra por
+               letra: aquí sí hay vocabulario cerrado. */
+            o: ['', 'PENSIONISTA', 'ADULTO_MAYOR', 'DISCAPACIDAD'],
+            ayuda: 'Se registra; no se aplica. Cuánto deduce un pensionista es un valor normativo que sigue bloqueado (D-02a).',
+          },
+          { k: 'fechaNacimiento', l: 'Fecha de nacimiento', t: 'date' },
+          {
+            k: 'estadoCivil',
+            l: 'Estado civil',
+            t: 'text',
+            /* El manual lo dibuja como desplegable —SOLTERO(A), CASADO(A)…— y
+               la columna es `varchar(20)` de texto libre, sin ninguna
+               restricción: no hay vocabulario que ofrecer. Con el desplegable,
+               un padrón que ya diga «CASADO» no casaría con ninguna opción y el
+               control se dibujaría en blanco; guardar entonces escribiría
+               «CASADO(A)» encima, dejando dos escrituras distintas de lo mismo
+               en el mismo padrón. */
+            ayuda: 'Texto libre de hasta 20 caracteres: la columna no tiene vocabulario cerrado, así que el desplegable del manual impondría uno que el sistema no tiene.',
+          },
+          {
+            k: 'conyugeId',
+            l: 'Cónyuge — código del padrón',
+            t: 'text',
+            ayuda: 'El código único del otro contribuyente; se resuelve contra el padrón antes de guardar. En blanco deshace el enlace. Nadie es su propio cónyuge.',
+          },
         ],
       },
     ],
@@ -108,54 +187,64 @@ export const EXPEDIENTE: SeccionDef[] = [
   {
     id: 'domicilio',
     label: 'Domicilio fiscal',
-    hint: 'A dónde se notifica; sale del catálogo vial de Catastro',
-    conteo: '16 campos',
+    hint: 'A dónde se notifica, y desde cuándo',
+    conteo: 'vigente e historial',
     bloques: [
       {
+        /* Los dieciséis campos del manual descomponían la dirección —tipo de
+           vía, vía, habilitación urbana, número, departamento, provincia,
+           distrito, edificación, interior, zona, manzana, lote, sub lote…— y el
+           padrón la guarda en UNA línea, con su referencia y su ubigeo. No hay
+           dónde escribir quince de esos dieciséis, y los tres de solo lectura
+           —departamento, provincia, distrito— salían con «PIURA / PIURA /
+           CATACAOS» de la maqueta bajo el nombre de cualquiera.
+
+           Y sobre todo: aquí no se muda a nadie. Cambiar de domicilio es cerrar
+           el anterior y abrir el nuevo en la misma transacción —«POST
+           /rentas/contribuyentes/{id}/domicilios»—, no reescribir una línea; si
+           fuera una edición, la dirección vieja desaparecería y con ella la
+           única prueba de por qué se notificó donde se notificó. */
+        titulo: 'Domicilio fiscal vigente',
+        nota:
+          'El que rige a la fecha de corte de la ficha, no «el último». Cambiarlo es una mudanza —cierra el tramo anterior y abre ' +
+          'otro— y es un acto distinto del que guarda esta pantalla: se registra en «POST /rentas/contribuyentes/{id}/domicilios», ' +
+          'que aquí todavía no está.',
         campos: [
-          {
-            k: 'tipoVia',
-            l: 'Tipo de vía',
-            t: 'sel',
-            o: ['01 — AV - AVENIDA', '02 — CA - CALLE', '03 — JR - JIRÓN', '04 — PS - PASAJE', '05 — CR - CARRETERA', '99 — NO ESPECIFICADO'],
-          },
-          { k: 'via', l: 'Vía', t: 'text', ancho: true },
-          { k: 'habUrbana', l: 'Habilitación urbana', t: 'text', ancho: true },
-          { k: 'numero', l: 'Número', t: 'text' },
-          { k: 'numAd', l: 'Número adicional', t: 'text' },
-          { k: 'dep', l: 'Departamento', t: 'ro' },
-          { k: 'prov', l: 'Provincia', t: 'ro' },
-          { k: 'dist', l: 'Distrito', t: 'ro' },
+          { k: 'domDireccion', l: 'Dirección', t: 'ro', ancho: true },
+          { k: 'domReferencia', l: 'Referencia', t: 'ro', ancho: true },
+          { k: 'domUbigeo', l: 'Ubigeo', t: 'ro' },
+          { k: 'domDesde', l: 'Vigente desde', t: 'ro' },
+          { k: 'domOrigen', l: 'Documento que lo sustenta', t: 'ro', ancho: true },
         ],
       },
       {
-        titulo: 'Edificación e interior',
+        titulo: 'Domicilio procesal',
+        nota: 'El que se señala para un procedimiento. La ficha lo publica aparte del fiscal, y también vigente a la fecha de corte.',
         campos: [
-          { k: 'nomEdif', l: 'Nombre de la edificación', t: 'text', ancho: true },
-          {
-            k: 'tipoEdif',
-            l: 'Tipo de edificación',
-            t: 'sel',
-            o: ['01 — CASA', '02 — EDIFICIO', '03 — QUINTA', '04 — CENTRO COMERCIAL', '99 — NO ESPECIFICADO'],
-          },
-          {
-            k: 'tipoInt',
-            l: 'Tipo de interior',
-            t: 'sel',
-            o: ['01 — DEPARTAMENTO', '02 — INTERIOR', '03 — OFICINA', '04 — TIENDA', '99 — NO ESPECIFICADO'],
-          },
-          { k: 'numInt', l: 'Núm. interior', t: 'text' },
+          { k: 'procDireccion', l: 'Dirección', t: 'ro', ancho: true },
+          { k: 'procDesde', l: 'Vigente desde', t: 'ro' },
+          { k: 'procOrigen', l: 'Documento que lo sustenta', t: 'ro', ancho: true },
         ],
       },
       {
-        titulo: 'Zona, sector y etapa',
-        campos: [
-          { k: 'zonaNombre', l: 'Nombre', t: 'text', ancho: true },
-          { k: 'mz', l: 'Manzana', t: 'text' },
-          { k: 'lt', l: 'Lote', t: 'text' },
-          { k: 'sublt', l: 'Sub lote', t: 'text' },
-          { k: 'dirAd', l: 'Dirección adicional', t: 'text', ancho: true },
-        ],
+        campos: [],
+        lectura: 'domicilios',
+        tabla: {
+          titulo: 'Historial de domicilios',
+          conteo: '',
+          min: '780px',
+          cols: [
+            ['Tipo', 0],
+            ['Dirección', 0],
+            ['Referencia', 0],
+            ['Ubigeo', 0],
+            ['Desde', 0],
+            ['Hasta', 0],
+            ['Documento', 0],
+          ],
+          filas: [],
+          nota: 'Los cerrados siguen aquí: no se borra nada (regla 4), y es lo que explica por qué una notificación de marzo se hizo donde se hizo.',
+        },
       },
     ],
   },
@@ -163,71 +252,64 @@ export const EXPEDIENTE: SeccionDef[] = [
   {
     id: 'contacto',
     label: 'Documentos y contacto',
-    hint: 'Documentos, contactos, gestores, teléfonos y correo',
-    conteo: '4 listas',
+    hint: 'Cómo se le ubica y quién responde con él',
+    conteo: '2 listas',
     bloques: [
       {
-        titulo: 'Documentos',
-        campos: [
-          {
-            k: 'tipoDoc',
-            l: 'Tipo de documento',
-            t: 'sel',
-            ancho: true,
-            o: [
-              '01 — NO PRESENTÓ DOCUMENTO',
-              '02 — DNI',
-              '03 — CARNET DE IDENTIDAD DE POLICÍA NACIONAL',
-              '04 — CARNET DE IDENTIDAD DE FUERZAS ARMADAS',
-              '05 — PARTIDA DE NACIMIENTO',
-              '06 — PASAPORTE',
-              '07 — CARNET DE EXTRANJERÍA',
-              '08 — OTROS (ESPECIFICAR)',
-              '09 — RUC',
-              '99 — NO ESPECIFICADO',
-            ],
-          },
-          { k: 'numDoc', l: 'Número de documento', t: 'text' },
-        ],
-        tabla: {
-          titulo: 'Documentos registrados',
-          conteo: '1 documento',
-          accion: '+ Añadir',
-          min: '420px',
-          cols: [
-            ['Tipo', 0],
-            ['Número', 0],
-            ['Registrado', 0],
-          ],
-          filas: [['02 — DNI', '03593174', '12/08/2026']],
-        },
-      },
-      {
+        /* El bloque «Documentos» del manual —un desplegable de diez tipos, una
+           caja de número y una tabla de documentos registrados— se va entero:
+           el padrón guarda UN documento de identidad, el que ya sale en
+           «Identificación», y no hay tabla de documentos ni operación que
+           añada otro. Su única fila era de la maqueta: «02 — DNI · 03593174 ·
+           12/08/2026».
+
+           Los ocho campos de «Contactos y gestores» tampoco se dibujan: dar de
+           alta un contacto es «POST /rentas/contribuyentes/{id}/contactos», con
+           su propia observación y su propio privilegio, y no algo que este
+           botón guarde. Lo que sí se puede hacer aquí es LEERLOS. */
         titulo: 'Contactos y gestores',
-        campos: [
-          { k: 'contacto', l: 'Nombre del contacto', t: 'text', ancho: true },
-          { k: 'cargo', l: 'Cargo', t: 'text' },
-          { k: 'email', l: 'Correo electrónico', t: 'text' },
-          { k: 'telefonos', l: 'Teléfonos', t: 'text' },
-          { k: 'gestor', l: 'Código de gestor', t: 'text' },
-          { k: 'gestorIni', l: 'Gestor desde', t: 'date' },
-          { k: 'gestorFin', l: 'Gestor hasta', t: 'date' },
-          { k: 'notifElec', l: 'Notificación electrónica', t: 'chk', ph: 'Autoriza notificar al correo' },
-        ],
+        nota:
+          'Teléfonos, correos y gestores, tal como la ficha los publica. Darlos de alta o de baja son actos aparte —«POST ' +
+          '/rentas/contribuyentes/{id}/contactos» y su PUT—, y esta pantalla todavía no los ofrece. Un contacto no se borra: se da ' +
+          'de baja, y por eso los no vigentes siguen en la lista.',
+        campos: [],
+        lectura: 'contactos',
         tabla: {
-          titulo: 'Teléfonos y correos',
-          conteo: '2 registros',
-          accion: '+ Añadir',
-          min: '460px',
+          titulo: 'Teléfonos, correos y gestores',
+          conteo: '',
+          min: '720px',
           cols: [
             ['Tipo', 0],
             ['Valor', 0],
-            ['Notifica', 0],
+            ['Nombre', 0],
+            ['Documento', 0],
+            ['Nota', 0],
+            ['Vigente', 0],
           ],
-          filas: [
-            ['01 — DOMICILIO 1', '073-413074', 'No'],
-            ['E-MAIL', 'FRUIZ159@GMAIL.COM', 'Sí'],
+          filas: [],
+        },
+      },
+      {
+        titulo: 'Responsables solidarios',
+        nota:
+          'Quién responde con él, y desde cuándo. El responsable es otro contribuyente del mismo padrón —para notificarle hace ' +
+          'falta su domicilio— y por eso la lista da su identificador, que es lo que la ficha publica.',
+        campos: [],
+        lectura: 'responsables',
+        tabla: {
+          titulo: 'Responsables solidarios',
+          conteo: '',
+          min: '720px',
+          cols: [
+            ['Responsable (id)', 0],
+            ['Vínculo', 0],
+            ['%', 1],
+            ['Desde', 0],
+            ['Hasta', 0],
+            ['Documento', 0],
           ],
+          filas: [],
+          nota: 'Un vínculo no se borra: se cierra con su fecha. La deuda de entonces sigue siendo suya, y una notificación de entonces se defiende enseñando que regía.',
         },
       },
     ],
@@ -315,40 +397,42 @@ export const EXPEDIENTE: SeccionDef[] = [
     id: 'beneficios',
     label: 'Beneficios y exoneraciones',
     hint: 'Deducciones, inafectaciones y amnistías',
-    conteo: '1 vigente',
+    conteo: '1 lista',
     bloques: [
       {
-        nota: 'La deducción de 50 UIT para pensionistas y adultos mayores exige predio único destinado a vivienda. Es la que más se solicita y la que más se deniega.',
-        campos: [
-          {
-            k: 'tipoBen',
-            l: 'Tipo de beneficio',
-            t: 'sel',
-            o: ['PENSIONISTA — DEDUCCIÓN 50 UIT', 'ADULTO MAYOR NO PENSIONISTA', 'PERSONA CON DISCAPACIDAD', 'INAFECTACIÓN', 'AMNISTÍA TRIBUTARIA'],
-          },
-          { k: 'benPredio', l: 'Código predial', t: 'text' },
-          { k: 'benExp', l: 'Nº de expediente', t: 'text' },
-          { k: 'benFecha', l: 'Fecha de solicitud', t: 'date' },
-          { k: 'benRes', l: 'Nº de resolución', t: 'text', ph: 'RES-0000-2026-MDC' },
-          { k: 'benEstado', l: 'Estado', t: 'sel', o: ['VIGENTE', 'EN TRÁMITE', 'DENEGADO', 'VENCIDO'] },
-        ],
+        /* Los seis campos eran el formulario de una SOLICITUD y no hay dónde
+           mandarla: `RegistrarBeneficio` existe y no se publica —el contrato no
+           declara ningún POST ni PUT en «/rentas/beneficios»—, así que el botón
+           «+ Solicitar» y sus seis cajas prometían un acto que no existe. La
+           tabla sí se lee, y sus dos filas eran de la maqueta: un expediente
+           2026-0281 con su resolución y su deducción de 50 UIT, dibujados bajo
+           el nombre de cualquiera que se abriera.
+
+           La columna «Deducción» del manual no está: `BeneficioResource`
+           publica el porcentaje y el monto por separado y juntarlos en una
+           celda obligaría a elegir cuál enseñar. Van los dos, cada uno en la
+           suya. */
+        nota:
+          'Los que la lectura de rentas publica para este contribuyente. Solicitarlos y cesarlos son actos que el contrato todavía ' +
+          'no declara, así que aquí sólo se leen. Cuánto deduce cada uno es un valor normativo bloqueado (D-02a): la lista dice lo ' +
+          'que la resolución concedió, no lo que se descontará.',
+        campos: [],
+        lectura: 'beneficios',
         tabla: {
           titulo: 'Beneficios del contribuyente',
-          conteo: '2 registros',
-          accion: '+ Solicitar',
-          min: '700px',
+          conteo: '',
+          min: '820px',
           cols: [
-            ['Expediente', 0],
             ['Tipo', 0],
-            ['Resolución', 0],
+            ['Tributo', 0],
+            ['Clase', 0],
+            ['%', 1],
+            ['Monto S/', 1],
             ['Vigencia', 0],
-            ['Deducción', 0],
-            ['Estado', 0],
+            ['Base legal', 0],
+            ['Documento', 0],
           ],
-          filas: [
-            ['2026-0281', 'PENSIONISTA', 'RES-0412-2026-MDC', '2026 — indefinida', '50 UIT', 'Vigente'],
-            ['2025-1102', 'AMNISTÍA 2025', 'ORD-018-2025-MDC', '2025', '100 % interés', 'Vencido'],
-          ],
+          filas: [],
         },
       },
     ],
@@ -358,15 +442,25 @@ export const EXPEDIENTE: SeccionDef[] = [
     id: 'obs',
     label: 'Observaciones y bitácora',
     hint: 'Quién tocó qué y cuándo',
-    conteo: '3 anotaciones',
+    conteo: 'sin lectura propia',
     bloques: [
       {
-        campos: [
-          { k: 'obs', l: 'Observación', t: 'area', ancho: true, ph: 'Lo que hay que saber antes de atenderlo' },
-          { k: 'registrado', l: 'Registrado por', t: 'ro' },
-          { k: 'modificado', l: 'Última modificación', t: 'ro' },
-          { k: 'fotos', l: 'Foto álbum personal', t: 'ro', ancho: true },
-        ],
+        /* Los cuatro campos se van. «Observación» era una caja de texto para
+           una nota del contribuyente y `contribuyente` no tiene esa columna;
+           «Registrado por», «Última modificación» y «Foto álbum personal»
+           salían con «MRIOS — 12/08/2026 09:14» y «2 imágenes» de la maqueta,
+           que es exactamente la forma de un dato traído del backend.
+
+           Y hay un motivo para no inventarles un origen: la observación que
+           este expediente sí exige es la de CADA cambio (regla 10, RNF-052), va
+           en la barra de guardado y queda en la bitácora de auditoría, que
+           tiene su propia pantalla y su propio permiso. Una caja de
+           «Observación» suelta aquí arriba se confundiría con ella. */
+        nota:
+          'Quién tocó qué y cuándo lo guarda la bitácora de auditoría, que tiene su propia pantalla y su propio permiso: esta ficha ' +
+          'no lo publica. La observación de cada corrección se pide al guardar —sin ella no se guarda (regla 10)— y es la que queda ' +
+          'anotada allí.',
+        campos: [],
       },
     ],
   },
@@ -381,15 +475,23 @@ export const EXPEDIENTE: SeccionDef[] = [
  * Un filtro de la cabecera de una determinación.
  *
  * `k` es **el nombre con el que viaja**, y su ausencia no es un descuido: un
- * filtro sin `k` no lo lee nadie. Los tres del predial —«DJ N°», «Tipo de
- * declaración», «Fecha de declaración»— están declarados en el contrato y
- * `PredialController` sólo lee `codContribuyente` y `ano`, así que se tecleaban
- * y se caían en silencio; los de alcabala y espectáculos ni siquiera están en el
- * contrato. Un control vivo que no acota nada es el defecto que #322, #398 y
- * #432 cerraron tres veces, y aquí se cierra igual: se apaga con su motivo en
- * `bloqueado`, que se lee en su `title`.
+ * filtro sin `k` no lo lee nadie. Y desde #576 los que se apagan por no tener
+ * quien los lea tampoco están ya en el contrato: los tres del predial —«DJ N°»,
+ * «Tipo de declaración», «Fecha de declaración»— y los de espectáculos se
+ * retiraron de él (`SUPRIMIDOS` de `generar-openapi.mjs`), y los de alcabala
+ * nunca estuvieron. «Zona» y «Uso» de arbitrios sí lo están, y se apagan por
+ * otra cosa (#541). Un control vivo que no acota nada es el defecto que #322,
+ * #398 y #432 cerraron tres veces, y aquí se cierra igual: se apaga con su
+ * motivo en `bloqueado`, que se lee en su `title` y bajo la rejilla.
+ *
+ * `soloCon` es el otro caso, y no es el mismo: el filtro no está apagado, es que
+ * **todavía no se pregunta**. Lleva el valor de «Alcance» que lo hace exigible
+ * —`SECTOR` el suyo, `RANGO_DE_CODIGO` sus dos extremos (#577)—, y con otro
+ * alcance elegido no se dibuja. Dibujarlo siempre sería ofrecer una caja que la
+ * corrida no va a leer, que es la mitad del defecto de un filtro que no acota;
+ * apagarlo con `bloqueado` diría que no sirve, y sirve: sirve con su alcance.
  */
-export type FiltroDef = { l: string; v: string; t?: 'sel'; o?: string[]; ph?: string; k?: string; bloqueado?: string };
+export type FiltroDef = { l: string; v: string; t?: 'sel'; o?: string[]; ph?: string; k?: string; bloqueado?: string; soloCon?: string };
 
 /**
  * Una línea de la memoria del cálculo: operador, rótulo, detalle, importe y
@@ -483,30 +585,58 @@ const SIN_LECTURA = 'sin lectura';
 /* ── Por qué hay filtros apagados en cuatro de las seis hojas ────────────────
    Un filtro que se teclea y no acota es peor que no tenerlo: quien busca cree
    haber acotado y lee una lista entera como si fuera el resultado de su
-   búsqueda. Aquí hay dos casos distintos y conviene no mezclarlos, porque se
-   arreglan en sitios distintos. */
+   búsqueda. Aquí hay casos distintos y conviene no mezclarlos, porque no todos
+   esperan lo mismo: unos se abren solos el día que el backend crezca y otros no
+   se van a abrir, y decir cuál es cuál es la mitad del aviso. */
 
-/** Está en el contrato y ningún controlador lo lee: el hueco que #544 censó en 62 operaciones. */
-const DECLARADO_Y_SIN_LECTOR =
-  'Este filtro no acota nada. El contrato lo declara y el controlador de la determinación sólo lee el ' +
-  'código de contribuyente y el año, así que tecleado aquí viajaría y se caería en silencio (#544).';
+/**
+ * Los tres de la declaración jurada del predial: no esperan a un lector, porque
+ * acotar por declaración jurada **sería calcular otra cosa**.
+ *
+ * Hasta #576 el contrato los declaraba y `PredialController` no leía ninguno
+ * —el hueco que #544 censó—, así que lo que se escribía aquí era «falta el
+ * lector». Ya no: #576 los retiró del contrato (`SUPRIMIDOS` de
+ * `generar-openapi.mjs`), y lo hizo por lo que saldría de leerlos y no por lo
+ * que falta implementar. La base del predial es POR CONTRIBUYENTE y no por
+ * predio (NEG-05 §1): los tramos progresivos se aplican al conjunto de sus
+ * predios, así que calcularla sobre los de una sola declaración da de menos en
+ * todo el padrón, y la cifra que sale nadie la distingue de la correcta.
+ */
+const OTRO_CALCULO_Y_NO_UN_FILTRO =
+  'Este filtro no acota nada, y no está esperando a que alguien lo implemente: el contrato dejó de declararlo (#576). ' +
+  'Acotar la determinación a una declaración jurada sería calcular otra cosa —la base del predial es la de TODOS los ' +
+  'predios del contribuyente, porque los tramos progresivos se aplican al conjunto—, así que sobre los de una sola ' +
+  'declaración saldría de menos y esa cifra no se distinguiría de la correcta. Son los datos de la DJ que se atiende, ' +
+  'no un criterio de cálculo.';
 
-/** Ni siquiera está en el contrato: la ruta es un `POST` que registra y no declara consulta. */
+/**
+ * Los de alcabala y espectáculos: lo que falta es **la lectura**, no el lector.
+ *
+ * Ninguna operación del contrato lista las transferencias ni los espectáculos
+ * declarados, así que un filtro de búsqueda no tiene a qué petición sumarse: la
+ * ruta de estas dos hojas es el `POST` que registra el acto. Los tres de
+ * alcabala no se declararon nunca y los de espectáculos los retiró #576 por
+ * eso mismo; vuelven el día que exista la lectura que los liste, y ese día
+ * serán suyos y no de este acto.
+ */
 const SIN_LECTURA_QUE_LISTE =
-  'Ninguna lectura del contrato lista estos actos y esta ruta no declara ni un parámetro de consulta: ' +
-  'elegir aquí no cambiaría nada de lo que se manda.';
+  'Ninguna lectura del contrato lista estos actos, y esta ruta —el POST que registra— no declara ni un parámetro de ' +
+  'consulta: elegir aquí no cambiaría nada de lo que se manda. Vuelve el día que exista la lectura que los liste, y ' +
+  'será suyo (#576).';
 
 /** Y el tercero: la hoja entera todavía no habla con el backend. */
 const HOJA_SIN_CONECTAR =
   'Esta hoja todavía no pide nada al backend, así que su filtro no tendría a qué petición sumarse.';
 
-/* ── Y un cuarto, que no dice «todavía» ─────────────────────────────────────
-   Los tres de arriba se abren solos el día que el backend crezca. Estos dos no:
-   lo que falta no es la consulta sino que **los valores del desplegable no
-   existen en el sistema**, así que el filtro no se podría servir ni queriendo
-   sin decidir antes qué significan. #541 los hizo contestar `422` en vez de
-   ignorarlos, que es lo correcto y lo que obliga a bloquearlos aquí: mandarlos
-   rompe la búsqueda entera en vez de devolver de más. */
+/* ── Y un cuarto, que tampoco dice «todavía» ────────────────────────────────
+   De los tres de arriba, dos se abren solos el día que el backend crezca —la
+   lectura que liste, la hoja que se conecte—; el primero no, porque lo que le
+   falta no es un lector. Estos dos tampoco, y por un tercer motivo: lo que
+   falta no es la consulta sino que **los valores del desplegable no existen en
+   el sistema**, así que el filtro no se podría servir ni queriendo sin decidir
+   antes qué significan. #541 los hizo contestar `422` en vez de ignorarlos, que
+   es lo correcto y lo que obliga a bloquearlos aquí: mandarlos rompe la
+   búsqueda entera en vez de devolver de más. */
 
 /** «Zona»: vive en `sector.zona` y cada municipalidad la escribe a su manera. */
 const ZONA_QUE_NO_EXISTE =
@@ -526,12 +656,31 @@ const DEL_CONJUNTO_SELLADO =
   'Es una cifra del conjunto sellado del ejercicio, no un dato que se teclee: escribirla aquí dejaría que ' +
   'quien corre la emisión eligiera con qué UIT se calcula (regla 5).';
 
-/* Los dos únicos alcances que `DeterminarPredialMasivo.Peticion` admite, letra
-   por letra. El desplegable del manual ofrecía cuatro —«TODO EL PADRÓN», «POR
-   SECTOR», «POR RANGO DE CÓDIGO», «SOLO OBSERVADOS»— y NINGUNO coincide: los
-   dos primeros se parecen, y parecerse no es serlo (#427). Los otros dos no
-   existen en el backend, y se dicen en la ayuda en vez de ofrecerse. */
-export const ALCANCES_DE_LA_CORRIDA = ['TODOS', 'SECTOR'] as const;
+/* Los CUATRO alcances que `DeterminarPredialMasivo.Peticion` admite, letra por
+   letra.
+
+   Hasta #577 eran dos, y lo que decía aquí era verdad entonces: el desplegable
+   del manual ofrecía «TODO EL PADRÓN», «POR SECTOR», «POR RANGO DE CÓDIGO» y
+   «SOLO OBSERVADOS», ninguno de los cuatro coincidía letra por letra —los dos
+   primeros se parecen, y parecerse no es serlo (#427)—, y los otros dos el
+   backend no los tenía: se decían en la ayuda en vez de ofrecerse, porque un
+   alcance que se elige y no se sirve devuelve un 422 con el nombre de lo que
+   quien atiende acaba de elegir de una lista.
+
+   Ya los tiene los cuatro. Lo que no cambia es de quién es el vocabulario: sale
+   de `ALCANCES` de `DeterminarPredialMasivo` y se ofrece con SUS palabras, no
+   con los rótulos del manual. Al revés haría falta una tabla de traducción, que
+   es una segunda copia de la regla y se queda vieja en silencio en cuanto el
+   enumerado gane un valor —el defecto que #427 no cometió con «ACTIVA» y que
+   `vocabularios.mjs` vigila donde sí hubo que traducir—.
+
+   Dos de los cuatro piden campos y por eso los suyos declaran `soloCon`:
+   `SECTOR` exige el sector, y `RANGO_DE_CODIGO` sus dos extremos. `OBSERVADOS`
+   no pide ninguno y aun así no es «TODOS con otro nombre»: recorre a los que la
+   ÚLTIMA corrida del ejercicio dejó fuera, y sin corrida previa no recorre a
+   nadie —«ninguno quedó observado» y «todavía no se ha corrido» son dos cosas
+   distintas, y esta pantalla tiene que poder decir la diferencia—. */
+export const ALCANCES_DE_LA_CORRIDA = ['TODOS', 'SECTOR', 'RANGO_DE_CODIGO', 'OBSERVADOS'] as const;
 
 /** La coletilla de las cuatro memorias: por qué no hay números. */
 const MEMORIA_SIN_CIFRAS =
@@ -550,15 +699,15 @@ export const DETERMINACIONES: Record<ClaveDeDeterminacion, DeterminacionDef> = {
       /* El único que viaja. El año no se teclea: sale del selector de la
          cabecera, como en las doce pantallas del sistema. */
       { l: 'Cod. Contribuyente', v: '', k: 'codContribuyente', ph: 'C-000001' },
-      { l: 'DJ N°', v: '', bloqueado: DECLARADO_Y_SIN_LECTOR },
+      { l: 'DJ N°', v: '', bloqueado: OTRO_CALCULO_Y_NO_UN_FILTRO },
       {
         l: 'Tipo de declaración',
         t: 'sel',
         v: 'RECTIFICATORIA',
         o: ['INSCRIPCIÓN', 'DESCARGO', 'RECTIFICATORIA', 'ANUAL MECANIZADA'],
-        bloqueado: DECLARADO_Y_SIN_LECTOR,
+        bloqueado: OTRO_CALCULO_Y_NO_UN_FILTRO,
       },
-      { l: 'Fecha de declaración', v: '', bloqueado: DECLARADO_Y_SIN_LECTOR },
+      { l: 'Fecha de declaración', v: '', bloqueado: OTRO_CALCULO_Y_NO_UN_FILTRO },
     ],
     tabla: {
       titulo: 'Predios que integran la base imponible',
@@ -658,7 +807,16 @@ export const DETERMINACIONES: Record<ClaveDeDeterminacion, DeterminacionDef> = {
       /* Los códigos los pone `GET /catastro/sectores` al abrir la hoja: los seis
          de aquí —«Todos», «01»…«05»— eran los de la maqueta, y con `SECTOR` el
          backend exige uno que exista. La lista vacía es a propósito. */
-      { l: 'Sector', t: 'sel', v: '', o: [], k: 'sector' },
+      { l: 'Sector', t: 'sel', v: '', o: [], k: 'sector', soloCon: 'SECTOR' },
+      /* Los dos extremos del tramo, incluidos los dos (#577). Son cajas de
+         TEXTO y no de número porque el backend los compara como texto: el
+         código del padrón es una cadena —«00000025673», «C-000007»— y ni
+         siquiera siempre numérica, así que ese es el orden con que la pantalla
+         lo lista y «del C-000100 al C-000200» es exactamente el tramo que quien
+         pide la corrida está viendo. Un control numérico se comería el prefijo
+         y los ceros de la izquierda, y el tramo dejaría de ser el que se ve. */
+      { l: 'Código desde', v: '', k: 'codigoDesde', ph: 'C-000001', soloCon: 'RANGO_DE_CODIGO' },
+      { l: 'Código hasta', v: '', k: 'codigoHasta', ph: 'C-000500', soloCon: 'RANGO_DE_CODIGO' },
       /* La UIT y el derecho de emisión los pone el conjunto sellado del
          ejercicio, y no se teclean: escribirlos aquí sería la regla 5 —una cifra
          normativa compilada— y ademas dejaria que quien corre la emision de
@@ -1078,17 +1236,21 @@ export const CAMPOS_DEL_ALTA: CampoDef[] = [
     l: 'Unidad (predio / placa)',
     t: 'text',
     ayuda:
-      'Código predial o placa. Se resuelve contra el padrón antes de mandar: el identificador interno no se teclea. En blanco, el alta cae sobre la obligación SIN unidad, que es otra distinta de la del predio.',
+      'Código de referencia catastral o placa. Se resuelve contra el padrón mientras se teclea, y debajo se dice qué salió y de quién es: el identificador interno no se escribe nunca. En blanco, el alta cae sobre la obligación SIN unidad, que es otra distinta.',
   },
   /* El valor por omision es el primero de la lista a proposito: un desplegable que
      ensena «2026» y manda «2024» es el defecto de #331.
 
-     Los cinco anios se quedan como el manual los dibuja, y la ayuda dice lo
-     medido: `cuenta_corriente_asiento` esta particionada por ejercicio y `V2`
-     declara solo 2026 y 2027, asi que los otros cuatro revientan con un 500
-     opaco. **No se recortan a «2026»**: seria escribir a mano el conjunto de
-     particiones de hoy, que quedaria viejo en silencio el dia que alguien anada
-     2028 —el mismo modo de fallo que el issue describe, con otro nombre—. */
+     Los cinco anios se quedan como el manual los dibuja. **No se recortan a los
+     que hoy registran**: seria escribir a mano el conjunto de particiones de la
+     cuenta corriente, que quedaria viejo en silencio el dia que alguien anada
+     otra —el mismo modo de fallo que #597 describe, con otro nombre—.
+
+     Y la nota que documentaba la medicion se retira con #597 cerrado: los
+     ejercicios que la cuenta corriente no tiene abiertos ya no contestan un 500
+     opaco con incidencia, sino un 422 que nombra el anio y dice cuales lo estan.
+     Ese mensaje lo escribe el servidor y llega entero a la pantalla; repetirlo
+     aqui seria volver a congelar en un texto el conjunto de hoy. */
   {
     k: 'altaAnio',
     l: 'Año',
@@ -1096,7 +1258,7 @@ export const CAMPOS_DEL_ALTA: CampoDef[] = [
     v: '2026',
     o: ['2026', '2025', '2024', '2023', '2022'],
     ayuda:
-      'Medido el 2026-09-01: de estos cinco ejercicios sólo 2026 registra; los otros cuatro contestan un error interno del servidor, porque la cuenta corriente sólo tiene abiertos 2026 y 2027 (#597).',
+      'El ejercicio de la obligación. La cuenta corriente sólo asienta en los ejercicios que tiene abiertos; si éste no lo está, el servidor lo rechaza nombrándolo, dice cuáles sí lo están y no se escribe nada (#597).',
   },
   /* Las dos cajas del manual, y las tres formas que el backend admite desde
      #538. Hasta entonces «Cuota hasta» se dibujaba y NO viajaba: Jackson la
@@ -1146,12 +1308,22 @@ export const CAMPOS_DE_LA_BAJA: CampoDef[] = [
     k: 'causal',
     l: 'Causal',
     t: 'sel',
-    v: 'PRESCRIPCIÓN DECLARADA',
-    o: ['PRESCRIPCIÓN DECLARADA', 'RESOLUCIÓN QUE DEJA SIN EFECTO', 'ERROR MATERIAL', 'COMPENSACIÓN', 'DEUDA DE COBRANZA DUDOSA', 'CONDONACIÓN POR ORDENANZA'],
+    /* Nace VACIA, y esa opcion primera es el arreglo de #636. Tenia
+       `PRESCRIPCIÓN DECLARADA` por omision, asi que la causal se escribia en la
+       bitacora la hubiera elegido alguien o no — medido: una baja que fue un
+       error material quedo auditada como «PRESCRIPCIÓN DECLARADA. Deshace el
+       alta…», y las dos cosas no se parecen: la prescripcion es una declaracion
+       sobre el plazo del art. 43 y no se revierte; el error material es una
+       correccion. Y lo escrito se queda, porque el libro no admite `UPDATE`
+       (regla 4, V29/V30). Es #331 —«un desplegable que ensena 2026 y manda
+       2024»— con la agravante de que aqui lo que viaja acaba en el texto que
+       defiende el acto ante una auditoria. */
+    v: '',
+    o: ['', 'PRESCRIPCIÓN DECLARADA', 'RESOLUCIÓN QUE DEJA SIN EFECTO', 'ERROR MATERIAL', 'COMPENSACIÓN', 'DEUDA DE COBRANZA DUDOSA', 'CONDONACIÓN POR ORDENANZA'],
     /* `PeticionDeMovimiento` no tiene campo para la causal, asi que se copia a la
        observacion, que es donde queda auditada (RNF-052). Dejarla suelta seria un
        desplegable que se elige y no llega: el defecto de #331. */
-    ayuda: 'El cuerpo del backend no tiene campo propio para la causal: se antepone a la observación, que es donde queda auditada',
+    ayuda: 'El cuerpo del backend no tiene campo propio para la causal: se antepone a la observación, que es donde queda auditada. Sin elegirla no se puede dar de baja',
   },
   { k: 'numRes', l: 'Nº de resolución', t: 'text', ayuda: 'Es el sustento documental de la baja: sin él no se registra' },
   {
@@ -1191,84 +1363,15 @@ export const COLS_DE_LA_BAJA: ColDef[] = [
 
 /* ══════════ Panel del módulo ══════════ */
 
-export type EtapaDeEmision = { etapa: string; pct: number; registros: string; estado: string; tono: 'ok' | 'warn' | 'bad' };
-
-export const ETAPAS_DE_LA_EMISION: EtapaDeEmision[] = [
-  { etapa: 'Lectura del padrón', pct: 100, registros: '62,418', estado: 'Completa', tono: 'ok' },
-  { etapa: 'Valuación de predios', pct: 100, registros: '78,204', estado: 'Completa', tono: 'ok' },
-  { etapa: 'Determinación del impuesto', pct: 100, registros: '61,884', estado: 'Completa', tono: 'ok' },
-  { etapa: 'Determinación de arbitrios', pct: 100, registros: '61,884', estado: 'Completa', tono: 'ok' },
-  { etapa: 'Generación de cuponeras', pct: 98, registros: '61,350', estado: '534 observados', tono: 'warn' },
-];
-
-export const KPIS_DEL_PANEL = [
-  { valor: '62,418', etiqueta: 'Contribuyentes en el padrón', nota: 'Activos. Los de baja siguen en determinaciones ya emitidas.' },
-  { valor: 'S/ 9.4 M', etiqueta: 'Predial determinado 2026', nota: 'Sobre 61,884 cuentas emitidas.' },
-  { valor: '534', etiqueta: 'Observados sin emisión', nota: 'Cada uno tiene una causa concreta y arreglable.' },
-  { valor: '41.2 %', etiqueta: 'Recaudado del emitido', nota: 'Al 31 de agosto. Dos cuotas vencidas de cuatro.' },
-];
+/* `ETAPAS_DE_LA_EMISION`, `KPIS_DEL_PANEL` y el tipo `EtapaDeEmision` se han
+   ido: el bloque entero era la maqueta del prototipo. Las cinco etapas de la
+   emisión con su porcentaje y sus registros, y los cuatro indicadores de la
+   cabecera —«62,418 contribuyentes», «S/ 9.4 M de predial determinado», «41.2 %
+   recaudado del emitido»—. Se dibujaban iguales en toda municipalidad y en todo
+   ejercicio, y un avance inventado se lee como el del padrón que se tiene
+   delante. Se fueron cuando el panel pasó a leer del backend. */
 
 /* ══════════ Padrón de contribuyentes ══════════ */
-
-export type FilaDelPadron = {
-  estado: string;
-  tono: 'ok' | 'warn' | 'bad';
-  codigo: string;
-  nombre: string;
-  doc: string;
-  dir: string;
-  unidades: string;
-  deuda: string;
-  /** La deuda se pinta en rojo cuando hay algo pendiente. */
-  deudaRoja: boolean;
-};
-
-export const PADRON: FilaDelPadron[] = [
-  {
-    estado: 'A',
-    tono: 'ok',
-    codigo: '00000025673',
-    nombre: 'SUC. RUFINA MEDINA MEDINA',
-    doc: 'DNI 03593174',
-    dir: 'URB. SANTA ROSA — EL ALTO 116',
-    unidades: '2 predios',
-    deuda: '1,842.60',
-    deudaRoja: true,
-  },
-  {
-    estado: 'A',
-    tono: 'ok',
-    codigo: '00000003541',
-    nombre: 'CASTILLO PASCUALA, MARÍA ELENA',
-    doc: 'DNI 44218937',
-    dir: 'CALLE LAMA 482',
-    unidades: '2 predios · 2 vehíc.',
-    deuda: '591.94',
-    deudaRoja: true,
-  },
-  {
-    estado: 'A',
-    tono: 'ok',
-    codigo: '00000006550',
-    nombre: 'DÍAZ MADRID, JULIO CÉSAR',
-    doc: 'DNI 02718844',
-    dir: 'C.P. BARRIO BUENOS AIRES',
-    unidades: '3 predios',
-    deuda: '9,412.15',
-    deudaRoja: true,
-  },
-  {
-    estado: 'I',
-    tono: 'bad',
-    codigo: '00000006551',
-    nombre: 'NOBLECILLA ARISMENDIZ SAC',
-    doc: 'RUC 20525118447',
-    dir: 'AV. JOSÉ DE LAMA 1180',
-    unidades: '1 predio',
-    deuda: '412.00',
-    deudaRoja: true,
-  },
-];
 
 export const COLS_DEL_PADRON: ColDef[] = [
   ['Est.', 0],
@@ -1280,13 +1383,14 @@ export const COLS_DEL_PADRON: ColDef[] = [
   ['Deuda hoy S/', 1],
 ];
 
-/** Los filtros rápidos del padrón. La clave va sin tilde; el rótulo la lleva. */
-export const CHIPS_DEL_PADRON: [clave: string, label: string][] = [
-  ['conDeuda', 'Con deuda vencida'],
-  ['sinConciliar', 'Predio sin conciliar'],
-  ['pensionista', 'Con beneficio vigente'],
-  ['juridica', 'Persona jurídica'],
-];
+/* `PADRON`, `CHIPS_DEL_PADRON` y el tipo `FilaDelPadron` se han ido. `PADRON`
+   eran cuatro personas de la maqueta del prototipo, con su código, su DNI o su
+   RUC, su domicilio y su deuda —«9,412.15»—, y se dibujaban antes de haber
+   buscado a nadie: cuatro filas que se leen como el padrón de la municipalidad
+   en sesión. Los filtros rápidos se fueron con ellas, porque ninguno de los
+   cuatro es un parámetro que la búsqueda del backend sepa leer. La consulta
+   dibuja ahora lo que devuelve `GET /rentas/contribuyentes`, o dice que no
+   encontró a nadie. */
 
 /* ══════════ Expediente: cabecera ══════════ */
 
@@ -1298,33 +1402,26 @@ export const CHIPS_DEL_PADRON: [clave: string, label: string][] = [
 
 /* ══════════ Declaración jurada ══════════ */
 
-export const DJ_META: { k: string; v: string }[] = [
-  { k: 'Contribuyente', v: 'SUC. RUFINA MEDINA MEDINA' },
-  { k: 'Código', v: '00000025673' },
-  { k: 'D.N.I.', v: '03593174' },
-  { k: 'Domicilio fiscal', v: 'URB. SANTA ROSA — EL ALTO 116' },
-  { k: 'Tipo de declaración', v: 'RECTIFICATORIA' },
-];
+/* `DJ_META`, `DJ_COLS`, `DJ_FILAS` y `DJ_TOTALES` se han ido (#563).
 
-export const DJ_COLS: ColDef[] = [
-  ['Código predial', 0],
-  ['Ubicación', 0],
-  ['Uso', 0],
-  ['% prop.', 1],
-  ['Valuo afecto S/', 1],
-];
+   Eran la hoja resumen entera: el nombre, el código, el DNI y el domicilio de
+   una persona; dos predios con su código catastral, su uso y su valuo afecto; y
+   los cuatro totales, «Total a pagar S/ 591.94» incluido. La pantalla los
+   dibujaba con cualquier sesión y sin haber abierto ningún contribuyente, bajo
+   un «Declaro bajo juramento que los datos consignados son verdaderos» y dos
+   líneas de firma. Una vez impresa y firmada, esa hoja no se distingue de una
+   correcta, y a diferencia de una pantalla nadie la vuelve a mirar contra la
+   base.
 
-export const DJ_FILAS: string[][] = [
-  ['02-014-D-14-01', 'CALLE SANTA ROSA 116', 'Casa habitación', '100.00', '132,196.75'],
-  ['04-021-B-07-00', 'MZ. B LT. 7 — BELLAVISTA', 'Terreno sin construir', '50.00', '19,210.00'],
-];
+   Ahora la hoja sale de `GET /rentas/declaraciones/{n}/hoja`: el declarante con
+   su domicilio VIGENTE A LA FECHA, sus predios con el % de propiedad que se
+   aplicó al determinar, y las cifras de la última determinación del ejercicio.
+   Lo que no puede consignar lo dice el propio recurso en `faltan`, que es una
+   lista de motivos y no un booleano.
 
-export const DJ_TOTALES: { k: string; v: string }[] = [
-  { k: 'Valuo afecto', v: 'S/ 151,406.75' },
-  { k: 'Impuesto insoluto', v: 'S/ 587.44' },
-  { k: 'Derecho de emisión', v: 'S/ 4.50' },
-  { k: 'Total a pagar', v: 'S/ 591.94' },
-];
+   Las columnas viven ahora en `COLS_DE_LA_HOJA`, dentro de `Rentas.tsx`, por lo
+   mismo que las del vehicular: la tercera decía «Uso» y el recurso publica el
+   TIPO —`URBANO`/`RUSTICO`—, que es otro dato. */
 
 /* ══════════ Las quince opciones del manual que el módulo resume ══════════ */
 
@@ -1347,61 +1444,20 @@ export const OPCIONES_DE_RENTAS: [label: string, dest: string][] = [
 ];
 
 /* ══════════ Los valores por omisión del contribuyente ══════════
-   Lo que el artboard llama `defectos()`: el estado inicial de todos los campos
-   del expediente, de las determinaciones y de los movimientos de deuda. */
+   Lo que el artboard llama `defectos()`: el estado inicial de los campos de las
+   determinaciones y de los movimientos de deuda.
+
+   **Del expediente ya no queda ninguno** (#552). Eran los cincuenta y tres de
+   la maqueta —el código 00000025673, el DNI 03593174, «MEDINA MEDINA RUFINA»,
+   la calle 116 de la urbanización Santa Rosa, el correo FRUIZ159@GMAIL.COM, la
+   resolución RES-0412-2026-MDC de un beneficio de 50 UIT y «MRIOS — 12/08/2026
+   09:14»—, y se dibujaban en cuanto se abría a cualquiera: la ficha de una
+   persona bajo el nombre de otra, indistinguible de la suya porque el
+   formulario no dice de dónde saca lo que enseña. Ahora cada campo del
+   expediente sale de `GET /rentas/contribuyentes/{id}/ficha` o sale con el
+   guion largo y su motivo. */
 
 export const DEFECTOS: Record<string, string | boolean> = {
-  codigo: '00000025673',
-  tipoPersona: 'SUCESIÓN INDIVISA',
-  apPaterno: 'MEDINA',
-  apMaterno: 'MEDINA',
-  nombres: 'RUFINA',
-  razonSocial: '',
-  dni: '03593174',
-  ruc: '',
-  nacimiento: '1948-08-30',
-  sexo: 'FEMENINO',
-  estadoCivil: 'VIUDO(A)',
-  conyuge: '',
-  calificacion: '003 — PEQUEÑO CONTRIBUYENTE',
-  estado: 'A — ACTIVO',
-  tipoVia: '02 — CA - CALLE',
-  via: '99999999 — NO ESPECIFICADO',
-  habUrbana: '200104000 — CATACAOS',
-  numero: '116',
-  numAd: '',
-  dep: 'PIURA',
-  prov: 'PIURA',
-  dist: 'CATACAOS',
-  nomEdif: '',
-  tipoEdif: '99 — NO ESPECIFICADO',
-  tipoInt: '99 — NO ESPECIFICADO',
-  numInt: '',
-  zonaNombre: 'URB. SANTA ROSA — EL ALTO',
-  mz: '015',
-  lt: '001',
-  sublt: '',
-  dirAd: '',
-  tipoDoc: '02 — DNI',
-  numDoc: '03593174',
-  contacto: 'FERNANDO RUIZ INGA',
-  cargo: 'GERENTE',
-  email: 'FRUIZ159@GMAIL.COM',
-  telefonos: '969032194',
-  gestor: '00000001 — GESTOR 1',
-  gestorIni: '2026-01-01',
-  gestorFin: '2026-12-31',
-  notifElec: true,
-  tipoBen: 'PENSIONISTA — DEDUCCIÓN 50 UIT',
-  benPredio: '02-014-D-14-01',
-  benExp: '2026-0281',
-  benFecha: '2026-03-04',
-  benRes: 'RES-0412-2026-MDC',
-  benEstado: 'VIGENTE',
-  obs: 'MODIFICACIÓN DE PRUEBA',
-  registrado: 'MRIOS — 12/08/2026 09:14',
-  modificado: 'MRIOS — 03/07/2026 16:02',
-  fotos: '2 imágenes — 12/08/2026, 03/07/2026',
   deduccion: 'NO APLICA',
   resBen: '',
   inafectacion: 'NINGUNA',
