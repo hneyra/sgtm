@@ -387,6 +387,15 @@ const DEL_BACKEND = {
       `),
     },
   ],
+  // La resolucion de determinacion sale en papel, como los otros quince
+  // documentos del contrato (#593, RF-132). Era el UNICO que no: es el valor que
+  // se notifica al contribuyente y el que arranca el plazo del art. 137 para
+  // reclamar, y su pantalla solo podia leerlo en JSON. `ResolucionController`
+  // parte la ruta con `params = "formato"`, como la ficha del contribuyente:
+  // sin el parametro, el JSON que la pantalla pinta; con el, el documento.
+  // No sale del prototipo —la pantalla dibuja «Descargar PDF» y no dice como
+  // viaja—, asi que se declara aqui.
+  resolucion_determinacion_fisc: [FORMATO_DE_REPORTE],
   // El estado de cuenta de fiscalizacion responde **a una fecha**: es la unica
   // cifra que publica y no existe «la deuda», existe la deuda actualizada a un
   // dia (regla 9, RNF-075). `OmisosController.estadoDeCuenta` lo lee desde #49 y
@@ -748,6 +757,19 @@ const DESCRIPCIONES = {
     así que ninguna de esas nueve opciones casaría con ningún dato y la respuesta sería la tabla
     vacía, que se lee como «no hay cuotas». Se acota por código predial. La pantalla los dibuja
     bloqueados con su motivo, como los de #322 y #398.
+  `),
+  // Fiscalizacion (#593)
+  resolucion_determinacion_fisc: bloque(`
+    El valor que cierra un procedimiento de fiscalización: determina por ejercicio la diferencia
+    de tributo y la multa tributaria, y es lo que arranca el plazo del art. 137 para reclamar
+    (#52, RF-057). Las cifras salen **nulas** mientras D-02a siga abierta, y eso no es un cero:
+    lo que no se puede determinar todavía no se dibuja como «no debe nada» (#198).
+
+    Con \`?formato=PDF|XLS|RTF\` la respuesta es el **documento**; sin él, el JSON que la pantalla
+    pinta (#593, RF-132). El papel **no se emite aquí**: la resolución ya se numeró y se guardó al
+    transferirla, así que esta ruta entrega los datos guardados dibujados en el formato pedido
+    —no recompone nada con datos vivos, que daría otro papel con el mismo número— y no registra
+    ninguna reimpresión.
   `),
   // Cuenta corriente (#72)
   constancia: bloque(`
