@@ -3179,6 +3179,51 @@ paths:
           $ref: "#/components/responses/SinMunicipalidad"
         "422":
           $ref: "#/components/responses/ErrorDeValidacion"
+  "/fiscalizacion/actas":
+    get:
+      operationId: fisc_actas_listado
+      summary: "Actas de inspección levantadas"
+      description: "Las actas de inspección de la municipalidad, predial y vehicular en la misma lista: las dos comparten tabla y ciclo de vida, y cuál es cuál lo dice cuál de `predioId` y `vehiculoId` trae valor. Agregada por #599, y no antes a propósito: #546 midió que un listado no habría llenado la pantalla del acta —el cuerpo del POST tenía nueve campos contra los veintitrés que el manual dibuja— y que lo que faltaba era dónde guardar el **uso hallado**, hoy `usoHallado` (V76). **`totalElementos` cuenta todas las actas que el filtro deja pasar, no las de la página**: es de ahí de donde el embudo del programa llena su etapa «Inspeccionados», y sumar `visitado` fila a fila recompondría esa cifra sobre la página que se hubiera pedido. Un solo filtro, y es el único que alguien pide: las dos pantallas del acta no dibujan ninguno —su catálogo no declara ni filtros ni tabla—, así que publicar el predio, el hallazgo o el estado sería inventar promesas que ninguna pantalla hace. Exige LECTURA sobre `fisc_predial` **o** sobre `fisc_vehicular`: un perfil de fiscalización vehicular registraría actas que no podría volver a ver."
+      tags: ["Fiscalización"]
+      parameters:
+        - name: programa
+          in: query
+          required: false
+          description: "Acota a las actas de un programa, por su numero interno; es de donde el embudo saca cuantas se inspeccionaron"
+          schema: { type: string }
+        - name: pagina
+          in: query
+          required: false
+          description: "Pagina que se pide, contada desde 0"
+          schema: { type: string }
+          example: "0"
+        - name: tamano
+          in: query
+          required: false
+          description: "Filas por pagina"
+          schema: { type: string }
+          example: "20"
+        - name: ordenarPor
+          in: query
+          required: false
+          description: "Campo por el que se ordena, en camelCase"
+          schema: { type: string }
+        - name: direccion
+          in: query
+          required: false
+          description: "ASCENDENTE | DESCENDENTE"
+          schema: { type: string }
+          example: "ASCENDENTE"
+      responses:
+        200:
+          description: Operacion realizada
+          content:
+            application/json:
+              schema: { type: object }
+        "403":
+          $ref: "#/components/responses/SinMunicipalidad"
+        "422":
+          $ref: "#/components/responses/ErrorDeValidacion"
   "/fiscalizacion/vehicular":
     post:
       operationId: fisc_vehicular
@@ -3189,8 +3234,8 @@ paths:
         - name: hallazgo
           in: query
           required: false
-          description: "Lo que el fiscalizador encontro en campo. El vocabulario es el del enumerado «Hallazgo», letra por letra —cuatro valores, y no los cinco de «CondicionFiscalizada»: un acta no consigna el uso observado—. Tambien se admite en el cuerpo, y ahi gana (#425)."
-          schema: { type: string, enum: [CONFORME, OMISO, SUBVALUADOR, NO_UBICADO] }
+          description: "Lo que el fiscalizador encontro en campo. El vocabulario es el del enumerado «Hallazgo», letra por letra. En un acta VEHICULAR «USO_DISTINTO» se rechaza: un vehiculo no declara uso, asi que no hay uso declarado del que difiera, y el acta vehicular no consigna uso hallado. Tambien se admite en el cuerpo, y ahi gana (#425)."
+          schema: { type: string, enum: [CONFORME, OMISO, SUBVALUADOR, USO_DISTINTO, NO_UBICADO] }
       requestBody:
         required: true
         content:
@@ -9328,6 +9373,64 @@ paths:
           required: true
           description: "El usuario, por el `id` que publica cada fila de `GET /seguridad/usuarios`"
           schema: { type: string }
+      responses:
+        200:
+          description: Operacion realizada
+          content:
+            application/json:
+              schema: { type: object }
+        "403":
+          $ref: "#/components/responses/SinMunicipalidad"
+        "422":
+          $ref: "#/components/responses/ErrorDeValidacion"
+    put:
+      operationId: fijar_permisos_de_usuario
+      summary: "Excepción de permisos de un usuario"
+      description: |
+        Fija la **excepción propia** de una cuenta sobre los accesos que viajen en el
+        cuerpo (#585, RF-121). Es la única forma de expresar «este cajero está en el
+        grupo de caja y a él no se le deja anular recibos» sin sacarlo del grupo ni
+        fabricarle un grupo de una persona; hasta aquí sólo se podía por SQL directo,
+        que no deja fila de auditoría con quien lo decidió ni pasa por la guarda del
+        último administrador.
+
+        **Mismo cuerpo y mismo *upsert* por acceso que `PUT /seguridad/grupos/{id}/permisos`**:
+        recibe la lista de accesos con sus privilegios, y un acceso **ausente del cuerpo
+        se queda como estaba** — una lista parcial no puede traducirse en retirar en
+        silencio todo lo demás.
+
+        **Lo que cambia es qué significa `privilegios: []`.** En el grupo es «este grupo
+        no otorga nada aquí»; en la cuenta es una **negación** que sustituye a lo que su
+        grupo le da, y la fila **se escribe en cero, nunca se borra**: sin ella el acceso
+        volvería a heredar del grupo, y «se le negó expresamente» y «nunca lo tuvo»
+        volverían a ser el mismo JSON — justo lo que el `GET` de esta ruta existe para
+        distinguir. La clave que **falta** en el cuerpo no es lo mismo que la lista
+        vacía: se rechaza con 422, porque retirar siete privilegios por un campo
+        olvidado no puede ser el resultado de una omisión.
+
+        Exige la observación del usuario, obligatoria (regla 10, RNF-052), y queda en la
+        auditoría como `PERMISO` con quien la firmó (ADR-0008 §5). Sin ella, **422**.
+
+        **Puede contestar 409**, con la misma guarda que la matriz del grupo y contando
+        con la precedencia del guardia: un cambio que dejara a la municipalidad **sin
+        ningún usuario capaz de administrar permisos** se rechaza, y de ahí no se sale
+        por el sistema. La comprobación corre **después** de escribir y dentro de la
+        misma transacción, así que lo que deshace el cambio es el rollback: no se
+        escribe nada.
+
+        Un `id` que no existe en esta municipalidad es **404**.
+      tags: ["Seguridad"]
+      parameters:
+        - name: id
+          in: path
+          required: true
+          description: "El usuario, por el `id` que publica cada fila de `GET /seguridad/usuarios`"
+          schema: { type: string }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { type: object }
       responses:
         200:
           description: Operacion realizada

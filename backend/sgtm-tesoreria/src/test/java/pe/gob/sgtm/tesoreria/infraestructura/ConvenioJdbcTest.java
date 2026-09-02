@@ -141,7 +141,7 @@ class ConvenioJdbcTest {
             new SeleccionDeObligacion("PREDIAL", EJERCICIO, null, null);
 
     private static final SeleccionDeObligacion LO_COACTIVO =
-            new SeleccionDeObligacion("ARBITRIOS", EJERCICIO, null, null);
+            new SeleccionDeObligacion("ARBITRIO", EJERCICIO, null, null);
 
     private static Clock relojDe(LocalDate dia) {
         return Clock.fixed(dia.atStartOfDay(ZoneOffset.UTC).toInstant(), ZoneOffset.UTC);
@@ -310,11 +310,11 @@ class ConvenioJdbcTest {
             assertThat(faseDe(titular, "PREDIAL"))
                     .as("la deuda ordinaria pasa a fase CONVENIO, con asientos")
                     .isEqualTo(Fase.CONVENIO);
-            assertThat(faseDe(titular, "ARBITRIOS")).isEqualTo(Fase.CONVENIO);
+            assertThat(faseDe(titular, "ARBITRIO")).isEqualTo(Fase.CONVENIO);
             assertThat(deudaDe(titular, "PREDIAL"))
                     .as("y el total adeudado no cambia: mover de fase no condona nada")
                     .isEqualTo(PREDIAL);
-            assertThat(deudaDe(titular, "ARBITRIOS")).isEqualTo(ARBITRIOS);
+            assertThat(deudaDe(titular, "ARBITRIO")).isEqualTo(ARBITRIOS);
         }
 
         @Test
@@ -350,7 +350,7 @@ class ConvenioJdbcTest {
 
             Convenio convenio = registrarPreconvenio(titular, 6, "20");
             cobrarLaInicial(titular, convenio);
-            assertThat(faseDe(titular, "ARBITRIOS")).isEqualTo(Fase.CONVENIO);
+            assertThat(faseDe(titular, "ARBITRIO")).isEqualTo(Fase.CONVENIO);
 
             quebrar(convenio, "DOS CUOTAS CONSECUTIVAS IMPAGAS");
 
@@ -375,7 +375,7 @@ class ConvenioJdbcTest {
             assertThat(fasePorTributo(titular))
                     .as("la que venia de coactiva vuelve a COACTIVA, no a ORDINARIA")
                     .isEqualTo(faseAntes)
-                    .containsEntry("ARBITRIOS", Fase.COACTIVA)
+                    .containsEntry("ARBITRIO", Fase.COACTIVA)
                     .containsEntry("PREDIAL", Fase.ORDINARIA);
 
             assertThat(estadoDe(convenio)).isEqualTo(EstadoDeConvenio.QUEBRADO);
@@ -581,7 +581,7 @@ class ConvenioJdbcTest {
             assertThat(cerrado.cierre().importe()).isEqualTo(PREDIAL.mas(ARBITRIOS));
             assertThat(fasePorTributo(titular))
                     .containsEntry("PREDIAL", Fase.ORDINARIA)
-                    .containsEntry("ARBITRIOS", Fase.COACTIVA);
+                    .containsEntry("ARBITRIO", Fase.COACTIVA);
         }
 
         @Test
@@ -637,7 +637,7 @@ class ConvenioJdbcTest {
             assertThat(fasePorTributo(titular))
                     .as("la deuda volvio a su fase mientras el nuevo no se formalice")
                     .containsEntry("PREDIAL", Fase.ORDINARIA)
-                    .containsEntry("ARBITRIOS", Fase.COACTIVA);
+                    .containsEntry("ARBITRIO", Fase.COACTIVA);
         }
     }
 
@@ -1384,14 +1384,14 @@ class ConvenioJdbcTest {
     private static Map<String, Dinero> deudaPorTributo(long contribuyenteId) {
         Map<String, Dinero> deuda = new LinkedHashMap<>();
         deuda.put("PREDIAL", deudaDe(contribuyenteId, "PREDIAL"));
-        deuda.put("ARBITRIOS", deudaDe(contribuyenteId, "ARBITRIOS"));
+        deuda.put("ARBITRIO", deudaDe(contribuyenteId, "ARBITRIO"));
         return deuda;
     }
 
     private static Map<String, Fase> fasePorTributo(long contribuyenteId) {
         Map<String, Fase> fases = new LinkedHashMap<>();
         fases.put("PREDIAL", faseDe(contribuyenteId, "PREDIAL"));
-        fases.put("ARBITRIOS", faseDe(contribuyenteId, "ARBITRIOS"));
+        fases.put("ARBITRIO", faseDe(contribuyenteId, "ARBITRIO"));
         return fases;
     }
 
@@ -1642,7 +1642,7 @@ class ConvenioJdbcTest {
     private static long contribuyenteConDeuda(String sufijo) {
         long id = crearContribuyente(municipalidad, sufijo);
         asentarCargo(id, "PREDIAL", PREDIAL, Fase.ORDINARIA);
-        asentarCargo(id, "ARBITRIOS", ARBITRIOS, Fase.COACTIVA);
+        asentarCargo(id, "ARBITRIO", ARBITRIOS, Fase.COACTIVA);
         return id;
     }
 

@@ -277,7 +277,7 @@ class CarteraEnElPlanJdbcTest {
                 .as(
                         "la siembra tiene que ejercitar la fase y el saldo negativo, o una"
                                 + " divergencia en esas dos condiciones no cambiaria ninguna cifra")
-                .containsExactly("ARBITRIOS", "PREDIAL", "VEHICULAR");
+                .containsExactly("ARBITRIO", "PREDIAL", "VEHICULAR");
     }
 
     // ------------------------------------------------------------------
@@ -340,7 +340,7 @@ class CarteraEnElPlanJdbcTest {
                                 + ") AS n");
                 for (int ejercicio : new int[] {2026, 2027}) {
                     sentencia.execute(cargos(municipalidadId, ejercicio, "PREDIAL", null));
-                    sentencia.execute(cargos(municipalidadId, ejercicio, "ARBITRIOS", "c.id"));
+                    sentencia.execute(cargos(municipalidadId, ejercicio, "ARBITRIO", "c.id"));
                 }
                 // Los dos casos que hacen OBSERVABLE una divergencia entre la consulta de
                 // produccion y la transcrita aqui. Sin ellos, anadirle a produccion un

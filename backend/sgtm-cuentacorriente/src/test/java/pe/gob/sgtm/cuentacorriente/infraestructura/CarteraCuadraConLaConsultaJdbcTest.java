@@ -227,7 +227,7 @@ class CarteraCuadraConLaConsultaJdbcTest {
                     .isEqualTo(deLaConsulta);
             assertThat(delPanel)
                     .containsExactly(
-                            Map.entry("ARBITRIOS", Dinero.de("73.00")),
+                            Map.entry("ARBITRIO", Dinero.de("73.00")),
                             Map.entry("PREDIAL", Dinero.de("644.90")),
                             Map.entry("VEHICULAR", Dinero.de("382.00")));
         }
@@ -351,9 +351,7 @@ class CarteraCuadraConLaConsultaJdbcTest {
                     .as("C-0001 solo tiene PREDIAL, de 2026 y de 2027")
                     .containsOnly("PREDIAL");
             assertThat(deC0001).hasSize(2);
-            assertThat(deC0002)
-                    .extracting(ObligacionConDeuda::tributo)
-                    .containsExactly("ARBITRIOS");
+            assertThat(deC0002).extracting(ObligacionConDeuda::tributo).containsExactly("ARBITRIO");
             assertThat(deC0002)
                     .singleElement()
                     .satisfies(
@@ -423,7 +421,7 @@ class CarteraCuadraConLaConsultaJdbcTest {
             // El ARBITRIOS de C-0002 tiene la cuota 1 en ORDINARIA y la 2 en VALOR. Ninguna
             // de las dos lecturas filtra por fase, y por eso las dos dicen 73,00: acotar por
             // una sola fase dejaria fuera 36,50 de deuda viva en un lado y no en el otro.
-            assertThat(pendienteDe("ARBITRIOS", EJERCICIO, CORTE)).isEqualTo(Dinero.de("73.00"));
+            assertThat(pendienteDe("ARBITRIO", EJERCICIO, CORTE)).isEqualTo(Dinero.de("73.00"));
             assertThat(sumaDeLaConsultaDe("C-0002", EJERCICIO, CORTE))
                     .isEqualTo(Dinero.de("73.00"));
         }
@@ -664,7 +662,7 @@ class CarteraCuadraConLaConsultaJdbcTest {
                             asiento(
                                     c2,
                                     EJERCICIO,
-                                    "ARBITRIOS",
+                                    "ARBITRIO",
                                     Concepto.INSOLUTO,
                                     TipoAsiento.CARGO,
                                     Fase.ORDINARIA,
@@ -677,7 +675,7 @@ class CarteraCuadraConLaConsultaJdbcTest {
                             asiento(
                                     c2,
                                     EJERCICIO,
-                                    "ARBITRIOS",
+                                    "ARBITRIO",
                                     Concepto.INSOLUTO,
                                     TipoAsiento.CARGO,
                                     Fase.VALOR,

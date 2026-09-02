@@ -16,6 +16,7 @@ import pe.gob.sgtm.catastro.VersionTransferida;
 import pe.gob.sgtm.contribuyentes.DirectorioDeContribuyentes;
 import pe.gob.sgtm.contribuyentes.ResumenDeContribuyente;
 import pe.gob.sgtm.cuentacorriente.GeneradorDeCargos;
+import pe.gob.sgtm.cuentacorriente.TributoDelLibro;
 import pe.gob.sgtm.documentos.EmitirDocumento;
 import pe.gob.sgtm.documentos.FormatoDeDocumento;
 import pe.gob.sgtm.documentos.ModeloDeDocumento;
@@ -116,12 +117,12 @@ public class TransferirARentas {
      * una obligacion por esa combinacion. Inventar aqui un {@code PREDIAL_FISCALIZADO} crearia una
      * obligacion paralela que ninguna consulta de deuda sumaria con la ordinaria.
      */
-    private static final String TRIBUTO_PREDIAL = "PREDIAL";
+    private static final String TRIBUTO_PREDIAL = TributoDelLibro.PREDIAL.texto();
 
-    private static final String TRIBUTO_VEHICULAR = "VEHICULAR";
+    private static final String TRIBUTO_VEHICULAR = TributoDelLibro.VEHICULAR.texto();
 
     /** Y la multa del art. 176, que no es tributo y por eso se imputa aparte. */
-    private static final String TRIBUTO_MULTA = "MULTA_TRIBUTARIA";
+    private static final String TRIBUTO_MULTA = TributoDelLibro.MULTA_TRIBUTARIA.texto();
 
     /** Los estados en los que el contraste de una liquidacion ya es definitivo (AC 3). */
     private static final Set<EstadoDeLiquidacion> CON_CONTRASTE_DEFINITIVO =

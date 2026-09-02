@@ -317,12 +317,13 @@ class AltaDeDeudaSobreUnVehiculoFronteraTest {
                 .isEqualTo(422);
         assertThat(resultado.getResponse().getContentAsString())
                 .as(
-                        "y por el motivo que es: «no tiene titular» y no «es de otro». Sin"
-                                + " comprobar la existencia, la lista vacia cae en la rama del"
-                                + " titular ajeno y contesta 422 igual — con un mensaje que habla"
-                                + " de un titular que no existe")
+                        "y por el motivo que es: «no esta en el padron» y no «es de otro». Los dos"
+                                + " se arreglan de forma distinta —uno tecleando el identificador"
+                                + " que es, el otro declarando que la deuda es del titular"
+                                + " anterior— y desde #680 dicen cosas distintas")
                 .contains("999999")
-                .contains("no tiene titular");
+                .contains("no esta en el padron de esta municipalidad")
+                .doesNotContain("deudaDeTitularAnterior");
     }
 
     @Test
@@ -333,7 +334,7 @@ class AltaDeDeudaSobreUnVehiculoFronteraTest {
         assertThat(resultado.getResponse().getStatus()).isEqualTo(422);
         assertThat(resultado.getResponse().getContentAsString())
                 .contains("999999")
-                .contains("no tiene titular");
+                .contains("no esta en el padron de esta municipalidad");
     }
 
     @Test

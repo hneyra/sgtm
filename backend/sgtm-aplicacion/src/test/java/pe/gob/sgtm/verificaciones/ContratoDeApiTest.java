@@ -178,6 +178,13 @@ class ContratoDeApiTest {
                     // el cliente tendria que reimplementar la precedencia.
                     "GET /seguridad/usuarios/{id}/grupos",
                     "GET /seguridad/usuarios/{id}/permisos",
+                    // #585 — y la ESCRITURA de esa excepcion, que #543 dejo sin poder tocar:
+                    // `AdministrarPermisos.fijarParaUsuario` existia —transaccional, con su
+                    // Observacion y con la guarda del ultimo administrador— y no la llamaba
+                    // nadie, asi que negarle un privilegio a una persona sin sacarla de su
+                    // grupo solo se podia por SQL directo, sin fila de auditoria y sin pasar
+                    // por esa guarda.
+                    "PUT /seguridad/usuarios/{id}/permisos",
                     // #583 — las dos preguntas que la matriz efectiva no puede contestar.
                     // La primera es lo CONFIGURADO de una cuenta: la efectiva aplica la
                     // regla del guardia, asi que a una cuenta deshabilitada le contesta la
@@ -247,6 +254,10 @@ class ContratoDeApiTest {
                     "POST /fiscalizacion/programas/{id}/muestra",
                     "POST /fiscalizacion/predial/actas",
                     "POST /fiscalizacion/vehicular",
+                    // #599: la lectura de actas, que faltaba. Hasta que el acta tuvo donde
+                    // consignar el uso hallado (V76) no habia nada honesto que publicar, y
+                    // eso es lo que #546 midio al negarse a esta misma lectura.
+                    "GET /fiscalizacion/actas",
                     // #49: la liquidacion, su reliquidacion y su estado, mas las cuatro
                     // consultas del modulo. Las tres primeras son rutas que la pantalla no
                     // declara —una pantalla declara UN endpoint— y entran por

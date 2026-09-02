@@ -76,7 +76,7 @@ class ModeloDeLaConstanciaDeNoAdeudoTest {
         assertThat(negada.tablas().getFirst().filas())
                 .containsExactly(
                         List.of("PREDIAL", "2026", "Pendiente", "500.00"),
-                        List.of("ARBITRIOS", "2026", "Cancelado", "0.00"));
+                        List.of("ARBITRIO", "2026", "Cancelado", "0.00"));
 
         ModeloDeDocumento emitida = ModeloDeLaConstanciaDeNoAdeudo.de(sinDeuda());
         assertThat(emitida.cabecera())
@@ -201,7 +201,7 @@ class ModeloDeLaConstanciaDeNoAdeudoTest {
                         // Con dos decimales porque asi llegan del libro: `dinero` es
                         // numeric(15,2), y el papel no reformatea lo que le dan (RNF-083).
                         obligacion("PREDIAL", Dinero.de("500.00")),
-                        obligacion("ARBITRIOS", Dinero.de("0.00"))));
+                        obligacion("ARBITRIO", Dinero.de("0.00"))));
     }
 
     private static ConstanciaDeNoAdeudo sinDeuda() {

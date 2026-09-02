@@ -28,6 +28,11 @@ import pe.gob.sgtm.fiscalizacion.dominio.TipoDePrograma;
  * hallado/declarado se pueda reproducir después (RNF-075), igual que {@code
  * RegistrarDeclaracionJurada} en {@code rentas} (#28).
  *
+ * <p>El <b>uso hallado</b> lo anota el acta desde #599 ({@code acta_fiscalizacion.uso_hallado},
+ * V76) y sólo la predial: hasta entonces lo tecleaba quien liquidaba, y quien visitó no tenía dónde
+ * dejarlo escrito. Las reglas que lo atan —sólo predial, y obligatorio si el hallazgo es {@code
+ * USO_DISTINTO}— viven en {@link ActaFiscalizacion} y otra vez en la base, no aquí.
+ *
  * <p>La versión —la visita número N sobre este contribuyente dentro del mismo programa— sale de
  * {@link ActaFiscalizacionRepository#siguienteVersion}: refiscalizar no reemplaza el acta anterior,
  * agrega una versión (V4: {@code acta_fisc_version_uq}).
@@ -62,6 +67,7 @@ public class RegistrarActaFiscalizacion {
             String fiscalizador,
             @Nullable Hallazgo hallazgo,
             @Nullable BigDecimal areaHallada,
+            @Nullable String usoHallado,
             @Nullable String detalle,
             Observacion observacion) {
 
@@ -80,6 +86,7 @@ public class RegistrarActaFiscalizacion {
                         fiscalizador,
                         hallazgo,
                         areaHallada == null ? null : new AreaM2(areaHallada),
+                        usoHallado,
                         detalle,
                         observacion));
     }

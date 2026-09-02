@@ -116,6 +116,7 @@ class LiquidarYReliquidarTest {
                                 "J. Perez",
                                 Hallazgo.SUBVALUADOR,
                                 AreaM2.de("300.00"),
+                                null,
                                 "ampliacion no declarada",
                                 OBSERVACION));
         liquidaciones.actaDe(actaId, CONTRIBUYENTE);
@@ -246,7 +247,11 @@ class LiquidarYReliquidarTest {
             // TIPO: los cuatro puertos que la liquidacion usa no declaran un solo metodo que
             // escriba, asi que no hay camino desde aqui al padron ni a las declaraciones.
             assertThat(metodosDe(pe.gob.sgtm.catastro.TitularesDelPredio.class))
-                    .containsExactlyInAnyOrder("de", "deVarios");
+                    .as(
+                            "«estaEnElPadron» entra con #680: pregunta si el identificador apunta a"
+                                    + " una fila, que es lo que separa «ese predio no existe» de"
+                                    + " «existe y no lo reclama nadie». Lee, no escribe")
+                    .containsExactlyInAnyOrder("de", "deVarios", "estaEnElPadron");
             assertThat(metodosDe(pe.gob.sgtm.catastro.LectorDeFichas.class))
                     .containsExactlyInAnyOrder("fichaVigenteEn", "areaDeLaVersion");
             assertThat(metodosDe(pe.gob.sgtm.catastro.LectorDeCaracteristicas.class))
@@ -276,6 +281,63 @@ class LiquidarYReliquidarTest {
             assertThatThrownBy(() -> liquidarDe(E2024, E2024))
                     .isInstanceOf(LiquidarFiscalizacion.ActaYaLiquidada.class)
                     .hasMessageContaining("reliquidar");
+        }
+    }
+
+    @Nested
+    @DisplayName("#599 — el uso hallado sale del acta, no de quien liquida")
+    class ElUsoHalladoSaleDelActa {
+
+        @Test
+        @DisplayName("con el uso observado en el acta, la linea lo copia y la condicion lo dice")
+        void laLineaCopiaElUsoDelActa() {
+            long conUso =
+                    actas.sembrar(
+                            ActaFiscalizacion.nuevaPredial(
+                                    1L,
+                                    2,
+                                    CONTRIBUYENTE,
+                                    PREDIO,
+                                    FICHA_VIGENTE,
+                                    LocalDate.of(2026, 3, 1),
+                                    "J. Perez",
+                                    Hallazgo.USO_DISTINTO,
+                                    AreaM2.de("120.00"),
+                                    "COMERCIO",
+                                    "vivienda convertida en bodega",
+                                    OBSERVACION));
+            liquidaciones.actaDe(conUso, CONTRIBUYENTE);
+
+            Liquidacion emitida =
+                    liquidar.liquidar(
+                            conUso,
+                            E2024,
+                            E2024,
+                            TipoDeFiscalizacion.CIERTA,
+                            "Uso distinto al declarado",
+                            HOY,
+                            OBSERVACION);
+
+            LineaDeLiquidacion linea = liquidaciones.lineasDe(emitida.identificador()).get(0);
+            assertThat(linea.usoDeclarado()).isEqualTo("CASA_HABITACION");
+            assertThat(linea.usoHallado())
+                    .as(
+                            "hasta #599 esto llegaba como argumento de liquidar: lo tecleaba quien"
+                                    + " liquidaba, no quien visito")
+                    .isEqualTo("COMERCIO");
+            assertThat(linea.condicion()).isEqualTo(CondicionFiscalizada.USO_DISTINTO);
+        }
+
+        @Test
+        @DisplayName("y sin uso en el acta la linea no se lo inventa: el area manda")
+        void sinUsoEnElActaLaLineaNoSeLoInventa() {
+            // El contraste que impide «arreglarlo» poniendo cualquier cosa: el acta de `armar()`
+            // no consigna uso, asi que la linea sale sin el y la condicion la deciden las areas.
+            Liquidacion emitida = liquidarDe(E2024, E2024);
+            LineaDeLiquidacion linea = liquidaciones.lineasDe(emitida.identificador()).get(0);
+
+            assertThat(linea.usoHallado()).isNull();
+            assertThat(linea.condicion()).isEqualTo(CondicionFiscalizada.SUBVALUADOR);
         }
     }
 
@@ -465,7 +527,6 @@ class LiquidarYReliquidarTest {
                 hasta,
                 TipoDeFiscalizacion.CIERTA,
                 "Ampliacion detectada en inspeccion",
-                null,
                 HOY,
                 OBSERVACION);
     }

@@ -208,6 +208,12 @@ public class MuestraController {
      * El cuerpo del sorteo. <b>Sólo la observación</b>: a quién se fiscaliza lo deciden los
      * parámetros del programa, no esta petición — si viajaran aquí, la muestra dejaría de ser del
      * programa y dos sorteos del mismo podrían dar cosas distintas.
+     *
+     * <p><b>Y eso ya no es sólo un javadoc</b> (#550): ADR-0023 lo decidió por escrito frente a la
+     * alternativa —que «Programar fiscalización» mandara los predios marcados en la grilla de
+     * «Omisos y subvaluadores»— y {@code LaMuestraSeSorteaTest} exige que este {@code record} tenga
+     * <b>exactamente un componente</b>. Un campo más aquí pone esa prueba en rojo, que es la forma
+     * de que quien lo añada relea el ADR antes.
      */
     public record PeticionDeMuestra(@Nullable String observacion) {}
 

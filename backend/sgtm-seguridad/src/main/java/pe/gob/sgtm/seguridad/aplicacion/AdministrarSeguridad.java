@@ -53,9 +53,10 @@ import pe.gob.sgtm.web.ProblemaDeNegocio;
  * §3)— y por eso {@link #registrarUsuario} <b>no promete la otra mitad</b>: escribe una fila, en
  * una transaccion, y quien la lee tiene que saber que la cuenta se declara aparte.
  *
- * <p>{@code AdministrarPermisos.fijarParaUsuario} sigue sin ruta, y por un motivo propio que no es
- * este: es la excepcion de usuario —no una mitad de nadie—, y su lectura entro en #543 ({@code GET
- * /seguridad/usuarios/&#123;id&#125;/permisos}).
+ * <p>{@code AdministrarPermisos.fijarParaUsuario} <b>ya no</b>: estuvo en la misma situacion por un
+ * motivo propio —es la excepcion de usuario, y escribirla sin poder <b>leerla</b> antes era
+ * administrar a ciegas—, y ese motivo se agoto cuando #543 publico la lectura. La escritura es
+ * {@code PUT /seguridad/usuarios/&#123;id&#125;/permisos} desde #585.
  */
 @Service
 public class AdministrarSeguridad {

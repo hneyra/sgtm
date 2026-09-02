@@ -6,6 +6,7 @@ import java.util.List;
 import java.util.Locale;
 import java.util.Objects;
 import org.jspecify.annotations.Nullable;
+import pe.gob.sgtm.cuentacorriente.TributoDelLibro;
 import pe.gob.sgtm.dominio.Dinero;
 import pe.gob.sgtm.dominio.Ejercicio;
 import pe.gob.sgtm.dominio.Observacion;
@@ -83,7 +84,7 @@ public record LiquidacionDeCostas(
      * exactamente lo que esta clase existe para impedir. Cuando #193 cierre D-02c con el arancel
      * aprobado se vera si los gastos tienen tarifa propia o si entran por otra puerta.
      */
-    public static final String TRIBUTO = "COSTAS PROCESALES";
+    public static final String TRIBUTO = TributoDelLibro.COSTAS_PROCESALES.texto();
 
     /** {@code liquidacion_costas.numero varchar(20)} (V35). */
     public static final int NUMERO_MAXIMO = 20;

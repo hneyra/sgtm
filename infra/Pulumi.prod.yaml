@@ -123,7 +123,23 @@ config:
   # `5fc02f3` (2026-08-29T20:51Z, `success` en los tres jobs de imagen) trae los runners
   # batch de catálogo vial y arancel —ya estaban en `1ec6bd6`, su ancestro— y además
   # `V28`…`V57`, `PublicarCuadros` y `PublicarParametros`.
-  sgtm:applicationBootstrapVersion: 5fc02f3a44931d69ac3012e55b17f02dc616eac8
+  #
+  # **Y volvió a quedarse atrás, exactamente igual (issue #675).** Entre el 2026-08-29 y
+  # el 2026-09-02 entraron trece migraciones —`V58`…`V71`— y esta línea no se movió: la
+  # versión declarada trae **48** y `main` declara **61**. `pulumi preview
+  # --expect-no-changes` salía en verde todas las noches, porque compara el clúster con
+  # lo declarado y no hay ninguna diferencia que ver: el Job lleva la versión en el
+  # nombre, existe desde el último despliegue y nadie lo tocó.
+  #
+  # Aquí duele más que en `stg` por un motivo distinto: `aplicar-prod` tiene
+  # `needs: aplicar-stg`, y `aplicar-stg` estaba rojo desde el 2026-08-30 por la
+  # extensión `postgis` que falta, así que **prod no se despliega desde el 2026-08-29** y
+  # el paso «El ambiente aplicado se comprueba a sí mismo», que se añadió al día
+  # siguiente, **no se ha ejecutado nunca contra producción**. Por eso ese guion pasa a
+  # correr también en `deteccion-de-deriva`, que sí corre a diario.
+  #
+  # `cb4c1482` (2026-09-02T05:49Z, `success` en los tres jobs de imagen) trae las 62.
+  sgtm:applicationBootstrapVersion: cb4c1482565f5e7c2842aec878cdb730c2c7a41a
   # La municipalidad que se implanta. D-01 —municipalidad piloto— se decidió el
   # 2026-08-24: Municipalidad Distrital de Catacaos (`decisiones-abiertas.md`), en
   # reemplazo de la Municipalidad Distrital de Chala que se había decidido un día antes.
