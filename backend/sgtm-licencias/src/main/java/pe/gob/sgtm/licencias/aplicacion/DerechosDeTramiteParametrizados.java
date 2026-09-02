@@ -3,11 +3,13 @@ package pe.gob.sgtm.licencias.aplicacion;
 import java.math.BigDecimal;
 import java.time.LocalDate;
 import java.util.Locale;
+import java.util.Optional;
 import org.springframework.stereotype.Service;
 import pe.gob.sgtm.dominio.Ejercicio;
 import pe.gob.sgtm.dominio.ValorNormativo;
 import pe.gob.sgtm.licencias.dominio.TipoDeCertificado;
 import pe.gob.sgtm.parametros.LectorDeParametros;
+import pe.gob.sgtm.parametros.ParametroSinPublicar;
 import pe.gob.sgtm.parametros.ParametrosSellados;
 
 /**
@@ -232,9 +234,16 @@ public class DerechosDeTramiteParametrizados {
      * inventado: con «cualquier concepto» bastaria un recibo de fotocopias para emitir una
      * licencia.
      */
-    public static final class DerechoSinParametrizar extends RuntimeException {
+    public static final class DerechoSinParametrizar extends RuntimeException
+            implements ParametroSinPublicar {
 
         @java.io.Serial private static final long serialVersionUID = 1L;
+
+        // El aviso [serial] no aplica: `Ejercicio` es un record del dominio que no
+        // implementa Serializable, y una excepcion de negocio nunca se serializa —se
+        // lanza, se traduce a problem+json y muere ahi (ManejadorDeErrores)—.
+        @SuppressWarnings("serial")
+        private final Ejercicio ejercicio;
 
         private final String llave;
 
@@ -258,12 +267,19 @@ public class DerechosDeTramiteParametrizados {
                             tipo,
                             clave,
                             consecuencia));
+            this.ejercicio = ejercicio;
             this.llave = tipo + ":" + clave;
         }
 
+        @Override
+        public Ejercicio ejercicio() {
+            return ejercicio;
+        }
+
         /** La llave que falta, {@code tipo:clave}, legible por programa. */
-        public String llave() {
-            return llave;
+        @Override
+        public Optional<String> llave() {
+            return Optional.of(llave);
         }
     }
 }

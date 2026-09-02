@@ -15,6 +15,7 @@ import pe.gob.sgtm.documentos.FormatoDeDocumento;
 import pe.gob.sgtm.dominio.ModalidadDeNotificacion;
 import pe.gob.sgtm.dominio.Observacion;
 import pe.gob.sgtm.dominio.ResultadoDeNotificacion;
+import pe.gob.sgtm.parametros.FaltaPublicar;
 import pe.gob.sgtm.parametros.LectorDeParametros;
 import pe.gob.sgtm.sanciones.aplicacion.NotificarResolucionDeGerencia;
 import pe.gob.sgtm.sanciones.aplicacion.PlazosDeSancionesParametrizados;
@@ -176,13 +177,18 @@ public class ResolucionesDeGerenciaController {
             // estado del procedimiento, y quien opera lo arregla notificando o esperando.
             throw new ProblemaDeNegocio(
                     CodigoDeError.CONFLICTO, PeticionesDeSanciones.mensajeDe(conflicto));
-        } catch (RegistrarDescargo.PapeletaSinNadaQueImpugnar
-                | ResolverConResolucionDeGerencia.DescargoDeOtraPapeleta
-                | PlazosDeSancionesParametrizados.PlazoSinParametrizar
-                | LectorDeParametros.EjercicioSinSellar
-                | IllegalArgumentException invalido) {
+        } catch (PlazosDeSancionesParametrizados.PlazoSinParametrizar
+                | LectorDeParametros.EjercicioSinSellar falta) {
             // Las dos de parametros no son un fallo del servidor: es una cifra que todavia nadie
             // ha publicado, y con D-02a abierta es el estado normal. Ver la cabecera de la clase.
+            // Falta publicar una cifra normativa, no un campo de la peticion: el 422 sale con
+            // el miembro `parametroQueFalta` (#604, #691). Sin el, la interfaz no puede decir UNA
+            // de las dos cosas —«corrige el formulario» o «hay que publicar una cifra»— y acaba
+            // enumerando las dos, que es peor que no decir nada.
+            throw FaltaPublicar.problema(falta);
+        } catch (RegistrarDescargo.PapeletaSinNadaQueImpugnar
+                | ResolverConResolucionDeGerencia.DescargoDeOtraPapeleta
+                | IllegalArgumentException invalido) {
             throw PeticionesDeSanciones.invalido(invalido);
         }
     }
@@ -219,13 +225,18 @@ public class ResolucionesDeGerenciaController {
         } catch (NotificarResolucionDeGerencia.ResolucionInexistente noExiste) {
             throw new ProblemaDeNegocio(
                     CodigoDeError.NO_ENCONTRADO, PeticionesDeSanciones.mensajeDe(noExiste));
-        } catch (NotificarResolucionDeGerencia.DiligenciaAnteriorALaResolucion
-                | NotificarResolucionDeGerencia.SinDireccion
-                | PlazosDeSancionesParametrizados.PlazoSinParametrizar
-                | LectorDeParametros.EjercicioSinSellar
-                | IllegalArgumentException invalido) {
+        } catch (PlazosDeSancionesParametrizados.PlazoSinParametrizar
+                | LectorDeParametros.EjercicioSinSellar falta) {
             // Igual que en `dictar`: el plazo de cumplimiento de la ordinaria sale del conjunto
             // sellado, y que falte no es un fallo del servidor. Ver la cabecera de la clase.
+            // Falta publicar una cifra normativa, no un campo de la peticion: el 422 sale con
+            // el miembro `parametroQueFalta` (#604, #691). Sin el, la interfaz no puede decir UNA
+            // de las dos cosas —«corrige el formulario» o «hay que publicar una cifra»— y acaba
+            // enumerando las dos, que es peor que no decir nada.
+            throw FaltaPublicar.problema(falta);
+        } catch (NotificarResolucionDeGerencia.DiligenciaAnteriorALaResolucion
+                | NotificarResolucionDeGerencia.SinDireccion
+                | IllegalArgumentException invalido) {
             throw PeticionesDeSanciones.invalido(invalido);
         }
     }

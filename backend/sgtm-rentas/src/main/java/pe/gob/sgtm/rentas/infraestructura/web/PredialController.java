@@ -21,6 +21,7 @@ import pe.gob.sgtm.dominio.Dinero;
 import pe.gob.sgtm.dominio.Ejercicio;
 import pe.gob.sgtm.dominio.Observacion;
 import pe.gob.sgtm.dominio.PoliticasDeRedondeo;
+import pe.gob.sgtm.parametros.FaltaPublicar;
 import pe.gob.sgtm.parametros.LectorDeParametros;
 import pe.gob.sgtm.parametros.ParametrosSellados;
 import pe.gob.sgtm.parametros.PoliticasDeRedondeoSelladas;
@@ -109,11 +110,16 @@ import pe.gob.sgtm.web.RespuestaPaginada;
  * IMPUESTO_POR_TRAMO} y {@code CUOTA}—, asi que basta con que la campana de observacion vaya por el
  * tercero para que la emision entera conteste 500.
  *
- * <p><b>Y sale sin el miembro {@code parametroQueFalta}</b>, igual que las otras seis de aqui: este
- * controlador no publica el discriminador de #604 en ninguno de sus 422 —lo hizo solo {@code
- * ConvenioController}—, y darselo a una de las siete diria por contrato que las otras seis son
- * campos que quien atiende puede corregir. Extenderlo a los cinco controladores que faltan es su
- * propio trabajo, no un efecto lateral de este.
+ * <p><b>Y las siete salen con el miembro {@code parametroQueFalta}</b> (#691). #604 lo cableo solo
+ * en {@code ConvenioController}, y aqui quedo anotado que extenderlo era su propio trabajo: ese
+ * trabajo es #691, que lo llevo a los veinticinco puntos de traduccion de los seis modulos que
+ * faltaban. Lo traduce {@link FaltaPublicar}, no un ayudante privado por controlador.
+ *
+ * <p>La septima —{@code PoliticasDeRedondeo.PuntoSinPolitica}— tiene su propio {@code catch} y no
+ * por gusto: es la unica que no puede declarar {@code ParametroSinPublicar}, porque vive en el
+ * dominio puro y no sabe de que ejercicio salieron sus politicas (regla 7). El ejercicio se lo
+ * pone quien lo pidio, que es este controlador, y la llave se compone con el punto que la
+ * excepcion si publica.
  *
  * <p>Lo que <b>no</b> cambia: un fallo de verdad del servidor sigue siendo 500 con su incidencia.
  * Una traduccion demasiado ancha —convertirlo todo en 422— es peor que el defecto que arregla, y
@@ -263,9 +269,17 @@ public class PredialController {
                 | PoliticasDeRedondeoSelladas.SinPuntosObservados
                 | PoliticasDeRedondeoSelladas.MediaPolitica
                 | PoliticasDeRedondeoSelladas.EscalaNoEntera
-                | PoliticasDeRedondeoSelladas.ModoDesconocido
-                | PoliticasDeRedondeo.PuntoSinPolitica falta) {
-            throw new ProblemaDeNegocio(CodigoDeError.VALIDACION, mensajeDe(falta));
+                | PoliticasDeRedondeoSelladas.ModoDesconocido falta) {
+            // Falta publicar una cifra normativa, no un campo de la peticion: el 422 sale con
+            // el miembro `parametroQueFalta` (#604, #691). Sin el, la interfaz no puede decir UNA
+            // de las dos cosas —«corrige el formulario» o «hay que publicar una cifra»— y acaba
+            // enumerando las dos, que es peor que no decir nada.
+            throw FaltaPublicar.problema(falta);
+        } catch (PoliticasDeRedondeo.PuntoSinPolitica sinPolitica) {
+            // La unica que no puede publicar su ejercicio: vive en el dominio puro y no sabe de
+            // que conjunto salieron sus politicas (regla 7). El ejercicio lo pone quien lo pidio,
+            // y la llave se compone con el punto, que la excepcion si nombra (#691).
+            throw FaltaPublicar.problema(elEjercicio, sinPolitica);
         }
     }
 
@@ -306,9 +320,17 @@ public class PredialController {
                 | PoliticasDeRedondeoSelladas.SinPuntosObservados
                 | PoliticasDeRedondeoSelladas.MediaPolitica
                 | PoliticasDeRedondeoSelladas.EscalaNoEntera
-                | PoliticasDeRedondeoSelladas.ModoDesconocido
-                | PoliticasDeRedondeo.PuntoSinPolitica falta) {
-            throw new ProblemaDeNegocio(CodigoDeError.VALIDACION, mensajeDe(falta));
+                | PoliticasDeRedondeoSelladas.ModoDesconocido falta) {
+            // Falta publicar una cifra normativa, no un campo de la peticion: el 422 sale con
+            // el miembro `parametroQueFalta` (#604, #691). Sin el, la interfaz no puede decir UNA
+            // de las dos cosas —«corrige el formulario» o «hay que publicar una cifra»— y acaba
+            // enumerando las dos, que es peor que no decir nada.
+            throw FaltaPublicar.problema(falta);
+        } catch (PoliticasDeRedondeo.PuntoSinPolitica sinPolitica) {
+            // La unica que no puede publicar su ejercicio: vive en el dominio puro y no sabe de
+            // que conjunto salieron sus politicas (regla 7). El ejercicio lo pone quien lo pidio,
+            // y la llave se compone con el punto, que la excepcion si nombra (#691).
+            throw FaltaPublicar.problema(ejercicio, sinPolitica);
         } catch (IllegalArgumentException mal) {
             throw new ProblemaDeNegocio(CodigoDeError.VALIDACION, mensajeDe(mal));
         }

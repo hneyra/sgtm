@@ -180,7 +180,10 @@ public class ResumenAnualDeLicencias {
                     conteos.canceladas(),
                     conteos.duplicados(),
                     conteos.vigentesAlCierre(),
-                    "Falta el parametro " + sinParametro.llave() + " del ejercicio " + ejercicio,
+                    "Falta el parametro "
+                            + sinParametro.llave().orElseThrow()
+                            + " del ejercicio "
+                            + ejercicio,
                     alCierre);
         } catch (LectorDeParametros.EjercicioSinSellar sinConjunto) {
             // Un año sin conjunto sellado no tiene concepto del TUPA que pedirle a la caja. Se

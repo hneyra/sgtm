@@ -42,6 +42,7 @@ import pe.gob.sgtm.licencias.dominio.EstadoDeLicencia;
 import pe.gob.sgtm.licencias.dominio.LicenciaRepository;
 import pe.gob.sgtm.licencias.dominio.MovimientoDeLicenciaRepository;
 import pe.gob.sgtm.licencias.dominio.TipoDeLicencia;
+import pe.gob.sgtm.parametros.FaltaPublicar;
 import pe.gob.sgtm.parametros.LectorDeParametros;
 import pe.gob.sgtm.web.Api;
 import pe.gob.sgtm.web.CodigoDeError;
@@ -243,7 +244,11 @@ public class LicenciaController {
             // pedirlo, en vez de recibir «error interno» y un identificador de incidencia.
             // `EjercicioSinSellar` —que no haya NINGUN conjunto sellado— es el mismo caso y hasta
             // #562 seguia saliendo como 500 con incidencia. Ver la cabecera de la clase.
-            throw new ProblemaDeNegocio(CodigoDeError.VALIDACION, mensajeDe(sinParametro));
+            // Falta publicar una cifra normativa, no un campo de la peticion: el 422 sale con
+            // el miembro `parametroQueFalta` (#604, #691). Sin el, la interfaz no puede decir UNA
+            // de las dos cosas —«corrige el formulario» o «hay que publicar una cifra»— y acaba
+            // enumerando las dos, que es peor que no decir nada.
+            throw FaltaPublicar.problema(sinParametro);
         } catch (LicenciaRepository.NumeroDuplicado repetido) {
             throw new ProblemaDeNegocio(CodigoDeError.CONFLICTO, mensajeDe(repetido));
         }
@@ -318,7 +323,11 @@ public class LicenciaController {
             throw new ProblemaDeNegocio(CodigoDeError.VALIDACION, mensajeDe(sinPagar));
         } catch (DerechosDeTramiteParametrizados.DerechoSinParametrizar
                 | LectorDeParametros.EjercicioSinSellar sinParametro) {
-            throw new ProblemaDeNegocio(CodigoDeError.VALIDACION, mensajeDe(sinParametro));
+            // Falta publicar una cifra normativa, no un campo de la peticion: el 422 sale con
+            // el miembro `parametroQueFalta` (#604, #691). Sin el, la interfaz no puede decir UNA
+            // de las dos cosas —«corrige el formulario» o «hay que publicar una cifra»— y acaba
+            // enumerando las dos, que es peor que no decir nada.
+            throw FaltaPublicar.problema(sinParametro);
         } catch (DuplicadoDeLicenciaRepository.DuplicadoDuplicado carrera) {
             throw new ProblemaDeNegocio(CodigoDeError.CONFLICTO, mensajeDe(carrera));
         }

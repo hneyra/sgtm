@@ -37,6 +37,7 @@ import pe.gob.sgtm.documentos.FormatoDeDocumento;
 import pe.gob.sgtm.dominio.ModalidadDeNotificacion;
 import pe.gob.sgtm.dominio.Observacion;
 import pe.gob.sgtm.dominio.ResultadoDeNotificacion;
+import pe.gob.sgtm.parametros.FaltaPublicar;
 import pe.gob.sgtm.parametros.LectorDeParametros;
 import pe.gob.sgtm.web.Api;
 import pe.gob.sgtm.web.CodigoDeError;
@@ -398,11 +399,15 @@ public class ActoCoactivoController {
                 | EmitirDocumento.LaReimpresionNoCoincide enConflicto) {
             throw new ProblemaDeNegocio(CodigoDeError.CONFLICTO, motivoDe(enConflicto));
         } catch (PlazosCoactivosParametrizados.PlazoSinParametrizar
-                | LectorDeParametros.EjercicioSinSellar
-                | NotificarActoCoactivo.SinDireccion
-                | IllegalArgumentException invalido) {
+                | LectorDeParametros.EjercicioSinSellar falta) {
             // `EjercicioSinSellar` no es un fallo del servidor: es que nadie ha sellado todavia el
             // conjunto del ejercicio del acto (D-02a). Ver la cabecera de la clase (#562).
+            // Falta publicar una cifra normativa, no un campo de la peticion: el 422 sale con
+            // el miembro `parametroQueFalta` (#604, #691). Sin el, la interfaz no puede decir UNA
+            // de las dos cosas —«corrige el formulario» o «hay que publicar una cifra»— y acaba
+            // enumerando las dos, que es peor que no decir nada.
+            throw FaltaPublicar.problema(falta);
+        } catch (NotificarActoCoactivo.SinDireccion | IllegalArgumentException invalido) {
             throw new ProblemaDeNegocio(CodigoDeError.VALIDACION, motivoDe(invalido));
         }
     }

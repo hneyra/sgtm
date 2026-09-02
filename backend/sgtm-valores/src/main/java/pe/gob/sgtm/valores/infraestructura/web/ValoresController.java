@@ -31,6 +31,7 @@ import pe.gob.sgtm.dominio.Ejercicio;
 import pe.gob.sgtm.dominio.ModalidadDeNotificacion;
 import pe.gob.sgtm.dominio.Observacion;
 import pe.gob.sgtm.dominio.ResultadoDeNotificacion;
+import pe.gob.sgtm.parametros.FaltaPublicar;
 import pe.gob.sgtm.parametros.LectorDeParametros;
 import pe.gob.sgtm.valores.aplicacion.ConsultaDeValores;
 import pe.gob.sgtm.valores.aplicacion.IniciarCorridaMasiva;
@@ -248,13 +249,18 @@ public class ValoresController {
                     .body(NotificacionResource.de(guardada, exigir(nro, "nro")));
         } catch (RegistrarNotificacion.ValorInexistente noExiste) {
             throw new ProblemaDeNegocio(CodigoDeError.NO_ENCONTRADO, mensajeDe(noExiste));
-        } catch (RegistrarNotificacion.DiligenciaAnteriorALaEmision
-                | RegistrarNotificacion.SinDomicilio
-                | PlazosParametrizados.PlazoSinParametrizar
-                | LectorDeParametros.EjercicioSinSellar
-                | IllegalArgumentException invalido) {
+        } catch (PlazosParametrizados.PlazoSinParametrizar
+                | LectorDeParametros.EjercicioSinSellar falta) {
             // `EjercicioSinSellar` no es un fallo del servidor: es que nadie ha sellado todavia
             // el conjunto del ejercicio de la diligencia (D-02a). Ver la cabecera de la clase.
+            // Falta publicar una cifra normativa, no un campo de la peticion: el 422 sale con
+            // el miembro `parametroQueFalta` (#604, #691). Sin el, la interfaz no puede decir UNA
+            // de las dos cosas —«corrige el formulario» o «hay que publicar una cifra»— y acaba
+            // enumerando las dos, que es peor que no decir nada.
+            throw FaltaPublicar.problema(falta);
+        } catch (RegistrarNotificacion.DiligenciaAnteriorALaEmision
+                | RegistrarNotificacion.SinDomicilio
+                | IllegalArgumentException invalido) {
             throw new ProblemaDeNegocio(CodigoDeError.VALIDACION, mensajeDe(invalido));
         }
     }

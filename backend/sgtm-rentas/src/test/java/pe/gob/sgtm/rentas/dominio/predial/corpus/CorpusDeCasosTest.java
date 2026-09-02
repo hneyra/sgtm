@@ -570,7 +570,7 @@ class CorpusDeCasosTest {
                         corrida.valores(),
                         List.copyOf(pedidos));
             } catch (ParametrosSellados.ParametroAusente falta) {
-                if (!pedidos.add(falta.llave())) {
+                if (!pedidos.add(falta.llave().orElseThrow())) {
                     throw falta;
                 }
             }
