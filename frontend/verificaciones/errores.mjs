@@ -233,6 +233,10 @@ const FRASES = [
   ['cifra normativa · falta el conjunto', { codigo: 'VALIDACION', mensaje: 'x', parametroQueFalta: { ejercicio: 2027 } }, 'cifra normativa', 'Si nombra'],
   ['cifra normativa · falta la llave', { codigo: 'VALIDACION', mensaje: 'x', parametroQueFalta: { ejercicio: 2028, llave: 'REDONDEO' } }, 'REDONDEO', 'Si nombra'],
   ['campo de la peticion', { codigo: 'VALIDACION', mensaje: "Falta el campo 'ano'" }, 'el del servidor', 'cifra normativa, no un dato'],
+  /* El MISMO hecho con otro codigo: catastro traduce «falta publicar» a 404
+     porque alli se LEE un cuadro, y un calculo lo da como 422 (#540, #723). Con
+     el miembro, la frase tiene que salir igual. */
+  ['cifra normativa dicha como 404', { codigo: 'NO_ENCONTRADO', mensaje: 'x', parametroQueFalta: { ejercicio: 2029 } }, 'cifra normativa', 'Si nombra'],
 ];
 for (const [nombre, cuerpo, debeDecir, noDebeDecir] of FRASES) {
   globalThis.fetch = async () =>
@@ -247,12 +251,20 @@ for (const [nombre, cuerpo, debeDecir, noDebeDecir] of FRASES) {
   if (!frase.includes(debeDecir)) fallos.push(`la frase · ${nombre}: no dice «${debeDecir}» — salio «${frase.slice(0, 90)}…»`);
   if (frase.includes(noDebeDecir)) fallos.push(`la frase · ${nombre}: dice «${noDebeDecir}», que es de la OTRA causa: vuelve a enumerar`);
 }
-/* Y el contraste: un rechazo que no es de validacion no lleva ninguna frase. */
-globalThis.fetch = async () =>
-  new Response(JSON.stringify({ status: 409, codigo: 'CONFLICTO', mensaje: 'x' }), { status: 409, headers: { 'Content-Type': 'application/problem+json' } });
-await solicitar('/lo/que/sea').catch((e) => {
-  if (causasDelRechazo(e) !== null) fallos.push('la frase · un 409 no es un rechazo de validacion y no deberia llevar esta frase');
-});
+/* Los dos contrastes, y el segundo es el que impide pasarse de listo: un 409 no
+   es un rechazo de validacion, y un 404 SIN el miembro es un no-encontrado de
+   verdad —«ese numero no existe»— que no puede llevarse una frase sobre valores
+   normativos. */
+for (const [que, estado, cuerpo] of [
+  ['un 409', 409, { codigo: 'CONFLICTO', mensaje: 'x' }],
+  ['un 404 sin el miembro', 404, { codigo: 'NO_ENCONTRADO', mensaje: 'Ese numero no existe' }],
+]) {
+  globalThis.fetch = async () =>
+    new Response(JSON.stringify({ status: estado, ...cuerpo }), { status: estado, headers: { 'Content-Type': 'application/problem+json' } });
+  await solicitar('/lo/que/sea').catch((e) => {
+    if (causasDelRechazo(e) !== null) fallos.push(`la frase · ${que} no deberia llevar la frase de las causas del rechazo`);
+  });
+}
 
 // ─────────────────────────────────────────────────────────── 3. La pantalla ──
 

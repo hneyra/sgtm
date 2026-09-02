@@ -1512,7 +1512,12 @@ export default function Catastro({ dest, onDest, sujeto, onSujeto, filtros, onFi
   const estadoDeLosAranceles: 'cargando' | 'sin-sellar' | 'no-se-pudo' | 'sin-filas' | 'con-filas' =
     aranceles.cargando
       ? 'cargando'
-      : aranceles.error?.codigo === 'NO_ENCONTRADO'
+      /* Se decide por el DISCRIMINADOR y no por el código (#723): desde #730 el
+         404 de los tres cuadros trae `parametroQueFalta`, así que «el ejercicio
+         no tiene conjunto sellado» es un hecho de la respuesta y no una
+         suposición sobre qué otros 404 puede dar esta ruta. Un 404 sin él
+         —mañana, si la ruta gana otro— cae en «no se pudo», que dice la verdad. */
+      : aranceles.error?.faltaUnaCifraNormativa === true
         ? 'sin-sellar'
         : aranceles.error !== null
           ? 'no-se-pudo'

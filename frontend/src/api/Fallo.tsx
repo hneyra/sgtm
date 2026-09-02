@@ -164,7 +164,18 @@ export function explicacionDelFallo(error: ErrorDeApi | null, acceso?: string): 
  * otro módulo. Sin ella se describe la forma y no se inventa ninguna.
  */
 export function causasDelRechazo(error: ErrorDeApi | null, llave?: string): string | null {
-  if (error?.codigo !== 'VALIDACION') return null;
+  if (error === null) return null;
+  /* No sólo el 422: **el mismo hecho sale con dos códigos** y es deliberado.
+     Catastro traduce «falta publicar» a 404 porque allí se LEE un cuadro —el
+     ejercicio sin conjunto sellado no tiene esa tabla—, mientras un cálculo lo
+     da como 422 (#540, #723). Mirando sólo el código, los tres cuadros de
+     catastro se quedaban sin esta frase aunque su respuesta trae el
+     discriminador; y mirando sólo el discriminador, un 404 corriente —«ese
+     número no existe»— se llevaría una frase sobre valores normativos.
+
+     Así que se admite el 404 **sólo cuando trae el miembro**, que es lo que lo
+     distingue de un no-encontrado de verdad. */
+  if (error.codigo !== 'VALIDACION' && !(error.codigo === 'NO_ENCONTRADO' && error.faltaUnaCifraNormativa)) return null;
   /* UNA de las dos cosas, no las dos (#691, AC 5).
      Hasta que #714 llevó el discriminador a los seis módulos que no eran
      convenios, esta frase tenía que enumerar —«si nombra un dato de esta
