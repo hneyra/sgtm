@@ -2940,6 +2940,22 @@
       }
     ]
   },
+  "GET /tesoreria/cajas": {
+    "contenido": [
+      {
+        "codigo": "texto",
+        "nombre": "texto",
+        "areaCodigo": "texto",
+        "areaNombre": "texto",
+        "activa": "booleano"
+      }
+    ],
+    "pagina": "entero",
+    "tamano": "entero",
+    "totalElementos": "entero",
+    "totalPaginas": "entero",
+    "hayMas": "booleano"
+  },
   "GET /tesoreria/convenios": {
     "contenido": [
       {
@@ -5624,10 +5640,34 @@
       }
     ]
   },
+  "POST /seguridad/grupos": {
+    "id": "entero",
+    "nombre": "texto",
+    "descripcion": "texto",
+    "habilitado": "booleano",
+    "vigenciaDesde": "fecha",
+    "vigenciaHasta": "fecha"
+  },
   "POST /seguridad/grupos/{grupo}/miembros": {
     "grupoId": "entero",
     "usuarioId": "entero",
     "activo": "booleano"
+  },
+  "POST /seguridad/grupos/{id}/baja": {
+    "id": "entero",
+    "nombre": "texto",
+    "descripcion": "texto",
+    "habilitado": "booleano",
+    "vigenciaDesde": "fecha",
+    "vigenciaHasta": "fecha"
+  },
+  "POST /seguridad/grupos/{id}/reactivacion": {
+    "id": "entero",
+    "nombre": "texto",
+    "descripcion": "texto",
+    "habilitado": "booleano",
+    "vigenciaDesde": "fecha",
+    "vigenciaHasta": "fecha"
   },
   "POST /seguridad/respaldos": {
     "contenido": [
@@ -5646,6 +5686,33 @@
     "totalElementos": "entero",
     "totalPaginas": "entero",
     "hayMas": "booleano"
+  },
+  "POST /seguridad/usuarios": {
+    "id": "entero",
+    "cuenta": "texto",
+    "nombre": "texto",
+    "correo": "texto",
+    "habilitado": "booleano",
+    "vigenciaDesde": "fecha",
+    "vigenciaHasta": "fecha"
+  },
+  "POST /seguridad/usuarios/{id}/baja": {
+    "id": "entero",
+    "cuenta": "texto",
+    "nombre": "texto",
+    "correo": "texto",
+    "habilitado": "booleano",
+    "vigenciaDesde": "fecha",
+    "vigenciaHasta": "fecha"
+  },
+  "POST /seguridad/usuarios/{id}/reactivacion": {
+    "id": "entero",
+    "cuenta": "texto",
+    "nombre": "texto",
+    "correo": "texto",
+    "habilitado": "booleano",
+    "vigenciaDesde": "fecha",
+    "vigenciaHasta": "fecha"
   },
   "POST /tesoreria/caja/cierre": {
     "id": "entero",
@@ -6620,6 +6687,14 @@
       ]
     }
   ],
+  "PUT /seguridad/grupos/{id}/vigencia": {
+    "id": "entero",
+    "nombre": "texto",
+    "descripcion": "texto",
+    "habilitado": "booleano",
+    "vigenciaDesde": "fecha",
+    "vigenciaHasta": "fecha"
+  },
   "PUT /seguridad/sesion/ejercicio": {
     "id": "entero",
     "usuarioId": "entero",
@@ -6629,5 +6704,25 @@
   "PUT /seguridad/usuarios/{id}/clave": {
     "gestionadaPor": "texto",
     "destino": "texto"
+  },
+  "PUT /seguridad/usuarios/{id}/permisos": [
+    {
+      "id": "entero",
+      "acceso": "texto",
+      "grupoId": "entero",
+      "usuarioId": "entero",
+      "privilegios": [
+        "texto"
+      ]
+    }
+  ],
+  "PUT /seguridad/usuarios/{id}/vigencia": {
+    "id": "entero",
+    "cuenta": "texto",
+    "nombre": "texto",
+    "correo": "texto",
+    "habilitado": "booleano",
+    "vigenciaDesde": "fecha",
+    "vigenciaHasta": "fecha"
   }
 }

@@ -305,6 +305,12 @@ class PrediosDeRentasControllerTest {
                     new TitularDelPredio(MARIA, "SUCESION", Porcentaje.de("50")));
         }
 
+        /** No lo usa esta pantalla, pero el puerto lo declara desde #680. */
+        @Override
+        public boolean estaEnElPadron(long predioId) {
+            return true;
+        }
+
         /** No lo usa esta pantalla, pero el puerto lo declara desde #545. */
         @Override
         public java.util.Map<Long, List<TitularDelPredio>> deVarios(

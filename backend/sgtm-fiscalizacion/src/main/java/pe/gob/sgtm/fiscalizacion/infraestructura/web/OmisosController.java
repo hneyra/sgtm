@@ -19,7 +19,6 @@ import pe.gob.sgtm.contribuyentes.ResumenDeContribuyente;
 import pe.gob.sgtm.dominio.Ejercicio;
 import pe.gob.sgtm.fiscalizacion.aplicacion.DeteccionDeOmisos;
 import pe.gob.sgtm.fiscalizacion.aplicacion.EstadoDeCuentaDeFiscalizacion;
-import pe.gob.sgtm.fiscalizacion.dominio.CondicionFiscalizada;
 import pe.gob.sgtm.fiscalizacion.dominio.FilaDeOmisos;
 import pe.gob.sgtm.web.Api;
 import pe.gob.sgtm.web.CodigoDeError;
@@ -31,9 +30,13 @@ import pe.gob.sgtm.web.RespuestaPaginada;
  * Las dos consultas de fiscalización que no son de liquidación: omisos y subvaluadores ({@code
  * fisc_omisos}, RF-055) y el estado de cuenta ({@code fisc_estado_cuenta}, RF-056).
  *
- * <p>Las dos son de <b>solo lectura</b>. Detectar omisos no escribe nada, ni siquiera una marca en
- * el padrón: convertir la lista en un programa de fiscalización es la acción «Programar
- * fiscalización» de la pantalla, que ya existe desde #45.
+ * <p>Las dos son de <b>solo lectura</b>, y la detección lo es <b>del todo</b>: no escribe nada, ni
+ * siquiera una marca en el padrón. Hasta #550 este javadoc decía que convertir la lista en un
+ * programa «es la acción de la pantalla, que ya existe desde #45», y no era cierto: {@code POST
+ * /fiscalizacion/programas} registra un programa con su código, su descripción, su tipo y su fecha
+ * de inicio, y <b>no recibe predios</b>. ADR-0023 decidió que siga así —la muestra se sortea, no se
+ * manda—: lo que esta pantalla aporta al programa son sus <b>filtros</b>, y por eso los dos que
+ * también son parámetros del sorteo se leen en un solo sitio, {@link FiltroDeLaDeteccion}.
  */
 @RestController
 @RequestMapping(Api.RAIZ + "/fiscalizacion")
@@ -82,8 +85,8 @@ public class OmisosController {
         Pagina<FilaDeOmisos> pagina =
                 deteccion.detectar(
                         ejercicioDe(ejercicio, hoy),
-                        sectorOpcional(sector),
-                        condicionOpcional(condicion),
+                        FiltroDeLaDeteccion.sectorOpcional(sector),
+                        FiltroDeLaDeteccion.condicionOpcional(condicion),
                         hoy,
                         paginacion.aPaginacion(ORDEN_POR_OMISION));
 
@@ -146,23 +149,6 @@ public class OmisosController {
         }
     }
 
-    private static @Nullable String sectorOpcional(@Nullable String texto) {
-        String valor = vacioAnulo(texto);
-        return valor == null || "TODOS".equalsIgnoreCase(valor) ? null : valor;
-    }
-
-    private static @Nullable CondicionFiscalizada condicionOpcional(@Nullable String texto) {
-        String valor = vacioAnulo(texto);
-        if (valor == null || "TODAS".equalsIgnoreCase(valor) || "TODOS".equalsIgnoreCase(valor)) {
-            return null;
-        }
-        try {
-            return CondicionFiscalizada.porNombre(valor);
-        } catch (IllegalArgumentException desconocida) {
-            throw new ProblemaDeNegocio(CodigoDeError.VALIDACION, mensajeDe(desconocida));
-        }
-    }
-
     private static LocalDate fechaOpcional(
             @Nullable String texto, String campo, LocalDate porOmision) {
         if (texto == null || texto.isBlank()) {
@@ -190,10 +176,5 @@ public class OmisosController {
         }
         String limpio = texto.strip();
         return limpio.isEmpty() ? null : limpio;
-    }
-
-    private static String mensajeDe(RuntimeException excepcion) {
-        String mensaje = excepcion.getMessage();
-        return mensaje == null ? "La operacion no se pudo completar" : mensaje;
     }
 }

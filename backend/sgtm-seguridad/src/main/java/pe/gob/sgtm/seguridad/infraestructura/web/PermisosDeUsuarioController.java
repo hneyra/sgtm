@@ -4,11 +4,15 @@ import java.util.ArrayList;
 import java.util.List;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
+import org.springframework.web.bind.annotation.PutMapping;
+import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 import pe.gob.sgtm.autorizacion.Privilegio;
 import pe.gob.sgtm.autorizacion.RequiereAcceso;
+import pe.gob.sgtm.dominio.Observacion;
 import pe.gob.sgtm.seguridad.aplicacion.AdministrarPermisos;
+import pe.gob.sgtm.seguridad.dominio.Permiso;
 import pe.gob.sgtm.seguridad.dominio.PermisoEfectivo;
 import pe.gob.sgtm.web.Api;
 
@@ -30,9 +34,12 @@ import pe.gob.sgtm.web.Api;
  * esPropio || esHeredado}), que convierte una excepcion que <b>restringe</b> en una que amplia. Por
  * eso cada fila trae {@code origen} y, cuando lo hereda de un solo grupo, cual.
  *
- * <p>El acceso es {@code permisos} —la misma opcion del catalogo que la matriz de grupo— con {@code
- * LECTURA}. Va <b>en el metodo</b> aunque hoy la clase tenga un solo endpoint: es lo que hace que
- * añadir aqui una escritura no herede en silencio el privilegio de una lectura.
+ * <p>El acceso es {@code permisos} —la misma opcion del catalogo que la matriz de grupo— y el
+ * privilegio va <b>en cada metodo</b>, nunca en la clase: las dos lecturas piden {@code LECTURA} y
+ * la escritura de la excepcion (#585) pide {@code REGISTRO}, y una anotacion de clase habria dejado
+ * que la escritura heredara en silencio el privilegio de una lectura. {@code verificarArquitectura}
+ * exige que la anotacion exista «en la clase <b>o</b> en cada endpoint», no que diga lo correcto:
+ * cual acceso y cual privilegio declara cada una lo fija {@code AccesoDeLasLecturasDeUsuarioTest}.
  */
 @RestController
 @RequestMapping(Api.RAIZ + "/seguridad/usuarios/{id}/permisos")
@@ -85,5 +92,59 @@ public class PermisosDeUsuarioController {
     public Recursos.PermisosConfiguradosResource configuradosDeUsuario(
             @PathVariable("id") long usuario) {
         return Recursos.PermisosConfiguradosResource.de(administrar.configuradosDeUsuario(usuario));
+    }
+
+    /**
+     * La <b>excepcion</b> de esa cuenta: {@code PUT /api/v1/seguridad/usuarios/{id}/permisos}
+     * (#585).
+     *
+     * <h2>Que faltaba</h2>
+     *
+     * <p>{@code AdministrarPermisos.fijarParaUsuario} existia desde el primer dia —transaccional,
+     * con su {@link Observacion} y con la guarda del ultimo administrador— y <b>no la llamaba
+     * nadie</b>: la ruta solo tenia {@code get}, de modo que la unica forma de negarle un
+     * privilegio a una persona sin sacarla de su grupo era el SQL directo, que no deja fila de
+     * auditoria con quien lo decidio (regla 10, RNF-052) ni pasa por esa guarda.
+     *
+     * <h2>La semantica, que es la del {@code PUT} del grupo salvo en una cosa</h2>
+     *
+     * <p>Mismo cuerpo y mismo <i>upsert</i> por acceso: <b>lo que no viene se queda como
+     * estaba</b>, porque una lista parcial no puede traducirse en retirar en silencio todo lo
+     * demas. Lo que cambia es lo que significa {@code "privilegios": []}: en el grupo es «este
+     * grupo no otorga nada aqui», y en la cuenta es una <b>negacion</b> que sustituye a lo que el
+     * grupo le da. Por eso no se borra la fila —ademas de que aqui no se borra nada (regla 4)—: sin
+     * ella el acceso volveria a heredar del grupo, y «se le nego expresamente» y «nunca lo tuvo»
+     * volverian a leerse igual, que es justo lo que {@code GET} de esta misma ruta existe para
+     * distinguir.
+     *
+     * <p><b>Puede contestar 409</b>, con la misma guarda que la matriz del grupo y contando con la
+     * precedencia: negarle por excepcion {@code permisos}/{@code REGISTRO} al unico administrador
+     * deja la municipalidad sin quien administre, y de ahi no se sale por el sistema. La
+     * comprobacion corre <b>despues</b> del guardado y dentro de la misma transaccion, asi que lo
+     * que deshace el cambio es el rollback.
+     *
+     * <p>El acceso es {@code permisos} con <b>{@code REGISTRO}</b>, y va en el metodo: heredar el
+     * {@code LECTURA} de las lecturas de arriba dejaria que quien solo puede mirar la matriz la
+     * escribiera, y {@code verificarArquitectura} no ve <i>cual</i> acceso ni <i>cual</i>
+     * privilegio declara una anotacion.
+     */
+    @PutMapping
+    @RequiereAcceso(acceso = "permisos", privilegio = Privilegio.REGISTRO)
+    public List<PermisosController.PermisoResource> fijar(
+            @PathVariable("id") long usuario,
+            @RequestBody PermisosController.CambioDePermisos cambio) {
+
+        Observacion observacion = PermisosController.observacionDe(cambio.observacion());
+        List<PermisosController.PermisoResource> resultado = new ArrayList<>();
+
+        for (PermisosController.NivelDeAcceso nivel :
+                PermisosController.nivelesDe(cambio.niveles())) {
+            String acceso = PermisosController.accesoDe(nivel);
+            Permiso permiso =
+                    administrar.fijarParaUsuario(
+                            usuario, acceso, PermisosController.privilegios(nivel), observacion);
+            resultado.add(PermisosController.PermisoResource.de(permiso, acceso));
+        }
+        return resultado;
     }
 }

@@ -178,6 +178,13 @@ class ContratoDeApiTest {
                     // el cliente tendria que reimplementar la precedencia.
                     "GET /seguridad/usuarios/{id}/grupos",
                     "GET /seguridad/usuarios/{id}/permisos",
+                    // #585 — y la ESCRITURA de esa excepcion, que #543 dejo sin poder tocar:
+                    // `AdministrarPermisos.fijarParaUsuario` existia —transaccional, con su
+                    // Observacion y con la guarda del ultimo administrador— y no la llamaba
+                    // nadie, asi que negarle un privilegio a una persona sin sacarla de su
+                    // grupo solo se podia por SQL directo, sin fila de auditoria y sin pasar
+                    // por esa guarda.
+                    "PUT /seguridad/usuarios/{id}/permisos",
                     // #583 — las dos preguntas que la matriz efectiva no puede contestar.
                     // La primera es lo CONFIGURADO de una cuenta: la efectiva aplica la
                     // regla del guardia, asi que a una cuenta deshabilitada le contesta la
@@ -195,6 +202,19 @@ class ContratoDeApiTest {
                     "GET /seguridad/grupos/{grupo}/miembros",
                     "PUT /seguridad/grupos/{id}/permisos",
                     "GET /seguridad/grupos/{id}/permisos",
+                    // #572 — las ocho escrituras que #543 dejo censadas sin ruta. Las de
+                    // grupo solo esperaban su controlador; las de usuario esperaban la
+                    // decision de ADR-0012 §5 sobre como se coordinan las dos mitades de
+                    // una persona: esta pantalla escribe la fila del padron y el archivo
+                    // declarativo de `despliegue/identidad/` crea la cuenta del proveedor.
+                    "POST /seguridad/grupos",
+                    "POST /seguridad/grupos/{id}/baja",
+                    "POST /seguridad/grupos/{id}/reactivacion",
+                    "PUT /seguridad/grupos/{id}/vigencia",
+                    "POST /seguridad/usuarios",
+                    "POST /seguridad/usuarios/{id}/baja",
+                    "POST /seguridad/usuarios/{id}/reactivacion",
+                    "PUT /seguridad/usuarios/{id}/vigencia",
                     "GET /seguridad/sesion/permisos",
                     // #555 — a quien pertenecen las cifras de la pantalla. Ninguna
                     // operacion publicaba el nombre de la municipalidad de la sesion, asi
@@ -278,6 +298,12 @@ class ContratoDeApiTest {
                     // en ninguna parte y la decision no se distingue de un descuido.
                     "GET /coactiva/prescripcion",
                     "POST /valores/{numero}/movimientos",
+                    // #618: el catalogo de ventanillas. Cinco opciones de Tesoreria piden el
+                    // codigo de la caja antes de poder pedir nada —dos en el cuerpo del cobro,
+                    // dos para resolver el turno y una como filtro— y ninguna lectura lo
+                    // publicaba: `GET /tesoreria/cajas` contestaba 404 porque no estaba en el
+                    // contrato, y la interfaz ponia una caja de texto.
+                    "GET /tesoreria/cajas",
                     "POST /tesoreria/caja/cobranza",
                     "POST /tesoreria/caja/tasas",
                     // #548: el listado de recibos emitidos. Hasta aqui la unica puerta a

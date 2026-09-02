@@ -1413,6 +1413,52 @@ const OPERACIONES_ADICIONALES = {
         permisos y no existir son dos respuestas distintas.
       `),
     },
+    // Y la ESCRITURA de esa excepcion, que es lo que #543 dejo sin poder tocar:
+    // el dominio existia y no la llamaba nadie (#585). Misma ruta que la lectura
+    // de arriba y otro verbo, como `permisos_de_grupo` sobre la suya.
+    {
+      operationId: 'fijar_permisos_de_usuario',
+      metodo: 'put',
+      ruta: '/api/v1/seguridad/usuarios/{id}/permisos',
+      titulo: 'Excepción de permisos de un usuario',
+      descripcionesDeRuta: {
+        id: 'El usuario, por el `id` que publica cada fila de `GET /seguridad/usuarios`',
+      },
+      descripcion: literal(`
+        Fija la **excepción propia** de una cuenta sobre los accesos que viajen en el
+        cuerpo (#585, RF-121). Es la única forma de expresar «este cajero está en el
+        grupo de caja y a él no se le deja anular recibos» sin sacarlo del grupo ni
+        fabricarle un grupo de una persona; hasta aquí sólo se podía por SQL directo,
+        que no deja fila de auditoría con quien lo decidió ni pasa por la guarda del
+        último administrador.
+
+        **Mismo cuerpo y mismo *upsert* por acceso que \`PUT /seguridad/grupos/{id}/permisos\`**:
+        recibe la lista de accesos con sus privilegios, y un acceso **ausente del cuerpo
+        se queda como estaba** — una lista parcial no puede traducirse en retirar en
+        silencio todo lo demás.
+
+        **Lo que cambia es qué significa \`privilegios: []\`.** En el grupo es «este grupo
+        no otorga nada aquí»; en la cuenta es una **negación** que sustituye a lo que su
+        grupo le da, y la fila **se escribe en cero, nunca se borra**: sin ella el acceso
+        volvería a heredar del grupo, y «se le negó expresamente» y «nunca lo tuvo»
+        volverían a ser el mismo JSON — justo lo que el \`GET\` de esta ruta existe para
+        distinguir. La clave que **falta** en el cuerpo no es lo mismo que la lista
+        vacía: se rechaza con 422, porque retirar siete privilegios por un campo
+        olvidado no puede ser el resultado de una omisión.
+
+        Exige la observación del usuario, obligatoria (regla 10, RNF-052), y queda en la
+        auditoría como \`PERMISO\` con quien la firmó (ADR-0008 §5). Sin ella, **422**.
+
+        **Puede contestar 409**, con la misma guarda que la matriz del grupo y contando
+        con la precedencia del guardia: un cambio que dejara a la municipalidad **sin
+        ningún usuario capaz de administrar permisos** se rechaza, y de ahí no se sale
+        por el sistema. La comprobación corre **después** de escribir y dentro de la
+        misma transacción, así que lo que deshace el cambio es el rollback: no se
+        escribe nada.
+
+        Un \`id\` que no existe en esta municipalidad es **404**.
+      `),
+    },
     // Lo CONFIGURADO de esa misma cuenta, que es otra pregunta y por eso otra
     // ruta: la de arriba no cambia (#583).
     {
@@ -1527,6 +1573,73 @@ const OPERACIONES_ADICIONALES = {
       `),
     },
   ],
+  // Las cuatro escrituras de grupo que `AdministrarSeguridad` tenia desde #543
+  // sin ninguna ruta que llegara a ellas (#572). No dependian de ninguna
+  // decision: un grupo es una fila de esta base y de ninguna otra.
+  grupos: [
+    {
+      operationId: 'registrar_grupo',
+      metodo: 'post',
+      titulo: 'Alta de un grupo de usuarios',
+      descripcion: bloque(`
+        Da de alta un grupo (#572, RF-120). Los permisos se otorgan al grupo y los usuarios se
+        afilian: dar de alta a alguien es meterlo en «Mesa de Partes», no repetirle veinte
+        permisos.
+
+        El grupo nace **habilitado**; la vigencia es opcional y sus dos extremos significan cosas
+        distintas —sin \`vigenciaDesde\` vale desde siempre, sin \`vigenciaHasta\` vale
+        indefinidamente (RF-123)—.
+
+        Un nombre ya usado en esta municipalidad es **409**: lo garantiza \`grupo_nombre_uq\`.
+        Exige \`REGISTRO\` sobre \`grupos\` y la observación del usuario, obligatoria (RNF-052).
+      `),
+    },
+    {
+      operationId: 'inhabilitar_grupo',
+      metodo: 'post',
+      ruta: '/api/v1/seguridad/grupos/{id}/baja',
+      titulo: 'Baja de un grupo',
+      descripcionesDeRuta: {
+        id: 'El grupo, por el `id` que publica cada fila de `GET /seguridad/grupos`',
+      },
+      descripcion: bloque(`
+        Inhabilita el grupo: **retira el acceso de todos sus miembros de golpe** y no borra
+        ninguna relación (RNF-051). Las filas de \`miembro\` siguen ahí diciendo quién pudo hacer
+        qué y hasta cuándo, y volver a habilitarlo devuelve el acceso a los mismos.
+
+        Exige \`ELIMINACION\` sobre \`grupos\` —quita acceso a gente— y la observación del
+        usuario.
+      `),
+    },
+    {
+      operationId: 'habilitar_grupo',
+      metodo: 'post',
+      ruta: '/api/v1/seguridad/grupos/{id}/reactivacion',
+      titulo: 'Reactivación de un grupo',
+      descripcionesDeRuta: {
+        id: 'El grupo, por el `id` que publica cada fila de `GET /seguridad/grupos`',
+      },
+      descripcion:
+        'Vuelve a habilitar un grupo inhabilitado: sus miembros recuperan el acceso que tenían,' +
+        ' sin repetir un solo permiso. Exige `MODIFICACION` sobre `grupos` y la observación del' +
+        ' usuario (RNF-052).',
+    },
+    {
+      operationId: 'fijar_vigencia_de_grupo',
+      metodo: 'put',
+      ruta: '/api/v1/seguridad/grupos/{id}/vigencia',
+      titulo: 'Vigencia de un grupo',
+      descripcionesDeRuta: {
+        id: 'El grupo, por el `id` que publica cada fila de `GET /seguridad/grupos`',
+      },
+      descripcion: bloque(`
+        Fija desde cuándo y hasta cuándo vale el grupo (RF-123). El cuerpo declara la vigencia
+        **entera**: mandar los dos extremos nulos es *quitar* la caducidad, no «no cambiar nada».
+
+        Exige \`MODIFICACION\` sobre \`grupos\` y la observación del usuario (RNF-052).
+      `),
+    },
+  ],
   // La pantalla «Usuarios del sistema» dibuja una columna «Grupo» y su endpoint
   // —el listado— no la puede llenar: la pertenencia vive en `miembro`, y de esa
   // tabla solo habia el POST que afilia (#543).
@@ -1554,6 +1667,79 @@ const OPERACIONES_ADICIONALES = {
 
         Un \`id\` que no existe en esta municipalidad es **404**; no pertenecer a ningún
         grupo es una página vacía con **200**.
+      `),
+    },
+    {
+      operationId: 'registrar_usuario',
+      metodo: 'post',
+      titulo: 'Alta de un usuario',
+      descripcion: bloque(`
+        Da de alta **la fila del padrón de usuarios**, y sólo eso (#572, ADR-0012 §5).
+
+        Un usuario del SGTM son **dos mitades**: esta fila y la cuenta del proveedor de identidad
+        (ADR-0005). Esta operación escribe la primera; **la segunda se declara aparte**, en
+        \`despliegue/identidad/municipalidades/<ubigeo>.json\`, que es la fuente versionada de las
+        cuentas y la que las reproduce si el clúster se reconstruye. Mientras esa cuenta no
+        exista, la persona figura en los listados, admite permisos y **no puede entrar**.
+
+        **No hay campo de clave, y no puede haberlo**: la credencial vive en el proveedor y este
+        sistema no la recibe nunca. Tampoco hay campo para el identificador OIDC del sujeto: sería
+        pedir un dato que quien atiende no tiene por qué tener, y tecleado mal enlazaría esta fila
+        con nadie (ADR-0012 §5.4). El enlace entre las dos mitades es la **cuenta**, que tiene que
+        ser el mismo \`preferred_username\` con el que la persona entra.
+
+        Una cuenta ya usada en esta municipalidad es **409**: lo garantiza \`usuario_cuenta_uq\`.
+        Exige \`REGISTRO\` sobre \`usuarios\` y la observación del usuario (RNF-052).
+      `),
+    },
+    {
+      operationId: 'inhabilitar_usuario',
+      metodo: 'post',
+      ruta: '/api/v1/seguridad/usuarios/{id}/baja',
+      titulo: 'Baja de un usuario',
+      descripcionesDeRuta: {
+        id: 'El usuario, por el `id` que publica cada fila de `GET /seguridad/usuarios`',
+      },
+      descripcion: bloque(`
+        Inhabilita la cuenta: deja de poder entrar y **no se borra** (RNF-051). Su fila sigue ahí
+        para que la bitácora pueda seguir diciendo quién hizo qué.
+
+        **No toca la cuenta del proveedor de identidad**, que esta aplicación no administra: esa
+        persona seguirá autenticando y el guardia le negará todo, que es exactamente lo que una
+        baja significa aquí. Retirarle además la cuenta es un acto del proveedor.
+
+        Exige \`ELIMINACION\` sobre \`usuarios\` y la observación del usuario (RNF-052).
+      `),
+    },
+    {
+      operationId: 'habilitar_usuario',
+      metodo: 'post',
+      ruta: '/api/v1/seguridad/usuarios/{id}/reactivacion',
+      titulo: 'Reactivación de un usuario',
+      descripcionesDeRuta: {
+        id: 'El usuario, por el `id` que publica cada fila de `GET /seguridad/usuarios`',
+      },
+      descripcion:
+        'Vuelve a habilitar una cuenta inhabilitada: recupera los permisos que tenía —los del' +
+        ' grupo y sus excepciones—, sin repetir ninguno. Exige `MODIFICACION` sobre `usuarios` y' +
+        ' la observación del usuario (RNF-052).',
+    },
+    {
+      operationId: 'fijar_vigencia_de_usuario',
+      metodo: 'put',
+      ruta: '/api/v1/seguridad/usuarios/{id}/vigencia',
+      titulo: 'Vigencia de un usuario',
+      descripcionesDeRuta: {
+        id: 'El usuario, por el `id` que publica cada fila de `GET /seguridad/usuarios`',
+      },
+      descripcion: bloque(`
+        Fija desde cuándo y hasta cuándo vale la cuenta (RF-123). Es lo que el manual pide para el
+        personal por contrato: su acceso **caduca solo** el día que termina, sin depender de que
+        alguien se acuerde de retirarlo.
+
+        El cuerpo declara la vigencia **entera**: mandar los dos extremos nulos es *quitar* la
+        caducidad. Exige \`MODIFICACION\` sobre \`usuarios\` y la observación del usuario
+        (RNF-052).
       `),
     },
   ],
@@ -3017,6 +3203,46 @@ const OPERACIONES_ADICIONALES = {
         ' con el mismo número. Escribe —cuenta la reimpresión y deja su traza—, así que el cuerpo' +
         ' lleva la observación del usuario, obligatoria (RNF-052). Es la acción «Imprimir' +
         ' certificado» de la pantalla.',
+    },
+  ],
+  // `caja_tributaria` declara «POST /api/v1/tesoreria/caja/cobranza» como su
+  // unico endpoint, y ese cuerpo EXIGE el codigo de la caja. Lo mismo el de
+  // `caja_tasas` y el de `cierre_caja`, y como parametro de consulta el de
+  // `avance_recaudacion` y el del listado de recibos de #548: cinco opciones
+  // del catalogo que piden el codigo de una ventanilla antes de poder pedir
+  // nada, y ninguna lectura que lo publicara. Medido contra el backend local el
+  // 2026-09-01, `GET /api/v1/tesoreria/cajas` contestaba 404 —no estaba sin
+  // implementar: no estaba en el contrato—, asi que la interfaz ponia una caja
+  // de texto y quien atiende tenia que saberse el codigo de memoria.
+  //
+  // Cuelga de `caja_tributaria` porque es la opcion cuyo acceso la guarda; las
+  // otras cuatro llegan por `oTambien` (#548), censadas en
+  // AccesosCompartidosTest.
+  //
+  // No es la situacion de `GET /tesoreria/tasas`, que #430 midio y decidio no
+  // publicar: alli nada en produccion escribe la tabla y sus cifras son D-02b.
+  // Aqui `cargar-cajas.sh` es el paso 4 de la siembra desde #460 y la tabla
+  // tiene filas en cuanto una municipalidad se implanta.
+  caja_tributaria: [
+    {
+      operationId: 'cajas_listado',
+      metodo: 'get',
+      antes: true,
+      ruta: '/api/v1/tesoreria/cajas',
+      paginacion: true,
+      titulo: 'Ventanillas de la municipalidad',
+      descripcion:
+        'El catálogo de cajas: código, rótulo, el área a la que se imputa lo que recaudan y si' +
+        ' siguen abiertas. Es lo que llena el desplegable «Caja» de las cinco pantallas de' +
+        ' Tesorería que hoy piden ese código tecleado —las dos ventanillas de cobro, el cierre y' +
+        ' arqueo, el avance de recaudación y el filtro del listado de recibos—. Sin filtros: una' +
+        ' municipalidad tiene cuatro ventanillas, no cuarenta mil, y quien ya sabe el código no' +
+        ' necesita el catálogo. **Salen también las dadas de baja**, con `activa: false`, porque' +
+        ' sus recibos siguen existiendo (RNF-051) y el filtro «Caja» del duplicado tiene que' +
+        ' poder nombrarlas; devolver sólo las abiertas recortaría la lista en silencio. El área' +
+        ' viaja legible —código y nombre— y es nula en la caja tributaria general, que no cuelga' +
+        ' de ninguna. Una municipalidad recién implantada y todavía sin ventanillas devuelve una' +
+        ' página vacía con `totalElementos: 0`, no un 404.',
     },
   ],
   // `duplicado_recibo` declara «GET /api/v1/tesoreria/recibos/{nro}/duplicado»

@@ -766,13 +766,13 @@ class DeudaPorPeriodoFronteraTest {
             new pe.gob.sgtm.cuentacorriente.TitularesDeLaUnidad() {
 
                 @Override
-                public List<TitularDeLaUnidad> delPredio(long predioId, LocalDate fecha) {
-                    return List.of();
+                public TitularidadDeLaUnidad delPredio(long predioId, LocalDate fecha) {
+                    return TitularidadDeLaUnidad.fueraDelPadron();
                 }
 
                 @Override
-                public List<TitularDeLaUnidad> delVehiculo(long vehiculoId, LocalDate fecha) {
-                    return List.of();
+                public TitularidadDeLaUnidad delVehiculo(long vehiculoId, LocalDate fecha) {
+                    return TitularidadDeLaUnidad.fueraDelPadron();
                 }
             };
 

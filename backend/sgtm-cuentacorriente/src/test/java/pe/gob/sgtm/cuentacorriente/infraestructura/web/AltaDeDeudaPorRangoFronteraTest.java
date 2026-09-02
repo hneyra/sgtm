@@ -952,15 +952,14 @@ class AltaDeDeudaPorRangoFronteraTest {
             new pe.gob.sgtm.cuentacorriente.TitularesDeLaUnidad() {
 
                 @Override
-                public java.util.List<TitularDeLaUnidad> delPredio(
-                        long predioId, java.time.LocalDate fecha) {
-                    return java.util.List.of();
+                public TitularidadDeLaUnidad delPredio(long predioId, java.time.LocalDate fecha) {
+                    return TitularidadDeLaUnidad.fueraDelPadron();
                 }
 
                 @Override
-                public java.util.List<TitularDeLaUnidad> delVehiculo(
+                public TitularidadDeLaUnidad delVehiculo(
                         long vehiculoId, java.time.LocalDate fecha) {
-                    return java.util.List.of();
+                    return TitularidadDeLaUnidad.fueraDelPadron();
                 }
             };
 
