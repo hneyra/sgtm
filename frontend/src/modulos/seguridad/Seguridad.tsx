@@ -1340,10 +1340,26 @@ export default function Seguridad({ dest, onDest }: PantallaProps) {
                   <label htmlFor="acceso-sondeado" style={{ fontSize: 11.5, color: 'var(--ink-3)' }}>
                     Opción
                   </label>
+                  {/* Sin catalogo que ofrecer se APAGA y dice por que. Con
+                      «Elige una opcion del catalogo…» de unica opcion, el sondeo
+                      queda encendido y sin nada que sondear, y las tres causas
+                      —leyendo, la lectura rota, y un catalogo de verdad vacio—
+                      no se distinguen entre si (#718). Es el patron de los
+                      sectores del mapa catastral. */}
                   <select
                     id="acceso-sondeado"
                     value={accesoSondeado}
                     onChange={(e) => setAccesoSondeado(e.target.value)}
+                    disabled={catalogo.length === 0}
+                    title={
+                      catalogo.length > 0
+                        ? undefined
+                        : accesosReales.cargando
+                          ? 'Leyendo el catálogo de opciones…'
+                          : accesosReales.error !== null
+                            ? 'No se pudo leer el catálogo de opciones, así que no hay ninguna que sondear'
+                            : 'El catálogo de opciones vino vacío: no hay ninguna que sondear'
+                    }
                     style={{ flex: 1, minWidth: 230, border: '1px solid var(--line-2)', borderRadius: 6, padding: '6px 9px', background: 'var(--bg-card)', fontSize: 12 }}
                   >
                     {/* La opción vacía se queda: sin ella la pantalla preguntaría

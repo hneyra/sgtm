@@ -508,6 +508,42 @@ export function identidadDeLaSesion(senal?: AbortSignal): Promise<IdentidadDeLaS
 }
 
 /**
+ * Lo que ESTA sesion puede hacer, acceso por acceso (#592).
+ *
+ * <h2>La forma, medida contra el servidor y no supuesta</h2>
+ *
+ * Es un objeto plano: la clave es el acceso del catalogo y el valor la lista de
+ * privilegios **en minuscula**, que no es como los escribe `PRIVILEGIOS` aqui
+ * arriba —el dominio los declara en mayuscula— ni como los dibuja la matriz.
+ *
+ * ```json
+ * {"cambiar_direccion_ref":["ejecucion","lectura","registro","modificacion",
+ *                           "eliminacion","impresion","especial"],
+ *  "transferencia_vehiculo":["ejecucion","lectura"]}
+ * ```
+ *
+ * <h2>Un acceso que falta no es un acceso sin privilegios</h2>
+ *
+ * Es un acceso que la sesion **no tiene**: el servidor no publica una clave con
+ * la lista vacia, sencillamente no la publica. Por eso el tipo es un
+ * `Record<string, string[]>` y no una lista de pares con su `privilegios: []`:
+ * la ausencia significa algo, y un mapa la expresa sin inventar una fila.
+ *
+ * <h2>Sin ningun parametro, como sus dos hermanas</h2>
+ *
+ * El sujeto sale del token. Pedirlo por identificador seria la matriz de otro,
+ * que es {@link permisosEfectivosDelUsuario} y vive detras del permiso de
+ * administracion; esta la lee cualquier sesion valida, porque preguntar que
+ * puede uno mismo no revela nada que el guardia no vaya a contestar igual al
+ * primer intento (ADR-0013).
+ */
+export type PermisosDeLaSesion = Record<string, string[]>;
+
+export function permisosDeLaSesion(senal?: AbortSignal): Promise<PermisosDeLaSesion> {
+  return solicitar('/seguridad/sesion/permisos', { senal });
+}
+
+/**
  * Lo que contesta el cambio de clave: quien la gestiona y a donde hay que ir.
  *
  * `destino` es una ruta RELATIVA del proveedor —hoy `/account/password`—, no una

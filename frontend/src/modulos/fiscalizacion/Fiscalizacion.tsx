@@ -2383,9 +2383,33 @@ export default function Fiscalizacion({ dest, onDest }: PantallaProps) {
                       peor que no tenerlo (#322, #398, #431). */}
                   <label style={{ display: 'flex', alignItems: 'center', gap: 7, fontSize: 12, color: 'var(--ink-3)' }}>
                     Programa
+                    {/* Sin programas que ofrecer, el desplegable se APAGA y
+                        dice por que. Encendido y con «Todos» de unica opcion se
+                        lee como «esta municipalidad no tiene ningun programa»,
+                        que es la lectura plausible y equivocada por la que este
+                        repositorio se ha negado varias veces a conectar una
+                        pantalla (#78, #80, #430, #431) — y las tres causas
+                        —cargando, la lectura rota, y ninguno registrado— dejan
+                        de distinguirse entre si. Es el patron que el mapa
+                        catastral ya usa con sus sectores (#718).
+
+                        Y la nota de fallo que hay al lado NO sirve de aviso:
+                        habla de la lectura de las ACTAS, no de la de los
+                        programas, asi que un desplegable mudo debajo de un
+                        aviso ajeno sigue siendo mudo. Medido. */}
                     <select
                       value={programaActas}
                       onChange={(e) => setProgramaActas(e.target.value)}
+                      disabled={listaDeProgramas.length === 0}
+                      title={
+                        listaDeProgramas.length > 0
+                          ? undefined
+                          : programas.cargando
+                            ? 'Leyendo los programas de fiscalización de esta municipalidad…'
+                            : programas.error !== null
+                              ? 'No se pudieron leer los programas de fiscalización, así que no se puede acotar por ninguno'
+                              : 'Esta municipalidad no tiene ningún programa de fiscalización registrado, así que no hay por cuál acotar'
+                      }
                       style={{ border: '1px solid var(--line-2)', borderRadius: 6, padding: '6px 9px', background: 'var(--bg-card)', fontSize: 12.5 }}
                     >
                       {/* «Todas» manda el filtro VACÍO, que es no mandarlo: el

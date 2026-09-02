@@ -1,10 +1,11 @@
 import { lazy, Suspense, useCallback, useEffect, useMemo, useState } from 'react';
 import { DENSIDADES, PreferenciasCtx, type Preferencias } from './shell/preferencias';
 import { MODULOS, moduloDe } from './shell/modulos';
+import { PermisosCtx, type EstadoDePermisos } from './shell/permisos';
 import { Icono } from './ds/Icono';
 import { ICO } from './ds/iconos';
 import { rotuloDeLaEntidad } from './api/sesion';
-import { municipalidadDeLaSesion } from './api/seguridad';
+import { municipalidadDeLaSesion, permisosDeLaSesion } from './api/seguridad';
 import { useRecurso } from './api/useRecurso';
 
 /* Cada módulo llega en su propio trozo: el arranque no paga los doce. */
@@ -116,6 +117,28 @@ export function App() {
     if (nombre !== undefined && nombre !== '') setPref((p) => ({ ...p, entidad: nombre }));
   }, [laMunicipalidad.datos]);
 
+  /* Lo que la sesion puede, leido UNA vez para las doce pantallas (#592).
+
+     Aqui y no en cada pantalla porque el mapa es de la sesion, no del destino:
+     pedirlo donde hace falta serian tantas peticiones como reportes se abran, y
+     todas contestarian lo mismo. `useRecurso` vuelve a pedirlo solo cuando
+     cambia la credencial, que es cuando el mapa deja de ser cierto.
+
+     Los tres estados salen de los mismos campos que dibuja cualquier lectura, y
+     `leyendo` es «ni datos ni error» a proposito y no `cargando`: entre el
+     primer render y el efecto, `cargando` ya es cierto pero un reintento lo
+     vuelve a poner a cierto con los datos delante — y ahi lo que se sabe se
+     sigue sabiendo. */
+  const losPermisos = useRecurso((senal) => permisosDeLaSesion(senal), []);
+  const permisos = useMemo<EstadoDePermisos>(
+    () => ({
+      permisos: losPermisos.datos,
+      leyendo: losPermisos.datos === null && losPermisos.error === null,
+      fallo: losPermisos.error !== null,
+    }),
+    [losPermisos.datos, losPermisos.error],
+  );
+
   useEffect(() => {
     const t = () => setRuta(leerRuta());
     window.addEventListener('hashchange', t);
@@ -179,38 +202,40 @@ export function App() {
   const Pantalla = PANTALLAS[ruta.modulo] ?? PANTALLAS.inicio;
 
   return (
-    <PreferenciasCtx.Provider value={ctx}>
-      <Suspense fallback={<Cargando />}>
-        <Pantalla dest={ruta.dest} onDest={onDest} sujeto={ruta.sujeto} onSujeto={onSujeto} filtros={ruta.filtros} onFiltros={onFiltros} />
-      </Suspense>
-      {toast.texto && (
-        <div
-          /* Un error no es una nota al margen: se anuncia, no se ofrece. */
-          role={toast.malo ? 'alert' : 'status'}
-          style={{
-            position: 'fixed',
-            zIndex: 90,
-            bottom: 22,
-            left: '50%',
-            transform: 'translateX(-50%)',
-            display: 'flex',
-            alignItems: 'center',
-            gap: 10,
-            padding: '11px 18px',
-            borderRadius: 999,
-            background: toast.malo ? 'var(--error-texto)' : 'var(--ink)',
-            color: 'var(--bg)',
-            fontSize: 13,
-            boxShadow: 'var(--shadow-3)',
-            animation: 'subir .2s ease',
-            maxWidth: 'min(560px, 92vw)',
-          }}
-        >
-          <Icono d={toast.malo ? ICO.cerrar : ICO.visto} tam={15} grosor={2.4} style={{ flex: '0 0 auto' }} />
-          {toast.texto}
-        </div>
-      )}
-    </PreferenciasCtx.Provider>
+    <PermisosCtx.Provider value={permisos}>
+      <PreferenciasCtx.Provider value={ctx}>
+        <Suspense fallback={<Cargando />}>
+          <Pantalla dest={ruta.dest} onDest={onDest} sujeto={ruta.sujeto} onSujeto={onSujeto} filtros={ruta.filtros} onFiltros={onFiltros} />
+        </Suspense>
+        {toast.texto && (
+          <div
+            /* Un error no es una nota al margen: se anuncia, no se ofrece. */
+            role={toast.malo ? 'alert' : 'status'}
+            style={{
+              position: 'fixed',
+              zIndex: 90,
+              bottom: 22,
+              left: '50%',
+              transform: 'translateX(-50%)',
+              display: 'flex',
+              alignItems: 'center',
+              gap: 10,
+              padding: '11px 18px',
+              borderRadius: 999,
+              background: toast.malo ? 'var(--error-texto)' : 'var(--ink)',
+              color: 'var(--bg)',
+              fontSize: 13,
+              boxShadow: 'var(--shadow-3)',
+              animation: 'subir .2s ease',
+              maxWidth: 'min(560px, 92vw)',
+            }}
+          >
+            <Icono d={toast.malo ? ICO.cerrar : ICO.visto} tam={15} grosor={2.4} style={{ flex: '0 0 auto' }} />
+            {toast.texto}
+          </div>
+        )}
+      </PreferenciasCtx.Provider>
+    </PermisosCtx.Provider>
   );
 }
 
