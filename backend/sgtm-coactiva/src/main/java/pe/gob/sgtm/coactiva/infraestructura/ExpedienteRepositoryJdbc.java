@@ -226,31 +226,8 @@ public class ExpedienteRepositoryJdbc extends RepositorioJdbc implements Expedie
     public Pagina<ExpedienteEnConsulta> consultar(
             CriterioDeExpedientes criterio, Paginacion paginacion) {
 
-        StringBuilder donde = new StringBuilder(" WHERE 1 = 1");
         Map<String, Object> parametros = new HashMap<>();
-
-        if (criterio.numero() != null) {
-            donde.append(" AND e.numero = :numero");
-            parametros.put("numero", criterio.numero());
-        }
-        if (criterio.contribuyenteId() != null) {
-            donde.append(" AND e.contribuyente_id = :contribuyente");
-            parametros.put("contribuyente", criterio.contribuyenteId());
-        }
-        if (criterio.ejecutor() != null) {
-            donde.append(" AND upper(e.ejecutor) = :ejecutor");
-            parametros.put("ejecutor", criterio.ejecutor());
-        }
-        if (criterio.ejercicio() != null) {
-            donde.append(" AND e.ejercicio = :ejercicio");
-            parametros.put("ejercicio", criterio.ejercicio());
-        }
-        if (criterio.estado() != null) {
-            donde.append(" AND ").append(ESTADO_DERIVADO).append(" = :estado");
-            parametros.put("estado", criterio.estado().name());
-        }
-
-        String desde = " FROM expediente_coactivo e" + donde;
+        String desde = desdeDeLaConsulta(criterio, parametros);
         String seleccion =
                 "SELECT "
                         + COLUMNAS_DE_LA_GRILLA
@@ -276,6 +253,56 @@ public class ExpedienteRepositoryJdbc extends RepositorioJdbc implements Expedie
                                 EstadoDelExpediente.porNombre(fila.getString("estado_derivado")),
                                 fila.getString("direccion_vigente"),
                                 fila.getInt("cuantos_valores")));
+    }
+
+    /**
+     * El mismo {@code count(*)} que {@link #consultar} ejecuta para paginar, y nada mas (#549).
+     *
+     * <p>Comparte {@link #desdeDeLaConsulta} con la grilla: el estado del expediente se DERIVA del
+     * ultimo movimiento y transcribir esa derivacion por segunda vez es exactamente lo que #397
+     * midio en el «Estado» de la infraccion administrativa —las dos copias divergen y la que se lee
+     * en pantalla acaba no siendo la que filtro—.
+     */
+    @Override
+    public long contar(CriterioDeExpedientes criterio) {
+        Map<String, Object> parametros = new HashMap<>();
+        String desde = desdeDeLaConsulta(criterio, parametros);
+
+        return jdbc().sql("SELECT count(*)" + desde)
+                .params(parametros)
+                .query(Long.class)
+                .optional()
+                .orElse(0L);
+    }
+
+    /** El {@code FROM} y el {@code WHERE} de la consulta de expedientes, en un solo sitio. */
+    private String desdeDeLaConsulta(
+            CriterioDeExpedientes criterio, Map<String, Object> parametros) {
+
+        StringBuilder donde = new StringBuilder(" WHERE 1 = 1");
+
+        if (criterio.numero() != null) {
+            donde.append(" AND e.numero = :numero");
+            parametros.put("numero", criterio.numero());
+        }
+        if (criterio.contribuyenteId() != null) {
+            donde.append(" AND e.contribuyente_id = :contribuyente");
+            parametros.put("contribuyente", criterio.contribuyenteId());
+        }
+        if (criterio.ejecutor() != null) {
+            donde.append(" AND upper(e.ejecutor) = :ejecutor");
+            parametros.put("ejecutor", criterio.ejecutor());
+        }
+        if (criterio.ejercicio() != null) {
+            donde.append(" AND e.ejercicio = :ejercicio");
+            parametros.put("ejercicio", criterio.ejercicio());
+        }
+        if (criterio.estado() != null) {
+            donde.append(" AND ").append(ESTADO_DERIVADO).append(" = :estado");
+            parametros.put("estado", criterio.estado().name());
+        }
+
+        return " FROM expediente_coactivo e" + donde;
     }
 
     // ------------------------------------------------------------------

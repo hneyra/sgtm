@@ -18,6 +18,7 @@ import pe.gob.sgtm.cuentacorriente.ConsultaDeDeudaPublica;
 import pe.gob.sgtm.cuentacorriente.MovimientoDelLibro;
 import pe.gob.sgtm.cuentacorriente.MovimientosDelLibro;
 import pe.gob.sgtm.cuentacorriente.ObligacionPublica;
+import pe.gob.sgtm.cuentacorriente.TributoDelLibro;
 import pe.gob.sgtm.dominio.Dinero;
 import pe.gob.sgtm.rentas.dominio.DeclaracionJurada;
 import pe.gob.sgtm.rentas.dominio.DeclaracionJuradaRepository;
@@ -230,7 +231,7 @@ public class ConsultaUnificada {
     public enum Alcance {
 
         /** Solo el impuesto predial. */
-        PREDIAL("PREDIAL"),
+        PREDIAL(TributoDelLibro.PREDIAL.texto()),
 
         /**
          * Solo los arbitrios municipales.
@@ -239,7 +240,7 @@ public class ConsultaUnificada {
          * como lo nombra el {@code CHECK} de {@code determinacion} (V2). El desplegable del
          * prototipo dice «ARBITRIOS», y la traduccion se hace aqui, una vez.
          */
-        ARBITRIOS("ARBITRIO"),
+        ARBITRIOS(TributoDelLibro.ARBITRIO.texto()),
 
         /** Los dos, y con ellos todo lo demas que el contribuyente deba. */
         PREDIAL_Y_ARBITRIOS(null);

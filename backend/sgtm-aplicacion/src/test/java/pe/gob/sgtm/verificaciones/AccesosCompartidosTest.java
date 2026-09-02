@@ -62,6 +62,15 @@ class AccesosCompartidosTest {
                     // nadie: son cuatro filas con el codigo y el rotulo de las ventanillas.
                     "GET /tesoreria/cajas",
                     Set.of("caja_tasas", "cierre_caja", "avance_recaudacion", "duplicado_recibo"),
+                    // #599 — la grilla de actas de inspeccion. `acta_fiscalizacion` es UNA tabla y
+                    // el acta predial y la vehicular son el mismo tipo de dominio y el mismo
+                    // recurso, asi que la lectura es una: dos listados serian dos copias de la
+                    // misma consulta. Las dos opciones que ESCRIBEN actas la necesitan por igual, y
+                    // exigir solo `fisc_predial` dejaria a un perfil de fiscalizacion vehicular
+                    // registrando actas que no puede volver a ver — el mismo sintoma que #548
+                    // encontro en la caja, una pantalla que escribe y no ve lo que escribio.
+                    "GET /fiscalizacion/actas",
+                    Set.of("fisc_vehicular"),
                     // #548 — la grilla de deuda de la caja tributaria. `POST
                     // /tesoreria/caja/cobranza` exige `obligaciones[]` con tributo, ejercicio y
                     // unidad una a una, y esta es la UNICA lectura que las publica asi: sin ella,

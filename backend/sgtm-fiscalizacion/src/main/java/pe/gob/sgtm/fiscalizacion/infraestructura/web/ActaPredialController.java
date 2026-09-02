@@ -26,43 +26,34 @@ import pe.gob.sgtm.web.ProblemaDeNegocio;
  * <p>Trabaja sobre una copia: no toca ninguna fila de {@code catastro} (AC de #45). El cuerpo es
  * una <b>lista blanca</b>, mismo patrón que {@code TransferenciaPredioController}.
  *
- * <h2>No hay ningún {@code GET} de actas, y publicar uno no desbloquearía la pantalla (#546, AC 8)
- * </h2>
+ * <h2>El {@code GET} de actas existe desde #599, y lo que le faltaba era una columna</h2>
  *
- * <p>Un acta se registra y no se puede volver a leer: el único sitio donde asoma es {@code
- * MuestraResource.visitado}, que dice <b>si</b> un predio de la muestra ya tiene acta y nada más.
- * Es un hueco real, y el issue de esa lectura es propio.
+ * <p>La lectura la sirve {@link ActasController} en {@code GET /fiscalizacion/actas}, y hasta #599
+ * no existía: un acta se registraba y no se podía volver a leer —el único sitio donde asomaba era
+ * {@code MuestraResource.visitado}, que dice <b>si</b> un predio de la muestra ya tiene acta y nada
+ * más—.
  *
- * <p>Lo que sí queda medido aquí es que <b>ese {@code GET} no es lo que le falta a la pantalla</b>.
- * El destino {@code actas} del diseño es el acta en cuatro pasos con modo campo: dibuja 23
- * controles y siete filas de contraste declarado/verificado, y el cuerpo de este {@code POST} tiene
- * <b>nueve</b> campos —{@code observacion}, {@code programaId}, {@code contribuyenteId}, {@code
- * predioId}, {@code fechaVisita}, {@code fiscalizador}, {@code hallazgo}, {@code areaHallada},
- * {@code detalle}—. Un listado publicaría esos nueve, o sea la misma foto que ya no llena el
- * formulario: lo que falta no es por dónde leer, es <b>dónde guardar</b>.
+ * <p>Y no se publicó antes a propósito. #546 midió que <b>ese {@code GET} no era lo que le faltaba
+ * a la pantalla</b>: el destino {@code actas} del diseño es el acta en cuatro pasos con modo campo,
+ * que dibuja 23 controles y siete filas de contraste declarado/verificado, y el cuerpo de este
+ * {@code POST} tenía <b>nueve</b> campos. Un listado habría publicado esa misma foto incompleta: lo
+ * que faltaba no era por dónde leer, era <b>dónde guardar</b>.
  *
- * <p>Y lo que falta es sobre todo una columna. {@code acta_fiscalizacion} (V4, V24) guarda {@code
- * area_hallada} y <b>ninguna de uso</b>, así que el «uso observado» —el sexto de los siete
- * contrastes, y el valor «USO DISTINTO AL DECLARADO» que el desplegable del manual ofrece— no cabe:
- * hoy lo teclea quien liquida, como argumento de {@code LiquidarFiscalizacion.liquidar}, y quien
- * visitó no puede dejarlo escrito. Es lo que impide que {@link
- * pe.gob.sgtm.fiscalizacion.dominio.Hallazgo} gane el quinto valor que {@code CondicionFiscalizada}
- * sí tiene, y por eso está anotado ahí y no aquí.
+ * <p>Lo que #599 añadió es la columna {@code uso_hallado} (V76), o sea el <b>sexto</b> de los siete
+ * contrastes y el segundo de los dos hallazgos que la fiscalización predial persigue —el otro es el
+ * área—. Con ella {@link pe.gob.sgtm.fiscalizacion.dominio.Hallazgo} gana su quinto valor y el
+ * cuerpo pasa a diez campos.
  *
- * <p>Las otras seis filas de contraste son estructura del predio —frente, fondo, número de pisos,
- * material, estado de conservación— y ninguna existe todavía en ninguna tabla del acta; declararlas
- * en el cuerpo sin tabla dejaría la petición aceptando datos que se pierden al guardar, que es peor
- * que no aceptarlos.
+ * <p>Las otras seis filas de contraste siguen fuera, y por el mismo criterio: son estructura del
+ * predio —frente, fondo, número de pisos, material, estado de conservación— y ninguna existe
+ * todavía en ninguna tabla del acta; declararlas en el cuerpo sin tabla dejaría la petición
+ * aceptando datos que se pierden al guardar, que es peor que no aceptarlos.
  *
- * <p><b>Y es la misma lectura que le falta al embudo del programa</b> (#546, AC 10). Sus cuatro
- * etapas son «Programados», «Inspeccionados», «Con liquidación» y «Notificadas»; la primera la da
- * el total de {@code GET /programas/{id}/muestra} y las dos últimas los dos totales de {@code GET
- * /fiscalizacion/resultados}, cada uno de su propia consulta. La única que no tiene de dónde salir
- * es <b>«Inspeccionados»</b>, que es cuántas actas tiene el programa: {@code visitado} viaja fila a
- * fila en la muestra y ninguna operación publica el recuento. No se compone en la interfaz —y no
- * podría: sin las dos cifras no hay proporción que pintar—, así que el embudo dice «—» en esa
- * etapa. El día que exista el {@code GET} de actas, esa etapa se llena con su {@code
- * totalElementos} y no con una suma.
+ * <p><b>Y con la misma lectura se llena el embudo del programa</b> (#546, AC 10). Sus cuatro etapas
+ * son «Programados», «Inspeccionados», «Con liquidación» y «Notificadas»; la primera la da el total
+ * de {@code GET /programas/{id}/muestra} y las dos últimas los dos totales de {@code GET
+ * /fiscalizacion/resultados}. La que no tenía de dónde salir era «Inspeccionados», y sale del
+ * {@code totalElementos} de {@code GET /fiscalizacion/actas?programa=‹id›} —no de una suma—.
  */
 @RestController
 @RequestMapping(Api.RAIZ + "/fiscalizacion/predial/actas")
@@ -90,6 +81,7 @@ public class ActaPredialController {
                             exigir(peticion.fiscalizador(), "fiscalizador"),
                             hallazgoDe(peticion.hallazgo()),
                             areaDe(peticion.areaHallada()),
+                            vacioAnulo(peticion.usoHallado()),
                             peticion.detalle(),
                             observacion));
         } catch (RegistrarActaFiscalizacion.ProgramaInexistente
@@ -112,6 +104,14 @@ public class ActaPredialController {
             throw new ProblemaDeNegocio(
                     CodigoDeError.VALIDACION, "Hallazgo desconocido: '" + texto + "'");
         }
+    }
+
+    private static @Nullable String vacioAnulo(@Nullable String texto) {
+        if (texto == null) {
+            return null;
+        }
+        String limpio = texto.strip();
+        return limpio.isEmpty() ? null : limpio;
     }
 
     private static @Nullable BigDecimal areaDe(@Nullable String texto) {
@@ -177,5 +177,6 @@ public class ActaPredialController {
             @Nullable String fiscalizador,
             @Nullable String hallazgo,
             @Nullable String areaHallada,
+            @Nullable String usoHallado,
             @Nullable String detalle) {}
 }

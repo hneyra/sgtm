@@ -7,7 +7,6 @@ import org.springframework.stereotype.Service;
 import pe.gob.sgtm.dominio.Alicuota;
 import pe.gob.sgtm.dominio.Ejercicio;
 import pe.gob.sgtm.dominio.PoliticaDeRedondeo;
-import pe.gob.sgtm.dominio.PoliticasDeRedondeo;
 import pe.gob.sgtm.dominio.PuntoDeRedondeo;
 import pe.gob.sgtm.dominio.ValorNormativo;
 import pe.gob.sgtm.parametros.LectorDeParametros;
@@ -115,10 +114,19 @@ public class CondicionesParametrizadas {
                     interes(), maximoDeCuotas(), porcentajeInicial, conjuntoId);
         }
 
-        /** La politica con la que se redondea cada cuota (D-03, E-7 §3). */
+        /**
+         * La politica con la que se redondea cada cuota (D-03, E-7 §3).
+         *
+         * <p>Se pide por {@link PoliticasDeRedondeoSelladas#en} y no resolviendo el punto sobre las
+         * politicas ya leidas, y la diferencia no es de estilo (#633): un conjunto que observa
+         * puntos pero <b>no</b> el de la cuota lanzaba {@code
+         * PoliticasDeRedondeo.PuntoSinPolitica}, que es dominio puro y no sabe de que ejercicio
+         * salieron las politicas —asi que no podia decir donde publicar la fila que falta, y ningun
+         * {@code catch} la nombraba: salia como 500 con identificador de incidencia—. Este es el
+         * unico sitio de tesoreria que resuelve un punto, y es el que sabe el ejercicio.
+         */
         public PoliticaDeRedondeo redondeoDeLaCuota() {
-            PoliticasDeRedondeo politicas = PoliticasDeRedondeoSelladas.de(sellados);
-            return politicas.en(PuntoDeRedondeo.CUOTA);
+            return PoliticasDeRedondeoSelladas.en(sellados, PuntoDeRedondeo.CUOTA);
         }
 
         /** El conjunto del que salieron; queda escrito en {@code convenio.conjunto_id}. */

@@ -619,7 +619,13 @@ public final class ReglasDeArquitectura {
                         // (RF-056). Arista al reves de las otras: la excepcion de ARQ-01 §4 regla
                         // 2.
                         PAQUETE_RAIZ + ".cuentacorriente.ConsultaDeDeudaPublica",
-                        PAQUETE_RAIZ + ".cuentacorriente.ObligacionPublica");
+                        PAQUETE_RAIZ + ".cuentacorriente.ObligacionPublica",
+                        // Como se llaman los tributos del libro (#553). Es un enumerado: no
+                        // tiene un metodo que escriba, y lo que aporta es que fiscalizacion no
+                        // declare su propio literal —«PREDIAL», «VEHICULAR», «MULTA_TRIBUTARIA»
+                        // eran tres constantes suyas, y dos grafias del mismo tributo son dos
+                        // obligaciones distintas—.
+                        PAQUETE_RAIZ + ".cuentacorriente.TributoDelLibro");
 
         SinEscribirFueraDeLaTransferencia() {
             super(

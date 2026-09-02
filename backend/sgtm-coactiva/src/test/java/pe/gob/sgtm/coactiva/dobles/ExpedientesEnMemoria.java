@@ -111,6 +111,16 @@ public final class ExpedientesEnMemoria implements ExpedienteRepository {
         return encontrados;
     }
 
+    /** Cuenta lo mismo que {@link #consultar} filtra, reusandolo: aqui no hay dos criterios. */
+    @Override
+    public long contar(CriterioDeExpedientes criterio) {
+        return consultar(
+                        criterio,
+                        new Paginacion(
+                                0, Integer.MAX_VALUE, "numero", Paginacion.Direccion.ASCENDENTE))
+                .totalElementos();
+    }
+
     @Override
     public Pagina<ExpedienteEnConsulta> consultar(
             CriterioDeExpedientes criterio, Paginacion paginacion) {
