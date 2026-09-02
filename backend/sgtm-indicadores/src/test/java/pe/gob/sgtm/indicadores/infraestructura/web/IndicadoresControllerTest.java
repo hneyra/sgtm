@@ -41,7 +41,7 @@ class IndicadoresControllerTest {
             new LibroDeMentira()
                     .conRecaudado("PREDIAL", new Ejercicio(2026), 3, "500.00", 4)
                     .conCargado("PREDIAL", "1000.00", 10)
-                    .conCargado("ARBITRIOS", "400.00", 8)
+                    .conCargado("ARBITRIO", "400.00", 8)
                     .conPendiente("PREDIAL", "200.00", 3);
 
     private final MockMvc mvc =

@@ -13,6 +13,7 @@ import pe.gob.sgtm.auditoria.RegistroDeAuditoria;
 import pe.gob.sgtm.catastro.CaracteristicasDelPredio;
 import pe.gob.sgtm.catastro.LectorDeCaracteristicas;
 import pe.gob.sgtm.cuentacorriente.GeneradorDeCargos;
+import pe.gob.sgtm.cuentacorriente.TributoDelLibro;
 import pe.gob.sgtm.dominio.Dinero;
 import pe.gob.sgtm.dominio.Ejercicio;
 import pe.gob.sgtm.dominio.Observacion;
@@ -160,7 +161,7 @@ public class DeterminarArbitrios {
         cargos.generarCargo(
                 ejercicio,
                 contribuyenteId,
-                "ARBITRIO",
+                TributoDelLibro.ARBITRIO.texto(),
                 periodo,
                 predioId,
                 null,

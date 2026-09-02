@@ -236,7 +236,7 @@ class AsientoRepositoryJdbcTest {
                                             titular,
                                             Dinero.de(50),
                                             new Ejercicio(2027),
-                                            "ARBITRIOS",
+                                            "ARBITRIO",
                                             LocalDate.of(2027, 3, 1))));
 
             Pagina<Asiento> de2026 =
@@ -255,7 +255,7 @@ class AsientoRepositoryJdbcTest {
                             estado ->
                                     repositorio.buscar(
                                             new CriterioDeConsulta(
-                                                    "L-0020", null, "ARBITRIOS", null),
+                                                    "L-0020", null, "ARBITRIO", null),
                                             Paginacion.de(0, 20, "fecha_valor")));
 
             assertThat(arbitrios.totalElementos()).isEqualTo(1);
@@ -317,7 +317,7 @@ class AsientoRepositoryJdbcTest {
                             repositorio.registrar(
                                     asiento(
                                             titular,
-                                            "ARBITRIOS",
+                                            "ARBITRIO",
                                             1,
                                             Concepto.INSOLUTO,
                                             TipoAsiento.CARGO,

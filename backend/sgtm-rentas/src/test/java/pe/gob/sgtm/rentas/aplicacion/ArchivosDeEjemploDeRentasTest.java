@@ -22,6 +22,7 @@ import pe.gob.sgtm.auditoria.Auditoria;
 import pe.gob.sgtm.carga.InformeDeImportacion;
 import pe.gob.sgtm.carga.LectorDeFilasCsv;
 import pe.gob.sgtm.carga.LectorDeFilasCsv.FilaCsv;
+import pe.gob.sgtm.cuentacorriente.TributoDelLibro;
 import pe.gob.sgtm.dominio.CodigoReferenciaCatastral;
 import pe.gob.sgtm.dominio.ComposicionCatastral;
 import pe.gob.sgtm.dominio.Observacion;
@@ -132,7 +133,59 @@ class ArchivosDeEjemploDeRentasTest {
         assertThat(padron.cargosAsentados())
                 .as("las tres clases de obligacion, para que la demostracion las muestre")
                 .extracting(PadronDeLaSiembraEnMemoria.Cargo::tributo)
-                .contains("PREDIAL", "ARBITRIOS", "VEHICULAR");
+                .contains("PREDIAL", "ARBITRIO", "VEHICULAR");
+    }
+
+    @Test
+    @DisplayName("#553 — cada fila de deuda.csv usa una grafia del vocabulario del libro")
+    void cadaFilaUsaLaGrafiaDelVocabulario() throws IOException {
+        importarVehiculos().importar(abrir("vehiculos.csv"), observacion);
+        importarTransferencias().importar(abrir("transferencias.csv"), observacion);
+
+        InformeDeImportacion informe =
+                new ImportarDeudaDeDemostracion(padron, referencias)
+                        .importar(abrir("deuda.csv"), observacion);
+
+        // El archivo sembraba ARBITRIOS (plural) y el sistema escribe ARBITRIO: la deuda
+        // entraba, se cobraba y caia AL LADO de la que deberia ser la misma obligacion, sin
+        // que nada lo dijera. Ahora la fila con una grafia de fuera se rechaza con su numero
+        // de linea, en vez de sembrar una obligacion paralela.
+        assertThat(informe.rechazadas())
+                .as("una grafia de fuera se rechaza nombrando la fila, no se siembra")
+                .isEmpty();
+        assertThat(padron.cargosAsentados())
+                .extracting(PadronDeLaSiembraEnMemoria.Cargo::tributo)
+                .allSatisfy(
+                        tributo ->
+                                assertThat(TributoDelLibro.esDelVocabulario(tributo))
+                                        .as("«%s» no es un tributo del libro", tributo)
+                                        .isTrue());
+    }
+
+    @Test
+    @DisplayName("#553 — el filtro «Arbitrios» de la consulta unificada encuentra esas filas")
+    void elFiltroDeArbitriosEncuentraLasFilasDelArchivo() throws IOException {
+        importarVehiculos().importar(abrir("vehiculos.csv"), observacion);
+        importarTransferencias().importar(abrir("transferencias.csv"), observacion);
+        new ImportarDeudaDeDemostracion(padron, referencias)
+                .importar(abrir("deuda.csv"), observacion);
+
+        List<String> arbitriosSembrados =
+                padron.cargosAsentados().stream()
+                        .map(PadronDeLaSiembraEnMemoria.Cargo::tributo)
+                        .filter(ConsultaUnificada.Alcance.ARBITRIOS::incluye)
+                        .toList();
+
+        // Es el defecto del issue medido donde nacia: el desplegable dice «ARBITRIOS», el
+        // filtro compara contra ARBITRIO —como se asienta— y el archivo sembraba el plural,
+        // asi que el filtro no encontraba ni una de las 18 filas que la siembra habia escrito.
+        assertThat(arbitriosSembrados)
+                .as(
+                        "el archivo y el filtro no pueden volver a divergir: si el archivo cambia"
+                                + " de grafia, aqui sale vacio")
+                .isNotEmpty()
+                .allSatisfy(
+                        tributo -> assertThat(tributo).isEqualTo(TributoDelLibro.ARBITRIO.texto()));
     }
 
     @Test

@@ -39,7 +39,7 @@ class PanelDeRecaudacionTest {
                     .conRecaudado("PREDIAL", EJERCICIO, 7, "300.00", 2)
                     .conRecaudado("PREDIAL", new Ejercicio(2025), 7, "200.00", 1)
                     .conCargado("PREDIAL", "1000.00", 10)
-                    .conCargado("ARBITRIOS", "400.00", 8)
+                    .conCargado("ARBITRIO", "400.00", 8)
                     .conPendiente("PREDIAL", "200.00", 3);
 
     private final CajaDeMentira caja = new CajaDeMentira().con("310.00", "10.00");
@@ -167,7 +167,7 @@ class PanelDeRecaudacionTest {
             // union por lo recaudado lo dejaria fuera.
             assertThat(porTributo().lineas())
                     .extracting(LineaDeCartera::concepto)
-                    .containsExactly("ARBITRIOS", "PREDIAL");
+                    .containsExactly("ARBITRIO", "PREDIAL");
         }
 
         @Test
@@ -188,7 +188,7 @@ class PanelDeRecaudacionTest {
             // Con la barra calculada como «(cargado - pendiente) / cargado» esto daria
             // 100 %, porque la proyeccion no distingue «cancelado» de «sin proyectar
             // todavia». Con las dos cifras del libro, el caso imposible no existe.
-            LineaDeCartera arbitrios = fila(porTributo(), "ARBITRIOS");
+            LineaDeCartera arbitrios = fila(porTributo(), "ARBITRIO");
 
             assertThat(arbitrios.cifra()).isEqualTo("S/ 0.00");
             assertThat(arbitrios.avance()).isEqualTo(OptionalInt.of(0));

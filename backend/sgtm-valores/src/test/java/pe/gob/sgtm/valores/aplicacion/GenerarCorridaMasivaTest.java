@@ -96,7 +96,7 @@ class GenerarCorridaMasivaTest {
     @DisplayName("un candidato sin deuda que coincida con el criterio queda SIN_DEUDA, sin valor")
     void candidatoSinDeudaQueCoincidaQuedaSinDeuda() {
         // Deuda de un tributo que el criterio no filtra.
-        deuda.con(7L, obligacion("ARBITRIOS", EJERCICIO_DEUDA, Dinero.de("500.00")));
+        deuda.con(7L, obligacion("ARBITRIO", EJERCICIO_DEUDA, Dinero.de("500.00")));
         ValorMasivo corrida = corridaDe(TipoValor.ORDEN_DE_PAGO, "PREDIAL");
         repositorioMasivo.iniciar(corrida, List.of(7L));
 

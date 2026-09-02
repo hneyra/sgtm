@@ -194,9 +194,9 @@ class AltasBajasSonActosJdbcTest {
             String codigo = nuevoCodigo();
             long titular = nuevoTitular(codigo);
 
-            emitir(titular, "ARBITRIOS", "500.00");
-            cristalizarInteres(titular, "ARBITRIOS", "12.35");
-            darDeAlta(titular, "ARBITRIOS", "90.00");
+            emitir(titular, "ARBITRIO", "500.00");
+            cristalizarInteres(titular, "ARBITRIO", "12.35");
+            darDeAlta(titular, "ARBITRIO", "90.00");
 
             List<Asiento> altas = relacion(codigo, SentidoDelMovimiento.ALTA);
 
@@ -206,7 +206,7 @@ class AltasBajasSonActosJdbcTest {
                     .satisfies(
                             asiento -> {
                                 assertThat(asiento.documentoOrigen())
-                                        .isEqualTo("RES-ALTA-ARBITRIOS");
+                                        .isEqualTo("RES-ALTA-ARBITRIO");
                                 assertThat(asiento.acto()).isEqualTo(ActoDelLibro.ALTA_DEUDA);
                             });
         }
@@ -217,10 +217,10 @@ class AltasBajasSonActosJdbcTest {
             String codigo = nuevoCodigo();
             long titular = nuevoTitular(codigo);
 
-            emitir(titular, "SERENAZGO", "400.00");
-            cobrar(titular, "SERENAZGO", "150.00");
-            darDeAlta(titular, "SERENAZGO", "60.00");
-            darDeBaja(titular, "SERENAZGO", "60.00");
+            emitir(titular, "ANUNCIOS", "400.00");
+            cobrar(titular, "ANUNCIOS", "150.00");
+            darDeAlta(titular, "ANUNCIOS", "60.00");
+            darDeBaja(titular, "ANUNCIOS", "60.00");
 
             assertThat(relacion(codigo, null))
                     .as("cinco asientos en el libro, dos actos en la relacion")
@@ -249,15 +249,15 @@ class AltasBajasSonActosJdbcTest {
             // el acto siempre— y porque V68 §3 dejo medido que esas filas NO se pueden
             // reparar: RLS con FORCE mas un migrador sin contexto de tenant (DAT-01 §0) y
             // `sgtm_app` sin UPDATE sobre el libro (V7).
-            insertarSinActo(titular, "PARQUES", TipoAsiento.ABONO, "RES-BAJA-VIEJA");
-            darDeBaja(titular, "PARQUES", "45.00");
+            insertarSinActo(titular, "JUEGOS", TipoAsiento.ABONO, "RES-BAJA-VIEJA");
+            darDeBaja(titular, "JUEGOS", "45.00");
 
             assertThat(relacion(codigo, SentidoDelMovimiento.BAJA))
                     .as(
                             "sale la posterior a V68; la anterior queda fuera, y por eso la"
                                     + " descripcion de la operacion lo dice en vez de callarlo")
                     .extracting(Asiento::documentoOrigen)
-                    .containsExactly("RES-BAJA-PARQUES");
+                    .containsExactly("RES-BAJA-JUEGOS");
         }
     }
 
@@ -307,8 +307,8 @@ class AltasBajasSonActosJdbcTest {
             String codigo = nuevoCodigo();
             long titular = nuevoTitular(codigo);
 
-            darDeAlta(titular, "LIMPIEZA", "150.00");
-            darDeBaja(titular, "LIMPIEZA", "150.00");
+            darDeAlta(titular, "ESPECTACULOS", "150.00");
+            darDeBaja(titular, "ESPECTACULOS", "150.00");
 
             Asiento laBaja =
                     relacion(codigo, SentidoDelMovimiento.BAJA).stream().findFirst().orElseThrow();
@@ -327,7 +327,7 @@ class AltasBajasSonActosJdbcTest {
             assertThat(relacion(codigo, SentidoDelMovimiento.ALTA))
                     .as("el alta y la reversion de la baja")
                     .extracting(Asiento::documentoOrigen)
-                    .containsExactlyInAnyOrder("RES-ALTA-LIMPIEZA", "RES-REVERSION");
+                    .containsExactlyInAnyOrder("RES-ALTA-ESPECTACULOS", "RES-REVERSION");
         }
     }
 
@@ -347,9 +347,9 @@ class AltasBajasSonActosJdbcTest {
             long deB = crearContribuyente(municipalidadB, codigo, "7272" + codigo.substring(3));
 
             TenantContext.fijar(new MunicipalidadId(municipalidadA));
-            darDeBaja(deA, "PATRIMONIO", "10.00");
+            darDeBaja(deA, "ALCABALA", "10.00");
             TenantContext.fijar(new MunicipalidadId(municipalidadB));
-            darDeBaja(deB, "PATRIMONIO", "20.00");
+            darDeBaja(deB, "ALCABALA", "20.00");
 
             TenantContext.fijar(new MunicipalidadId(municipalidadA));
             assertThat(relacion(codigo, SentidoDelMovimiento.BAJA))
@@ -365,7 +365,7 @@ class AltasBajasSonActosJdbcTest {
                             admin.prepareStatement(
                                     "SELECT count(DISTINCT municipalidad_id)"
                                             + " FROM cuenta_corriente_asiento"
-                                            + " WHERE tributo = 'PATRIMONIO'")) {
+                                            + " WHERE tributo = 'ALCABALA'")) {
                 try (ResultSet fila = sentencia.executeQuery()) {
                     fila.next();
                     assertThat(fila.getLong(1))

@@ -114,6 +114,22 @@ desplegadas, o cuando se sabe que alguna fila no encaja y no se va a reescribir 
 tenant desde una migración muere con el mismo `unrecognized configuration parameter`. «Normalizar el
 vocabulario viejo en la migración» no es una salida disponible, ni siquiera cuando parece la cómoda.
 
+**Y de ahí sale una consecuencia que `V74` (#553) tuvo que resolver, y conviene tenerla escrita.**
+Si las filas viejas no se pueden reescribir, lo único que la regla 4 deja para corregir un asiento
+equivocado es **reversarlo**: asentar su opuesto con `asiento_reversado_id` apuntando al original.
+Y una reversión **copia** el valor del original, porque si no, no netea. Un `CHECK` sin excepción
+cerraría ese camino **justo sobre las filas que más falta hace poder corregir**, y la obligación
+quedaría partida en dos para siempre. Por eso `asiento_tributo_ck` se escribe como «el vocabulario,
+**o** eres la reversión de otra fila», y no debilita nada: `asiento_reversado_id` sólo lo pone
+`Asiento.reversionDe`, que exige un asiento ya guardado, mientras que un asiento nuevo —el único que
+puede introducir una grafía nueva— lo lleva en nulo.
+
+Del mismo hallazgo sale la otra mitad: **el `CHECK` se pone donde está la verdad, no donde está la
+copia**. `saldo_proyectado` es caché reconstruible del libro, así que con el libro acotado lo está
+transitivamente; acotar además la caché no añadiría protección y sí haría fallar el `UPSERT` que
+`RegistrarAsiento.reproyectar` ejecuta en cada escritura, convirtiendo un defecto **detectable** en
+un estado de cuenta que revienta.
+
 ### Hallazgo 5 — Bajo RLS, el operador espacial tampoco llega al índice
 
 Es el hallazgo 3 otra vez, con otro operador, y por eso conviene leerlos como una **familia** y no
@@ -349,6 +365,20 @@ fraccionamiento— y `fase` —ordinaria, valor, coactiva, convenio—.
 - `referencia_externa` es cómo entran papeletas y licencias **sin** que el libro dependa de esos
   contextos: no hay clave foránea a propósito (ARQ-01 §4 regla 2).
 - `saldo_proyectado` es caché reconstruible. Si diverge, manda el libro.
+- `tributo` es un **vocabulario cerrado** desde `V74` (#553), con los siete que `determinacion`
+  ya declaraba en `V2` más `MULTA_TRIBUTARIA`, `MULTA_TRANSITO`, `MULTA_ADMINISTRATIVA`,
+  `CONVENIO` y `COSTAS PROCESALES`. Nació como `varchar(20)` sin restricción, y como
+  `ClaveDeSaldo` compara ese texto por igualdad exacta, **dos grafías del mismo tributo eran dos
+  obligaciones distintas**: `DeterminarArbitrios` asienta `ARBITRIO` y
+  `ejemplos/deuda.csv` sembraba `ARBITRIOS`, así que el filtro «Arbitrios» de la consulta
+  unificada no encontraba la deuda sembrada. El vocabulario vive en un solo sitio,
+  `pe.gob.sgtm.cuentacorriente.TributoDelLibro`, y es API pública del módulo porque los siete
+  contextos que asientan lo necesitan.
+- **`saldo_proyectado.tributo` no lleva `CHECK`, y es deliberado**: es caché derivada del libro
+  —su tributo sólo puede venir de un asiento—, así que acotarla no añade protección y sí
+  impediría reproyectar una obligación con grafía anterior a `V74`, que es exactamente la que hay
+  que poder seguir leyendo. `RegistrarAsiento.reproyectar` hace ese `UPSERT` en **cada**
+  escritura.
 
 ### 4.5 Sanciones: el desglose se guarda, no se recalcula
 
