@@ -96,6 +96,7 @@ class ResolucionControllerTest {
                                 "J. Perez",
                                 Hallazgo.SUBVALUADOR,
                                 AreaM2.de("300.00"),
+                                null,
                                 "ampliacion",
                                 OBSERVACION));
         liquidacion =

@@ -1089,10 +1089,12 @@ const VOCABULARIOS = {
         ' No existe «Reclamado». Se admite tambien la etiqueta con espacio, «EN PROCESO».',
     },
   },
-  // `Hallazgo` (4) es lo que el fiscalizador ANOTA en campo, y no es lo mismo
-  // que `CondicionFiscalizada` (5), que es lo que el sistema DERIVA: el acta no
-  // tiene donde consignar el uso observado —`acta_fiscalizacion` guarda area y
-  // no uso—, asi que USO_DISTINTO no puede anotarse y el enumerado no lo tiene.
+  // `Hallazgo` (5 desde #599) es lo que el fiscalizador ANOTA en campo, y sigue
+  // sin ser lo mismo que `CondicionFiscalizada` (5), que es lo que el sistema
+  // DERIVA comparando los dos lados: uno puede equivocarse y el otro no. Los dos
+  // vocabularios coinciden letra por letra desde que el acta tuvo donde
+  // consignar el uso observado —`acta_fiscalizacion.uso_hallado`, V76—, que es
+  // lo que le faltaba a `USO_DISTINTO` para poder anotarse.
   //
   // Y aqui publicar el vocabulario importa mas que en las lecturas: `hallazgo`
   // es OPCIONAL, asi que una palabra que el enumerado no reconoce no da una
@@ -1127,13 +1129,13 @@ const VOCABULARIOS = {
   },
   fisc_vehicular: {
     hallazgo: {
-      valores: ['CONFORME', 'OMISO', 'SUBVALUADOR', 'NO_UBICADO'],
+      valores: ['CONFORME', 'OMISO', 'SUBVALUADOR', 'USO_DISTINTO', 'NO_UBICADO'],
       enumerado: 'Hallazgo',
       descripcion:
         'Lo que el fiscalizador encontro en campo. El vocabulario es el del enumerado' +
-        ' «Hallazgo», letra por letra —cuatro valores, y no los cinco de' +
-        ' «CondicionFiscalizada»: un acta no consigna el uso observado—. Tambien se admite en el' +
-        ' cuerpo, y ahi gana (#425).',
+        ' «Hallazgo», letra por letra. En un acta VEHICULAR «USO_DISTINTO» se rechaza: un' +
+        ' vehiculo no declara uso, asi que no hay uso declarado del que difiera, y el acta' +
+        ' vehicular no consigna uso hallado. Tambien se admite en el cuerpo, y ahi gana (#425).',
     },
   },
 };
@@ -2766,6 +2768,49 @@ const OPERACIONES_ADICIONALES = {
         ' = predios + excluidosPorOtroPrograma + excluidosPorActaDelEjercicio. Un número suelto no' +
         ' distinguiría «otro programa se lo llevó» de «ya se fiscalizó», que se arreglan de' +
         ' maneras distintas (#586).',
+    },
+  ],
+  // `fisc_predial` declara «POST /fiscalizacion/predial/actas» como su endpoint
+  // —levantar el acta— y hasta #599 no habia por donde volver a leerla. #546 se
+  // nego a publicar la lectura y dejo el motivo escrito: el cuerpo del POST
+  // tenia NUEVE campos contra los veintitres controles y las siete filas de
+  // contraste que la pantalla del manual dibuja, asi que el listado habria
+  // publicado esa misma foto incompleta. Lo que faltaba no era por donde leer,
+  // era DONDE GUARDAR, y en concreto el uso hallado.
+  //
+  // La ruta es una y sirve a las dos familias porque el acta predial y la
+  // vehicular comparten tabla, tipo de dominio y recurso; dos listados serian
+  // dos copias de la misma consulta. Por eso el acceso lo comparten las dos
+  // opciones (`RequiereAcceso.oTambien`, censado en `AccesosCompartidosTest`).
+  fisc_predial: [
+    {
+      operationId: 'fisc_actas_listado',
+      metodo: 'get',
+      ruta: '/api/v1/fiscalizacion/actas',
+      parametros: [
+        {
+          nombre: 'programa',
+          descripcion:
+            'Acota a las actas de un programa, por su numero interno; es de donde el embudo saca' +
+            ' cuantas se inspeccionaron',
+        },
+      ],
+      paginacion: true,
+      titulo: 'Actas de inspección levantadas',
+      descripcion:
+        'Las actas de inspección de la municipalidad, predial y vehicular en la misma lista: las' +
+        ' dos comparten tabla y ciclo de vida, y cuál es cuál lo dice cuál de `predioId` y' +
+        ' `vehiculoId` trae valor. Agregada por #599, y no antes a propósito: #546 midió que un' +
+        ' listado no habría llenado la pantalla del acta —el cuerpo del POST tenía nueve campos' +
+        ' contra los veintitrés que el manual dibuja— y que lo que faltaba era dónde guardar el' +
+        ' **uso hallado**, hoy `usoHallado` (V76). **`totalElementos` cuenta todas las actas que' +
+        ' el filtro deja pasar, no las de la página**: es de ahí de donde el embudo del programa' +
+        ' llena su etapa «Inspeccionados», y sumar `visitado` fila a fila recompondría esa cifra' +
+        ' sobre la página que se hubiera pedido. Un solo filtro, y es el único que alguien pide:' +
+        ' las dos pantallas del acta no dibujan ninguno —su catálogo no declara ni filtros ni' +
+        ' tabla—, así que publicar el predio, el hallazgo o el estado sería inventar promesas que' +
+        ' ninguna pantalla hace. Exige LECTURA sobre `fisc_predial` **o** sobre `fisc_vehicular`:' +
+        ' un perfil de fiscalización vehicular registraría actas que no podría volver a ver.',
     },
   ],
   // «Resultados y determinaciones» declara «GET /fiscalizacion/resultados» como
