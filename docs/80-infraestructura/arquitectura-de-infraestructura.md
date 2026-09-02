@@ -258,21 +258,29 @@ propia ventana de mantenimiento, no en un `pulumi up` que además cambia otras c
 ### 4.1 `verificarAislamiento` no se ejecuta contra un motor en servicio
 
 Se descubrió leyendo lo que la prueba hace antes de verificar nada: **provisiona**. Crea una base
-para la corrida y les asigna a los cuatro roles claves efímeras con `ALTER ROLE`
-(`BaseDeDatosDePrueba.crearRoles`). Los roles son objetos **del clúster de PostgreSQL**, no de una
-base: esas claves nuevas valen para todas sus bases a la vez.
+para la corrida y les asigna a los cuatro roles su clave con `ALTER ROLE`
+(`BaseDeDatosDePrueba.provisionarRoles`). Los roles son objetos **del clúster de PostgreSQL**, no de
+una base: esas claves nuevas valen para todas sus bases a la vez.
 
 Apuntarla al motor de una municipalidad en marcha, por tanto, **deja fuera a la aplicación** hasta
 que alguien vuelva a aplicar el `Secret` — y el síntoma es un `28P01` en cada petición, que no se
 parece en nada a «alguien corrió una prueba».
 
 Y hay una segunda consecuencia de la misma frase —los roles son del clúster, no de la base—:
-**contra un motor externo, las dos tareas de `verificarAislamiento` no se pueden ejecutar en
-paralelo.** `org.gradle.parallel=true` las lanza a la vez, las dos hacen `ALTER ROLE` sobre los
-mismos cuatro roles, y salen un `tuple concurrently updated` y un `password authentication failed`
-que no se parecen en nada a su causa. Con Testcontainers no ocurre, porque cada tarea levanta su
-propio contenedor. Por eso la invocación lleva `--no-parallel --max-workers=1`, y se descubrió
-ejecutándola.
+**contra un motor externo, las dos tareas de `verificarAislamiento` se pisaban entre sí.**
+`org.gradle.parallel=true` las lanza a la vez, las dos hacían `ALTER ROLE` sobre los mismos cuatro
+roles con una clave aleatoria cada una, y salían un `tuple concurrently updated` y un `password
+authentication failed` que no se parecen en nada a su causa. Con Testcontainers no ocurre, porque
+cada tarea levanta su propio contenedor. Por eso la invocación llevaba `--no-parallel
+--max-workers=1`, y se descubrió ejecutándola.
+
+Desde **#698** el arnés lo cierra donde estaba la causa: la clave del rol **se deriva** del clúster
+en vez de sortearse —dos tareas escriben el mismo valor— y el provisionamiento entero se serializa
+con un candado de asesoramiento tomado siempre en la base `postgres`, porque los candados de
+PostgreSQL son **de la base** y cada tarea tiene la suya. La invocación de este guion **conserva
+las dos banderas igualmente**: aquí el motor es desechable y correr en serie cuesta segundos, así
+que este trabajo no depende de que aquel arreglo siga siendo correcto. Lo que sí depende de él es
+la orden que documenta `backend/README.md`, y ahí lo guarda `ProvisionamientoCompartidoTest`.
 
 Dónde se ejecuta entonces, que es donde el criterio de #149 se cumple igual:
 

@@ -48,8 +48,15 @@ exenta— vive en el código de la prueba (`TABLAS_DE_CATALOGO`, `TABLAS_EXENTAS
 > `sgtm_app` una.
 
 Los fixtures provisionan la base como se provisiona un ambiente real: crean los cuatro roles con
-claves efímeras, migran conectados como `sgtm_owner` —el único con DDL— y a partir de ahí entregan
+su clave, migran conectados como `sgtm_owner` —el único con DDL— y a partir de ahí entregan
 conexiones por rol.
+
+Esa clave **no se sortea**, y desde #698 es deliberado: `ALTER ROLE` es del clúster y no de la base,
+así que dos corridas contra el mismo motor por el camino de `sgtm.pruebas.postgres.url` se la
+pisaban. Se **deriva** del identificador del clúster y de la credencial con que se provisiona —dos
+tareas escriben el mismo valor— y el provisionamiento entero se serializa con un candado de
+asesoramiento tomado siempre en la base `postgres`. Qué garantiza eso y qué no:
+[`backend/README.md`](../README.md).
 
 ## Al agregar una tabla
 

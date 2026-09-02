@@ -69,17 +69,20 @@ Por omisión las pruebas de persistencia levantan un contenedor con Testcontaine
 **una salida documentada, y ninguna que omita la prueba**:
 
 ```bash
-./gradlew verificarAislamiento --max-workers=1 \
+./gradlew verificarAislamiento \
   -Dsgtm.pruebas.postgres.url=jdbc:postgresql://localhost:5432/postgres \
   -Dsgtm.pruebas.postgres.usuario=postgres \
   -Dsgtm.pruebas.postgres.clave=…
 ```
 
-- El usuario tiene que ser **superusuario**: la prueba crea los cuatro roles, les asigna claves
-  efímeras y crea una base nueva por corrida.
-- `--max-workers=1` **no es opcional aquí**. Los roles son del clúster y no de la base: dos módulos
-  en paralelo sobre el mismo motor se pisan la clave efímera de `sgtm_owner`, y el fallo sale como
-  `password authentication failed`, que no se parece en nada a su causa.
+- El usuario tiene que ser **superusuario**: la prueba crea los cuatro roles, les asigna su clave y
+  crea una base nueva por corrida.
+- **La base es de cada tarea; los roles son del clúster.** Desde #698 la clave del rol se deriva del
+  clúster en vez de sortearse, y el provisionamiento se serializa con un candado de asesoramiento
+  del propio motor, así que dos módulos en paralelo sobre el mismo motor ya no se pisan y
+  `--max-workers=1` dejó de hacer falta. Lo que sigue pisando es una corrida con **otro código** o
+  con **otra credencial de superusuario** —y ahí el fallo nombra la causa, en vez de salir como
+  `password authentication failed`—.
 - Sirven también las variables `SGTM_PRUEBAS_POSTGRES_URL`, `…_USUARIO`, `…_CLAVE`, y
   `-Dsgtm.pruebas.postgres.imagen` para cambiar la imagen de Testcontainers.
 
