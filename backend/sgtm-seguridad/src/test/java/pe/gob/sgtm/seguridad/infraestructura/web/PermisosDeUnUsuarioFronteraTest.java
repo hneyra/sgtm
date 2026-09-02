@@ -69,8 +69,19 @@ import tools.jackson.databind.json.JsonMapper;
  *
  * <p>La conexion es la de {@code sgtm_app} y no la de superusuario: un superusuario omite RLS
  * incluso con {@code FORCE ROW LEVEL SECURITY}, y entonces el aislamiento no se estaria midiendo.
+ * Lo sostiene {@link #seConectaComoSgtmApp()}, que mira el pool que usan los controladores.
+ *
+ * <h2>Y desde #585, tambien la ESCRITURA de esa excepcion</h2>
+ *
+ * <p>{@code AdministrarPermisos.fijarParaUsuario} existia —transaccional, con su {@code
+ * Observacion} y con la guarda del ultimo administrador— y <b>no la llamaba nadie</b>: la ruta solo
+ * tenia {@code get}. Las seis pruebas de mas abajo cruzan la misma frontera con {@code PUT}, y hay
+ * dos cosas que solo se pueden medir aqui: que {@code "privilegios": []} <b>escribe la fila en
+ * cero</b> en vez de borrarla —si la borrara, la lectura de esta misma ruta volveria a decir {@code
+ * GRUPO}—, y que el 409 del ultimo administrador <b>no deja nada escrito</b>, porque la guarda
+ * corre despues del guardado y lo que lo deshace es el rollback.
  */
-@DisplayName("RF-121 — Permisos efectivos de un usuario, de HTTP a PostgreSQL (#543)")
+@DisplayName("RF-121 — Permisos de un usuario, de HTTP a PostgreSQL (#543, #585)")
 class PermisosDeUnUsuarioFronteraTest {
 
     private static final LocalDate HOY = LocalDate.of(2026, 9, 1);
@@ -96,6 +107,10 @@ class PermisosDeUnUsuarioFronteraTest {
                     "INICIO");
 
     private static BaseDeDatosDePrueba base;
+
+    /** El mismo pool que usan los controladores: lo mira el centinela de mas abajo. */
+    private static JdbcClient jdbc;
+
     private static long municipalidadA;
     private static long municipalidadB;
     private static MockMvc mvc;
@@ -112,6 +127,25 @@ class PermisosDeUnUsuarioFronteraTest {
     private static long grupoAjeno;
     private static long grupoAdministrador;
 
+    /**
+     * Los cuatro sujetos de la ESCRITURA de la excepcion (#585), separados a proposito.
+     *
+     * <p>Cada uno tiene su prueba y ninguna comparte fila con otra: dos pruebas que escriben sobre
+     * el mismo par (usuario, acceso) se leen igual pasen en el orden que pasen, y entonces una
+     * verde no dice nada. {@code usuarioDeLaEscritura} pertenece a un grupo <b>propio</b> —no a
+     * {@code grupoUno}— porque afiliarlo alli cambiaria el recuento que ya afirma {@code
+     * losMiembrosDelGrupo}.
+     */
+    private static long usuarioDeLaEscritura;
+
+    private static long usuarioDelUpsert;
+    private static long usuarioDeLaAuditoria;
+    private static long usuarioSinObservacion;
+    private static long usuarioDelAislamiento;
+
+    /** El unico que hoy puede administrar permisos: la guarda del ultimo administrador. */
+    private static long administrador;
+
     /** Y el homonimo en B, para el aislamiento. */
     private static long usuarioDeB;
 
@@ -126,7 +160,7 @@ class PermisosDeUnUsuarioFronteraTest {
         pool.setUsername(BaseDeDatosDePrueba.APP);
         pool.setPassword(base.clave(BaseDeDatosDePrueba.APP));
 
-        JdbcClient jdbc = JdbcClient.create(pool);
+        jdbc = JdbcClient.create(pool);
         TenantTransactionManager gestor = new TenantTransactionManager(pool);
         AdministracionRepositoryJdbc administracion = new AdministracionRepositoryJdbc(jdbc);
         PermisoRepositoryJdbc permisos = new PermisoRepositoryJdbc(jdbc);
@@ -560,7 +594,297 @@ class PermisosDeUnUsuarioFronteraTest {
                 .isEqualTo(1);
     }
 
+    // ------------------------------------------------- #585: escribir la excepcion
+
+    @Test
+    @DisplayName("#585 AC 1 — «privilegios: []» NIEGA: escribe la fila en cero, no la borra")
+    void laExcepcionQueNiegaSeEscribeEnCero() throws Exception {
+        List<Fila> antes = sobre(permisosDe(usuarioDeLaEscritura), "calles");
+        assertThat(antes).hasSize(1);
+        assertThat(antes.get(0).origen())
+                .as("de partida lo hereda de su grupo, que le da los dos")
+                .isEqualTo("GRUPO");
+        assertThat(antes.get(0).privilegios()).containsExactlyInAnyOrder("LECTURA", "EJECUCION");
+
+        int estado =
+                fijar(
+                        usuarioDeLaEscritura,
+                        "[{\"acceso\":\"calles\",\"privilegios\":[]}]",
+                        "se le retira el acceso a calles");
+        assertThat(estado).isEqualTo(200);
+
+        List<Fila> despues = sobre(permisosDe(usuarioDeLaEscritura), "calles");
+        assertThat(despues).as("sigue siendo una fila por acceso").hasSize(1);
+        assertThat(despues.get(0).origen())
+                .as(
+                        "si el «[]» borrara la fila en vez de escribirla en cero, el acceso volveria"
+                                + " a heredar del grupo y esto diria GRUPO")
+                .isEqualTo("EXCEPCION");
+        assertThat(despues.get(0).privilegios())
+                .as("la fila vacia es la negacion hecha visible (#543)")
+                .isEmpty();
+        assertThat(despues.get(0).grupoId()).isNull();
+
+        assertThat(filasDePermiso(usuarioDeLaEscritura, "calles"))
+                .as("la fila existe: aqui no se borra nada (regla 4)")
+                .isEqualTo(1);
+        assertThat(filasDePermisoEnCero(usuarioDeLaEscritura, "calles"))
+                .as("y los siete booleanos estan en falso, que es lo que NIEGA")
+                .isEqualTo(1);
+    }
+
+    @Test
+    @DisplayName("#585 AC 1 — el upsert no barre lo que el cuerpo no nombra")
+    void elUpsertNoBarreLoAusente() throws Exception {
+        assertThat(
+                        fijar(
+                                usuarioDelUpsert,
+                                "[{\"acceso\":\"sectores\",\"privilegios\":[\"LECTURA\"]}]",
+                                "primero, sectores"))
+                .isEqualTo(200);
+        assertThat(
+                        fijar(
+                                usuarioDelUpsert,
+                                "[{\"acceso\":\"vehiculos\",\"privilegios\":[\"IMPRESION\"]}]",
+                                "despues, vehiculos"))
+                .isEqualTo(200);
+
+        List<Fila> filas = permisosDe(usuarioDelUpsert);
+        assertThat(sobre(filas, "sectores"))
+                .as(
+                        "una lista parcial no puede traducirse en retirar en silencio todo lo demas:"
+                                + " el acceso que el segundo cuerpo no nombra se queda como estaba")
+                .singleElement()
+                .satisfies(
+                        fila -> {
+                            assertThat(fila.origen()).isEqualTo("EXCEPCION");
+                            assertThat(fila.privilegios()).containsExactly("LECTURA");
+                        });
+        assertThat(sobre(filas, "vehiculos"))
+                .singleElement()
+                .satisfies(
+                        fila -> {
+                            assertThat(fila.origen()).isEqualTo("EXCEPCION");
+                            assertThat(fila.privilegios()).containsExactly("IMPRESION");
+                        });
+    }
+
+    @Test
+    @DisplayName("#585 AC 2 — sin observacion es 422 y no escribe nada (regla 10)")
+    void sinObservacionEs422() throws Exception {
+        MvcResult resultado =
+                mvc.perform(
+                                put(camino(
+                                                "/seguridad/usuarios/%d/permisos",
+                                                usuarioSinObservacion))
+                                        .contentType(MediaType.APPLICATION_JSON)
+                                        .content(
+                                                "{\"niveles\":[{\"acceso\":\"auditoria\","
+                                                        + "\"privilegios\":[\"LECTURA\"]}]}"))
+                        .andReturn();
+
+        assertThat(resultado.getResponse().getStatus())
+                .as(
+                        "ArchUnit guarda la FIRMA del caso de uso, no el VALOR que le pasa el"
+                                + " controlador (#538): un controlador que INVENTE la observacion"
+                                + " deja verificarArquitectura en verde y solo lo caza esto")
+                .isEqualTo(422);
+        assertThat(resultado.getResponse().getContentAsString())
+                .contains("\"codigo\":\"VALIDACION\"")
+                .contains("observacion");
+        assertThat(filasDePermiso(usuarioSinObservacion, "auditoria"))
+                .as(
+                        "sin observacion no se guarda. El sujeto es propio de esta prueba y no el de"
+                                + " la auditoria de abajo: con el mismo par (usuario, acceso) esta"
+                                + " asercion diria «1» o «0» segun el orden en que JUnit corriera"
+                                + " las dos, y entonces el verde no significaria nada")
+                .isZero();
+    }
+
+    @Test
+    @DisplayName("#585 AC 1 — la clave que FALTA no es la lista vacia: 422, no retirar siete")
+    void laClaveQueFaltaNoEsLaListaVacia() throws Exception {
+        MvcResult sinPrivilegios =
+                mvc.perform(
+                                put(camino(
+                                                "/seguridad/usuarios/%d/permisos",
+                                                usuarioSinObservacion))
+                                        .contentType(MediaType.APPLICATION_JSON)
+                                        .content(
+                                                "{\"niveles\":[{\"acceso\":\"auditoria\"}],"
+                                                        + "\"observacion\":\"por un campo olvidado\"}"))
+                        .andReturn();
+
+        assertThat(sinPrivilegios.getResponse().getStatus())
+                .as(
+                        "«privilegios: []» retira los siete a proposito; que la clave falte no puede"
+                                + " significar lo mismo, porque entonces un campo olvidado retiraria"
+                                + " siete privilegios y la respuesta seria un 200")
+                .isEqualTo(422);
+        assertThat(sinPrivilegios.getResponse().getContentAsString()).contains("privilegios");
+
+        MvcResult sinNiveles =
+                mvc.perform(
+                                put(camino(
+                                                "/seguridad/usuarios/%d/permisos",
+                                                usuarioSinObservacion))
+                                        .contentType(MediaType.APPLICATION_JSON)
+                                        .content("{\"observacion\":\"sin un solo acceso\"}"))
+                        .andReturn();
+
+        assertThat(sinNiveles.getResponse().getStatus())
+                .as(
+                        "y un PUT que no fija ningun acceso no es un acto: contestarle 200 lo haria"
+                                + " parecer guardado")
+                .isEqualTo(422);
+
+        assertThat(filasDePermiso(usuarioSinObservacion, "auditoria"))
+                .as("ninguno de los dos escribe nada")
+                .isZero();
+    }
+
+    @Test
+    @DisplayName("#585 AC 2 — la escritura deja fila de auditoria PERMISO, con quien la firmo")
+    void laEscrituraQuedaEnLaAuditoria() throws Exception {
+        String observacion = "delegacion de la bitacora al auditor interno";
+
+        assertThat(
+                        fijar(
+                                usuarioDeLaAuditoria,
+                                "[{\"acceso\":\"auditoria\",\"privilegios\":[\"LECTURA\"]}]",
+                                observacion))
+                .isEqualTo(200);
+
+        assertThat(contar(auditoriaCon("observacion = '" + observacion + "'")))
+                .as("por SQL directo no habria ninguna fila que contar (RNF-052)")
+                .isEqualTo(1);
+        assertThat(
+                        contar(
+                                auditoriaCon(
+                                        "observacion = '"
+                                                + observacion
+                                                + "' AND operacion = 'PERMISO'"
+                                                + " AND usuario_id = 'prueba'"
+                                                + " AND datos_nuevos->>'acceso' = 'auditoria'")))
+                .as(
+                        "ADR-0008 §5: quien administra la seguridad no puede alterar su propia"
+                                + " pista, asi que la fila dice que operacion fue, quien la firmo y"
+                                + " sobre que acceso")
+                .isEqualTo(1);
+    }
+
+    @Test
+    @DisplayName("#585 AC 3 — negarle por excepcion al ultimo administrador es 409, y no escribe")
+    void negarleAlUltimoAdministradorEs409() throws Exception {
+        MvcResult resultado =
+                mvc.perform(
+                                put(camino("/seguridad/usuarios/%d/permisos", administrador))
+                                        .contentType(MediaType.APPLICATION_JSON)
+                                        .content(
+                                                "{\"niveles\":[{\"acceso\":\"permisos\","
+                                                        + "\"privilegios\":[]}],"
+                                                        + "\"observacion\":\"retiro de prueba\"}"))
+                        .andReturn();
+
+        assertThat(resultado.getResponse().getStatus())
+                .as(
+                        "la excepcion SUSTITUYE a lo que su grupo le da, asi que negarle «permisos»"
+                                + " deja la municipalidad sin quien administre aunque el grupo se lo"
+                                + " siga otorgando: sin la precedencia de"
+                                + " usuariosQuePuedenAdministrarPermisos esto seria 200")
+                .isEqualTo(409);
+        assertThat(filasDePermiso(administrador, "permisos"))
+                .as(
+                        "la guarda corre DESPUES del save y dentro de la misma transaccion: lo que"
+                                + " deshace el cambio es el rollback, no un if")
+                .isZero();
+    }
+
+    @Test
+    @DisplayName("#585 AC 4 — desde B, escribir sobre el usuario de A es 404 y no escribe")
+    void elAislamientoDeLaEscritura() throws Exception {
+        TenantContext.fijar(new MunicipalidadId(municipalidadB));
+        MvcResult resultado =
+                mvc.perform(
+                                put(camino(
+                                                "/seguridad/usuarios/%d/permisos",
+                                                usuarioDelAislamiento))
+                                        .contentType(MediaType.APPLICATION_JSON)
+                                        .content(
+                                                "{\"niveles\":[{\"acceso\":\"calles\","
+                                                        + "\"privilegios\":[\"ESPECIAL\"]}],"
+                                                        + "\"observacion\":\"desde la vecina\"}"))
+                        .andReturn();
+
+        assertThat(resultado.getResponse().getStatus())
+                .as(
+                        "con un SUPERUSUARIO del cluster —que omite RLS incluso con FORCE ROW LEVEL"
+                                + " SECURITY— esto seria 200 y le escribiria un permiso al usuario"
+                                + " de A. Con sgtm_owner NO: al dueno la politica tambien lo somete"
+                                + " (#537, #545)")
+                .isEqualTo(404);
+
+        TenantContext.fijar(new MunicipalidadId(municipalidadA));
+        assertThat(filasDePermiso(usuarioDelAislamiento, "calles"))
+                .as("y en A no quedo nada escrito")
+                .isZero();
+    }
+
+    @Test
+    @DisplayName("#585 — el pool que usan los controladores es el de sgtm_app")
+    void seConectaComoSgtmApp() {
+        // Mira el POOL que usa el controlador, y no una conexion aparte: es lo unico que impide
+        // que un cambio de fixture devuelva la conexion sin que nadie lo note (#545). Con
+        // `sgtm_owner` la mutacion de aislamiento pasaria en verde —FORCE ROW LEVEL SECURITY
+        // sujeta tambien al dueno (#537)— y con el superusuario del cluster la politica se omite
+        // entera; esta linea caza los dos casos.
+        assertThat(jdbc.sql("SELECT current_user").query(String.class).single())
+                .isEqualTo(BaseDeDatosDePrueba.APP);
+    }
+
     // ------------------------------------------------------------------ apoyo
+
+    /** El {@code PUT} de la excepcion, con su observacion. Devuelve el codigo de estado. */
+    private static int fijar(long usuario, String niveles, String observacion) throws Exception {
+        return mvc.perform(
+                        put(camino("/seguridad/usuarios/%d/permisos", usuario))
+                                .contentType(MediaType.APPLICATION_JSON)
+                                .content(
+                                        "{\"niveles\":"
+                                                + niveles
+                                                + ",\"observacion\":\""
+                                                + observacion
+                                                + "\"}"))
+                .andReturn()
+                .getResponse()
+                .getStatus();
+    }
+
+    private static long filasDePermiso(long usuario, String acceso) throws SQLException {
+        return contar(permisoDe(usuario, acceso, ""));
+    }
+
+    private static long filasDePermisoEnCero(long usuario, String acceso) throws SQLException {
+        return contar(
+                permisoDe(
+                        usuario,
+                        acceso,
+                        " AND NOT (p.ejecucion OR p.lectura OR p.registro OR p.modificacion"
+                                + " OR p.eliminacion OR p.impresion OR p.especial)"));
+    }
+
+    private static String permisoDe(long usuario, String acceso, String extra) {
+        return "SELECT count(*) FROM permiso p JOIN acceso a ON a.id = p.acceso_id"
+                + " WHERE a.codigo = '"
+                + acceso
+                + "' AND p.usuario_id = "
+                + usuario
+                + extra;
+    }
+
+    private static String auditoriaCon(String condicion) {
+        return "SELECT count(*) FROM auditoria WHERE tabla = 'permiso' AND " + condicion;
+    }
 
     private record Fila(String acceso, List<String> privilegios, String origen, Long grupoId) {}
 
@@ -664,12 +988,18 @@ class PermisosDeUnUsuarioFronteraTest {
             usuarioSinGrupos = usuario(app, municipalidadA, "sin.grupos");
             usuarioDeLaExcepcion = usuario(app, municipalidadA, "con.excepcion");
             usuarioDeDosGruposConPermiso = usuario(app, municipalidadA, "de.dos.grupos");
-            long administrador = usuario(app, municipalidadA, "el.administrador");
+            administrador = usuario(app, municipalidadA, "el.administrador");
+            usuarioDeLaEscritura = usuario(app, municipalidadA, "se.le.niega");
+            usuarioDelUpsert = usuario(app, municipalidadA, "del.upsert");
+            usuarioDeLaAuditoria = usuario(app, municipalidadA, "de.la.auditoria");
+            usuarioSinObservacion = usuario(app, municipalidadA, "sin.observacion");
+            usuarioDelAislamiento = usuario(app, municipalidadA, "del.aislamiento");
 
             grupoUno = grupo(app, municipalidadA, "Mesa de Partes");
             grupoDos = grupo(app, municipalidadA, "Caja");
             grupoAjeno = grupo(app, municipalidadA, "Coactiva");
             grupoAdministrador = grupo(app, municipalidadA, "Administradores");
+            long grupoDeLaEscritura = grupo(app, municipalidadA, "Escritura");
 
             afiliar(app, municipalidadA, grupoUno, usuarioDeDosGrupos, true);
             afiliar(app, municipalidadA, grupoDos, usuarioDeDosGrupos, true);
@@ -679,6 +1009,7 @@ class PermisosDeUnUsuarioFronteraTest {
             afiliar(app, municipalidadA, grupoUno, usuarioDeDosGruposConPermiso, true);
             afiliar(app, municipalidadA, grupoDos, usuarioDeDosGruposConPermiso, true);
             afiliar(app, municipalidadA, grupoAdministrador, administrador, true);
+            afiliar(app, municipalidadA, grupoDeLaEscritura, usuarioDeLaEscritura, true);
 
             // `grupoUno` da LECTURA y EJECUCION sobre `calles`, y LECTURA sobre `sectores`.
             permisoDeGrupo(app, municipalidadA, calles, grupoUno, "lectura", "ejecucion");
@@ -690,6 +1021,8 @@ class PermisosDeUnUsuarioFronteraTest {
             permisoDeGrupo(app, municipalidadA, sectores, grupoDos);
             // Y el que sostiene la guarda del ultimo administrador.
             permisoDeGrupo(app, municipalidadA, permisos, grupoAdministrador, "registro");
+            // Lo que el grupo de `se.le.niega` otorga, y que su excepcion tendra que sustituir.
+            permisoDeGrupo(app, municipalidadA, calles, grupoDeLaEscritura, "lectura", "ejecucion");
 
             // Las dos excepciones de `con.excepcion`: una restringe, la otra niega.
             permisoDeUsuario(app, municipalidadA, calles, usuarioDeLaExcepcion, "lectura");

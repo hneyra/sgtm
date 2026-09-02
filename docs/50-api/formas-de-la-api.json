@@ -6624,5 +6624,16 @@
   "PUT /seguridad/usuarios/{id}/clave": {
     "gestionadaPor": "texto",
     "destino": "texto"
-  }
+  },
+  "PUT /seguridad/usuarios/{id}/permisos": [
+    {
+      "id": "entero",
+      "acceso": "texto",
+      "grupoId": "entero",
+      "usuarioId": "entero",
+      "privilegios": [
+        "texto"
+      ]
+    }
+  ]
 }
