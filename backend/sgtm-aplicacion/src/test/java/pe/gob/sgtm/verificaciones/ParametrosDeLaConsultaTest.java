@@ -134,6 +134,13 @@ class ParametrosDeLaConsultaTest {
                     Map.entry(
                             "GET /catastro/predios/plano",
                             Set.of("bbox", "codigoDeSector", "codigoDeManzana", "limite")),
+                    // #612 — el marco de lo levantado. Los dos que tiene, que son los dos del
+                    // plano: el marco tiene que salir del MISMO conjunto de predios que despues
+                    // se dibuja, asi que si uno de los dos deja de acotar aqui el encuadre y el
+                    // dibujo dejan de hablar del mismo territorio.
+                    Map.entry(
+                            "GET /catastro/predios/plano/marco",
+                            Set.of("codigoDeSector", "codigoDeManzana")),
                     // ------------------------------------------------------------------
                     // #425 — las nueve que quedaban. De cada operacion se promete lo que su
                     // cuerpo ya llevaba y el contrato declara `in: query`; los demas parametros
@@ -233,6 +240,10 @@ class ParametrosDeLaConsultaTest {
                     // contrato declara. Una operacion que estrena controlador es el unico momento
                     // en que esta promesa no cuesta nada.
                     "GET /catastro/predios/plano",
+                    // #612 — el marco de lo levantado. Nace con controlador y con exactamente
+                    // los dos parametros que el contrato le declara, que es el unico momento en
+                    // que esta promesa no cuesta nada.
+                    "GET /catastro/predios/plano/marco",
                     // #576 — las dos determinaciones de Rentas que declaraban filtros que
                     // ningun controlador leia. `predial_individual` declaraba los tres de la
                     // DECLARACION JURADA que motiva el calculo y `espectaculos` los cuatro de
@@ -241,7 +252,14 @@ class ParametrosDeLaConsultaTest {
                     // cualquiera de ellos al contrato ponga la prueba en rojo NOMBRANDOLO. Sin
                     // esto, la comprobacion no distingue «lo lee» de «no hay nada que leer».
                     "POST /rentas/predial/calculo-individual",
-                    "POST /rentas/espectaculos");
+                    "POST /rentas/espectaculos",
+                    // #674 — la relacion de prescripciones declaradas. Estrena controlador
+                    // con esta promesa puesta desde el primer dia, por lo mismo que el plano
+                    // catastral: sus cuatro filtros son exactamente los cuatro que el
+                    // contrato declara, y comprometerlos cuando la operacion nace no cuesta
+                    // nada. `resultado` se RECHAZA con 422 si no es uno de los tres, que
+                    // tambien es leerlo.
+                    "GET /coactiva/prescripcion");
 
     /**
      * Cuantas operaciones arrastran hoy cada mitad del desajuste. Medido, no estimado (#544).

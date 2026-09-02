@@ -3,23 +3,30 @@ package pe.gob.sgtm.valores.infraestructura;
 import java.sql.ResultSet;
 import java.sql.SQLException;
 import java.util.ArrayList;
+import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.Optional;
 import org.jspecify.annotations.Nullable;
 import org.springframework.jdbc.core.simple.JdbcClient;
 import org.springframework.stereotype.Repository;
 import pe.gob.sgtm.auditoria.Origen;
 import pe.gob.sgtm.auditoria.OrigenContext;
+import pe.gob.sgtm.compartido.Pagina;
+import pe.gob.sgtm.compartido.Paginacion;
 import pe.gob.sgtm.dominio.Ejercicio;
 import pe.gob.sgtm.dominio.Observacion;
 import pe.gob.sgtm.dominio.Plazo;
 import pe.gob.sgtm.dominio.UnidadDePlazo;
+import pe.gob.sgtm.persistencia.OrdenSeguro;
 import pe.gob.sgtm.persistencia.RepositorioJdbc;
 import pe.gob.sgtm.valores.dominio.CausalDePrescripcion;
 import pe.gob.sgtm.valores.dominio.ClaseDeHecho;
 import pe.gob.sgtm.valores.dominio.ComputoDeEjercicio;
+import pe.gob.sgtm.valores.dominio.CriterioDePrescripciones;
 import pe.gob.sgtm.valores.dominio.HechoDelComputo;
 import pe.gob.sgtm.valores.dominio.Prescripcion;
+import pe.gob.sgtm.valores.dominio.PrescripcionEnLista;
 import pe.gob.sgtm.valores.dominio.PrescripcionRepository;
 import pe.gob.sgtm.valores.dominio.ResultadoDeLaSolicitud;
 
@@ -41,6 +48,38 @@ public class PrescripcionRepositoryJdbc extends RepositorioJdbc implements Presc
             "id, contribuyente_id, tributo, ejercicio_desde, ejercicio_hasta, fecha_presentacion,"
                     + " causal, plazo_anios, conjunto_id, resultado, resolucion, usuario_registro,"
                     + " observacion";
+
+    /**
+     * Por lo que se recorre una relacion de prescripciones: cuando se presento la solicitud.
+     *
+     * <p>{@code desempatandoPor("id")} porque {@code fecha_presentacion} es una <b>fecha</b>, no un
+     * instante: varias solicitudes del mismo dia empatan, y sin orden total dos paginas
+     * consecutivas pueden repetir una fila y omitir otra —la solicitud que se busca no aparece
+     * nunca— (#543, #548).
+     */
+    private static final OrdenSeguro ORDEN =
+            OrdenSeguro.sobre(
+                            "fecha_presentacion",
+                            "tributo",
+                            "ejercicio_desde",
+                            "ejercicio_hasta",
+                            "resultado")
+                    .desempatandoPor("id");
+
+    /**
+     * Los ejercicios que de verdad prescribieron, en una sola consulta y no una por fila.
+     *
+     * <p>Correlacionada con {@code municipalidad_id} ademas de con {@code prescripcion_id}: la RLS
+     * ya acota las dos tablas, y nombrarlo deja explicito que la fila hija es de la misma
+     * municipalidad que su cabecera, como hace el {@code NOT EXISTS} de {@code
+     * AsientoRepositoryJdbc}.
+     */
+    private static final String EJERCICIOS_PRESCRITOS =
+            "(SELECT string_agg(pe.ejercicio::text, ',' ORDER BY pe.ejercicio)"
+                    + "   FROM prescripcion_ejercicio pe"
+                    + "  WHERE pe.municipalidad_id = p.municipalidad_id"
+                    + "    AND pe.prescripcion_id = p.id"
+                    + "    AND pe.prescrita) AS ejercicios_prescritos";
 
     public PrescripcionRepositoryJdbc(JdbcClient jdbc) {
         super(jdbc);
@@ -156,6 +195,89 @@ public class PrescripcionRepositoryJdbc extends RepositorioJdbc implements Presc
                         hechosDe(id),
                         datos.usuarioRegistro(),
                         datos.observacion()));
+    }
+
+    /**
+     * La relacion de declaraciones (#674).
+     *
+     * <p><b>Una consulta por pagina, no una por fila.</b> Los ejercicios que prescribieron se
+     * agregan en la propia seleccion con {@link #EJERCICIOS_PRESCRITOS}; leerlos con {@link
+     * #ejerciciosDe} por cada fila serian veinte consultas para una pagina de veinte, y ademas
+     * traerian el computo entero —los dos inicios y la fecha de cada ejercicio—, que es la
+     * resolucion y no la relacion.
+     *
+     * <p><b>Sin indice nuevo, y medido en vez de supuesto.</b> {@code prescripcion} crece una fila
+     * por solicitud presentada, no una por predio ni por asiento: el padron de Catacaos tiene 10
+     * 603 contribuyentes y las solicitudes de prescripcion de un ano se cuentan por decenas. La
+     * clave primaria es {@code (municipalidad_id, id)} y la politica RLS acota por su primera
+     * columna, asi que el recorrido ya esta acotado al inquilino. Un indice aqui seria una
+     * migracion para una tabla que cabe en una pagina.
+     */
+    @Override
+    public Pagina<PrescripcionEnLista> buscar(
+            CriterioDePrescripciones criterio, Paginacion paginacion) {
+
+        Map<String, Object> parametros = new LinkedHashMap<>();
+        StringBuilder condiciones = new StringBuilder("1 = 1");
+
+        if (criterio.contribuyenteId() != null) {
+            condiciones.append(" AND p.contribuyente_id = :contribuyenteId");
+            parametros.put("contribuyenteId", criterio.contribuyenteId());
+        }
+        if (criterio.tributo() != null && !criterio.tributo().isBlank()) {
+            condiciones.append(" AND p.tributo = :tributo");
+            parametros.put("tributo", criterio.tributo().strip());
+        }
+        if (criterio.ejercicio() != null) {
+            // El rango SOLICITADO, no los que prescribieron: ver CriterioDePrescripciones.
+            condiciones.append(
+                    " AND p.ejercicio_desde <= :ejercicio AND p.ejercicio_hasta >= :ejercicio");
+            parametros.put("ejercicio", criterio.ejercicio());
+        }
+        if (criterio.resultado() != null) {
+            condiciones.append(" AND p.resultado = :resultado");
+            parametros.put("resultado", criterio.resultado().name());
+        }
+
+        String desde = " FROM prescripcion p WHERE " + condiciones;
+        String seleccion =
+                "SELECT p.id, p.contribuyente_id, p.tributo, p.ejercicio_desde,"
+                        + " p.ejercicio_hasta, p.fecha_presentacion, p.causal, p.plazo_anios,"
+                        + " p.resultado, p.resolucion, p.usuario_registro, p.observacion, "
+                        + EJERCICIOS_PRESCRITOS
+                        + desde;
+        String conteo = "SELECT count(*)" + desde;
+
+        return paginar(seleccion, conteo, parametros, paginacion, ORDEN, this::mapearFila);
+    }
+
+    private PrescripcionEnLista mapearFila(ResultSet fila, int numeroDeFila) throws SQLException {
+        return new PrescripcionEnLista(
+                fila.getLong("id"),
+                fila.getLong("contribuyente_id"),
+                fila.getString("tributo"),
+                new Ejercicio(fila.getInt("ejercicio_desde")),
+                new Ejercicio(fila.getInt("ejercicio_hasta")),
+                fila.getDate("fecha_presentacion").toLocalDate(),
+                CausalDePrescripcion.valueOf(fila.getString("causal")),
+                new Plazo(fila.getInt("plazo_anios"), UnidadDePlazo.ANIOS),
+                ResultadoDeLaSolicitud.valueOf(fila.getString("resultado")),
+                fila.getString("resolucion"),
+                prescritos(fila.getString("ejercicios_prescritos")),
+                fila.getString("usuario_registro"),
+                fila.getString("observacion"));
+    }
+
+    /** Nulo es «ninguno prescribio», que es una lista vacia y no una falta de dato. */
+    private static List<Ejercicio> prescritos(@Nullable String agregados) {
+        if (agregados == null || agregados.isBlank()) {
+            return List.of();
+        }
+        List<Ejercicio> ejercicios = new ArrayList<>();
+        for (String anio : agregados.split(",")) {
+            ejercicios.add(new Ejercicio(Integer.parseInt(anio.strip())));
+        }
+        return ejercicios;
     }
 
     private List<ComputoDeEjercicio> ejerciciosDe(long prescripcionId) {

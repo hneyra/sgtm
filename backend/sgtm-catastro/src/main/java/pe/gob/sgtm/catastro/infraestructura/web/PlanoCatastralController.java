@@ -9,6 +9,7 @@ import org.springframework.web.bind.annotation.RestController;
 import pe.gob.sgtm.autorizacion.Privilegio;
 import pe.gob.sgtm.autorizacion.RequiereAcceso;
 import pe.gob.sgtm.catastro.aplicacion.ConsultaDelPlanoCatastral;
+import pe.gob.sgtm.catastro.dominio.AcotacionDelPlano;
 import pe.gob.sgtm.catastro.dominio.FiltroDelPlano;
 import pe.gob.sgtm.compartido.MarcoGeografico;
 import pe.gob.sgtm.web.Api;
@@ -85,6 +86,35 @@ public class PlanoCatastralController {
                     DeclaracionDeFicha.mensajeDe(noCabe),
                     List.of("lotes=" + noCabe.cuantos(), "tope=" + noCabe.tope()));
         }
+    }
+
+    /**
+     * Donde esta lo levantado: el marco que envuelve la geometria ya cargada (#612).
+     *
+     * <p>Es la lectura que le faltaba a {@link #lotes}: aquella exige {@code bbox} y hace bien —sin
+     * el la consulta seria el padron entero—, pero <b>ninguna operacion del contrato decia donde
+     * esta la municipalidad</b>, asi que la pantalla no tenia de donde sacar el primer marco y
+     * abria sobre un rectangulo declarado del pais. El dia que se cargue el primer plano, ese marco
+     * contiene mas lotes que el tope y la respuesta pasa a ser «acercate»: correcta, y imposible de
+     * obedecer desde ahi.
+     *
+     * <p><b>Los dos parametros son los mismos que los del plano, y a proposito</b>: el marco tiene
+     * que salir del mismo conjunto de predios que despues se dibuja. Falta {@code bbox}, que es
+     * justo lo que esta operacion calcula, y falta {@code limite}, que aqui no significa nada: la
+     * respuesta son cuatro cifras y una cuenta, pese lo que pese el padron.
+     *
+     * <p><b>Cuelga de {@code /plano} y hereda su {@code @RequiereAcceso}</b> —{@code
+     * consulta_fichas} con {@code LECTURA}—, que es lo que este endpoint tiene que exigir: es el
+     * encuadre del mismo mapa. Y no publica ni un identificador de predio, de modo que no es una
+     * via de fuga del padron ni deja fila en la bitacora.
+     */
+    @GetMapping("/marco")
+    public MarcoDelPlanoResource marco(
+            @RequestParam(required = false) @Nullable String codigoDeSector,
+            @RequestParam(required = false) @Nullable String codigoDeManzana) {
+
+        return MarcoDelPlanoResource.de(
+                plano.marcoDe(new AcotacionDelPlano(codigoDeSector, codigoDeManzana)));
     }
 
     /**

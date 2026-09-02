@@ -709,6 +709,56 @@ paths:
           $ref: "#/components/responses/SinMunicipalidad"
         "422":
           $ref: "#/components/responses/ErrorDeValidacion"
+  "/catastro/predios/plano/marco":
+    get:
+      operationId: marco_del_plano
+      summary: "Dónde está lo levantado: el marco del plano"
+      description: |
+        El rectángulo que envuelve la geometría **ya cargada**, con los mismos filtros de sector
+        y de manzana que `GET /catastro/predios/plano` (#612). Es de dónde sale el primer
+        `bbox`: aquella operación lo exige, y hasta ahora ninguna decía dónde está la
+        municipalidad, así que el visor abría sobre un marco declarado del país entero — y con
+        geometría cargada eso contesta «hay N lotes, acércate», una respuesta correcta que desde
+        la pantalla no se puede obedecer.
+
+        **Sale de la geometría cargada, nunca de una constante.** Se agrega sobre las cuatro
+        columnas que `V65` deriva del polígono de cada lote, con los **mismos** filtros que el
+        plano: un marco calculado sobre otro conjunto de predios encuadraría sobre algo que
+        después no se dibuja, y sobre un plano sin base cartográfica un encuadre equivocado **no
+        se ve**.
+
+        **`marco` es `null` cuando no hay ninguno que publicar, y `notaDelMarco` dice por
+        qué.** Son dos situaciones distintas y se arreglan distinto: `lotes: 0` es que no hay
+        ni un predio con polígono —el estado de hoy en todas las municipalidades, lo que falta es
+        la carga cartográfica de ADR-0021— y `lotes > 0` con `marco: null` es que todo lo
+        levantado cae sobre la misma línea, o sea que su envolvente no es un rectángulo. Nunca
+        `0,0,0,0`: ese punto está en el golfo de Guinea.
+
+        Lo que publica es **un rectángulo y una cuenta**, y nada más: ni un `predioId`, ni un
+        código, ni una dirección. Añadir el del lote más al norte la convertiría en una forma de
+        recorrer el padrón sin pedir el padrón.
+      tags: ["Catastro"]
+      parameters:
+        - name: codigoDeSector
+          in: query
+          required: false
+          description: "Filtro «Sector» de la pantalla, por código. El mismo que el del plano"
+          schema: { type: string }
+        - name: codigoDeManzana
+          in: query
+          required: false
+          description: "Filtro «Manzana» de la pantalla, por código. El mismo que el del plano"
+          schema: { type: string }
+      responses:
+        200:
+          description: Operacion realizada
+          content:
+            application/json:
+              schema: { type: object }
+        "403":
+          $ref: "#/components/responses/SinMunicipalidad"
+        "422":
+          $ref: "#/components/responses/ErrorDeValidacion"
   "/catastro/fichas/{codigo}/actualizacion":
     put:
       operationId: actualizacion_catastro
@@ -6707,6 +6757,85 @@ paths:
           $ref: "#/components/responses/SinMunicipalidad"
         "422":
           $ref: "#/components/responses/ErrorDeValidacion"
+    get:
+      operationId: prescripciones_declaradas
+      summary: "Prescripciones declaradas"
+      description: |
+        La relación de declaraciones de prescripción: **qué deuda quedó sin acción de
+        cobro** (#674, RF-094).
+
+        **La deuda sigue ahí, y eso es la decisión, no un defecto.** Lo que prescribe es
+        la *acción* para exigir el pago —art. 43 del TUO del Código Tributario—, no la
+        obligación: el libro conserva sus asientos, la deuda sigue siendo cartera
+        pendiente y sigue contando como emisión del ejercicio en el panel de recaudación.
+        Deja de contar cuando la administración la **da de baja** con RF-044, cuya
+        primera causal se llama «PRESCRIPCIÓN DECLARADA» —participio: presupone esta
+        declaración, que es su sustento y no la baja misma—.
+
+        Por eso existe esta lectura: si la deuda inexigible no se puede *ver* en ninguna
+        parte, quien audita la cartera no sabe qué parte de ella ya no se puede exigir, y
+        quien registra la baja no tiene dónde encontrar el acto que la sustenta.
+
+        **Ninguna cifra de dinero**, y no por descuido: la prescripción no extingue un
+        importe. `ejerciciosPrescritos` es la lista de los que de verdad prescribieron
+        —una solicitud pide un rango y se resuelve año por año, así que «procede en
+        parte» es el caso corriente— y con el contribuyente y el tributo identifica la
+        obligación alcanzada.
+      tags: ["Valores"]
+      parameters:
+        - name: codContribuyente
+          in: query
+          required: false
+          description: "Código del contribuyente. Un código que no está en el padrón es 404 nombrándolo, no una relación vacía."
+          schema: { type: string }
+        - name: tributo
+          in: query
+          required: false
+          description: "Tributo sobre el que se declaró"
+          schema: { type: string }
+        - name: ejercicio
+          in: query
+          required: false
+          description: "Acota a las declaraciones que RESOLVIERON ese ejercicio, hayan prescrito o no: cuáles prescribieron lo dice `ejerciciosPrescritos` de cada fila."
+          schema: { type: string }
+        - name: resultado
+          in: query
+          required: false
+          description: "PROCEDE, PROCEDE_EN_PARTE o NO_PROCEDE; otro valor es 422"
+          schema: { type: string }
+        - name: pagina
+          in: query
+          required: false
+          description: "Pagina que se pide, contada desde 0"
+          schema: { type: string }
+          example: "0"
+        - name: tamano
+          in: query
+          required: false
+          description: "Filas por pagina"
+          schema: { type: string }
+          example: "20"
+        - name: ordenarPor
+          in: query
+          required: false
+          description: "Campo por el que se ordena, en camelCase"
+          schema: { type: string }
+        - name: direccion
+          in: query
+          required: false
+          description: "ASCENDENTE | DESCENDENTE"
+          schema: { type: string }
+          example: "ASCENDENTE"
+      responses:
+        200:
+          description: Operacion realizada
+          content:
+            application/json:
+              schema: { type: object }
+        "403":
+          $ref: "#/components/responses/SinMunicipalidad"
+        "422":
+          $ref: "#/components/responses/ErrorDeValidacion"
   "/valores/{numero}/movimientos":
     post:
       operationId: pase_coactiva
@@ -9125,6 +9254,36 @@ components:
         codigo: { type: string, example: "DEUDA_YA_CANCELADA" }
         mensaje: { type: string, description: "En castellano; se muestra al usuario" }
         detalles: { type: array, items: { type: string } }
+        parametroQueFalta:
+          type: object
+          description: |
+            **Solo** cuando el 422 se debe a una cifra normativa que no esta
+            publicada en el conjunto de parametros sellado (#604). Es el
+            discriminador que separa dos errores que hasta ahora salian con el
+            mismo `codigo` y el mismo `mensaje` y piden acciones distintas:
+
+            - **sin** este miembro: falta un campo de la peticion o un valor no
+              vale. Lo arregla quien atiende, en la misma pantalla.
+            - **con** este miembro: falta publicar una cifra o sellar el
+              conjunto del ejercicio. No lo arregla nadie desde la pantalla
+              (D-02a, D-02b, D-03c).
+
+            La interfaz reacciona a la **presencia** del miembro, nunca al texto
+            del mensaje: el texto se reescribe y el contrato no.
+          required: [ejercicio]
+          properties:
+            ejercicio:
+              type: integer
+              description: El ejercicio de cuyo conjunto sellado se trata.
+              example: 2026
+            llave:
+              type: string
+              description: |
+                Lo que hay que publicar: `TIPO:CLAVE` cuando falta una sola fila,
+                o el `TIPO` solo cuando falta el bloque entero. **Ausente** cuando
+                lo que falta es el conjunto sellado: no hay donde publicar nada.
+                Nunca una clave inventada para rellenar el hueco.
+              example: "INTERES_FRACCIONAMIENTO:ORDINARIO"
   responses:
     SinMunicipalidad:
       description: |

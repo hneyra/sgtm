@@ -31,7 +31,7 @@ import org.junit.jupiter.api.Test;
  *       explicito de lo que ya existe: no se puede publicar un endpoint sin anotarlo ahi, ni
  *       retirarlo sin quitarlo. Las operaciones restantes del contrato estan pendientes, y no se
  *       pueden exigir todavia sin dejar el build en rojo permanente —que es la forma segura de que
- *       nadie vuelva a mirar esta prueba—. Hoy queda <b>una</b> de las 204, y no va a dejar de
+ *       nadie vuelva a mirar esta prueba—. Hoy queda <b>una</b> de las 210, y no va a dejar de
  *       quedar: {@code GET /portal/deuda} es la vista del funcionario, y ningun controlador la va a
  *       servir (ADR-0016 §3).
  * </ul>
@@ -91,6 +91,11 @@ class ContratoDeApiTest {
                     // las atendiera, y la otra —`GET /portal/deuda`— no va a tenerlo (ADR-0016
                     // §3).
                     "GET /catastro/predios/plano",
+                    // #612 — donde esta lo levantado. `plano` exige `bbox` y ninguna operacion
+                    // decia donde esta la municipalidad, asi que el visor abria sobre el pais
+                    // entero: con geometria cargada eso contesta «acercate» y desde la pantalla
+                    // no se sabe hacia donde.
+                    "GET /catastro/predios/plano/marco",
                     "GET /catastro/tablas/aranceles",
                     "GET /catastro/tablas/valores-unitarios",
                     "GET /catastro/tablas/depreciacion",
@@ -251,6 +256,13 @@ class ContratoDeApiTest {
                     "POST /valores/masivo",
                     "POST /valores/{nro}/notificacion",
                     "POST /coactiva/prescripcion",
+                    // #674: la relacion de prescripciones declaradas. La decision de ese
+                    // issue es que declarar la prescripcion NO toca el libro —lo que
+                    // prescribe es la accion de cobro, no la obligacion—, asi que la deuda
+                    // sigue en la cartera hasta que alguien la de de baja con RF-044. Esta
+                    // lectura es la contrapartida: sin ella, la deuda inexigible no se ve
+                    // en ninguna parte y la decision no se distingue de un descuido.
+                    "GET /coactiva/prescripcion",
                     "POST /valores/{numero}/movimientos",
                     "POST /tesoreria/caja/cobranza",
                     "POST /tesoreria/caja/tasas",

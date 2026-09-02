@@ -88,6 +88,14 @@ import tools.jackson.databind.json.JsonMapper;
  * cuota inicial cobrada en caja con su recibo de verdad. Que el indice unico de la clave exista y
  * muerda —y que la carrera de diez hilos produzca una sola fila— lo mide {@code ConvenioJdbcTest}
  * contra PostgreSQL.
+ *
+ * <h2>#604 — Y que el 422 traiga su discriminador tambien por esta ruta</h2>
+ *
+ * <p>Es la mitad del criterio 2: declarar el miembro {@code parametroQueFalta} solo en {@code
+ * /fraccionamientos} dejaria esta pantalla con el 422 mudo de antes de #604, y el sintoma seria
+ * exactamente el que el issue describe —la interfaz enumerando las dos posibilidades—. La prueba de
+ * CONTRASTE, la reformulacion sin el convenio que la sustituye, exige que un 422 de campo ausente
+ * <b>no</b> lo lleve.
  */
 @DisplayName("#547 — Capa web: POST /api/v1/tesoreria/convenios/{numero}/anulacion")
 class ConvenioControllerTest {
@@ -263,6 +271,56 @@ class ConvenioControllerTest {
         assertThat(resultado.getResponse().getContentAsString()).contains("incidencia");
     }
 
+    // ------------------------------------------------ #604: el discriminador, tambien aqui
+
+    /*
+     * La anulacion es la SEGUNDA ruta de convenios que lee el conjunto sellado, porque una
+     * reformulacion registra un preconvenio nuevo. Declarar el miembro solo en
+     * `/fraccionamientos` dejaria a esta pantalla con el 422 mudo de antes de #604, y el sintoma
+     * seria el mismo que el issue describe: la interfaz enumerando las dos posibilidades.
+     */
+
+    @Test
+    @DisplayName("#604 — reformular sin conjunto sellado trae el ejercicio y ninguna llave")
+    void reformularSinConjuntoSelladoTraeElMiembro() throws Exception {
+        String numero = convenioVigente();
+
+        MvcResult resultado = reformular(numero, SIN_SELLAR);
+
+        assertThat(resultado.getResponse().getStatus()).isEqualTo(422);
+        assertThat(resultado.getResponse().getContentAsString())
+                .as("lo que falta es el conjunto entero: no hay ninguna fila que nombrar")
+                .contains("\"parametroQueFalta\":{\"ejercicio\":2027}");
+    }
+
+    @Test
+    @DisplayName("#604 — y sin puntos de redondeo trae la llave del bloque que falta")
+    void reformularSinPuntosObservadosTraeLaLlave() throws Exception {
+        String numero = convenioVigente();
+
+        MvcResult resultado = reformular(numero, SIN_REDONDEO);
+
+        assertThat(resultado.getResponse().getStatus()).isEqualTo(422);
+        assertThat(resultado.getResponse().getContentAsString())
+                .as("son dos causas distintas y el miembro tambien las separa, no solo el texto")
+                .contains("\"parametroQueFalta\":{\"ejercicio\":2028,\"llave\":\"REDONDEO\"}");
+    }
+
+    @Test
+    @DisplayName("#604 — CONTRASTE: la reformulacion sin su convenio nuevo NO lleva el miembro")
+    void laReformulacionSinCuerpoNoLlevaElMiembro() throws Exception {
+        String numero = convenioVigente();
+
+        MvcResult resultado = reformularSinElConvenioNuevo(numero);
+
+        assertThat(resultado.getResponse().getStatus())
+                .as("tambien es 422 VALIDACION: eso es justo lo que hacia falta discriminar")
+                .isEqualTo(422);
+        assertThat(resultado.getResponse().getContentAsString())
+                .as("esto lo arregla quien atiende: rellenar el convenio que sustituye")
+                .doesNotContain("parametroQueFalta");
+    }
+
     // ---------------------------------------------------------------- #606: el reenvio
 
     @Test
@@ -397,6 +455,20 @@ class ConvenioControllerTest {
             peticion = peticion.header("Idempotency-Key", clave);
         }
         return mvc.perform(peticion).andReturn();
+    }
+
+    /** La reformulacion sin el convenio que sustituye: el 422 que SI arregla quien atiende. */
+    private MvcResult reformularSinElConvenioNuevo(String numero) throws Exception {
+        return mvc.perform(
+                        post("/api/v1/tesoreria/convenios/" + numero + "/anulacion")
+                                .contentType(MediaType.APPLICATION_JSON)
+                                .content(
+                                        """
+                                        {"accion":"REFORMULACION","fechaAnul":"2026-03-16",
+                                         "motivo":"SE REFORMULA A PEDIDO DEL ADMINISTRADO",
+                                         "observacion":"Reformulacion pedida en ventanilla"}
+                                        """))
+                .andReturn();
     }
 
     private static String cuerpoDelConvenio(int ejercicio) {
