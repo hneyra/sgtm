@@ -3591,6 +3591,47 @@ function clavesRepetidas(fuente, tabla) {
  *   enum de privilegios (ADR-0013). Y no tiene 422: no recibe cuerpo ni filtros,
  *   de modo que no hay regla de negocio que pueda incumplir.
  */
+/**
+ * Que operaciones pueden contestar `404`, derivado del codigo (#732).
+ *
+ * Lo produce `RespuestasDeLaApiTest` leyendo cada controlador —la unica forma de
+ * contestar 404 es `ProblemaDeNegocio` con `CodigoDeError.NO_ENCONTRADO`— y se
+ * regenera con `-Dsgtm.respuestas.regenerar=true`. **No se escribe a mano**: medio
+ * centenar de entradas manuales envejecen solas, que es el defecto que #312 midio.
+ *
+ * La clave es «VERBO /ruta», la misma que usa `formas-de-la-api.json`.
+ */
+const RESPUESTAS_DERIVADAS = JSON.parse(
+  readFileSync(new URL('./respuestas-de-la-api.json', import.meta.url), 'utf8'),
+);
+
+/**
+ * Lo que se dice de ese 404 cuando la frase de siempre no basta.
+ *
+ * Solo las tres lecturas de cuadro de catastro: ahi el 404 no es «esa fila no existe»
+ * sino «el ejercicio no tiene conjunto sellado», y su cuerpo puede traer
+ * `parametroQueFalta` (#723, #604). Que la lista sea corta es la señal de que el resto
+ * dice lo mismo, no de que nadie se haya ocupado.
+ */
+const DESCRIPCION_DEL_404 = {
+  aranceles:
+    'El ejercicio no tiene conjunto de parametros sellado, o el cuadro no esta' +
+    ' publicado en el. El cuerpo trae `parametroQueFalta` con la llave, que es lo' +
+    ' unico que distingue «no hay tabla» de «no hay ejercicio» (#723).',
+  depreciacion:
+    'El ejercicio no tiene conjunto de parametros sellado, o el cuadro no esta' +
+    ' publicado en el. El cuerpo trae `parametroQueFalta` con la llave (#723).',
+  valores_unitarios:
+    'El ejercicio no tiene conjunto de parametros sellado, o el cuadro no esta' +
+    ' publicado en el. El cuerpo trae `parametroQueFalta` con la llave (#723).',
+};
+
+/** La frase para el resto: el recurso que la ruta o el filtro identifica no existe. */
+const DESCRIPCION_DEL_404_POR_OMISION =
+  'Lo que la peticion identifica no existe en esta municipalidad. **No es un fallo del' +
+  ' servidor y reintentar no lo cambia**: el cuerpo es `problem+json` con `codigo:' +
+  ' NO_ENCONTRADO` y dice que se buscaba.';
+
 const RESPUESTAS = {
   // El 403 del ciudadano no es el de siempre: su token no lleva municipalidad —no
   // pertenece a ninguna— y lo que puede faltarle es el documento acreditado. Y no
@@ -4007,6 +4048,19 @@ for (const [ruta, ops] of porRuta) {
     for (const otra of respuestas.extra ?? []) {
       lineas.push(`        ${comillas(otra.codigo)}:`);
       escribirDescripcion(lineas, 10, otra.descripcion);
+    }
+    // El 404, derivado del codigo y no escrito aqui (#732).
+    const derivadas = RESPUESTAS_DERIVADAS[`${op.metodo.toUpperCase()} ${rutaRelativa}`] ?? [];
+    if (derivadas.includes('404')) {
+      lineas.push('        "404":');
+      escribirDescripcion(
+        lineas,
+        10,
+        DESCRIPCION_DEL_404[op.operationId] ?? DESCRIPCION_DEL_404_POR_OMISION,
+      );
+      lineas.push('          content:');
+      lineas.push('            application/problem+json:');
+      lineas.push('              schema: { $ref: "#/components/schemas/Error" }');
     }
     lineas.push('        "403":');
     lineas.push(
