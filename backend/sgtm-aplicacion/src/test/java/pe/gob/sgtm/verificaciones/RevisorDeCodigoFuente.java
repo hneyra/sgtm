@@ -13,6 +13,10 @@ import java.util.regex.Pattern;
  * Y una que vive en el texto del Java: la politica de redondeo escrita a mano, que D-03a y D-03b
  * prohiben.
  *
+ * <p>Y otra que vive en el texto del Java y tampoco es una dependencia entre tipos: un area
+ * convertida a cadena a mano (#607), que es como el mismo predio acabo diciendo «360.00 m2» en
+ * catastro y «360.00» en fiscalizacion.
+ *
  * <p>ArchUnit no las ve porque no son dependencias entre tipos, sino cadenas.
  *
  * <p><b>Solo mira literales de cadena</b>, no comentarios ni javadoc. Sin eso, cada documento del
@@ -550,6 +554,75 @@ public final class RevisorDeCodigoFuente {
                             + "|ACTUALIZACION|FACTOR)"
                             + "\\w*\\s*=\\s*[^;\\n]*[0-9]");
 
+    /**
+     * Un area convertida a texto a mano, en cualquiera de las dos formas (#607).
+     *
+     * <p>Un {@code AreaM2} tiene <b>un</b> sitio donde se convierte en cadena: el serializador que
+     * {@code ConfiguracionDeJson} registra para el, que escribe la cifra sola. Componerla en el
+     * recurso vuelve a abrir la puerta por la que este defecto entro: {@code
+     * ficha.areaTerreno().toString()} mete la unidad dentro del dato —{@code "360.00 m2"}— y {@code
+     * area.valor().toPlainString()} da la cifra buena pero es una <b>segunda convencion</b> para lo
+     * mismo. Teniendo dos, el sistema acabo publicando el area del mismo predio de dos formas segun
+     * a que modulo se le preguntara, y ninguna de las dos fallaba.
+     *
+     * <p><b>El anclaje es el nombre, porque esto es texto y no tipos</b>, y ahi esta el filo: el
+     * identificador tiene que <b>empezar</b> por {@code area} o {@code Area} tras un limite de
+     * palabra. Sin esa exigencia, «hect<b>area</b>s» casa por dentro —{@code hectareas()}, {@code
+     * hectareasTotales()}, {@code hectareasComunes()}— y la regla se llevaria por delante el bloque
+     * rural de {@code FichaResource}, que es una {@link pe.gob.sgtm.dominio.Medida} y lleva su
+     * unidad dentro <b>a proposito</b>: el arancel rural es por hectarea, y quien lea metros
+     * calcularia diez mil veces de menos. Lo mismo el {@code frontis} y la {@code cantidad} de una
+     * obra complementaria.
+     */
+    private static final Pattern AREA_COMPUESTA_A_MANO =
+            Pattern.compile(
+                    "\\b[aA]rea\\w*\\s*(?:\\(\\s*\\))?\\s*\\.\\s*"
+                            + "(?:toString\\s*\\(\\s*\\)"
+                            + "|valor\\s*\\(\\s*\\)\\s*\\.\\s*"
+                            + "toPlainString\\s*\\(\\s*\\))");
+
+    /**
+     * Las clases que componen un area a mano <b>con motivo</b>, nombradas una a una (#607).
+     *
+     * <p>Se nombran por clase y no por paquete a proposito: anadir una sexta tiene que ser una
+     * linea visible en el diff, con quien la escribe teniendo que decir por que. Un paquete entero
+     * exento seria una puerta que nadie vuelve a mirar.
+     *
+     * <p>Las cinco son lo mismo: <b>texto que no pasa por ningun serializador</b>. Cuatro son
+     * modelos de documento —el papel que se imprime y se archiva—, donde la unidad va en el rotulo
+     * de la fila o de la columna: «Area del terreno (m2)». La quinta es la descripcion que {@code
+     * RegistrarAnuncio} escribe en la columna JSON de la auditoria, que tampoco es una proyeccion
+     * HTTP. Todas escriben la <b>cifra sola</b>: lo que la lista permite es componerla, no meterle
+     * la unidad dentro.
+     *
+     * <p><b>{@code DiferenciaEntreLiquidaciones} no esta, y no es un olvido.</b> Es la otra
+     * excepcion legitima —la celda de texto libre del historial, donde «120.00 → 164.50» sin unidad
+     * no dice si cambio el area o el insoluto—, pero el escaner <b>no puede verla</b>: convierte
+     * con un {@code texto(Object)} propio, asi que en su codigo no aparece ningun {@code
+     * area…().toString()} que casar. Ponerla aqui seria una entrada muerta en una lista de
+     * excepciones, que es exactamente el defecto que esta lista existe para no tener. Lo que la
+     * sostiene son las tres pruebas que afirman «300.00 m2» letra por letra, y {@code
+     * ProhibicionesEnElCodigoFuenteTest} comprueba que el escaner, en efecto, no la alcanza.
+     */
+    static final Set<String> COMPONEN_EL_AREA_A_MANO_CON_MOTIVO =
+            Set.of(
+                    // Los cuatro modelos de documento: la unidad va en el rotulo.
+                    "ModeloDelFue",
+                    "ModeloDeLaLicencia",
+                    "ModeloDeLaResolucionDeDeterminacion",
+                    "ModeloDeLaFichaDelContribuyente",
+                    // Las dos descripciones que van a la columna JSON de la auditoria.
+                    //
+                    // OJO con el motivo, porque el que estaba escrito era falso: decia «no al
+                    // HTTP», y esa columna SI sale por HTTP —`GET /seguridad/auditoria` publica
+                    // `datosAnteriores`/`datosNuevos` verbatim (`AuditoriaResource`)—. El motivo
+                    // real es otro: ahi el area no es un campo tipado sino una instantanea de
+                    // texto libre, y por eso se escribe el numero SIN la unidad, que es
+                    // exactamente lo que #607 unifica. Componerla a mano es lo unico que se puede
+                    // hacer, y esta lista es lo que obliga a decirlo.
+                    "RegistrarAnuncio",
+                    "ActualizarFichaCatastral");
+
     private static final Pattern COMENTARIO_SQL_DE_LINEA = Pattern.compile("--[^\\n]*");
     private static final Pattern COMENTARIO_DE_BLOQUE = Pattern.compile("(?s)/\\*.*?\\*/");
 
@@ -572,6 +645,7 @@ public final class RevisorDeCodigoFuente {
         List<Hallazgo> hallazgos = new ArrayList<>(revisarTexto(archivo, literales.toString()));
         hallazgos.addAll(revisarRedondeo(archivo, contenido));
         hallazgos.addAll(revisarValoresTributarios(archivo, contenido));
+        hallazgos.addAll(revisarAreas(archivo, contenido));
         return hallazgos;
     }
 
@@ -611,6 +685,56 @@ public final class RevisorDeCodigoFuente {
         }
 
         return hallazgos;
+    }
+
+    /**
+     * #607: ninguna clase compone un area a mano, salvo las nombradas en {@link
+     * #COMPONEN_EL_AREA_A_MANO_CON_MOTIVO}.
+     *
+     * <p>Mira el codigo y no los literales —como el redondeo y por lo mismo—: lo que se busca es
+     * una llamada. Los comentarios se descartan porque este mismo archivo explica la prohibicion
+     * escribiendola.
+     *
+     * <p><b>Recorre {@code src/main} entero y no solo {@code infraestructura/web}</b>, aunque el
+     * defecto se viera ahi. Acotarlo a la web dejaria la lista de excepciones sin poder dispararse
+     * nunca —ninguna de las clases que componen con motivo vive en {@code infraestructura/web}—, y
+     * una regla cuya mitad no puede fallar no protege esa mitad: quitar {@code ModeloDelFue} de la
+     * lista no pondria nada rojo, y entonces la lista seria decoracion. Con el recorrido completo,
+     * quitar cualquier entrada pone rojo el escaneo del backend entero nombrando la clase.
+     *
+     * @param archivo la ruta o el nombre del archivo; de el sale la clase que se compara con la
+     *     lista de excepciones
+     */
+    public static List<Hallazgo> revisarAreas(String archivo, String contenido) {
+        if (COMPONEN_EL_AREA_A_MANO_CON_MOTIVO.contains(claseDe(archivo))) {
+            return List.of();
+        }
+
+        List<Hallazgo> hallazgos = new ArrayList<>();
+        Matcher area = AREA_COMPUESTA_A_MANO.matcher(soloCodigo(contenido));
+        while (area.find()) {
+            hallazgos.add(
+                    new Hallazgo(
+                            archivo,
+                            "#607: un area no se convierte a texto a mano. Va tipada como AreaM2 y"
+                                    + " la escribe el serializador de ConfiguracionDeJson —la cifra"
+                                    + " sola—; la unidad la pone la cabecera de la columna, nunca el"
+                                    + " dato",
+                            area.group()));
+        }
+        return hallazgos;
+    }
+
+    /** El nombre de la clase a partir de la ruta o del nombre del archivo. */
+    private static String claseDe(String archivo) {
+        String nombre = archivo.replace('\\', '/');
+        int barra = nombre.lastIndexOf('/');
+        if (barra >= 0) {
+            nombre = nombre.substring(barra + 1);
+        }
+        return nombre.endsWith(".java")
+                ? nombre.substring(0, nombre.length() - ".java".length())
+                : nombre;
     }
 
     /**

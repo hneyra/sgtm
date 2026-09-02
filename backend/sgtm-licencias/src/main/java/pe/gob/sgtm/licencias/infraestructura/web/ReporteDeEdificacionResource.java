@@ -2,6 +2,7 @@ package pe.gob.sgtm.licencias.infraestructura.web;
 
 import java.time.LocalDate;
 import org.jspecify.annotations.Nullable;
+import pe.gob.sgtm.dominio.AreaM2;
 import pe.gob.sgtm.licencias.aplicacion.ConsultaDeFue;
 import pe.gob.sgtm.licencias.aplicacion.ValorizacionDelFue;
 import pe.gob.sgtm.licencias.dominio.ProyectoDelFue;
@@ -19,6 +20,12 @@ import pe.gob.sgtm.web.ImporteActualizado;
  * cuadro de valores unitarios sellado no permite calcularla el campo llega nulo con su motivo. El
  * frontend imprime «—»; un cero se leeria como una obra que no vale nada, y esa hoja se usa para
  * conciliar lo que se cobro por derechos de tramite.
+ *
+ * <p><b>El area viaja tipada</b> (#607). Se escribia a mano con {@code valor().toPlainString()}:
+ * daba la cifra buena, pero era una segunda convencion para lo mismo, y de tener dos salio que
+ * catastro compusiera con {@code toString()} y publicara «360.00 m2» del mismo predio que aqui sale
+ * «360.00». Ahora la escribe el serializador que {@code ConfiguracionDeJson} registra para {@code
+ * AreaM2}, que es un solo sitio; la unidad la sigue poniendo el nombre del campo, no el dato.
  */
 public record ReporteDeEdificacionResource(
         @Nullable String nLicencia,
@@ -27,7 +34,7 @@ public record ReporteDeEdificacionResource(
         String administrado,
         @Nullable String predio,
         String modalidad,
-        @Nullable String areaAConstruirM,
+        @Nullable AreaM2 areaAConstruirM,
         @Nullable ImporteActualizado valorDeObraS,
         @Nullable String valorDeObraNoDisponible,
         String estado,
@@ -47,7 +54,7 @@ public record ReporteDeEdificacionResource(
                 consulta.nombreDelSolicitante(),
                 consulta.terreno() == null ? null : consulta.terreno().direccion(),
                 consulta.fue().modalidad().name(),
-                proyecto == null ? null : proyecto.areaTechada().valor().toPlainString(),
+                proyecto == null ? null : proyecto.areaTechada(),
                 obra == null ? null : new ImporteActualizado(obra.total(), consulta.aLaFecha()),
                 valorizacion == null ? null : valorizacion.motivo(),
                 consulta.estado().name(),

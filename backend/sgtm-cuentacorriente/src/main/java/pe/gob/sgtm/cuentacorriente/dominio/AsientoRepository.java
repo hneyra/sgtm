@@ -179,6 +179,44 @@ public interface AsientoRepository {
      */
     List<CargoAgregado> cargadoPorTributo(pe.gob.sgtm.dominio.Ejercicio ejercicio);
 
+    /**
+     * Lo que sigue pendiente en el ejercicio <b>a la fecha de corte</b>, agrupado por tributo
+     * (#639, RF-130).
+     *
+     * <h2>Es la misma definicion que {@code consulta_deuda}, sumada</h2>
+     *
+     * <p>Netea {@link Concepto#INSOLUTO} —cargos menos abonos— <b>de los asientos cuya fecha valor
+     * no pasa del corte</b>, agrupando por obligacion. Eso es exactamente lo que hace {@link
+     * CalculoDeDeuda#deudaActualizadaA} para una obligacion, escrito una sola vez en SQL para poder
+     * aplicarlo al padron entero. Que las dos lecturas apliquen la misma regla es lo que {@code
+     * CarteraCuadraConLaConsultaJdbcTest} comprueba obligacion por obligacion.
+     *
+     * <p><b>Y por eso no lleva el filtro de reversion que si lleva {@link #cargadoPorTributo}.</b>
+     * Netear se corrige solo: la reversion de un abono es un cargo del mismo concepto y del mismo
+     * importe, asi que el par suma cero. {@code cargadoPorTributo} mira <b>un solo lado</b> del
+     * libro y por eso necesita las dos mitades de ese filtro.
+     *
+     * <p>Aqui las dos mitades juntas serian <b>inertes</b> —se midio: quitan el cargo de la
+     * reversion y el abono reversado, y el neto no cambia—, pero <b>media</b> es un defecto: solo
+     * con {@code asiento_reversado_id IS NULL} se va el cargo de la reversion y se queda el abono
+     * que reversa, y la cartera sale <b>mas baja</b> —medido, 280,00 donde el libro dice 400,00—.
+     * Un filtro que no hace falta y que a medias resta deuda viva es un filtro que no se pone.
+     *
+     * <p>El grupo es la <b>obligacion</b> —tributo, ejercicio y unidad—, no la cuota, por lo mismo:
+     * es el grupo con el que {@code consulta_deuda} publica una fila. Agrupando por cuota, un
+     * contribuyente que pago de mas la cuota 1 y debe la 2 apareceria con el importe de la 2, y en
+     * la consulta con la diferencia.
+     *
+     * <p>Se cuentan solo las obligaciones con insoluto <b>positivo</b>: una en cero esta cancelada,
+     * y una negativa es un pago en exceso —un hecho del libro, pero no cartera por cobrar; restarlo
+     * taparia con el saldo a favor de uno la deuda de otro—.
+     *
+     * @param ejercicio de que ejercicio son las obligaciones
+     * @param aLaFecha la fecha de corte: ningun asiento posterior entra (regla 9, RNF-075)
+     */
+    List<PendienteAgregado> pendientePorTributo(
+            pe.gob.sgtm.dominio.Ejercicio ejercicio, java.time.LocalDate aLaFecha);
+
     /** Todos los asientos de un contribuyente, para reconstruir sus saldos de una vez (#23). */
     List<Asiento> deContribuyente(long contribuyenteId);
 

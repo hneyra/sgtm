@@ -15,6 +15,7 @@ import pe.gob.sgtm.catastro.dominio.OtraInstalacion;
 import pe.gob.sgtm.catastro.dominio.ParticipacionComun;
 import pe.gob.sgtm.catastro.dominio.TierraRural;
 import pe.gob.sgtm.catastro.dominio.VersionDeLaFicha;
+import pe.gob.sgtm.dominio.AreaM2;
 
 /**
  * Una version de la ficha, tal como sale por HTTP.
@@ -47,6 +48,15 @@ import pe.gob.sgtm.catastro.dominio.VersionDeLaFicha;
  * <p>{@code frontis} sale con su unidad —{@code "12.50 ML"}— por lo mismo que la superficie rural:
  * son metros lineales, y un numero suelto invita a leerlos como metros cuadrados.
  *
+ * <p><b>Las areas van tipadas y las medidas no, y la diferencia no es un descuido</b> (#607). Un
+ * {@code AreaM2} —{@code areaTerreno}, {@code areaConstruida}, {@code areaOcupada}, {@code
+ * areaComunTotal}, el area de un bien comun— lo escribe el serializador registrado en {@code
+ * ConfiguracionDeJson}: la cifra sola, {@code "360.00"}, y la unidad la pone la cabecera de la
+ * columna. Una {@link pe.gob.sgtm.dominio.Medida} —{@code frontis}, la {@code cantidad} de una obra
+ * complementaria, las hectareas del bloque rural— sale con su unidad dentro, {@code "12.50 ML"} o
+ * {@code "12.5000 HA"}, porque ahi la unidad <b>es</b> parte del dato: el arancel rural es por
+ * hectarea, y quien lea metros calcularia diez mil veces de menos.
+ *
  * <p><b>Sigue sin salir un solo importe.</b> Ni valor unitario, ni arancel, ni valor de la obra
  * complementaria, ni autovaluo: son D-02a/D-11 y viven en datos versionados (regla 5). Lo que se
  * publica es lo que el tecnico midio y clasifico.
@@ -56,7 +66,7 @@ public record FichaResource(
         long predioId,
         String tipo,
         int version,
-        String areaTerreno,
+        AreaM2 areaTerreno,
         String uso,
         @Nullable String frontis,
         @Nullable String condicionPropiedad,
@@ -92,7 +102,7 @@ public record FichaResource(
                 ficha.predioId(),
                 ficha.tipo().name(),
                 ficha.version(),
-                ficha.areaTerreno().toString(),
+                ficha.areaTerreno(),
                 ficha.uso(),
                 ficha.frontis() == null ? null : ficha.frontis().toString(),
                 ficha.condicionPropiedad(),
@@ -126,7 +136,7 @@ public record FichaResource(
     public record VersionResource(
             long id,
             int version,
-            String areaTerreno,
+            AreaM2 areaTerreno,
             String uso,
             String vigenciaDesde,
             @Nullable String vigenciaHasta,
@@ -141,7 +151,7 @@ public record FichaResource(
             return new VersionResource(
                     version.id(),
                     version.version(),
-                    version.areaTerreno().toString(),
+                    version.areaTerreno(),
                     version.uso(),
                     version.vigenciaDesde().toString(),
                     version.vigenciaHasta() == null ? null : version.vigenciaHasta().toString(),
@@ -165,7 +175,7 @@ public record FichaResource(
     public record ConstruccionResource(
             long id,
             String piso,
-            String areaConstruida,
+            AreaM2 areaConstruida,
             @Nullable Integer anioConstruccion,
             @Nullable String material,
             @Nullable String estadoConservacion,
@@ -176,7 +186,7 @@ public record FichaResource(
             return new ConstruccionResource(
                     construccion.id() == null ? 0L : construccion.id(),
                     construccion.piso(),
-                    construccion.areaConstruida().toString(),
+                    construccion.areaConstruida(),
                     construccion.anioConstruccion() == null
                             ? null
                             : construccion.anioConstruccion().valor(),
@@ -256,7 +266,7 @@ public record FichaResource(
             String conductor,
             @Nullable String nombreComercial,
             @Nullable String ciiu,
-            @Nullable String areaOcupada,
+            @Nullable AreaM2 areaOcupada,
             @Nullable String licenciaNumero,
             @Nullable String licenciaFecha,
             @Nullable String anuncioNumero,
@@ -269,7 +279,7 @@ public record FichaResource(
                     actividad.conductor(),
                     actividad.nombreComercial(),
                     actividad.ciiu(),
-                    actividad.areaOcupada() == null ? null : actividad.areaOcupada().toString(),
+                    actividad.areaOcupada(),
                     actividad.licenciaNumero(),
                     actividad.licenciaFecha() == null ? null : actividad.licenciaFecha().toString(),
                     actividad.anuncioNumero(),
@@ -284,13 +294,13 @@ public record FichaResource(
     public record BienesComunesResource(
             List<BienResource> bienes,
             List<ParticipacionResource> participaciones,
-            String areaComunTotal) {
+            AreaM2 areaComunTotal) {
 
         public static BienesComunesResource de(DetalleDeBienesComunes detalle) {
             return new BienesComunesResource(
                     detalle.bienes().stream().map(BienResource::de).toList(),
                     detalle.participaciones().stream().map(ParticipacionResource::de).toList(),
-                    detalle.areaComunTotal().toString());
+                    detalle.areaComunTotal());
         }
     }
 
@@ -302,7 +312,7 @@ public record FichaResource(
     public record BienResource(
             long id,
             String descripcion,
-            String area,
+            AreaM2 area,
             @Nullable String material,
             @Nullable String estadoConservacion,
             @Nullable Integer anioConstruccion) {
@@ -311,7 +321,7 @@ public record FichaResource(
             return new BienResource(
                     bien.id() == null ? 0L : bien.id(),
                     bien.descripcion(),
-                    bien.area().toString(),
+                    bien.area(),
                     bien.material() == null ? null : bien.material().name(),
                     bien.estadoConservacion() == null ? null : bien.estadoConservacion().name(),
                     bien.anioConstruccion() == null ? null : bien.anioConstruccion().valor());

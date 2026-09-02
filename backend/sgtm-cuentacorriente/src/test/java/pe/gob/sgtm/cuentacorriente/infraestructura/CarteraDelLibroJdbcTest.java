@@ -98,7 +98,7 @@ class CarteraDelLibroJdbcTest {
         asientos = new AsientoRepositoryJdbc(jdbc);
         saldos = new SaldoRepositoryJdbc(jdbc);
         recaudacion = new RecaudacionDelLibroCuentaCorriente(asientos);
-        cartera = new CarteraDelLibroCuentaCorriente(asientos, saldos);
+        cartera = new CarteraDelLibroCuentaCorriente(asientos);
 
         OrigenContext.fijar(new Origen("panel.pruebas", null, null));
         titularA = crearContribuyente(municipalidadA, "P-0001", "50111001");
@@ -246,46 +246,74 @@ class CarteraDelLibroJdbcTest {
         }
 
         @Test
-        @DisplayName("la cartera pendiente sale de la proyeccion, y dice desde cuando")
-        void laCarteraSaleDeLaProyeccion() {
+        @DisplayName("la cartera sale del libro con su corte, no de la proyeccion")
+        void laCarteraSaleDelLibro() {
             TenantContext.fijar(new MunicipalidadId(municipalidadA));
 
             CarteraPendiente pendiente =
                     transaccion.execute(estado -> cartera.pendientePorTributo(EJERCICIO, HOY));
 
+            // El libro dice: PREDIAL 1000 − 500 − 300 = 200, y ARBITRIOS 400 − 120 + 120
+            // (la reversion del abono anulado) = 400. La proyeccion sembrada dice otra cosa
+            // a proposito —999 de PREDIAL y 50 de un MULTA_TRANSITO que no tiene ni un
+            // asiento—, y es lo que hace visible de donde sale la cifra desde #639.
             assertThat(pendiente).isNotNull();
-            assertThat(pendiente.total()).isEqualTo(Dinero.de("250.00"));
-            assertThat(pendiente.obligaciones()).isEqualTo(3);
-            // La fecha de la fila MAS VIEJA, no la mas nueva. Una cartera es tan fresca
-            // como su peor fila: con la mas nueva, un agregado que arrastra proyecciones
-            // de hace una semana se leeria como si estuviera al dia (ADR-0006: es un
-            // cache, no la verdad). Las dos filas positivas tienen fechas distintas
-            // justamente para que la diferencia se vea.
-            assertThat(pendiente.proyectadaDesde()).contains(PROYECTADO);
+            assertThat(pendiente.total()).isEqualTo(Dinero.de("600.00"));
+            assertThat(pendiente.obligaciones()).isEqualTo(2);
+            assertThat(pendiente.aLaFecha())
+                    .as("y la cifra sale con la fecha con que se pidio (regla 9)")
+                    .isEqualTo(HOY);
             assertThat(pendiente.lineas())
-                    .filteredOn(linea -> linea.tributo().equals("PREDIAL"))
-                    .singleElement()
-                    .satisfies(
-                            linea -> {
-                                assertThat(linea.obligaciones()).isEqualTo(2);
-                                assertThat(linea.proyectadoDesde()).isEqualTo(PROYECTADO);
-                            });
+                    .extracting(pe.gob.sgtm.cuentacorriente.PendienteDeUnTributo::tributo)
+                    .as(
+                            "MULTA_TRANSITO esta en saldo_proyectado y no en el libro: si"
+                                    + " apareciera, la cartera seguiria saliendo del cache")
+                    .containsExactly("ARBITRIOS", "PREDIAL");
         }
 
         @Test
-        @DisplayName("un saldo en cero o negativo no es cartera por cobrar")
-        void unSaldoEnCeroONegativoNoEsCartera() {
+        @DisplayName("la reversion de un abono no baja la cartera: netear se corrige solo")
+        void laReversionNoBajaLaCartera() {
             TenantContext.fijar(new MunicipalidadId(municipalidadA));
 
-            // Sembrados: PREDIAL 200 y MULTA_TRANSITO 50 (cuentan), ARBITRIOS 0
-            // (cancelado) y ALCABALA -50 (pago en exceso). Restar el negativo taparia con
-            // el saldo a favor de uno la deuda de otro.
             CarteraPendiente pendiente =
                     transaccion.execute(estado -> cartera.pendientePorTributo(EJERCICIO, HOY));
 
+            // ARBITRIOS: cargo 400, abono 120 y su reversion (un CARGO de 120). El par suma
+            // cero, asi que esta consulta NO lleva el filtro de reversion de
+            // `cargadoPorTributo`. Medido: ponerselo ENTERO es inerte —se van las dos
+            // mitades del par—, pero ponerle solo `asiento_reversado_id IS NULL` deja el
+            // abono reversado sin su cargo y la cartera sale 280,00 donde el libro dice
+            // 400,00, o sea 120,00 de deuda viva restados de la cartera del ejercicio.
             assertThat(pendiente.lineas())
-                    .extracting(pe.gob.sgtm.cuentacorriente.PendienteDeUnTributo::tributo)
-                    .containsExactly("MULTA_TRANSITO", "PREDIAL");
+                    .filteredOn(linea -> linea.tributo().equals("ARBITRIOS"))
+                    .singleElement()
+                    .satisfies(
+                            linea -> assertThat(linea.pendiente()).isEqualTo(Dinero.de("400.00")));
+        }
+
+        @Test
+        @DisplayName("#639 — la misma cartera a otra fecha de corte es otra cifra")
+        void laCarteraCambiaConLaFechaDeCorte() {
+            TenantContext.fijar(new MunicipalidadId(municipalidadA));
+
+            // Los dos abonos del PREDIAL son del 10 de marzo y del 4 de julio. Al 1 de
+            // febrero todavia no existen, asi que lo pendiente es el cargo entero. Es la
+            // comprobacion que #639 no tenia: hasta entonces la cartera daba la MISMA cifra
+            // sea cual sea la fecha, y aun asi la estampaba en el indicador (regla 9).
+            CarteraPendiente enFebrero =
+                    transaccion.execute(
+                            estado ->
+                                    cartera.pendientePorTributo(
+                                            EJERCICIO, LocalDate.of(2026, 2, 1)));
+            CarteraPendiente hoy =
+                    transaccion.execute(estado -> cartera.pendientePorTributo(EJERCICIO, HOY));
+
+            assertThat(enFebrero.total()).isEqualTo(Dinero.de("1400.00"));
+            assertThat(hoy.total()).isEqualTo(Dinero.de("600.00"));
+            assertThat(enFebrero.total())
+                    .as("si las dos fueran iguales, la fecha del panel no significaria nada")
+                    .isNotEqualTo(hoy.total());
         }
     }
 
@@ -342,8 +370,8 @@ class CarteraDelLibroJdbcTest {
                     transaccion.execute(estado -> cartera.pendientePorTributo(EJERCICIO, HOY));
 
             assertThat(cargadoA.total()).isEqualTo(Dinero.de("1400.00"));
-            assertThat(pendienteA.total()).isEqualTo(Dinero.de("250.00"));
-            assertThat(pendienteA.obligaciones()).isEqualTo(3);
+            assertThat(pendienteA.total()).isEqualTo(Dinero.de("600.00"));
+            assertThat(pendienteA.obligaciones()).isEqualTo(2);
             assertThat(cargadoA.lineas()).hasSize(2);
             assertThat(pendienteA.lineas()).hasSize(2);
         }
@@ -470,12 +498,12 @@ class CarteraDelLibroJdbcTest {
                                     "CD-2026-0001",
                                     "condonacion de la prueba"));
 
-                    // El PREDIAL lleva DOS cuotas proyectadas en dias distintos: es lo
-                    // que hace visible que la fecha del grupo sea la mas vieja y no la mas
-                    // nueva. Con una sola fila por tributo, min y max dan lo mismo y la
-                    // comprobacion no probaria nada.
-                    saldos.proyectar(saldo(titular, "PREDIAL", 1, "150.00", PROYECTADO));
-                    saldos.proyectar(saldo(titular, "PREDIAL", 2, "50.00", PROYECTADO_HOY));
+                    // La proyeccion se siembra CONTRADICIENDO al libro a proposito: desde
+                    // #639 la cartera no sale de aqui, y estas cinco filas son lo que hace
+                    // visible el cambio de fuente. Si alguna de sus cifras apareciera en el
+                    // panel, la cartera habria vuelto al cache.
+                    saldos.proyectar(saldo(titular, "PREDIAL", 1, "999.00", PROYECTADO));
+                    saldos.proyectar(saldo(titular, "PREDIAL", 2, "111.00", PROYECTADO_HOY));
                     saldos.proyectar(saldo(titular, "MULTA_TRANSITO", 1, "50.00", PROYECTADO_HOY));
                     saldos.proyectar(saldo(titular, "ARBITRIOS", 1, "0.00", PROYECTADO));
                     saldos.proyectar(saldo(titular, "ALCABALA", 1, "-50.00", PROYECTADO));

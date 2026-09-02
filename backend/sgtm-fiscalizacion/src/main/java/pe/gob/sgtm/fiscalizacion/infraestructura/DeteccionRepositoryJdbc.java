@@ -37,6 +37,13 @@ import pe.gob.sgtm.persistencia.RepositorioJdbc;
  *   <li><b>Los tres {@code JOIN} son externos, y los tres a propósito.</b> Sin sector, sin ficha o
  *       sin declaración son los tres casos que esta consulta existe para encontrar. El de {@code
  *       titularidad} no está: los titulares se resuelven por el puerto público de catastro.
+ *   <li><b>El conteo tiene dos formas, y la elige el filtro (#561).</b> Con filtro de condición hay
+ *       que evaluarla, y eso obliga a mirar la declaración de cada predio. Sin filtro no: la
+ *       condición se <b>pinta</b> en la fila, y un {@code count(*)} no pinta filas. La forma corta
+ *       lee el padrón una vez en lugar de 14 422 —de 32 293 páginas tocadas a 555, medido— y cuenta
+ *       lo mismo, porque los dos {@code JOIN} que se deja no pueden cambiar el número de filas. Las
+ *       dos formas se componen de los <b>mismos</b> trozos de texto, que es lo que impide que una
+ *       diga una cosa y la otra otra.
  * </ol>
  *
  * <p>El filtro de sector va con la bandera {@code :conSector} en vez de con {@code :sector IS
@@ -79,7 +86,15 @@ public class DeteccionRepositoryJdbc extends RepositorioJdbc implements Deteccio
               ELSE 'CONFORME'
             END""";
 
-    private static final String DESDE =
+    /**
+     * El padrón: los predios activos con su sector y su ficha vigente a la fecha.
+     *
+     * <p>Está separado de la declaración porque el conteo sin filtro de condición <b>no la
+     * necesita</b>, y ahí es donde estaba el coste (#561). Los dos trozos se concatenan para
+     * componer {@link #DESDE}: lo que la página y el conteo comparten está escrito una sola vez,
+     * que es lo que impide que diverjan (la lección de #397).
+     */
+    private static final String DESDE_EL_PADRON =
             """
              FROM predio p
              LEFT JOIN sector s
@@ -91,6 +106,26 @@ public class DeteccionRepositoryJdbc extends RepositorioJdbc implements Deteccio
               AND f.tipo = 'UNICA'
               AND f.vigencia_desde <= :fecha
               AND (f.vigencia_hasta IS NULL OR f.vigencia_hasta >= :fecha)
+            """;
+
+    /**
+     * Y su declaración del ejercicio, que es lo único que la condición necesita y lo único que
+     * cuesta el padrón entero.
+     *
+     * <p>Ninguno de los dos {@code JOIN} puede cambiar el número de filas, y por eso el conteo sin
+     * filtro puede prescindir de ellos sin contar otra cosa: el {@code LATERAL} lleva {@code LIMIT
+     * 1} y entra con {@code ON true} —o sea exactamente una fila por predio, con nulos si no hay
+     * declaración—, y {@code fd} entra por la clave primaria de {@code ficha_catastral}, o sea a lo
+     * sumo una. El que sí podría multiplicar —{@code f}— se queda en {@link #DESDE_EL_PADRON}:
+     * {@code ficha_vigente_uq} es <b>parcial</b> ({@code WHERE vigencia_hasta IS NULL}), así que
+     * impide dos versiones <b>abiertas</b> y nada más; una abierta y una cerrada pueden cubrir la
+     * misma fecha, y entonces la página devuelve dos filas de ese predio. El camino de escritura no
+     * las produce —{@code ActualizarFichaCatastral} cierra la anterior el día antes de abrir la
+     * nueva—, pero un padrón migrado sí puede traerlas, y el conteo tiene que decir lo que la
+     * grilla enseña sea cual sea el dato. Eso lo fija una prueba con esa siembra exacta.
+     */
+    private static final String Y_SU_DECLARACION =
+            """
              LEFT JOIN LATERAL (
                    SELECT d.id, d.fuera_de_plazo, d.ficha_catastral_id
                      FROM declaracion_jurada d
@@ -104,15 +139,63 @@ public class DeteccionRepositoryJdbc extends RepositorioJdbc implements Deteccio
              LEFT JOIN ficha_catastral fd
                ON fd.municipalidad_id = p.municipalidad_id
               AND fd.id = dj.ficha_catastral_id
+            """;
+
+    /** Lo que acota el conjunto, y lo hacen las dos formas por igual. */
+    private static final String FILTRO_DEL_PADRON =
+            """
             WHERE p.estado = :activo
               AND (NOT :conSector OR s.codigo = :sector)
             """;
+
+    private static final String DESDE = DESDE_EL_PADRON + Y_SU_DECLARACION + FILTRO_DEL_PADRON;
+
+    /**
+     * La diferencia de area, transcrita de {@link
+     * pe.gob.sgtm.fiscalizacion.dominio.ComparacionHalladoDeclarado#diferenciaDeArea} (#608).
+     *
+     * <p>Es la <b>segunda</b> transcripcion de una funcion pura al motor que vive en este archivo,
+     * y por el mismo motivo que la primera: se ordena por ella, y {@code ORDER BY} no puede llamar
+     * a un metodo de Java. La funcion pura sigue siendo la que decide lo que la fila <b>enseña</b>
+     * —{@code FilaDeOmisos.diferenciaDeArea()}—; esta columna solo decide en que orden salen.
+     *
+     * <p>Las tres preguntas de aquella funcion, en el mismo orden:
+     *
+     * <ul>
+     *   <li>Sin uno de los dos lados no hay diferencia: {@code NULL}. Devolver cero diria que se
+     *       midio y coincidio, que es lo contrario de lo que pasa —el caso mayoritario es el omiso,
+     *       que no declaro nada—. <b>Esta rama es explicita y no operativa</b>: con cualquiera de
+     *       los dos lados nulo, la comparacion de la rama siguiente ya es {@code NULL} y no se
+     *       toma, y la resta del {@code ELSE} da {@code NULL} igual. Se escribe para que las tres
+     *       preguntas de la funcion pura esten a la vista una a una; quitarla no cambia ninguna
+     *       fila, y por eso ninguna mutacion la caza.
+     *   <li>Un area hallada <b>menor o igual</b> que la declarada da cero: declarar de mas no es un
+     *       hallazgo contra el contribuyente, y una diferencia negativa no existe.
+     *   <li>Lo demas, lo que el catastro tiene de mas sobre lo declarado.
+     * </ul>
+     *
+     * <p>Que esta transcripcion no se separe de la funcion pura tampoco lo garantiza este
+     * comentario: lo garantiza {@code OrdenDeLaDeteccionFronteraTest}, que compara el <b>orden</b>
+     * que produce el motor con el que produce la funcion pura sobre las mismas filas. Conviene no
+     * subir la apuesta: compara el orden, no la cifra de cada fila caso por caso — eso es lo que
+     * {@code LaCondicionCoincideConLaFuncionPura} hace para la condicion, y aqui no hay equivalente
+     * porque la cifra que la fila enseña no sale de esta columna.
+     */
+    private static final String DIFERENCIA_DE_AREA =
+            """
+            CASE
+              WHEN f.area_terreno IS NULL OR fd.area_terreno IS NULL THEN NULL::numeric
+              WHEN f.area_terreno <= fd.area_terreno THEN 0
+              ELSE f.area_terreno - fd.area_terreno
+            END""";
 
     private static final String INTERIOR =
             "SELECT p.id AS predio_id, p.codigo_ref_catastral, p.direccion,"
                     + " s.codigo AS sector_codigo, f.area_terreno AS area_catastral,"
                     + " fd.area_terreno AS area_declarada,"
                     + " COALESCE(dj.fuera_de_plazo, false) AS fuera_de_plazo, "
+                    + DIFERENCIA_DE_AREA
+                    + " AS diferencia_de_area, "
                     + CONDICION
                     + " AS condicion"
                     + DESDE;
@@ -120,6 +203,35 @@ public class DeteccionRepositoryJdbc extends RepositorioJdbc implements Deteccio
     /** El filtro de condición, sobre el alias de la subconsulta: la misma expresión, una vez. */
     private static final String FILTRO_DE_CONDICION =
             " WHERE (NOT :conCondicion OR d.condicion = :condicion)";
+
+    /**
+     * La página de la grilla. Visible en el paquete para que la prueba de plan le pida el plan a
+     * <b>esta</b> cadena y no a una transcripción suya (la lección de #397).
+     */
+    static final String PAGINA = "SELECT d.* FROM (" + INTERIOR + ") d" + FILTRO_DE_CONDICION;
+
+    /** El conteo cuando hay filtro de condición: hay que evaluarla, y eso cuesta el padrón. */
+    static final String CONTEO_CON_CONDICION =
+            "SELECT count(*) FROM (" + INTERIOR + ") d" + FILTRO_DE_CONDICION;
+
+    /**
+     * El conteo cuando <b>no</b> hay filtro de condición, que es como se abre la pantalla (#561).
+     *
+     * <p>Cuenta exactamente las mismas filas que {@link #CONTEO_CON_CONDICION} sin el filtro —mismo
+     * {@code FROM}, mismo {@code WHERE}— y se ahorra los dos {@code JOIN} que sólo sirven para
+     * <b>pintar</b> la condición. Ninguno de los dos puede cambiar el número de filas: eso está
+     * razonado en {@link #Y_SU_DECLARACION} y comprobado contra el motor por {@code
+     * ConteoDeLaDeteccionTest}, que compara las dos cifras predio a predio.
+     *
+     * <p>Lo que evita es el {@code LEFT JOIN LATERAL}: un descenso al índice de {@code
+     * declaracion_jurada} <b>por cada predio del padrón</b>, con su {@code Sort} montado y
+     * desmontado 14 422 veces. Medido sobre el padrón de Catacaos en dos municipalidades, como
+     * {@code sgtm_app} y con RLS activa: <b>31 738 de las 32 293 páginas</b> que el conteo tocaba
+     * eran eso, y sin ellos toca <b>555</b> (DAT-01 §7.2). Es el coste que no depende del tamaño de
+     * página, que es el síntoma que da nombre a #561.
+     */
+    static final String CONTEO_SIN_CONDICION =
+            "SELECT count(*)" + DESDE_EL_PADRON + FILTRO_DEL_PADRON;
 
     /**
      * Los dos estados en que una declaración sustenta algo, escritos aquí y no leídos de {@code
@@ -138,7 +250,7 @@ public class DeteccionRepositoryJdbc extends RepositorioJdbc implements Deteccio
     private static final String PREDIO_ACTIVO = "ACTIVO";
 
     /**
-     * Por lo que la fila <b>publica</b>, y por nada mas (#546).
+     * Por lo que la fila <b>publica</b>, y por nada mas (#546, #608).
      *
      * <p>{@code codRefCatastral} es el nombre del campo de {@code OmisoResource}; el {@code
      * camelCase} automatico de la columna era {@code codigoRefCatastral}, o sea un segundo nombre
@@ -146,10 +258,31 @@ public class DeteccionRepositoryJdbc extends RepositorioJdbc implements Deteccio
      * porque {@code OmisoResource} no la publica —ordenar por una columna que no esta en la fila no
      * se puede explicar en pantalla—, y {@code predio_id} pasa a <b>desempate</b>, que es para lo
      * que servia: da orden total sin ofrecerse como campo (#543).
+     *
+     * <h2>Los dos campos que #608 añade, y el que deja fuera</h2>
+     *
+     * <p>La pantalla dibuja siete columnas y hasta #608 se podia ordenar por <b>una</b>. Entran
+     * {@code sector} —que la fila ya publica y la consulta ya filtraba— y {@code diferenciaDeArea}
+     * —lo unico cuantificado que hoy distingue a un subvaluador—, que son ademas dos de los tres
+     * que el «Ordenar por» del manual ofrece.
+     *
+     * <p>El tercero del manual, {@code impuestoOmitidoS}, <b>no entra</b>: es {@code null} en todas
+     * las filas mientras D-02a siga abierta (#198), asi que ordenar por el no ordena nada —las dos
+     * direcciones devolverian la misma primera fila— y la lista blanca lo sigue rechazando con
+     * {@code 422 ORDEN_NO_ADMITIDO} nombrando el campo pedido. No se admite «porque este en el
+     * manual»: se admitira el dia que tenga cifra.
+     *
+     * <p>Los dos que entran <b>admiten nulos</b>, y los dos por un motivo del dominio: el sector,
+     * porque el predio sin sector es uno de los tres casos que esta consulta existe para encontrar;
+     * la diferencia, porque sin las dos superficies no hay diferencia que calcular —el caso del
+     * omiso, que es el mayoritario—. Sin {@code NULLS LAST}, «de mayor a menor» abriria por ellos.
      */
     static final OrdenSeguro ORDEN =
-            OrdenSeguro.sobre("codigo_ref_catastral")
+            OrdenSeguro.sobre("codigo_ref_catastral", "sector_codigo", "diferencia_de_area")
                     .publicandoComo("codRefCatastral", "codigo_ref_catastral")
+                    .publicandoComo("sector", "sector_codigo")
+                    .conNulosAlFinal("sector_codigo")
+                    .conNulosAlFinal("diferencia_de_area")
                     .desempatandoPor("predio_id");
 
     public DeteccionRepositoryJdbc(JdbcClient jdbc) {
@@ -172,8 +305,8 @@ public class DeteccionRepositoryJdbc extends RepositorioJdbc implements Deteccio
         parametros.put("conCondicion", condicion != null);
 
         return paginar(
-                "SELECT d.* FROM (" + INTERIOR + ") d" + FILTRO_DE_CONDICION,
-                "SELECT count(*) FROM (" + INTERIOR + ") d" + FILTRO_DE_CONDICION,
+                PAGINA,
+                condicion == null ? CONTEO_SIN_CONDICION : CONTEO_CON_CONDICION,
                 Map.copyOf(parametros),
                 paginacion,
                 ORDEN,

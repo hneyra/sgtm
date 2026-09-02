@@ -3,6 +3,7 @@ package pe.gob.sgtm.licencias.infraestructura.web;
 import java.time.LocalDate;
 import java.util.List;
 import org.jspecify.annotations.Nullable;
+import pe.gob.sgtm.dominio.AreaM2;
 import pe.gob.sgtm.licencias.aplicacion.ConsultaDeFue;
 import pe.gob.sgtm.licencias.aplicacion.ValorizacionDelFue;
 import pe.gob.sgtm.licencias.dominio.EstructuraDelProyecto;
@@ -31,6 +32,12 @@ import pe.gob.sgtm.web.ImporteActualizado;
  * ImporteActualizado} —con su fecha— o no viaja: cuando el cuadro sellado no permite calcularla, el
  * campo es nulo y {@code valorDeObraNoDisponible} dice por que, nombrando la llave que falta. Un
  * cero ahi se leeria como «la obra no vale nada» (AC 2 de #48; las cifras las espera #197).
+ *
+ * <p><b>El area viaja tipada</b> (#607). Se escribia a mano con {@code valor().toPlainString()}:
+ * daba la cifra buena, pero era una segunda convencion para lo mismo, y de tener dos salio que
+ * catastro compusiera con {@code toString()} y publicara «360.00 m2» del mismo predio que aqui sale
+ * «360.00». Ahora la escribe el serializador que {@code ConfiguracionDeJson} registra para {@code
+ * AreaM2}, que es un solo sitio; la unidad la sigue poniendo el nombre del campo, no el dato.
  */
 public record FueResource(
         String nroExpediente,
@@ -156,7 +163,7 @@ public record FueResource(
             String direccion,
             @Nullable String mz,
             @Nullable String lt,
-            String areaDelTerrenoM,
+            AreaM2 areaDelTerrenoM,
             @Nullable String zonificacion,
             @Nullable String partidaRegistral,
             @Nullable String frenteM,
@@ -169,7 +176,7 @@ public record FueResource(
                     terreno.direccion(),
                     terreno.manzana(),
                     terreno.lote(),
-                    terreno.areaTerreno().valor().toPlainString(),
+                    terreno.areaTerreno(),
                     terreno.zonificacion(),
                     terreno.partidaRegistral(),
                     terreno.frente() == null ? null : terreno.frente().magnitud().toPlainString(),
@@ -182,8 +189,8 @@ public record FueResource(
             int version,
             String usoDeLaEdificacion,
             int nDePisos,
-            String areaTechadaTotalM,
-            @Nullable String areaLibreM,
+            AreaM2 areaTechadaTotalM,
+            @Nullable AreaM2 areaLibreM,
             @Nullable Integer nDeEstacionamientos,
             @Nullable Integer plazoDeEjecucionMeses) {
 
@@ -192,10 +199,8 @@ public record FueResource(
                     proyecto.version(),
                     proyecto.uso(),
                     proyecto.numeroPisos(),
-                    proyecto.areaTechada().valor().toPlainString(),
-                    proyecto.areaLibre() == null
-                            ? null
-                            : proyecto.areaLibre().valor().toPlainString(),
+                    proyecto.areaTechada(),
+                    proyecto.areaLibre(),
                     proyecto.estacionamientos(),
                     proyecto.plazoEnMeses());
         }
@@ -208,14 +213,14 @@ public record FueResource(
      * viaja solo dentro del total de la ficha —una vez, con su fecha—: repetirlo por linea seria
      * exponer veintiuna cifras sin fecha en el mismo cuerpo.
      */
-    public record EstructuraResource(int piso, String partida, String categoria, String areaM) {
+    public record EstructuraResource(int piso, String partida, String categoria, AreaM2 areaM) {
 
         static EstructuraResource de(EstructuraDelProyecto estructura) {
             return new EstructuraResource(
                     estructura.piso(),
                     estructura.partida().name(),
                     String.valueOf(estructura.categoria()),
-                    estructura.area().valor().toPlainString());
+                    estructura.area());
         }
     }
 

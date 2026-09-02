@@ -16,6 +16,7 @@ import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
+import org.springframework.web.bind.annotation.RequestHeader;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
@@ -67,6 +68,28 @@ import pe.gob.sgtm.web.RespuestaPaginada;
  * eso pasa por la caja: {@code POST /tesoreria/caja/cobranza} con {@code tipoDePago = PRECONVENIO}.
  * Publicar aqui un «formalizar» permitiria poner un convenio en vigor sin recibo, que es
  * exactamente lo que el criterio de aceptacion de #35 prohibe.
+ *
+ * <h2>La cabecera {@code Idempotency-Key} (#606)</h2>
+ *
+ * <p>Las <b>dos</b> escrituras la leen, como {@link CajaController} desde #33. Tras un 500 o un
+ * tiempo de espera agotado, quien atiende no sabe si escribio; reenviar el mismo intento devuelve
+ * <b>lo de la primera vez</b> —el mismo convenio, con su mismo numero; el mismo acta de cierre— en
+ * vez de abrir un segundo preconvenio sobre la misma deuda o contestar un 409 que se lee como un
+ * fallo nuevo. Sin eso, la pantalla de convenios no puede ofrecer «Reintentar» sobre ellas, y no lo
+ * ofrecia.
+ *
+ * <p>Las dos responden <b>201</b> tambien en el reenvio, como {@code POST /tesoreria/caja/cobranza}
+ * desde #33: dentro de tesoreria las escrituras de ventanilla contestan igual, y que la misma
+ * situacion diera 201 en la caja y 200 aqui obligaria a quien llama a distinguir dos exitos. {@code
+ * AnuncioController} si los distingue (#51), y esa diferencia queda anotada a proposito.
+ *
+ * <p>La garantia ultima son {@code convenio_idempotencia_uq} y {@code
+ * convenio_movimiento_idempotencia_uq} (V70), no las lecturas previas de los casos de uso: entre
+ * leer y escribir cabe otra peticion. Las lecturas estan para poder contestar algo util.
+ *
+ * <p><b>La simulacion no consume la clave</b>: con {@code simular = true} no se escribe nada, asi
+ * que no hay nada que devolver dos veces. Simular y despues registrar con la misma clave registra,
+ * que es lo que la pantalla hace cuando quien atiende imprime la simulacion y luego acepta.
  *
  * <h2>El numero, en la ruta</h2>
  *
@@ -179,7 +202,9 @@ public class ConvenioController {
      */
     @PostMapping("/fraccionamientos")
     @RequiereAcceso(acceso = ACCESO_FRACCIONAMIENTO, privilegio = Privilegio.REGISTRO)
-    public ResponseEntity<Object> fraccionar(@RequestBody PeticionDeFraccionamiento peticion) {
+    public ResponseEntity<Object> fraccionar(
+            @RequestBody PeticionDeFraccionamiento peticion,
+            @RequestHeader(name = "Idempotency-Key", required = false) @Nullable String clave) {
         ResumenDeContribuyente contribuyente = contribuyenteDe(peticion.codContribuyente());
         RegistrarPreconvenio.Peticion pedido = peticionDe(peticion, contribuyente.id());
 
@@ -204,13 +229,19 @@ public class ConvenioController {
 
         Observacion observacion = observacionDe(peticion.observacion());
         try {
-            Convenio guardado = registrar.registrar(pedido, observacion);
+            Convenio guardado = registrar.registrar(pedido, vacioAnulo(clave), observacion);
             return ResponseEntity.status(HttpStatus.CREATED)
                     .body(
                             ConvenioResource.de(
                                     guardado,
                                     contribuyente.codigo(),
                                     EstadoDeConvenio.PRECONVENIO.name()));
+        } catch (ConvenioRepository.ClaveRepetida
+                | RegistrarPreconvenio.ClaveDeOtraPeticion claveEnConflicto) {
+            // 409: la peticion esta bien formada. `ClaveRepetida` es la carrera —dos envios del
+            // mismo intento a la vez, y la segunda no puede devolver lo que la primera aun no ha
+            // confirmado—; `ClaveDeOtraPeticion` es una clave vieja reusada para otro sujeto.
+            throw new ProblemaDeNegocio(CodigoDeError.CONFLICTO, mensajeDe(claveEnConflicto));
         } catch (ConvenioRepository.CronogramaDuplicado yaTeniaCronograma) {
             // 409: la peticion esta bien formada; lo que no admite la operacion es el
             // estado actual del convenio.
@@ -294,7 +325,9 @@ public class ConvenioController {
     @PostMapping("/convenios/{numero}/anulacion")
     @RequiereAcceso(acceso = ACCESO_ANULACION, privilegio = Privilegio.ELIMINACION)
     public ResponseEntity<ConvenioResource> cerrar(
-            @PathVariable String numero, @RequestBody PeticionDeCierreDeConvenio peticion) {
+            @PathVariable String numero,
+            @RequestBody PeticionDeCierreDeConvenio peticion,
+            @RequestHeader(name = "Idempotency-Key", required = false) @Nullable String clave) {
 
         NumeroDeConvenio delConvenio = numeroDe(numero);
         Observacion observacion = observacionDe(peticion.observacion());
@@ -328,13 +361,20 @@ public class ConvenioController {
         }
 
         try {
-            CerrarConvenio.Cerrado cerrado = cerrar.cerrar(cierre, observacion);
+            CerrarConvenio.Cerrado cerrado = cerrar.cerrar(cierre, vacioAnulo(clave), observacion);
             return ResponseEntity.status(HttpStatus.CREATED)
                     .body(
                             ConvenioResource.de(
                                     cerrado.convenio(),
                                     codigoDe(cerrado.convenio().contribuyenteId()),
-                                    estadoTras(accion).name()));
+                                    // Del acta y no de la accion pedida: en un reenvio las dos
+                                    // coinciden, y si no coincidieran mandaria lo que se registro.
+                                    estadoTras(cerrado.cierre().tipo()).name()));
+        } catch (MovimientoDeConvenioRepository.ClaveRepetida
+                | CerrarConvenio.ClaveDeOtroActo claveEnConflicto) {
+            // 409, por lo mismo que en /fraccionamientos: la carrera de dos envios simultaneos y
+            // la clave vieja reusada para otro convenio no son reenvios que se puedan atender.
+            throw new ProblemaDeNegocio(CodigoDeError.CONFLICTO, mensajeDe(claveEnConflicto));
         } catch (FormalizarConvenio.ConvenioInexistente noExiste) {
             throw new ProblemaDeNegocio(CodigoDeError.NO_ENCONTRADO, mensajeDe(noExiste));
         } catch (MovimientoDeConvenioRepository.ConvenioYaCerrado

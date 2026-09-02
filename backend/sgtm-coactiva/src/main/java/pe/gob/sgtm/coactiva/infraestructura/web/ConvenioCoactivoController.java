@@ -10,6 +10,7 @@ import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
+import org.springframework.web.bind.annotation.RequestHeader;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 import pe.gob.sgtm.autorizacion.Privilegio;
@@ -87,11 +88,19 @@ public class ConvenioCoactivoController {
      *
      * <p>Responde <b>201</b> al registrar y <b>200</b> al simular: lo primero crea un recurso y lo
      * segundo no.
+     *
+     * <p><b>Lee {@code Idempotency-Key}</b> (#606), igual que la ruta de tesoreria: esta es un
+     * {@code POST} tan reenviable como aquella, y sin la cabecera un reenvio tras un 500 abre un
+     * segundo convenio coactivo sobre la misma deuda. La simulacion no la usa porque no registra
+     * nada.
      */
     @PostMapping("/convenios")
     @RequiereAcceso(acceso = ACCESO_CONVENIOS, privilegio = Privilegio.REGISTRO)
     public ResponseEntity<ConvenioCoactivoResource> fraccionar(
-            @RequestBody PeticionDeConvenioCoactivo peticion) {
+            @RequestBody PeticionDeConvenioCoactivo peticion,
+            @RequestHeader(value = "Idempotency-Key", required = false)
+                    @org.jspecify.annotations.Nullable
+                    String claveDeIdempotencia) {
 
         String numeroDeExpediente = exigir(peticion.nroExpedCoact(), "nroExpedCoact");
         FraccionarEnCoactiva.Peticion pedido = peticionDe(peticion, numeroDeExpediente);
@@ -103,7 +112,8 @@ public class ConvenioCoactivoController {
         }
 
         Observacion observacion = observacionDe(peticion.observacion());
-        ConvenioCoactivo registrado = ejecutar(() -> fraccionar.fraccionar(pedido, observacion));
+        ConvenioCoactivo registrado =
+                ejecutar(() -> fraccionar.fraccionar(pedido, claveDeIdempotencia, observacion));
         return ResponseEntity.status(HttpStatus.CREATED)
                 .body(ConvenioCoactivoResource.de(registrado, numeroDeExpediente));
     }

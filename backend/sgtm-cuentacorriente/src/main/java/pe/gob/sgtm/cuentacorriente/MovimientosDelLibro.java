@@ -50,10 +50,11 @@ public interface MovimientosDelLibro {
     /**
      * El historial de pagos del contribuyente, entre dos fechas opcionales, paginado (RF-048).
      *
-     * <p>Un pago es un asiento {@code ABONO} de concepto {@code PAGO}: los demas abonos
-     * —compensacion, anulacion, condonacion, ajuste, fraccionamiento— son movimientos de deuda y
-     * salen por {@link #altasYBajasDe}. La distincion la mantiene {@code cuentacorriente} y no
-     * quien pregunta, que es justo el conocimiento que este puerto existe para no repartir.
+     * <p>Un pago es un asiento {@code ABONO} de concepto {@code PAGO}. Los demas abonos no salen
+     * todos por {@link #altasYBajasDe}: ahi van solo los que nacen de un <b>acto</b> de alta o de
+     * baja (#640), y el abono con que una cobranza cancela el insoluto no es ninguna de las dos
+     * cosas. La distincion la mantiene {@code cuentacorriente} y no quien pregunta, que es justo el
+     * conocimiento que este puerto existe para no repartir.
      *
      * <p>Paginado, a diferencia de {@link ConsultaDeDeudaPublica#deTodoElContribuyente}: las
      * obligaciones con deuda de un contribuyente son pocas, pero sus pagos son los de todos los
@@ -72,8 +73,18 @@ public interface MovimientosDelLibro {
     /**
      * Las altas y bajas de deuda del contribuyente, paginadas (RF-045).
      *
-     * <p>Un movimiento de deuda es un asiento de uno de los cuatro conceptos del desglose
-     * —insoluto, reajuste, interes, gasto—. Un pago no lo es, y por eso tiene su propio metodo.
+     * <p>Son los dos <b>actos</b> de RF-043 y RF-044, no todo movimiento del libro (#640): ni el
+     * abono de una cobranza —que tiene su propio metodo—, ni el cargo de la emision masiva, ni el
+     * que cristaliza el interes devengado al cobrar. Los tres se escriben con los mismos conceptos
+     * del desglose que un acto, asi que el concepto no los separa; lo hace la columna que el libro
+     * estampa desde V68.
+     *
+     * <p>Una baja de deuda es la de RF-044 la teclee quien la teclee: desde #662 salen aqui tambien
+     * las que asienta {@code ExtincionDeDeuda} cuando una resolucion de gerencia deja una multa sin
+     * efecto, que son los mismos asientos y las mismas causales.
+     *
+     * <p>Los asientos anteriores a V68 nacieron sin la columna y <b>no salen</b>; ver {@code
+     * AsientoRepositoryJdbc#altasYBajas} para por que no se pueden reparar.
      *
      * @param codigoContribuyente el codigo del titular
      * @param tributo filtro opcional de tributo; {@code null} trae todos
