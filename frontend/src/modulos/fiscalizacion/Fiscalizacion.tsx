@@ -6,6 +6,8 @@ import {
   listarOmisos,
   listarProgramas,
   listarMuestra,
+  registrarPrograma,
+  sortearMuestra,
   listarActas,
   listarResultados,
   listarHistorico,
@@ -18,11 +20,12 @@ import {
   type FilaDeMuestra,
   type ActaDeFiscalizacion,
   type ResolucionDeDeterminacion,
+  type ResultadoDelSorteo,
 } from '../../api/fiscalizacion';
 import { useRecurso, useRebote } from '../../api/useRecurso';
 import { FalloDeLectura } from '../../api/Fallo';
 import { Descargas } from '../../api/descarga';
-import type { ErrorDeApi, RespuestaPaginada } from '../../api/cliente';
+import { ErrorDeApi, type RespuestaPaginada } from '../../api/cliente';
 import { ICO } from '../../ds/iconos';
 import { Aviso, Insignia, Paginador, PasoAtras, type Tono } from '../../ds/componentes';
 import { moduloDe } from '../../shell/modulos';
@@ -430,6 +433,48 @@ function FalloDeLaMuestra({
   return <FalloDeLectura error={error} que="la muestra del programa" acceso="fisc_programa" alReintentar={reintentarMuestra} />;
 }
 
+/**
+ * Cuantos caracteres exige el servidor en una observacion, medido.
+ *
+ * No es «que no este vacia»: el backend contesta «La observacion debe explicar
+ * el cambio: al menos 5 caracteres, y no espacios en blanco (ADR-0008)», asi
+ * que una primaria encendida con «ok» tecleado dentro manda una peticion que ya
+ * se sabe rechazada. Se comprueba aqui con la misma regla —recortada y por
+ * longitud— para que el 422 no sea la forma de enterarse.
+ */
+const OBSERVACION_MINIMA = 5;
+
+/** Un control del alta de programa: todos miden y se ven igual. */
+const CAMPO: CSSProperties = {
+  width: '100%',
+  boxSizing: 'border-box',
+  border: '1px solid var(--line-2)',
+  borderRadius: 6,
+  padding: '9px 10px',
+  background: 'var(--bg-elev)',
+  fontSize: 13.5,
+};
+
+/**
+ * Los dos parrafos a los que apuntan las primarias apagadas de este modulo.
+ *
+ * El motivo de un acto que no se puede hacer se DIBUJA, y el boton lo señala
+ * con `aria-describedby` en vez de repetirlo en un `title`: un boton apagado no
+ * recibe el foco, asi que su `title` no lo lee un lector de pantalla ni lo
+ * descubre quien no pasa el raton (RNF-082). Con el identificador aqui, el
+ * parrafo y el boton no pueden dejar de apuntarse.
+ */
+const MOTIVO_DEL_ALTA = 'fisc-motivo-del-alta';
+const MOTIVO_DEL_SORTEO = 'fisc-motivo-del-sorteo';
+
+/** El rotulo de un control del alta. */
+const ROTULO: CSSProperties = { fontSize: 11.5, fontWeight: 500, color: 'var(--ink-3)' };
+
+/** Si la observacion tecleada cumple lo que el servidor va a exigir. */
+function observacionBastante(texto: string): boolean {
+  return texto.trim().length >= OBSERVACION_MINIMA;
+}
+
 /** Lo que se dibuja en un boton apagado: se ve, no se pulsa, y dice por que. */
 const BOTON_APAGADO: CSSProperties = {
   borderRadius: 6,
@@ -799,6 +844,172 @@ export default function Fiscalizacion({ dest, onDest }: PantallaProps) {
     [programaActivo?.id, paginaMuestra],
     (dest === 'programas' || dest === 'panel') && programaActivo !== null,
   );
+
+  /* ── El alta de un programa, contra `POST /fiscalizacion/programas` (#550) ──
+     ────────────────────────────────────────────────────────────────────────
+     Es la mitad de frontend del AC 4. La operacion existia desde antes y no la
+     alcanzaba ninguna pantalla: el unico boton que la nombraba —«+ Nuevo
+     programa»— estaba apagado porque aqui no habia donde teclear sus cuatro
+     campos obligatorios. Sin ella, un programa solo podia nacer por `curl`, y
+     con el no nacia tampoco la muestra ni el acta que cuelgan de el.
+
+     Los cinco campos que el servidor exige y su orden estan medidos en
+     `registrarPrograma`, no leidos del backend. */
+  const [altaAbierta, setAltaAbierta] = useState(false);
+  const [alta, setAlta] = useState<Record<string, string>>({});
+  const campoDelAlta = (k: string): string => alta[k] ?? '';
+  const fijarAlta = (k: string, v: string) => setAlta((s) => ({ ...s, [k]: v }));
+  const [observacionDelAlta, setObservacionDelAlta] = useState('');
+  const [registrando, setRegistrando] = useState(false);
+  const [falloDelAlta, setFalloDelAlta] = useState<string | null>(null);
+
+  /**
+   * Lo que le falta al alta para poder mandarse, y **se dibuja**.
+   *
+   * No vive en el `title` de un boton apagado: un boton deshabilitado no recibe
+   * el foco, asi que su `title` no lo lee un lector de pantalla ni lo descubre
+   * quien no pasa el raton por encima (RNF-082). Esta lista es el motivo, y por
+   * eso quitarla deja la pantalla sin decir por que no se puede registrar.
+   *
+   * Los cuatro primeros son los que el servidor exige. El quinto —ejercicio,
+   * criterio y fiscalizador— **el servidor lo admite en blanco y esta pantalla
+   * no**, y el motivo esta medido: `POST /programas/{id}/muestra` contesta «El
+   * programa no declara 'X', y sin el no se puede sortear su muestra» por cada
+   * uno de los tres, y **no hay ninguna ruta de edicion de un programa**
+   * —«reprogramar es registrar otro»—, de modo que lo que nace sin ellos es una
+   * fila esteril que nadie puede arreglar. Dejar pasar aqui el dato que falta
+   * traslada el fallo a un acto despues y sin vuelta atras.
+   *
+   * Los tres se descubrieron **de uno en uno y operando la pantalla**, que es
+   * lo que este orden de comprobacion obliga a hacer: el 422 nombra el primero
+   * que falta y calla los demas, asi que un programa con ejercicio y criterio
+   * —el que esta pantalla dejaba registrar antes de medirlo— pasaba las dos
+   * comprobaciones y moria en la tercera.
+   */
+  const faltaDelAlta: { que: string; ok: boolean }[] = [
+    { que: 'El código del programa', ok: campoDelAlta('codigo').trim() !== '' },
+    { que: 'La descripción: qué se va a fiscalizar', ok: campoDelAlta('descripcion').trim() !== '' },
+    { que: 'El tipo, predial o vehicular', ok: campoDelAlta('tipo') !== '' },
+    { que: 'La fecha de inicio', ok: campoDelAlta('fechaInicio') !== '' },
+    {
+      que: 'El ejercicio, el criterio de riesgo y el fiscalizador, que son con los que sorteará su muestra',
+      ok:
+        campoDelAlta('ejercicio').trim() !== '' &&
+        campoDelAlta('criterio') !== '' &&
+        campoDelAlta('fiscalizador').trim() !== '',
+    },
+    { que: 'La observación de quien lo registra', ok: observacionBastante(observacionDelAlta) },
+  ];
+  const puedeRegistrarPrograma = faltaDelAlta.every((f) => f.ok);
+
+  const registrarElPrograma = async () => {
+    setRegistrando(true);
+    setFalloDelAlta(null);
+    try {
+      /* Los cuatro opcionales van con `|| undefined` y no con la cadena vacia:
+         `solicitar` no filtra el cuerpo —solo los parametros de consulta—, asi
+         que un `""` viajaria y quedaria guardado como el sector llamado «». */
+      const creado = await registrarPrograma({
+        observacion: observacionDelAlta.trim(),
+        codigo: campoDelAlta('codigo').trim(),
+        descripcion: campoDelAlta('descripcion').trim(),
+        tipo: campoDelAlta('tipo'),
+        fechaInicio: campoDelAlta('fechaInicio'),
+        ejercicio: campoDelAlta('ejercicio').trim() || undefined,
+        sector: campoDelAlta('sector').trim() || undefined,
+        criterio: campoDelAlta('criterio') || undefined,
+        fiscalizador: campoDelAlta('fiscalizador').trim() || undefined,
+      });
+      setAltaAbierta(false);
+      setAlta({});
+      setObservacionDelAlta('');
+      /* Se elige el que acaba de nacer, y se vuelve a pedir la lista: el
+         programa que se registra es sobre el que se va a sortear ahora mismo,
+         y buscarlo a mano en una lista que todavia no lo trae seria el paso
+         que sobra. */
+      setPrograma(creado.id);
+      programas.reintentar();
+      toast(`Programa ${creado.codigo} registrado. Todavía no tiene muestra: se sortea aquí abajo.`);
+    } catch (error) {
+      setFalloDelAlta(error instanceof ErrorDeApi ? error.mensaje : 'no hubo respuesta del servidor');
+    } finally {
+      setRegistrando(false);
+    }
+  };
+
+  /* ── El sorteo de la muestra (#550, ADR-0023) ──────────────────────────
+     El cuerpo lleva SOLO la observacion, y eso no es una omision: a quien se
+     fiscaliza lo deciden los parametros del programa. Por eso este acto vive
+     aqui —donde el programa esta elegido y sus parametros se leen— y no en la
+     deteccion, donde lo que hay marcado son predios que no viajan. */
+  const [observacionDelSorteo, setObservacionDelSorteo] = useState('');
+  const [sorteando, setSorteando] = useState(false);
+  const [falloDelSorteo, setFalloDelSorteo] = useState<string | null>(null);
+  const [ultimoSorteo, setUltimoSorteo] = useState<ResultadoDelSorteo | null>(null);
+  /* El recuento del sorteo es del programa que se sorteo: al cambiar de
+     programa se va, porque si no diria las cifras de otro bajo esta muestra. */
+  useEffect(() => {
+    setUltimoSorteo(null);
+    setFalloDelSorteo(null);
+  }, [programaActivo?.id]);
+
+  /**
+   * Por que NO se puede sortear ahora mismo, o `null` si se puede.
+   *
+   * Las tres primeras causas se saben **antes de pulsar**, porque
+   * `ProgramaResource` publica `ejercicio` y `criterio` y el sobre de la muestra
+   * dice cuantas filas tiene: descubrirlas en el 422 de la respuesta seria
+   * mandar a quien atiende a averiguar por ensayo lo que la pantalla ya sabe.
+   */
+  const motivoParaNoSortear: string | null =
+    programaActivo === null
+      ? 'No hay ningún programa elegido: el sorteo es un acto de un programa concreto.'
+      : programaActivo.ejercicio === null
+        ? `El programa ${programaActivo.codigo} no declara ejercicio, y sin él no hay padrón sobre el que sortear. No se le puede añadir: no existe ninguna ruta de edición de un programa.`
+        : programaActivo.criterio === null
+          ? `El programa ${programaActivo.codigo} no declara criterio de riesgo, y la muestra se sortea por uno. No se le puede añadir: no existe ninguna ruta de edición de un programa.`
+          : programaActivo.fiscalizador === null
+            ? `El programa ${programaActivo.codigo} no declara fiscalizador, y el sorteo lo exige aunque el alta lo admita en blanco. No se le puede añadir: no existe ninguna ruta de edición de un programa.`
+            : (muestra.datos?.totalElementos ?? 0) > 0
+              ? `El programa ${programaActivo.codigo} ya sorteó su muestra, y una muestra no se regenera: hay actas que cuelgan de ella.`
+              : !observacionBastante(observacionDelSorteo)
+                ? 'Falta la observación de quien sortea, de al menos cinco caracteres.'
+                : null;
+
+  const sortearLaMuestraDelPrograma = async () => {
+    if (programaActivo === null) return;
+    setSorteando(true);
+    setFalloDelSorteo(null);
+    try {
+      const resultado = await sortearMuestra(programaActivo.id, observacionDelSorteo.trim());
+      setUltimoSorteo(resultado);
+      setObservacionDelSorteo('');
+      muestra.reintentar();
+      toast(`Muestra sorteada: ${resultado.predios} de ${resultado.detectados} detectados.`);
+    } catch (error) {
+      setFalloDelSorteo(error instanceof ErrorDeApi ? error.mensaje : 'no hubo respuesta del servidor');
+    } finally {
+      setSorteando(false);
+    }
+  };
+
+  /**
+   * Abre el alta con los filtros de la deteccion ya puestos (ADR-0023 §1).
+   *
+   * Es lo unico que la deteccion le pasa al programa, y es la salida (a) del
+   * ADR escrita en un boton: **los predios marcados no viajan**, viajan el
+   * sector y la condicion con los que se encontraron. La condicion vacia es
+   * «Todas», que en un programa no existe —contesta 422 diciendo que no es un
+   * criterio sino la ausencia de filtro—, asi que llega en blanco y el
+   * formulario la pide.
+   */
+  const programarConLosFiltrosDeLaDeteccion = () => {
+    setAlta({ tipo: 'PREDIAL', sector: sectorDet.trim(), criterio: condicionDet, ejercicio: pref.ejercicio });
+    setObservacionDelAlta('');
+    setFalloDelAlta(null);
+    setAltaAbierta(true);
+    onDest('programas');
+  };
 
   /* ── Las actas levantadas, contra `GET /fiscalizacion/actas` (#599) ── */
   /**
@@ -1548,52 +1759,58 @@ export default function Fiscalizacion({ dest, onDest }: PantallaProps) {
               </p>
             </section>
 
-            {/* Las dos acciones estan APAGADAS, y el motivo se lee en pantalla
-                —no en un `title` que nadie abre (RNF-082)—.
+            {/* Lo que sale de esta pantalla son sus FILTROS, no sus marcas
+                (ADR-0023 §1).
 
-                «Programar fiscalizacion»: el backend NO tiene ninguna operacion
-                que reciba una seleccion de predios. Lo que hay es `POST
-                /fiscalizacion/programas`, que registra un programa con su
-                codigo, su descripcion, su tipo y su fecha de inicio —cuatro
-                campos que esta pantalla no dibuja—, y `POST
-                /fiscalizacion/programas/{id}/muestra`, que SORTEA la muestra a
-                partir de los parametros del programa y cuyo cuerpo lleva solo
-                la observacion: su javadoc dice, con todas las letras, que a
-                quien se fiscaliza lo deciden los parametros del programa y no
-                la peticion. Asi que la seleccion no tiene a donde ir, y el
-                toast anterior —«N registros añadidos a la muestra del
-                PF-2026-014»— afirmaba un acto que nunca salio de la pantalla,
-                sobre un programa que es del prototipo.
+                La muestra se sortea: la fila de `programa_muestra` copia la
+                condicion del dia del sorteo y con eso contesta sola «¿por que
+                me toco a mi?». Una seleccion a mano contesta «porque alguien te
+                marco», que en una fiscalizacion de oficio no es una respuesta.
+                Asi que las casillas se quedan —marcar sigue siendo util para
+                revisar la pagina— y no viajan, y el boton lleva al alta del
+                programa con el sector y la condicion ya puestos, que son dos de
+                los tres parametros con los que ese programa sorteara.
 
-                «Notificar esquela»: no tenia ni `onClick`, y no hay ninguna
-                ruta de esquela en el contrato. */}
-            <Aviso tono="warn" titulo="Desde aquí todavía no se programa nada">
-              La selección se queda en esta pantalla. Para que salga de ella el backend tendría que aceptar una lista de predios, y hoy no
-              hay ninguna operación que la reciba: un programa se registra con su código, su descripción, su tipo y su fecha de inicio
-              —cuatro datos que esta pantalla no pide— y su muestra se <em>sortea</em> a partir del sector, la condición y el ejercicio que
-              el propio programa declara. Mientras tanto, la muestra se genera desde «Programas». Issue #550.
+                «Notificar esquela» SE HA RETIRADO, y no por descuido: ningun
+                requisito la pide, el catalogo de opciones no la nombra, el
+                contrato no declara ninguna ruta con esa palabra y el sistema no
+                modela el acto —no hay tipo de documento para ella ni plazo suyo
+                transcrito en el corpus, y este proyecto no inventa plazos
+                (regla 5)—. Un boton apagado dice «esto llegara»; aqui no hay
+                nada que llegue, asi que lo que quedaba era un rotulo del
+                prototipo sin acto detras. Se nombra en el aviso para que su
+                ausencia no se lea como un descuido, que es la leccion de #608
+                con las columnas que el manual propone y no se pueden ordenar. */}
+            <Aviso tono="neutro" titulo="Lo que se lleva de aquí son los filtros, no los predios marcados">
+              La muestra de un programa se <em>sortea</em>: se aplica al padrón el ejercicio, el sector y el criterio que el propio programa
+              declara, y la fila que sale copia la condición de ese día, que es lo que contesta «por qué me tocó a mí». Por eso los predios
+              marcados no viajan —marcar sirve para revisar esta página— y lo que el botón se lleva son el sector y la condición de arriba,
+              al formulario que registra el programa. «Notificar esquela» ya no está: no hay ninguna operación de esquela en el contrato, ni
+              tipo de documento, ni plazo transcrito con el que decir para cuándo, así que era un rótulo sin acto detrás. ADR-0023, issue
+              #550.
             </Aviso>
 
             <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>
               <p style={{ margin: 0, flex: 1, minWidth: 180, fontSize: 12.5, color: 'var(--ink-3)', textWrap: 'pretty' }}>
                 {marcadasN === 0
                   ? 'Marca los registros que quieras anotar. La marca no sale de esta pantalla.'
-                  : marcadasN + (marcadasN === 1 ? ' registro marcado' : ' registros marcados') + ' en esta página.'}
+                  : marcadasN + (marcadasN === 1 ? ' registro marcado' : ' registros marcados') + ' en esta página. La marca no viaja.'}
               </p>
-              <button
-                disabled
-                title="No hay ninguna operación de esquela en el contrato de la API."
-                style={{ ...BOTON_APAGADO, border: '1px solid var(--line-2)', background: 'var(--bg-card)', padding: '10px 18px', fontSize: 13 }}
-              >
-                Notificar esquela
-              </button>
-              <button
-                disabled
-                title="Ninguna operación del backend recibe una selección de predios."
-                style={{ ...BOTON_APAGADO, border: 0, background: 'var(--accent)', color: '#fff', padding: '11px 22px', fontSize: 13.5, fontWeight: 500 }}
-              >
-                Programar fiscalización
-              </button>
+              {/* Solo en el predial: el cruce vehicular no tiene lectura, asi
+                  que sus dos desplegables estan bloqueados y no hay ningun
+                  filtro que llevarse. */}
+              {detTab === 0 && (
+                <button
+                  onClick={programarConLosFiltrosDeLaDeteccion}
+                  style={{ border: 0, borderRadius: 7, background: 'var(--accent)', color: '#fff', padding: '11px 22px', fontSize: 13.5, fontWeight: 500, cursor: 'pointer' }}
+                >
+                  {/* El rotulo dice lo que hace. «Programar fiscalizacion» a
+                      secas, con N marcados al lado, se lee como «programa estos
+                      N» — que es exactamente lo que el toast anterior afirmaba
+                      sin mandar una sola peticion. */}
+                  Programar con estos filtros
+                </button>
+              )}
             </div>
           </div>
         )}
@@ -1641,8 +1858,8 @@ export default function Fiscalizacion({ dest, onDest }: PantallaProps) {
                           PF-2025-032, con sus «96 predios», «618 vehiculos» y
                           «1,412 predios»— no existen: `programa_fiscalizacion`
                           tiene cero filas en las dos municipalidades (#546). */}
-                      La consulta contestó sin ninguno. Un programa se registra con <code>POST /fiscalizacion/programas</code> —código,
-                      descripción, tipo y fecha de inicio— y esta pantalla todavía no dibuja ese formulario. Issue #550.
+                      La consulta contestó sin ninguno. Se registra el primero con «+ Nuevo programa», aquí abajo: pide código,
+                      descripción, tipo y fecha de inicio, más el ejercicio y el criterio con los que sorteará su muestra.
                     </Aviso>
                   </div>
                 )}
@@ -1685,21 +1902,198 @@ export default function Fiscalizacion({ dest, onDest }: PantallaProps) {
                 })}
 
                 <div style={{ padding: '11px 14px' }}>
-                  {/* `POST /fiscalizacion/programas` existe, pero pide codigo,
-                      descripcion, tipo y fecha de inicio, y aqui no hay ningun
-                      campo donde teclearlos —ni el de observacion que toda
-                      escritura exige (regla 10)—. Apagado, con el motivo. */}
+                  {/* Ya no esta apagado: el formulario del alta existe y vive a
+                      la derecha, donde hay sitio para sus ocho campos y su
+                      observacion (#550, AC 4). Este boton solo lo abre y lo
+                      cierra, asi que no escribe nada y no necesita motivo. */}
                   <button
-                    disabled
-                    title="El alta pide código, descripción, tipo y fecha de inicio, y esta pantalla no dibuja ningún campo."
-                    style={{ ...BOTON_APAGADO, width: '100%', border: '1px dashed var(--line-2)', borderRadius: 7, padding: 9, background: 'transparent', fontSize: 12.5, color: 'var(--ink-3)' }}
+                    onClick={() => {
+                      setAltaAbierta((x) => !x);
+                      setFalloDelAlta(null);
+                    }}
+                    aria-expanded={altaAbierta}
+                    style={{ width: '100%', border: '1px dashed var(--line-2)', borderRadius: 7, padding: 9, background: 'transparent', fontSize: 12.5, color: 'var(--ink-3)', cursor: 'pointer' }}
                   >
-                    + Nuevo programa
+                    {altaAbierta ? 'Cerrar el alta' : '+ Nuevo programa'}
                   </button>
                 </div>
               </section>
 
               <div style={{ display: 'flex', flexDirection: 'column', gap: 14, minWidth: 0 }}>
+                {/* ── El alta de un programa (#550, AC 4) ──────────────────
+                    `POST /fiscalizacion/programas` existia desde antes y no lo
+                    alcanzaba ninguna pantalla. Aqui estan sus cinco campos
+                    exigidos —codigo, descripcion, tipo, fecha de inicio y la
+                    observacion— y los cuatro que el servidor llama opcionales,
+                    de los que dos no lo son de hecho: sin ejercicio y sin
+                    criterio el programa no puede sortear su muestra nunca, y no
+                    hay ruta de edicion que se los añada despues. */}
+                {altaAbierta && (
+                  <section style={TARJETA}>
+                    <div style={{ ...CABECERA, flexWrap: 'wrap' }}>
+                      <h2 style={H2}>Nuevo programa</h2>
+                      <span style={META}>{puedeRegistrarPrograma ? 'listo' : faltaDelAlta.filter((f) => !f.ok).length + ' sin llenar'}</span>
+                    </div>
+
+                    <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit,minmax(190px,1fr))', gap: 12, padding: '14px 16px', borderBottom: '1px solid var(--line)' }}>
+                      <label style={{ display: 'flex', flexDirection: 'column', gap: 5, minWidth: 0 }}>
+                        <span style={ROTULO}>Código · obligatorio</span>
+                        <input value={campoDelAlta('codigo')} onChange={(e) => fijarAlta('codigo', e.target.value)} placeholder="PF-2026-001" style={CAMPO} />
+                      </label>
+                      <label style={{ display: 'flex', flexDirection: 'column', gap: 5, minWidth: 0, gridColumn: 'span 2' }}>
+                        <span style={ROTULO}>Descripción · obligatoria</span>
+                        <input
+                          value={campoDelAlta('descripcion')}
+                          onChange={(e) => fijarAlta('descripcion', e.target.value)}
+                          placeholder="Qué se va a fiscalizar y por qué"
+                          style={CAMPO}
+                        />
+                      </label>
+                      <label style={{ display: 'flex', flexDirection: 'column', gap: 5, minWidth: 0 }}>
+                        <span style={ROTULO}>Tipo · obligatorio</span>
+                        {/* Los DOS que `TipoDePrograma` declara, y ninguno mas:
+                            otro valor contesta «Tipo de programa desconocido».
+                            La opcion vacia esta a proposito, para que el tipo
+                            sea una eleccion y no lo que quedo dibujado. */}
+                        <select value={campoDelAlta('tipo')} onChange={(e) => fijarAlta('tipo', e.target.value)} style={CAMPO}>
+                          <option value="">Elegir…</option>
+                          <option value="PREDIAL">PREDIAL</option>
+                          <option value="VEHICULAR">VEHICULAR</option>
+                        </select>
+                      </label>
+                      <label style={{ display: 'flex', flexDirection: 'column', gap: 5, minWidth: 0 }}>
+                        <span style={ROTULO}>Fecha de inicio · obligatoria</span>
+                        <input type="date" value={campoDelAlta('fechaInicio')} onChange={(e) => fijarAlta('fechaInicio', e.target.value)} style={CAMPO} />
+                      </label>
+                    </div>
+
+                    <div style={{ padding: '12px 16px 4px' }}>
+                      <p style={{ margin: 0, fontSize: 12, fontWeight: 600, color: 'var(--ink-2)' }}>Con qué va a sortear su muestra</p>
+                      <p style={{ margin: '4px 0 0', fontSize: 11.5, lineHeight: 1.5, color: 'var(--ink-4)', textWrap: 'pretty' }}>
+                        El servidor admite los cuatro en blanco. Esta pantalla pide los tres primeros de todas formas: un programa al que
+                        le falte cualquiera de ellos <strong>no puede sortear su muestra nunca</strong> —contesta «El programa no declara
+                        &apos;ejercicio&apos;, y sin él no se puede sortear su muestra», y lo mismo del criterio y del fiscalizador— y no hay
+                        ninguna ruta de edición que se los añada después: reprogramar es registrar otro. Sólo el sector es de verdad
+                        opcional: en blanco, el sorteo mira el distrito entero.
+                      </p>
+                    </div>
+
+                    <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit,minmax(190px,1fr))', gap: 12, padding: '12px 16px 14px', borderBottom: '1px solid var(--line)' }}>
+                      <label style={{ display: 'flex', flexDirection: 'column', gap: 5, minWidth: 0 }}>
+                        <span style={ROTULO}>Ejercicio</span>
+                        <input value={campoDelAlta('ejercicio')} onChange={(e) => fijarAlta('ejercicio', e.target.value)} placeholder="2026" style={CAMPO} />
+                      </label>
+                      <label style={{ display: 'flex', flexDirection: 'column', gap: 5, minWidth: 0 }}>
+                        <span style={ROTULO}>Criterio de riesgo</span>
+                        {/* Los cinco de `CondicionFiscalizada`, y **ninguna
+                            opcion «Todas»**: en la deteccion «Todas» es «sin
+                            filtro», y aqui el servidor la rechaza diciendo que
+                            no es un criterio sino la ausencia de uno
+                            (ADR-0023 §2). Ofrecerla seria dibujar un 422 de ida
+                            y vuelta. */}
+                        <select value={campoDelAlta('criterio')} onChange={(e) => fijarAlta('criterio', e.target.value)} style={CAMPO}>
+                          <option value="">Elegir…</option>
+                          {CONDICIONES.map((c) => (
+                            <option key={c.valor} value={c.valor}>
+                              {c.valor}
+                            </option>
+                          ))}
+                        </select>
+                      </label>
+                      <label style={{ display: 'flex', flexDirection: 'column', gap: 5, minWidth: 0 }}>
+                        <span style={ROTULO}>Fiscalizador</span>
+                        <input value={campoDelAlta('fiscalizador')} onChange={(e) => fijarAlta('fiscalizador', e.target.value)} style={CAMPO} />
+                      </label>
+                      <label style={{ display: 'flex', flexDirection: 'column', gap: 5, minWidth: 0 }}>
+                        <span style={ROTULO}>Sector · opcional</span>
+                        <input value={campoDelAlta('sector')} onChange={(e) => fijarAlta('sector', e.target.value)} placeholder="Todos" style={CAMPO} />
+                      </label>
+                    </div>
+
+                    {/* Lo que falta, DIBUJADO. Un boton apagado no recibe el
+                        foco, asi que su `title` no lo lee un lector de pantalla
+                        (RNF-082): quitar esta lista deja la pantalla sin decir
+                        por que no se puede registrar. */}
+                    <div style={{ ...CABECERA, flexWrap: 'wrap' }}>
+                      <p style={{ ...H2, margin: 0, fontSize: 14 }}>Qué falta para poder registrarlo</p>
+                    </div>
+                    {faltaDelAlta.map((r) => (
+                      <div key={r.que} style={{ display: 'flex', alignItems: 'center', gap: 11, padding: '10px 16px', borderTop: '1px solid var(--line)' }}>
+                        <span
+                          style={{
+                            display: 'grid',
+                            placeItems: 'center',
+                            width: 20,
+                            height: 20,
+                            borderRadius: '50%',
+                            flex: '0 0 auto',
+                            background: r.ok ? 'var(--ok-bg)' : 'var(--warn-bg)',
+                            color: r.ok ? 'var(--ok-fg)' : 'var(--warn-fg)',
+                          }}
+                        >
+                          <Icono d={r.ok ? ['M5 12.5l4.5 4.5L19 7'] : ['M12 7.5V13M12 16.5h.02']} tam={12} grosor={2.4} />
+                        </span>
+                        <span style={{ flex: 1, minWidth: 0, fontSize: 13 }}>{r.que}</span>
+                      </div>
+                    ))}
+
+                    <div style={{ padding: '14px 16px', borderTop: '1px solid var(--line)' }}>
+                      <label style={{ display: 'block' }}>
+                        <span style={{ display: 'block', ...ROTULO, marginBottom: 5 }}>Observación · obligatoria</span>
+                        <textarea
+                          value={observacionDelAlta}
+                          onChange={(e) => setObservacionDelAlta(e.target.value)}
+                          rows={2}
+                          placeholder="Por qué se abre este programa y con qué documento"
+                          style={{ ...CAMPO, background: 'var(--bg-card)', resize: 'vertical' }}
+                        />
+                      </label>
+                      <p style={{ margin: '5px 0 0', fontSize: 11.5, color: 'var(--ink-4)', textWrap: 'pretty' }}>
+                        Queda en la bitácora junto a quién lo hizo y cuándo. Sin ella no se guarda, y el servidor pide al menos cinco
+                        caracteres que no sean espacios (regla 10, RNF-052).
+                      </p>
+                    </div>
+
+                    {falloDelAlta !== null && (
+                      <p style={{ margin: 0, padding: '11px 16px', borderTop: '1px solid var(--line)', background: 'var(--bad-bg)', color: 'var(--bad-fg)', fontSize: 12.5, lineHeight: 1.5, textWrap: 'pretty' }}>
+                        No se registró: {falloDelAlta}
+                      </p>
+                    )}
+
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap', padding: '12px 16px 14px', borderTop: '1px solid var(--line)' }}>
+                      {/* Cuando no se puede registrar, este parrafo ES el
+                          motivo —el mismo que la lista de arriba, resumido en
+                          una linea— y el boton lo señala con `aria-describedby`.
+                          Cuando si se puede, dice lo que el alta NO pide: la
+                          fecha de fin no viaja —un campo que el servidor no lee
+                          se descarta en silencio y contesta 201 igual—, asi que
+                          dibujarla seria un control que se teclea y no llega
+                          (#331). El programa nace sin plazo de cierre y el
+                          resumen lo enseña con el guion. */}
+                      <p
+                        id={MOTIVO_DEL_ALTA}
+                        style={{ margin: 0, flex: 1, minWidth: 180, fontSize: 12, lineHeight: 1.5, color: puedeRegistrarPrograma ? 'var(--ink-3)' : 'var(--warn-fg)', textWrap: 'pretty' }}
+                      >
+                        {puedeRegistrarPrograma
+                          ? 'El programa nace abierto y sin fecha de fin: el alta no admite el plazo de cierre, así que el resumen lo dirá con un guion hasta que exista una operación que lo declare.'
+                          : 'Todavía no se puede registrar. Falta ' + faltaDelAlta.filter((f) => !f.ok).map((f) => f.que.replace(/^El |^La /, (x) => x.toLowerCase())).join('; ') + '.'}
+                      </p>
+                      <button
+                        onClick={() => void registrarElPrograma()}
+                        disabled={!puedeRegistrarPrograma || registrando}
+                        aria-describedby={MOTIVO_DEL_ALTA}
+                        style={
+                          puedeRegistrarPrograma && !registrando
+                            ? { border: 0, borderRadius: 7, background: 'var(--accent)', color: '#fff', padding: '11px 22px', fontSize: 13.5, fontWeight: 500, cursor: 'pointer' }
+                            : { ...BOTON_APAGADO, border: 0, background: 'var(--accent)', color: '#fff', padding: '11px 22px', fontSize: 13.5, fontWeight: 500 }
+                        }
+                      >
+                        {registrando ? 'Registrando…' : 'Registrar programa'}
+                      </button>
+                    </div>
+                  </section>
+                )}
+
                 <section style={TARJETA}>
                   <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit,minmax(150px,1fr))', gap: 0, background: 'var(--bg-card)' }}>
                     {resumenDelPrograma(programaActivo, muestra.datos?.totalElementos ?? null).map((r) => (
@@ -1793,9 +2187,9 @@ export default function Fiscalizacion({ dest, onDest }: PantallaProps) {
                           en uno de los dos era falso. Desde #546 el programa que
                           no está contesta 404, y lo dice `FalloDeLaMuestra`. */}
                       <Aviso tono="neutro" titulo="Este programa no ha sorteado su muestra">
-                        El programa existe —si no, la consulta contestaría que no—: lo que no tiene todavía es muestra. Se sortea con{' '}
-                        <code>POST /fiscalizacion/programas/{'{id}'}/muestra</code> a partir del sector, la condición y el ejercicio que el
-                        programa declara, y esta pantalla no dibuja esa acción ni su campo de observación. Issue #550.
+                        El programa existe —si no, la consulta contestaría que no—: lo que no tiene todavía es muestra. Se sortea aquí
+                        abajo, a partir del sector, la condición y el ejercicio que el propio programa declara: no se elige a mano a quién
+                        se fiscaliza, y por eso la fila que salga podrá contestar por qué le tocó (ADR-0023).
                       </Aviso>
                     </div>
                   ) : null}
@@ -1803,6 +2197,90 @@ export default function Fiscalizacion({ dest, onDest }: PantallaProps) {
                   {muestra.datos !== null && (
                     <Paginador pagina={muestra.datos.pagina} totalPaginas={muestra.datos.totalPaginas} hayMas={muestra.datos.hayMas} ir={setPaginaMuestra} />
                   )}
+
+                  {/* ── El sorteo de la muestra (#550, ADR-0023) ───────────
+                      El cuerpo lleva SOLO la observacion: a quien se fiscaliza
+                      lo deciden los parametros del programa, no esta peticion.
+                      Va aqui, debajo de la muestra que va a llenar, y no en la
+                      deteccion: alli lo marcado son predios, y los predios no
+                      viajan.
+
+                      El motivo por el que no se puede sortear se DIBUJA, no se
+                      esconde en el `title` de un boton apagado: un boton
+                      deshabilitado no recibe el foco y su `title` no lo lee un
+                      lector de pantalla (RNF-082). Y se sabe antes de pulsar,
+                      porque las tres causas estructurales —sin ejercicio, sin
+                      criterio, ya sorteada— salen de lo que la pantalla ya ha
+                      leido. */}
+                  <div style={{ padding: '14px 16px', borderTop: '1px solid var(--line)', background: 'var(--bg-elev)' }}>
+                    <p style={{ margin: '0 0 4px', fontSize: 12, fontWeight: 600, color: 'var(--ink-2)' }}>Sortear la muestra</p>
+                    <p style={{ margin: '0 0 10px', fontSize: 11.5, lineHeight: 1.5, color: 'var(--ink-4)', textWrap: 'pretty' }}>
+                      Se aplica al padrón el ejercicio, el sector y el criterio que el programa declara. <strong>El orden importa</strong>:
+                      no se sortea un predio que otro programa abierto ya se llevó ni uno ya fiscalizado en el ejercicio, así que el primero
+                      que se genere se los lleva y el siguiente sale más corto.
+                    </p>
+
+                    <label style={{ display: 'block' }}>
+                      <span style={{ display: 'block', ...ROTULO, marginBottom: 5 }}>Observación · obligatoria</span>
+                      <textarea
+                        value={observacionDelSorteo}
+                        onChange={(e) => setObservacionDelSorteo(e.target.value)}
+                        rows={2}
+                        placeholder="Por qué se sortea ahora y con qué documento"
+                        style={{ ...CAMPO, background: 'var(--bg-card)', resize: 'vertical' }}
+                      />
+                    </label>
+
+                    {falloDelSorteo !== null && (
+                      <p style={{ margin: '10px 0 0', padding: '10px 12px', borderRadius: 6, background: 'var(--bad-bg)', color: 'var(--bad-fg)', fontSize: 12.5, lineHeight: 1.5, textWrap: 'pretty' }}>
+                        No se sorteó: {falloDelSorteo}
+                      </p>
+                    )}
+
+                    {/* Lo que el sorteo contesto, entero. Un «se sortearon N» a
+                        secas no deja distinguir «no hay ninguno con ese
+                        criterio» de «se los llevo el programa de al lado», y lo
+                        segundo se arregla cerrando aquel (#586). */}
+                    {ultimoSorteo !== null && (
+                      <p style={{ margin: '10px 0 0', padding: '10px 12px', borderRadius: 6, background: 'var(--ok-bg)', color: 'var(--ok-fg)', fontSize: 12.5, lineHeight: 1.5, textWrap: 'pretty' }}>
+                        Sorteada el {ultimoSorteo.fechaSorteo}: la detección vio {ultimoSorteo.detectados}
+                        {ultimoSorteo.detectados === 1 ? ' predio' : ' predios'} y entraron {ultimoSorteo.predios}. Quedaron fuera{' '}
+                        {ultimoSorteo.excluidosPorOtroPrograma} porque otro programa abierto ya se los llevó y{' '}
+                        {ultimoSorteo.excluidosPorActaDelEjercicio} por tener acta del ejercicio. De los que entraron,{' '}
+                        {ultimoSorteo.sinTitular === 1
+                          ? '1 no tiene titular vigente: hay que averiguar en la visita quién lo ocupa'
+                          : `${ultimoSorteo.sinTitular} no tienen titular vigente: hay que averiguar en la visita quién los ocupa`}
+                        .
+                      </p>
+                    )}
+
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap', marginTop: 11 }}>
+                      <p
+                        id={MOTIVO_DEL_SORTEO}
+                        style={{ margin: 0, flex: 1, minWidth: 200, fontSize: 12, lineHeight: 1.5, color: motivoParaNoSortear === null ? 'var(--ink-3)' : 'var(--warn-fg)', textWrap: 'pretty' }}
+                      >
+                        {motivoParaNoSortear ?? 'Al sortear, los predios entran en la muestra y quedan reservados para este programa.'}
+                      </p>
+                      <button
+                        onClick={() => void sortearLaMuestraDelPrograma()}
+                        disabled={motivoParaNoSortear !== null || sorteando}
+                        /* Apunta al parrafo de al lado, que es donde el motivo
+                           se LEE. No es un `title`: un boton apagado no recibe
+                           el foco, asi que el `title` no lo alcanza ni el raton
+                           ni un lector de pantalla (RNF-082). Asi la misma
+                           frase sirve a quien mira y a quien escucha, y no hay
+                           dos textos que puedan discrepar. */
+                        aria-describedby={MOTIVO_DEL_SORTEO}
+                        style={
+                          motivoParaNoSortear === null && !sorteando
+                            ? { border: 0, borderRadius: 7, background: 'var(--accent)', color: '#fff', padding: '10px 20px', fontSize: 13, fontWeight: 500, cursor: 'pointer' }
+                            : { ...BOTON_APAGADO, border: 0, background: 'var(--accent)', color: '#fff', padding: '10px 20px', fontSize: 13, fontWeight: 500 }
+                        }
+                      >
+                        {sorteando ? 'Sorteando…' : 'Sortear la muestra'}
+                      </button>
+                    </div>
+                  </div>
 
                   <p style={{ ...PIE, borderTop: '1px solid var(--line)' }}>
                     «Uso declarado» y «Riesgo» salen «—»: la muestra publica el predio, su titular, las áreas y si ya se visitó, y ninguna

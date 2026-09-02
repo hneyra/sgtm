@@ -277,6 +277,170 @@ export function listarMuestra(
   });
 }
 
+/* ══════════ Las dos escrituras del programa (#550, ADR-0023) ══════════
+ *
+ * Son las UNICAS dos puertas por las que se decide a quien se fiscaliza, y
+ * ninguna de las dos recibe una lista de predios. Lo dice ADR-0023 §1: la fila
+ * de `programa_muestra` **copia** la condicion del dia del sorteo y con eso
+ * contesta sola «¿por que me toco a mi?»; una seleccion a mano contesta «porque
+ * alguien te marco», que en una fiscalizacion de oficio no es una respuesta.
+ *
+ * Asi que la pantalla de deteccion no gana ninguna escritura —lo que aporta al
+ * programa son sus FILTROS— y las dos escrituras viven donde el manual las
+ * dibuja: en «Programacion de fiscalizacion».
+ */
+
+/**
+ * Registra un programa de fiscalizacion.
+ *
+ * <h2>Los cinco campos que el servidor exige, medidos y en su orden</h2>
+ *
+ * No se leyeron del backend: se midieron mandando el cuerpo vacio y añadiendo
+ * de uno en uno lo que el 422 pedia. Sale siempre `422 VALIDACION`, y el
+ * mensaje nombra el que falta:
+ *
+ * ```
+ * {}                                   → «Toda modificacion exige la observacion del usuario: sin ella no se guarda»
+ * {observacion}                        → «Falta el campo 'codigo'»
+ * {observacion,codigo}                 → «Falta el campo 'descripcion'»
+ * {observacion,codigo,descripcion}     → «Falta el campo 'tipo'»
+ * {…,tipo}                             → «Falta el campo 'fechaInicio'»
+ * {…,fechaInicio}                      → 201
+ * ```
+ *
+ * La observacion, ademas, tiene forma: «al menos 5 caracteres, y no espacios en
+ * blanco (ADR-0008)». Por eso la pantalla no se conforma con que no este vacia.
+ *
+ * <h2>Los cuatro «opcionales», de los que TRES no lo son</h2>
+ *
+ * `ejercicio`, `sector`, `criterio` y `fiscalizador` los admite el servidor en
+ * blanco —medido: un registro sin ninguno de los cuatro contesta 201—, y aun
+ * asi la pantalla pide **ejercicio, criterio y fiscalizador** con todas las
+ * letras, porque el programa que nace sin cualquiera de los tres **no puede
+ * sortear su muestra nunca**:
+ *
+ * ```
+ * POST /fiscalizacion/programas/3/muestra          (sin ninguno de los cuatro)
+ *   → 422 «El programa no declara 'ejercicio', y sin el no se puede sortear su muestra»
+ * POST /fiscalizacion/programas/5/muestra          (con ejercicio y criterio, sin fiscalizador)
+ *   → 422 «El programa no declara 'fiscalizador', y sin el no se puede sortear su muestra»
+ * ```
+ *
+ * Los tres hubo que descubrirlos **de uno en uno**, y eso es lo que hace
+ * peligroso el reparto: el 422 nombra el primero que falta y calla los otros,
+ * asi que un programa con ejercicio y criterio pasa dos comprobaciones y muere
+ * en la tercera. `sector` es el unico de verdad opcional —en blanco, el sorteo
+ * mira el distrito entero—, y se comprobo sorteando un programa que lo tiene
+ * nulo.
+ *
+ * Y no se arregla despues: **no hay ninguna ruta de edicion de un programa**
+ * —«reprogramar es registrar otro», dice `ProgramasController`—, de modo que un
+ * programa registrado sin alguno de los tres es una fila esteril y permanente.
+ * Es la trampa que este formulario existe para no tender: el servidor deja
+ * pasar el dato que falta y quien lo descubre es el sorteo, un acto despues y
+ * sin vuelta atras.
+ *
+ * <h2>«Todas» no es un criterio, y ahi las dos pantallas no dicen lo mismo</h2>
+ *
+ * En la deteccion «Todas» es «sin filtro» y trae el padron entero; en el
+ * programa **no existe**, y el 422 lo dice sin rodeos —«'Todas' no es un
+ * criterio de riesgo: es lo que la deteccion llama «sin filtro». Un programa
+ * sortea su muestra por UNA condicion, y hay que elegirla»— en vez de decir que
+ * la palabra no se conoce (ADR-0023 §2). Por eso el desplegable del alta NO
+ * ofrece ninguna opcion «Todas»: ofrecerla seria dibujar un 422 de ida y vuelta.
+ *
+ * El servidor devuelve el programa ya escrito, con su `id` —que es con lo que se
+ * sortea— y con lo que quedo guardado, no con lo tecleado.
+ */
+export function registrarPrograma(peticion: {
+  observacion: string;
+  codigo: string;
+  descripcion: string;
+  /** `PREDIAL` | `VEHICULAR`. Otro valor: «Tipo de programa desconocido: 'XXXX'». */
+  tipo: string;
+  /** ISO `AAAA-MM-DD`, que es como el servidor la devuelve. */
+  fechaInicio: string;
+  ejercicio?: string;
+  sector?: string;
+  /** Un `CondicionFiscalizada`, y nunca «Todas». */
+  criterio?: string;
+  fiscalizador?: string;
+}): Promise<ProgramaDeFiscalizacion> {
+  return solicitar('/fiscalizacion/programas', { metodo: 'POST', cuerpo: peticion });
+}
+
+/**
+ * Lo que el sorteo contesta: sobre que padron se sorteo, no solo cuantos entraron.
+ *
+ * Medido contra el backend, y son siete miembros:
+ *
+ * ```
+ * POST /fiscalizacion/programas/4/muestra   {"observacion":"…"}
+ *   → 201 {"programaId":4,"predios":0,"sinTitular":0,"detectados":0,
+ *          "excluidosPorOtroPrograma":0,"excluidosPorActaDelEjercicio":0,
+ *          "fechaSorteo":"2026-09-02"}
+ * ```
+ *
+ * Las tres cifras de exclusion se publican POR MOTIVO y no como un total,
+ * porque «otro programa se lo llevo» y «ya se fiscalizo en el ejercicio» se
+ * arreglan de maneras distintas (#586), y la identidad que las ata es
+ * `detectados = predios + excluidosPorOtroPrograma + excluidosPorActaDelEjercicio`.
+ * La pantalla las dibuja las tres: un «se sortearon 0 predios» a secas no deja
+ * distinguir «no hay ningun omiso con ese criterio» de «se los llevo el
+ * programa de al lado», y lo segundo se resuelve cerrando aquel.
+ */
+export type ResultadoDelSorteo = {
+  programaId: number;
+  /** Cuantos entraron en la muestra. */
+  predios: number;
+  /** Cuantos de los sorteados no tienen titular vigente (#586, V73). */
+  sinTitular: number;
+  /** Cuantos vio la deteccion antes de excluir nada. */
+  detectados: number;
+  excluidosPorOtroPrograma: number;
+  excluidosPorActaDelEjercicio: number;
+  /** El dia del sorteo, que es la foto que la fila de la muestra copia. */
+  fechaSorteo: string;
+};
+
+/**
+ * Sortea la muestra del programa. El cuerpo lleva **solo la observacion**.
+ *
+ * No es una omision que haya que completar: es la decision de ADR-0023, escrita
+ * tambien en el javadoc de `PeticionDeMuestra` —«a quien se fiscaliza lo deciden
+ * los parametros del programa, no esta peticion»— y sujeta por
+ * `LaMuestraSeSorteaTest`, que se pone roja si alguien le añade un componente.
+ * Mandar aqui una lista de predios no da error: el cuerpo admite campos que
+ * nadie lee y los descarta en silencio —medido, `{…,"predios":["1"]}` contesta
+ * 201 igual—, o sea que el unico sintoma de intentarlo seria una muestra que no
+ * se parece a lo que se marco.
+ *
+ * <h2>Lo que puede contestar, y lo que la pantalla tiene que saber antes</h2>
+ *
+ * <ul>
+ *   <li>`404` si el programa no existe.
+ *   <li>`422` si el programa no declara ejercicio, criterio o fiscalizador,
+ *       nombrando cual —y eso la pantalla lo sabe ANTES de pulsar, porque
+ *       `ProgramaResource` publica los tres: por eso el boton nace apagado con
+ *       el motivo dibujado en vez de descubrirlo al pulsar (RNF-082).
+ *   <li>`409` si el programa ya sorteo su muestra: una muestra es un acto y no
+ *       se regenera, porque hay actas levantadas sobre ella. **Con la muestra en
+ *       cero no lo contesta** —medido: dos sorteos seguidos de un programa que
+ *       detecta 0 dan 201 los dos—, y tiene sentido: no hay ninguna muestra que
+ *       proteger todavia.
+ * </ul>
+ *
+ * Y el orden importa, asi que la pantalla lo dice donde se opera: no se sortea
+ * un predio que otro programa abierto ya se llevo, de modo que el primero que
+ * genere se los lleva y el segundo sale mas corto.
+ */
+export function sortearMuestra(programaId: number, observacion: string): Promise<ResultadoDelSorteo> {
+  return solicitar(`/fiscalizacion/programas/${String(programaId)}/muestra`, {
+    metodo: 'POST',
+    cuerpo: { observacion },
+  });
+}
+
 /* ══════════ Las actas de inspeccion (#599) ══════════
  *
  * `GET /fiscalizacion/actas` no existia hasta #599, y no por descuido: #546
