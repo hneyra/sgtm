@@ -83,6 +83,18 @@ tasks.test {
         .file(rootProject.file("../docs/50-api/formas-de-la-api.json"))
         .withPathSensitivity(PathSensitivity.RELATIVE)
 
+    // Y lo mismo para las pruebas de TODOS los modulos, que `AsercionesQueNoPuedenFallarTest`
+    // lee del disco (#724). Es el unico escaner que recorre `src/test`, y esas fuentes no estan
+    // en el classpath de este modulo —solo lo estan las de `src/main`, por las dependencias—,
+    // asi que sin declararlas editar una prueba de otro modulo dejaria esta tarea en UP-TO-DATE
+    // y una asercion que no puede fallar pasaria en verde rancio. Misma leccion de #192 punto 2.
+    inputs
+        .files(
+            rootProject.layout.projectDirectory.asFileTree.matching {
+                include("*/src/test/java/**/*.java")
+            })
+        .withPathSensitivity(PathSensitivity.RELATIVE)
+
     // Gradle no propaga las propiedades de sistema del build al proceso de prueba
     // (lo mismo que hace `sgtm.pruebas-postgres` con las suyas). Sin esto,
     // `-Dsgtm.formas.regenerar=true` no llega y el archivo no se puede regenerar.

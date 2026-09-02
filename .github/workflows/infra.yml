@@ -114,6 +114,16 @@ on:
     # 07:00 UTC — madrugada en Perú (UTC-5). El horario exacto no importa mientras sea
     # fuera de la ventana de atención; lo que importa es que corra todos los días.
     - cron: '0 7 * * *'
+  # A petición, desde #720. Lo pide `declarar-version.yml` después de integrar la línea
+  # de `applicationBootstrapVersion`: un `push` hecho con el `GITHUB_TOKEN` **no** dispara
+  # flujos, así que sin esta puerta la versión quedaría declarada y sin aplicar hasta el
+  # siguiente push que tocara las rutas de arriba — un retraso permanente de un merge,
+  # que es medio defecto de #675 reintroducido por la puerta de atrás.
+  #
+  # No es una puerta trasera al despliegue: `aplicar-prod` sigue detrás del *environment*
+  # protegido, y `aplicar-stg` sigue exigiendo las cuatro credenciales. Lo que cambia es
+  # quién puede pedir la corrida, no qué comprueba antes de aplicar.
+  workflow_dispatch:
 
 permissions:
   contents: read
@@ -808,7 +818,9 @@ jobs:
     name: pulumi up en stg
     runs-on: ubuntu-latest
     needs: verificar
-    if: github.event_name == 'push'
+    # `workflow_dispatch` desde #720: es como `declarar-version.yml` pide que se aplique
+    # la versión que acaba de integrar, porque su propio `push` no dispara nada.
+    if: github.event_name == 'push' || github.event_name == 'workflow_dispatch'
     # Un `pulumi up` sano de stg tarda 15-25 s. Este tope no existe para corridas
     # lentas: existe para las que NO terminan (issue #252). Un pod que el planificador
     # no puede ubicar se queda `Pending` para siempre, y el `ConfigGroup` lo espera sin
@@ -1021,7 +1033,9 @@ jobs:
     # sentido pedirle a un revisor que apruebe una espera que termina en un paso omitido.
     # El *environment* protegido —y con él la aprobación— solo entra en juego cuando de
     # verdad hay algo que aplicar.
-    if: github.event_name == 'push' && needs.aplicar-stg.outputs.hay-credenciales == 'si'
+    if: >-
+      (github.event_name == 'push' || github.event_name == 'workflow_dispatch') &&
+      needs.aplicar-stg.outputs.hay-credenciales == 'si'
     # GitHub bloquea este trabajo hasta que alguien con acceso al *environment* `prod`
     # lo aprueba, y registra quién. **El *environment* se crea a mano, una vez, en
     # Settings → Environments → New environment → «prod» → Required reviewers**: no hay
