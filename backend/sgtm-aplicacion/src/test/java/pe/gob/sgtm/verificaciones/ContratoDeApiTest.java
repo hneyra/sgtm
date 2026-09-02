@@ -178,6 +178,16 @@ class ContratoDeApiTest {
                     // el cliente tendria que reimplementar la precedencia.
                     "GET /seguridad/usuarios/{id}/grupos",
                     "GET /seguridad/usuarios/{id}/permisos",
+                    // #583 — las dos preguntas que la matriz efectiva no puede contestar.
+                    // La primera es lo CONFIGURADO de una cuenta: la efectiva aplica la
+                    // regla del guardia, asi que a una cuenta deshabilitada le contesta la
+                    // lista vacia tanto si conserva permisos como si nunca los tuvo, y las
+                    // dos respuestas eran el mismo JSON. La segunda es la inversa —que
+                    // cuentas tienen un privilegio sobre un acceso—, que costaba una
+                    // peticion por usuario del padron y no se puede componer acotando por
+                    // grupo, porque la excepcion propia SUSTITUYE a lo que el grupo da.
+                    "GET /seguridad/usuarios/{id}/permisos/configurados",
+                    "GET /seguridad/accesos/{codigo}/usuarios",
                     "POST /seguridad/grupos/{grupo}/miembros",
                     // #582 — la pregunta inversa: quien esta EN un grupo. De esta misma
                     // ruta solo habia el POST que afilia, asi que derivarla costaba una

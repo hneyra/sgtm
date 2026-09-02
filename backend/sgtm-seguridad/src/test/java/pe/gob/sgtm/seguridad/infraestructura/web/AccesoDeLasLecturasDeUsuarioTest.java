@@ -62,4 +62,54 @@ class AccesoDeLasLecturasDeUsuarioTest {
                 .isEqualTo("permisos");
         assertThat(enElMetodo.privilegio()).isEqualTo(Privilegio.LECTURA);
     }
+
+    @Test
+    @DisplayName("los permisos configurados exigen lo mismo, y en el metodo (#583)")
+    void losConfiguradosExigenLecturaSobrePermisos() throws Exception {
+        RequiereAcceso enElMetodo =
+                PermisosDeUsuarioController.class
+                        .getMethod("configuradosDeUsuario", long.class)
+                        .getAnnotation(RequiereAcceso.class);
+
+        assertThat(enElMetodo)
+                .as(
+                        "la clase declara la suya en el otro metodo, no en la clase: sin esta, la"
+                                + " lectura de lo configurado se quedaria sin guardia y"
+                                + " verificarArquitectura seguiria en verde")
+                .isNotNull();
+        assertThat(enElMetodo.acceso())
+                .as(
+                        "lo configurado de una cuenta es la misma pregunta con otra guarda: quien"
+                                + " puede ver su matriz efectiva puede ver que conserva. Otro acceso"
+                                + " aqui abriria o cerraria la puerta sin que nada mas cambiara, y"
+                                + " ArchUnit no ve CUAL es")
+                .isEqualTo("permisos");
+        assertThat(enElMetodo.privilegio()).isEqualTo(Privilegio.LECTURA);
+    }
+
+    @Test
+    @DisplayName("y «quien tiene el privilegio» exige LECTURA sobre «permisos» (#583)")
+    void losTitularesExigenLecturaSobrePermisos() throws Exception {
+        RequiereAcceso enElMetodo =
+                TitularesDelPrivilegioController.class
+                        .getMethod(
+                                "quienesTienen",
+                                String.class,
+                                String.class,
+                                ParametrosDePaginacion.class)
+                        .getAnnotation(RequiereAcceso.class);
+
+        assertThat(enElMetodo)
+                .as("la clase no declara ninguna: sin la del metodo esta lectura no tiene guardia")
+                .isNotNull();
+        assertThat(enElMetodo.acceso())
+                .as(
+                        "enumerar quien tiene la llave de la caja es administrar permisos, no"
+                                + " consultar el catalogo de opciones: pedir «accesos» —el listado"
+                                + " que publica el codigo de la ruta— dejaria la lista de quien"
+                                + " tiene ESPECIAL detras de un permiso de lectura del menu."
+                                + " ArchUnit no ve cual acceso es: cambiarlo deja el build en VERDE")
+                .isEqualTo("permisos");
+        assertThat(enElMetodo.privilegio()).isEqualTo(Privilegio.LECTURA);
+    }
 }
