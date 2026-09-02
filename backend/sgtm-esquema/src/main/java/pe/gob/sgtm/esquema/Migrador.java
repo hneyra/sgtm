@@ -88,12 +88,55 @@ public final class Migrador {
      */
     public static int migrar(String url, String usuario, String clave) throws SQLException {
         comprobarElAmbiente(url, usuario, clave);
+        return configuracion(url, usuario, clave).load().migrate().migrationsExecuted;
+    }
+
+    /**
+     * Como se configura Flyway aqui. Visible en el paquete para que la prueba lo compruebe sobre
+     * <b>esta</b> configuracion y no sobre una transcripcion suya.
+     *
+     * <h2>{@code outOfOrder}, y por que se acepta lo que cuesta (#722)</h2>
+     *
+     * <p>Varias ramas cogen numero de migracion <b>antes</b> de mezclarse y se mezclan en otro
+     * orden. Ninguna revision puede verlo —cada PR es correcto por su lado, el conflicto solo
+     * existe en el arbol mezclado, y {@code git} no marca conflicto porque son ficheros distintos—.
+     * Con la cadencia de un dia normal la probabilidad es baja; el 2026-09-02, con ocho PR
+     * mezclados en unas horas y cuatro de ellos con migracion, <b>paso dos veces</b>:
+     *
+     * <pre>
+     * Detected resolved migration not applied to database: 74.
+     * Detected resolved migration not applied to database: 72.
+     * </pre>
+     *
+     * <p>Y no es un aviso: el migrador <b>termina con excepcion</b>, asi que el paso de migracion
+     * de cualquier despliegue se pone rojo y la instalacion se queda como este. La primera vez hubo
+     * que aplicar {@code V74} a mano para desbloquear.
+     *
+     * <h2>Que se gana y que se pierde</h2>
+     *
+     * <p>Se gana que una migracion que llega tarde <b>se aplique</b> en vez de parar el despliegue.
+     * Se pierde que dos instalaciones con el mismo {@code main} tengan el historial en el mismo
+     * orden: la que iba al dia aplico {@code V72} despues de {@code V78}, y la que clona hoy lo
+     * aplicara en su sitio. <b>El esquema resultante es el mismo</b>; lo que difiere es el {@code
+     * installed_rank} de {@code flyway_schema_history}.
+     *
+     * <p>Se acepta porque las migraciones de este repositorio son <b>aditivas e independientes</b>:
+     * cada una crea o amplia lo suyo y ninguna deshace lo de otra. Lo que esa reproducibilidad
+     * protege —recalcular un ejercicio y obtener el mismo centimo (regla 6)— depende del esquema y
+     * de los conjuntos sellados, no del orden en que se escribieron las filas del historial.
+     *
+     * <p><b>Lo que esto NO arregla</b> es que el numero se coja por adelantado. Sigue siendo cierto
+     * que dos ramas pueden reclamar el mismo, y eso {@code outOfOrder} no lo toca: lo caza el
+     * choque de nombres de fichero al mezclar. Y una migracion que de verdad dependa de otra
+     * posterior seguiria rompiendose — por eso la regla sigue siendo que sean independientes, y no
+     * porque Flyway lo compruebe.
+     */
+    static org.flywaydb.core.api.configuration.FluentConfiguration configuracion(
+            String url, String usuario, String clave) {
         return Flyway.configure()
                 .dataSource(url, usuario, clave)
                 .locations("classpath:db/migration")
-                .load()
-                .migrate()
-                .migrationsExecuted;
+                .outOfOrder(true);
     }
 
     private static void comprobarElAmbiente(String url, String usuario, String clave)
