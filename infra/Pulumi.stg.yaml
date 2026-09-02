@@ -82,7 +82,7 @@ config:
   # puesto en `6ce252c0` —61 migraciones— y mientras se medía entró `V73` en `main`;
   # `deriva-de-migraciones.test.ts` se puso roja sola, sin provocarla, diciendo «declara
   # 61, origin/main declara 62: le faltan 1 (V73…)». Es exactamente el aviso que faltaba.
-  sgtm:applicationBootstrapVersion: 670bdf2d7e245b47651786379daedb5a48872887
+  sgtm:applicationBootstrapVersion: f41df55b1140e406ba861455f82da249f9b6f6b4
   sgtm:webReplicas: "1"
   # La municipalidad de ensayo. El ubigeo es el de Catacaos, igual que en prod (D-01,
   # 2026-08-24), porque stg restaura los respaldos de prod anonimizados (INF-03 §2 y
