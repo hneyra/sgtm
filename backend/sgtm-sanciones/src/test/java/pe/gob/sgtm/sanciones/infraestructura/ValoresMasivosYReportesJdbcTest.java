@@ -99,6 +99,7 @@ import pe.gob.sgtm.sanciones.aplicacion.ModelosDeLosReportesDeSanciones;
 import pe.gob.sgtm.sanciones.aplicacion.NotificarResolucionDeGerencia;
 import pe.gob.sgtm.sanciones.aplicacion.PlazosDeSancionesParametrizados;
 import pe.gob.sgtm.sanciones.aplicacion.ProcesarPapeletaDeLaCorrida;
+import pe.gob.sgtm.sanciones.aplicacion.RegistrarDescargo;
 import pe.gob.sgtm.sanciones.aplicacion.RegistrarPapeleta;
 import pe.gob.sgtm.sanciones.aplicacion.ResolverConResolucionDeGerencia;
 import pe.gob.sgtm.sanciones.dominio.AgrupacionDelResumen;
@@ -106,6 +107,7 @@ import pe.gob.sgtm.sanciones.dominio.ConstanciaLibre;
 import pe.gob.sgtm.sanciones.dominio.CorridaDeValores;
 import pe.gob.sgtm.sanciones.dominio.CriterioDeConstancias;
 import pe.gob.sgtm.sanciones.dominio.CriterioDePadron;
+import pe.gob.sgtm.sanciones.dominio.EfectoSobreLaMulta;
 import pe.gob.sgtm.sanciones.dominio.EstadoDeItemDeCorrida;
 import pe.gob.sgtm.sanciones.dominio.Familia;
 import pe.gob.sgtm.sanciones.dominio.ItemDeCorrida;
@@ -113,6 +115,8 @@ import pe.gob.sgtm.sanciones.dominio.LineaDelResumen;
 import pe.gob.sgtm.sanciones.dominio.Papeleta;
 import pe.gob.sgtm.sanciones.dominio.PapeletaDelPadron;
 import pe.gob.sgtm.sanciones.dominio.ResumenDePapeletas;
+import pe.gob.sgtm.sanciones.dominio.SentidoDelFallo;
+import pe.gob.sgtm.sanciones.dominio.TipoDeRecurso;
 import pe.gob.sgtm.sanciones.dominio.TipoDeResolucionDeGerencia;
 import pe.gob.sgtm.sanciones.infraestructura.web.HojaDePapeletaController;
 import pe.gob.sgtm.sanciones.infraestructura.web.HojaInformativaResource;
@@ -197,6 +201,7 @@ class ValoresMasivosYReportesJdbcTest {
     private static TransactionTemplate transaccion;
 
     private static PapeletaRepositoryJdbc papeletas;
+    private static RegistrarDescargo registrarDescargo;
     private static PadronDePapeletasRepositoryJdbc padron;
     private static CorridaDeValoresRepositoryJdbc corridas;
     private static ConstanciaLibreRepositoryJdbc constancias;
@@ -299,6 +304,11 @@ class ValoresMasivosYReportesJdbcTest {
                                                 .ParametrosRepositoryJdbc(jdbc))));
 
         DirectorioDeContribuyentes directorio = new PadronDeLaPrueba();
+        DescargoRepositoryJdbc repositorioDeDescargos = new DescargoRepositoryJdbc(jdbc);
+        registrarDescargo =
+                envolver(
+                        new RegistrarDescargo(
+                                papeletas, repositorioDeDescargos, plazos, auditoria, RELOJ));
 
         registrarValor =
                 envolver(
@@ -314,7 +324,7 @@ class ValoresMasivosYReportesJdbcTest {
                 envolver(
                         new ResolverConResolucionDeGerencia(
                                 papeletas,
-                                new DescargoRepositoryJdbc(jdbc),
+                                repositorioDeDescargos,
                                 resoluciones,
                                 diligencias,
                                 directorio,
@@ -816,6 +826,38 @@ class ValoresMasivosYReportesJdbcTest {
                             "un recibo anulado conserva sus asientos (V2); sumarlos daria por"
                                     + " recaudado lo que ya no vale")
                     .isEqualTo(antes.total());
+        }
+
+        @Test
+        @DisplayName("dejar una multa sin efecto no sube la recaudacion ni un centimo (#662)")
+        void dejarSinEfectoNoEsRecaudar() {
+            Papeleta papeleta = papeletaDeTransito("rec4");
+            RecaudadoEnElLibro antes = recaudacionDe2026();
+
+            ResolverConResolucionDeGerencia.ResolucionDictada dictada =
+                    dejarSinEfecto(papeleta, "EXP-REC4");
+
+            assertThat(dictada.baja())
+                    .as("la baja se asienta, no se edita la papeleta")
+                    .isNotNull();
+            assertThat(dictada.baja().importe())
+                    .as("y da de baja lo que se debia a la fecha de la resolucion")
+                    .isEqualTo(MULTA);
+
+            RecaudadoEnElLibro despues = recaudacionDe2026();
+
+            // Este es el panel de sanciones —el resumen de recaudacion de multas de #53,
+            // RF-074— y esta es la cifra que se movia. El abono de una extincion es un
+            // ABONO de concepto INSOLUTO, columna a columna el mismo que el de una
+            // cobranza, asi que antes de #662 dejar una multa sin efecto publicaba sus
+            // 428,00 como dinero que entro por ventanilla: hacia arriba y sin que nadie lo
+            // note, que es la peor manera de equivocarse en esta cifra.
+            assertThat(despues.total())
+                    .as("una resolucion que deja la multa sin efecto no ingresa dinero")
+                    .isEqualTo(antes.total());
+            assertThat(despues.abonos())
+                    .as("ni el recuento: no hubo un abono mas de cobranza, hubo una baja")
+                    .isEqualTo(antes.abonos());
         }
 
         @Test
@@ -1683,6 +1725,43 @@ class ValoresMasivosYReportesJdbcTest {
                 "gerente");
     }
 
+    /**
+     * La ordinaria que declara fundado el recurso y deja la multa sin efecto: es el unico camino
+     * del sistema que llama a {@code ExtincionDeDeuda} (#50, RF-064).
+     */
+    private static ResolverConResolucionDeGerencia.ResolucionDictada dejarSinEfecto(
+            Papeleta papeleta, String expediente) {
+        enTransaccion(
+                () ->
+                        registrarDescargo.registrar(
+                                Familia.TRANSITO,
+                                papeleta.numero(),
+                                new RegistrarDescargo.Peticion(
+                                        expediente,
+                                        INFRACCION.plusDays(2),
+                                        TipoDeRecurso.DESCARGO,
+                                        "El vehiculo estaba en el taller"),
+                                PORQUE),
+                "mesa.partes");
+        return enTransaccion(
+                () ->
+                        resolver.dictar(
+                                new ResolverConResolucionDeGerencia.Peticion(
+                                        Familia.TRANSITO,
+                                        papeleta.numero(),
+                                        TipoDeResolucionDeGerencia.ORDINARIA,
+                                        ORDINARIA,
+                                        expediente,
+                                        SentidoDelFallo.FUNDADO,
+                                        EfectoSobreLaMulta.SE_DEJA_SIN_EFECTO,
+                                        null,
+                                        "Sustento de la prueba",
+                                        null),
+                                FormatoDeDocumento.PDF,
+                                PORQUE),
+                "gerente");
+    }
+
     private static String placaDe(String sufijo) {
         return "P"
                 + Math.abs(sufijo.hashCode() % 9)
@@ -1760,16 +1839,23 @@ class ValoresMasivosYReportesJdbcTest {
     }
 
     /**
-     * El conjunto sellado de 2026 con el plazo de la resolución ordinaria dentro.
+     * El conjunto sellado de 2026 con los dos plazos que este archivo necesita.
      *
-     * <p>Los siete días entran como <b>dato</b>, no como constante del programa (regla 5). Que esta
-     * prueba tenga que sembrarlo es la demostración: sin él, notificar la resolución falla.
+     * <p>Los días entran como <b>dato</b>, no como constante del programa (regla 5). Que esta
+     * prueba tenga que sembrarlos es la demostración: sin el de la ordinaria, notificar la
+     * resolución falla; sin el del descargo (#662), no se puede registrar el recurso que la
+     * resolución que deja la multa sin efecto tiene que resolver.
      */
     private static void crearConjuntoConElPlazo(long municipalidadId) throws SQLException {
         long ordinaria =
                 cargarParametro(
                         "RG_ORDINARIA_CUMPLIMIENTO",
                         "7 DIAS_HABILES",
+                        "TUO del Codigo Tributario, D.S. 133-2013-EF");
+        long descargo =
+                cargarParametro(
+                        "DESCARGO_PAPELETA",
+                        "5 DIAS_HABILES",
                         "TUO del Codigo Tributario, D.S. 133-2013-EF");
 
         try (Connection app = base.conexion(BaseDeDatosDePrueba.APP)) {
@@ -1789,10 +1875,12 @@ class ValoresMasivosYReportesJdbcTest {
                     app.prepareStatement(
                             "INSERT INTO conjunto_parametro_detalle (municipalidad_id, conjunto_id,"
                                     + " parametro_id) VALUES (?, ?, ?)")) {
-                sentencia.setLong(1, municipalidadId);
-                sentencia.setLong(2, conjunto);
-                sentencia.setLong(3, ordinaria);
-                sentencia.executeUpdate();
+                for (long parametro : new long[] {ordinaria, descargo}) {
+                    sentencia.setLong(1, municipalidadId);
+                    sentencia.setLong(2, conjunto);
+                    sentencia.setLong(3, parametro);
+                    sentencia.executeUpdate();
+                }
             }
             try (PreparedStatement sentencia =
                     app.prepareStatement(

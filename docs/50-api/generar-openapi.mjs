@@ -644,7 +644,7 @@ const DEL_BACKEND = {
  * pantalla que todavia no la tiene.
  */
 const DESCRIPCIONES = {
-  // Cuenta corriente · Consultas (#640)
+  // Cuenta corriente · Consultas (#640, #662)
   consulta_altas_bajas: bloque(`
     Los **actos** de alta y de baja de deuda de un contribuyente (RF-043, RF-044), con el documento
     que los aprueba y el motivo con que se registraron.
@@ -659,10 +659,15 @@ const DESCRIPCIONES = {
     escritas nacieron sin él. Para una instalación con historia previa, esta relación empieza el día
     en que se aplicó esa migración; lo anterior se consulta como movimientos de la cuenta corriente.
 
-    **«Auto / Manual» no se sirve** y se rechaza con 422 en vez de ignorarse: hoy todo lo que este
-    sistema registra como alta o baja viene de las dos pantallas que lo hacen a mano, así que
-    «AUTOMÁTICA» devolvería la tabla vacía, que se lee como «no hay ninguna» y no como «este sistema
-    todavía no las produce».
+    **También salen las bajas que dicta una resolución de gerencia** —la que deja una multa sin
+    efecto, y la que declara fundado un descargo—: son una baja de deuda como la de la pantalla que
+    la registra a mano, con las mismas causales, y el documento que las sustenta es el número de esa
+    resolución.
+
+    **«Auto / Manual» no se sirve** y se rechaza con 422 en vez de ignorarse: el origen de un acto
+    —tecleado en ventanilla o dictado por un procedimiento— no es un dato que esta relación pueda
+    consultar. Lo que el libro guarda es de qué acto nace la fila, no quién la produjo; quien lo
+    dice es el documento que la sustenta, y eso es texto.
   `),
   // Rentas · Determinaciones (#577)
   vehicular_calculo: bloque(`

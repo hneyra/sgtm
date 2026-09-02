@@ -25,9 +25,17 @@ import pe.gob.sgtm.sanciones.dominio.ResumenDePapeletas;
  * estado en que está cada una.
  *
  * <p><b>«Cuánto se recaudó»</b> se contesta con el <b>libro</b>: {@link #recaudacion} pregunta a
- * {@link RecaudacionDelLibro}, que suma los abonos vivos —{@code ABONO} de concepto {@code PAGO}
- * que nadie ha reversado—. Es el tercer criterio de aceptación de #53: «lo recaudado por papeletas
- * es exactamente la suma de sus abonos».
+ * {@link RecaudacionDelLibro}, que suma los abonos vivos —{@code ABONO} de los cuatro conceptos del
+ * desglose, insoluto, reajuste, interés y gasto, que nadie ha reversado y que <b>no nacen de una
+ * baja de deuda</b>—. Es el tercer criterio de aceptación de #53: «lo recaudado por papeletas es
+ * exactamente la suma de sus abonos».
+ *
+ * <p>Esa última condición no es un detalle (#662): el abono con que se extingue una multa —cuando
+ * una resolución de gerencia la deja sin efecto— es un {@code ABONO} de concepto {@code INSOLUTO},
+ * columna a columna el mismo asiento que el de una cobranza, y lo único que los separa es de qué
+ * <b>acto</b> nace. Este javadoc decía antes que la suma era de concepto {@code PAGO}, que ningún
+ * camino de cobranza escribe: leerlo así hacía creer que una extinción no podía colarse aquí, y se
+ * colaba.
  *
  * <p>La salida cómoda —sumar {@code importe_a_pagar} de las papeletas en estado {@code PAGADA} y
  * llamarlo recaudación— daría una cifra <b>parecida y distinta</b>: no cuenta los intereses
