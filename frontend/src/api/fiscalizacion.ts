@@ -1,4 +1,5 @@
-import { solicitar, type RespuestaPaginada } from './cliente';
+import { descargar, solicitar, type RespuestaPaginada } from './cliente';
+import type { FormatoDeDocumento } from './descarga';
 import type { Paginacion } from './catastro';
 
 /**
@@ -390,4 +391,168 @@ export function leerEstadoDeCuenta(
   senal?: AbortSignal,
 ): Promise<EstadoDeCuentaDeFiscalizacion> {
   return solicitar('/fiscalizacion/estado-cuenta', { parametros: { contribuyente }, senal });
+}
+
+/* ══════════ La resolucion de determinacion ══════════
+ *
+ * El valor que cierra el procedimiento: determina por ejercicio la diferencia
+ * de tributo y la multa, y es lo que arranca el plazo del art. 137 para
+ * reclamar. Es la ULTIMA lectura de fiscalizacion que faltaba por conectar.
+ *
+ * <h2>Su numero no lo lista nadie, y esta medido</h2>
+ *
+ * `GET /fiscalizacion/resultados` publica `LiquidacionResource`, que trae el
+ * numero de la LIQUIDACION —`LIQ-2026-000001`— y no el de la resolucion que la
+ * transfirio —`RDF-2026-000001`—; el contrato no declara ninguna otra ruta bajo
+ * `/fiscalizacion/resoluciones`, y la unica respuesta del sistema que trae ese
+ * numero es la del `POST /fiscalizacion/transferencias` que la dicta. De modo
+ * que el numero se **teclea**: sale del papel notificado, que es donde el
+ * contribuyente lo lee cuando viene a reclamar.
+ *
+ * Se midio, con la cadena entera sembrada en la municipalidad 1 (programa →
+ * acta → liquidacion → transferencia):
+ *
+ * ```
+ * GET /fiscalizacion/resultados      → LIQ-2026-000001, sin numero de resolucion
+ * GET .../resoluciones/RDF-2026-000001 → 200 application/json
+ * ```
+ */
+
+/**
+ * Una fila del cuadro de la determinacion. Es `LineaDeterminadaResource`.
+ *
+ * **Las cinco cifras de dinero llegan `null` y seguiran llegando `null`**
+ * mientras D-02a este abierta: determinar la base de un ejercicio exige el
+ * cuadro de valores unitarios, la depreciacion y el arancel, y ninguno esta
+ * firmado. Salen «—», nunca cero: un cero en un valor notificable se lee como
+ * «no debe nada», y esto es lo que el contribuyente recibe por escrito.
+ *
+ * `total` **lo suma el servidor** —y solo cuando conoce las dos partes, porque
+ * sumar una cifra con una ausencia daria la cifra—. La pantalla no lo
+ * recompone: componer dinero en la interfaz es RNF-083, y aqui ademas el papel
+ * emitido ya lleva su propio total dentro del PDF sellado.
+ *
+ * Las dos superficies viajan como `AreaM2` **sin la unidad dentro** (#546):
+ * `"260.00"`, no `"260.00 m2"`. La unidad la pone la cabecera de la columna.
+ */
+export type LineaDeterminada = {
+  ejercicio: number;
+  /** La base que resulta de lo hallado. Nula hasta D-02a. */
+  determinado: string | null;
+  /** La base que consta declarada. Nula hasta D-02a. */
+  declarado: string | null;
+  /** El tributo que se dejo de pagar. Nula hasta D-02a. */
+  diferencia: string | null;
+  /** La multa del art. 176. Nula hasta D-02a y D-02c. */
+  multa: string | null;
+  /** La suma de las dos anteriores, hecha por el servidor. Nula si falta cualquiera. */
+  total: string | null;
+  /** La condicion hallada. Esta si se conoce siempre. */
+  condicion: string;
+  areaDeclarada: string | null;
+  areaHallada: string | null;
+};
+
+/**
+ * `ResolucionResource`: la resolucion de determinacion tal como sale por HTTP.
+ *
+ * <h2>Lo que NO publica, y por eso la hoja lo dice en vez de rellenarlo</h2>
+ *
+ * El artboard dibuja seis rotulos en la cabecera del papel y el recurso
+ * sostiene cuatro. **R.U.C.** no viaja —el documento de identidad del obligado
+ * lo imprime el PDF («Documento: DNI 00000001») y el JSON no lo lleva— y
+ * **tipo de fiscalizacion** tampoco: es de la liquidacion
+ * (`LiquidacionResource.tipoDeFiscalizacion`), no de la resolucion. Los dos
+ * salen «—» con su motivo escrito al lado; inventarlos con lo que se parezca es
+ * exactamente lo que #427 se nego a hacer con «ACTIVA».
+ *
+ * `predioId` y `vehiculoId` son los identificadores INTERNOS de la unidad, no
+ * el codigo de referencia catastral ni la placa. Se dibujan como el propio
+ * papel los dibuja —«Predio 1»— y se dice que lo son: cambiarlos por un codigo
+ * que el recurso no trae seria afirmar un dato que nadie leyo.
+ *
+ * `aLaFecha` esta en la raiz y no en cada linea porque **todas** las cifras de
+ * esta respuesta son del dia de la resolucion, que es cuando se congelaron
+ * (regla 9, RNF-075). El papel no se recompone nunca con datos vivos: el
+ * domicilio de notificacion cambia y la ficha se versiona otra vez, y el valor
+ * que arranca el plazo del art. 137 es el de 2026, no el de 2030.
+ */
+export type ResolucionDeDeterminacion = {
+  numero: string;
+  fecha: string;
+  /** El dia al que estan las cifras. El mismo de la resolucion, dicho aparte. */
+  aLaFecha: string;
+  nLiquidacion: string;
+  versionDeLaLiquidacion: number;
+  periodoDesde: number;
+  periodoHasta: number;
+  codContribuyente: string | null;
+  contribuyente: string | null;
+  predioId: number | null;
+  vehiculoId: number | null;
+  documentoSustento: string;
+  sustento: string;
+  baseLegal: string;
+  fichaAnteriorId: number | null;
+  fichaNuevaId: number | null;
+  usuarioRegistro: string | null;
+  observacion: string;
+  lineas: LineaDeterminada[];
+  /** Cuantos cargos asento; **solo** en la respuesta de la transferencia. */
+  cargosAsentados: number | null;
+};
+
+/**
+ * La resolucion por su numero. Un numero que no existe contesta **404**.
+ *
+ * Y contesta 404 tambien desde otra municipalidad: medido, la municipalidad 9
+ * pidiendo `RDF-2026-000001` —que es de la 1— recibe «No hay ninguna resolucion
+ * de determinacion con el numero 'RDF-2026-000001'», que es RLS hablando. No
+ * hace falta que la pantalla lo distinga: para quien pregunta, un valor de otra
+ * municipalidad no existe.
+ */
+export function leerResolucion(numero: string, senal?: AbortSignal): Promise<ResolucionDeDeterminacion> {
+  return solicitar(`/fiscalizacion/resoluciones/${encodeURIComponent(numero)}`, { senal });
+}
+
+/**
+ * La misma resolucion, como documento: `?formato=PDF|XLS|RTF` (#593, RF-132).
+ *
+ * <h2>Descargarla no la vuelve a emitir</h2>
+ *
+ * Y el motivo es mas fuerte que el de la ficha del contribuyente y el de la
+ * constancia de no adeudo: no es que aqui no haya nada que numerar, es que **ya
+ * esta numerado**. `TransferirARentas` emitio el papel, le puso su correlativo
+ * y guardo su modelo con su SHA-256 en la misma transaccion que versiono la
+ * ficha y asento los cargos; lo que falta es entregarlo. Por eso esta descarga
+ * **no pide observacion y no gasta correlativo**: la regla 10 gobierna las
+ * escrituras y esto no lo es, al reves que el duplicado del recibo —que si
+ * suma una reimpresion y por eso si la exige—.
+ *
+ * Tampoco sale marcada «DUPLICADO N.º 1», y esta comprobado leyendo el PDF que
+ * el servidor entrega: `POST /fiscalizacion/transferencias` devuelve JSON y
+ * descarta los bytes que emitio, asi que esta descarga es la **primera** vez
+ * que ese papel sale del sistema.
+ *
+ * Basta `LECTURA`, no `IMPRESION`: el documento es la misma hoja que esta
+ * pantalla ya dibuja al lado. Los padrones de #53 piden impresion porque sacan
+ * un listado que nadie llego a ver entero; aqui no hay nada que no este ya en
+ * la respuesta JSON.
+ *
+ * Los cuatro casos, medidos contra el backend con `RDF-2026-000001`:
+ *
+ * ```
+ * ?formato=PDF    → 200 application/pdf            Content-Disposition: attachment; filename="RDF-2026-000001.pdf"
+ * ?formato=XLS    → 200 application/vnd.ms-excel   … filename="RDF-2026-000001.xls"
+ * ?formato=RTF    → 200 application/rtf            … filename="RDF-2026-000001.rtf"
+ * ?formato=PATATA → 422 «El parametro 'formato' admite PDF, XLS o RTF: 'PATATA'»
+ * ```
+ *
+ * Y `?formato=` **vacio tambien es 422**, no PDF por omision: `params =
+ * "formato"` elige ese handler en cuanto el parametro esta, asi que contestar
+ * PDF seria contestar con un formato que nadie pidio. De ahi que `descargar()`
+ * reciba siempre uno de los tres y nunca `undefined`.
+ */
+export function descargarResolucion(numero: string, formato: FormatoDeDocumento): Promise<void> {
+  return descargar(`/fiscalizacion/resoluciones/${encodeURIComponent(numero)}`, { formato });
 }

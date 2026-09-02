@@ -9,12 +9,16 @@ import {
   listarResultados,
   listarHistorico,
   leerEstadoDeCuenta,
+  leerResolucion,
+  descargarResolucion,
   type OrdenDeOmisos,
   type ProgramaDeFiscalizacion,
   type FilaDeMuestra,
+  type ResolucionDeDeterminacion,
 } from '../../api/fiscalizacion';
 import { useRecurso, useRebote } from '../../api/useRecurso';
 import { FalloDeLectura } from '../../api/Fallo';
+import { Descargas } from '../../api/descarga';
 import type { ErrorDeApi, RespuestaPaginada } from '../../api/cliente';
 import { ICO } from '../../ds/iconos';
 import { Aviso, Insignia, Paginador, PasoAtras, type Tono } from '../../ds/componentes';
@@ -28,8 +32,7 @@ import {
   OPCIONES,
   PASOS_ACTA,
   REP_COLS,
-  REP_FILAS,
-  REP_META,
+  REP_COLS_AREA,
   type CampoDeActa,
   type ColDef,
 } from '../../datos/fiscalizacion';
@@ -831,6 +834,47 @@ export default function Fiscalizacion({ dest, onDest }: PantallaProps) {
     [paginaHist],
     dest === 'resultados' && resTab === 2,
   );
+
+  /* ── La resolucion de determinacion, por su numero (#593) ───── */
+  /**
+   * El numero se TECLEA, y no es una comodidad: es que no lo lista nadie.
+   *
+   * `GET /fiscalizacion/resultados` —la grilla de al lado— publica el numero de
+   * la LIQUIDACION (`LIQ-2026-000001`) y no el de la resolucion que la
+   * transfirio (`RDF-2026-000001`); el contrato no declara ninguna otra ruta
+   * bajo `/fiscalizacion/resoluciones`, y la unica respuesta del sistema que
+   * trae ese numero es la del `POST /fiscalizacion/transferencias` que la
+   * dicta, que esta pantalla no puede hacer. Medido con la cadena entera
+   * sembrada en la municipalidad 1.
+   *
+   * De donde sale, entonces: del papel notificado. Es el numero que el
+   * contribuyente trae escrito cuando viene a reclamar dentro de los veinte
+   * dias del art. 137, que es exactamente cuando ventanilla necesita esta hoja.
+   */
+  const [numeroResolucion, setNumeroResolucion] = useState('');
+  const numeroResolucionReposado = useRebote(numeroResolucion.trim());
+  const resolucion = useRecurso(
+    (senal) => leerResolucion(numeroResolucionReposado, senal),
+    [numeroResolucionReposado],
+    /* Con la caja vacia NO se pide nada, y eso es lo que deja la hoja sin una
+       sola cifra: `useRecurso` inactivo deja `datos` en `null`, y de `null` no
+       sale ningun numero que pintar. La guarda no esta en el dibujo, esta en la
+       lectura. */
+    esResolucion && numeroResolucionReposado !== '',
+  );
+  /**
+   * La resolucion leida, y **solo** la que esta escrita ahora mismo.
+   *
+   * No lleva ninguna guarda propia, y **eso se midio antes de quitarla**: la
+   * version anterior era `numeroResolucionReposado === '' ? null :
+   * resolucion.datos`, se muto a `resolucion.datos` a secas y **no cambio
+   * nada** —borrar la caja seguia llevandose la hoja entera—. Quien lo hace es
+   * `useRecurso`: con `activo` en falso su efecto pone `datos` en `null`, y al
+   * cambiar de pregunta lo limpia antes de pedir. Una guarda que no puede
+   * fallar no protege nada, asi que la que sujeta la hoja es la de la lectura,
+   * cinco lineas mas arriba, y es la que hay que mutar para comprobarla.
+   */
+  const laResolucion = resolucion.datos;
 
   /* ── Acta: la tabla de contraste ───────────────────────────── */
   const contraste = useMemo(() => {
@@ -2275,104 +2319,314 @@ export default function Fiscalizacion({ dest, onDest }: PantallaProps) {
         {/* ══════════ RESOLUCIÓN ══════════ */}
         {esResolucion && (
           <div style={{ display: 'flex', flexDirection: 'column', gap: 16, alignItems: 'center' }}>
-            {/* Los dos botones nacen apagados, y no por precaución: no hay
-                resolución que emitir. «Descargar PDF» estaba encendido y era
-                INERTE —ni petición, ni navegación, ni aviso: se pulsaba y no
-                pasaba nada—, y «Imprimir» sí funcionaba, que era peor: sacaba
-                por la impresora una resolución de determinación entera con las
-                cifras del artboard. */}
-            <div data-noprint="1" style={{ width: '100%', maxWidth: 820, display: 'flex', gap: 8, justifyContent: 'flex-end' }}>
-              <button
-                disabled
-                aria-disabled="true"
-                title="El contrato no publica ningún formato para esta resolución: GET /fiscalizacion/resoluciones/{numero} devuelve JSON y no admite ?formato."
-                style={{ border: '1px solid var(--line-2)', borderRadius: 6, padding: '9px 16px', background: 'var(--bg-card)', fontSize: 13, cursor: 'not-allowed', opacity: 0.5 }}
-              >
-                Descargar PDF
-              </button>
-              <button
-                disabled
-                aria-disabled="true"
-                title="No hay ninguna resolución leída: no hay qué imprimir."
-                style={{ border: 0, borderRadius: 6, padding: '9px 20px', background: 'var(--accent)', color: '#fff', fontSize: 13, fontWeight: 500, cursor: 'not-allowed', opacity: 0.5 }}
-              >
-                Imprimir
-              </button>
+            {/* ── De qué resolución se habla ────────────────────────
+                Antes esta hoja no lo preguntaba, y por eso estaba vacía: un
+                destino de documento que no sabe CUÁL documento no puede leer
+                nada. Y antes de vaciarla enseñaba la resolución entera del
+                artboard —«000418-2026-SGFT/MDC», un R.U.C. real y seis
+                ejercicios al céntimo— y la imprimía igual con la red cortada. */}
+            <section data-noprint="1" style={{ ...TARJETA, width: '100%', maxWidth: 820 }}>
+              <div style={CABECERA}>
+                <h2 style={H2}>Qué resolución</h2>
+                <span style={META}>GET …/resoluciones/{'{numero}'}</span>
+              </div>
+              <div style={{ padding: '14px 16px 4px' }}>
+                <label style={{ display: 'flex', flexDirection: 'column', gap: 5, maxWidth: 320 }}>
+                  <span style={{ fontSize: 11.5, fontWeight: 500, color: 'var(--ink-3)' }}>Nº de resolución</span>
+                  <input
+                    value={numeroResolucion}
+                    onChange={(e) => setNumeroResolucion(e.target.value)}
+                    placeholder="RDF-2026-000001"
+                    style={{
+                      width: '100%',
+                      border: '1px solid var(--line-2)',
+                      borderRadius: 6,
+                      padding: '9px 10px',
+                      background: 'var(--bg-elev)',
+                      fontFamily: 'var(--font-mono)',
+                      fontSize: 13.5,
+                    }}
+                  />
+                  <span style={{ fontSize: 11.5, lineHeight: 1.4, color: 'var(--ink-4)', textWrap: 'pretty' }}>
+                    Tal como está impreso en el papel notificado. Es lo único que identifica la resolución.
+                  </span>
+                </label>
+              </div>
+              {/* Por qué se teclea, en vez de elegirse de una lista. No es una
+                  comodidad: es que no la lista nadie. `GET
+                  /fiscalizacion/resultados` —la grilla de «Resultados»— publica
+                  el número de la LIQUIDACIÓN y no el de la resolución que la
+                  transfirió, y el contrato no declara ninguna otra ruta bajo
+                  `/fiscalizacion/resoluciones`. Medido con la cadena entera
+                  sembrada: la grilla dice `LIQ-2026-000001` y la resolución es
+                  `RDF-2026-000001`. */}
+              <p style={PIE}>
+                No hay lista de resoluciones que ofrecer: «Resultados» publica el número de la liquidación
+                (<code style={{ fontFamily: 'var(--font-mono)' }}>LIQ-…</code>) y no el de la resolución que la transfirió
+                (<code style={{ fontFamily: 'var(--font-mono)' }}>RDF-…</code>). El número sale del papel, que es lo que el
+                contribuyente trae cuando viene a reclamar dentro de los veinte días del artículo 137º.
+              </p>
+            </section>
+
+            {/* Los tres estados de la lectura, antes de cualquier cifra. */}
+            {numeroResolucionReposado === '' && (
+              <p data-noprint="1" style={{ margin: 0, width: '100%', maxWidth: 820, fontSize: 13, color: 'var(--ink-3)' }}>
+                Teclea el número de la resolución para verla.
+              </p>
+            )}
+            {resolucion.cargando && (
+              <p data-noprint="1" style={{ margin: 0, width: '100%', maxWidth: 820, fontSize: 13, color: 'var(--ink-3)' }}>
+                Buscando la resolución…
+              </p>
+            )}
+            {!resolucion.cargando && resolucion.error !== null && (
+              <div data-noprint="1" style={{ width: '100%', maxWidth: 820 }}>
+                <FalloDeLectura
+                  error={resolucion.error}
+                  que="la resolución de determinación"
+                  acceso="resolucion_determinacion_fisc"
+                  alReintentar={resolucion.reintentar}
+                />
+              </div>
+            )}
+
+            {/* ── Los dos actos, y los dos apagados sin resolución leída ──
+                «Descargar» estaba encendido y era INERTE —ni petición, ni
+                navegación, ni aviso— e «Imprimir» sí funcionaba, que era peor:
+                sacaba por la impresora una resolución entera con las cifras del
+                artboard. Ahora los cuatro botones nacen apagados y siguen
+                apagados ante un 404 y ante un 403, porque lo que los enciende no
+                es haber tecleado algo sino que `laResolucion` no sea `null`, y
+                un fallo de lectura deja `datos` en `null`.
+
+                Los dos motivos son DISTINTOS a propósito, y cada uno se dibuja
+                junto a su control (RNF-082): sin número no hay a quién pedirle
+                el archivo, y sin hoja dibujada no hay qué mandar a la
+                impresora. Un `title` no basta —un botón apagado no recibe el
+                foco, así que nadie lo lee—. */}
+            <div
+              data-noprint="1"
+              style={{ width: '100%', maxWidth: 820, display: 'flex', gap: 20, justifyContent: 'flex-end', alignItems: 'flex-start', flexWrap: 'wrap' }}
+            >
+              <Descargas
+                traer={(f) => descargarResolucion(laResolucion?.numero ?? numeroResolucionReposado, f)}
+                que="la resolución de determinación"
+                acceso="resolucion_determinacion_fisc"
+                /* `lectura` y no `impresion`, y está comprobado en el
+                   controlador: el documento es la misma hoja que está aquí
+                   debajo, así que pedir un segundo privilegio negaría el
+                   archivo a quien ya tiene el contenido delante. */
+                privilegio="lectura"
+                impedimento={
+                  laResolucion === null
+                    ? 'No hay ninguna resolución leída: no hay número al que pedirle el archivo. Teclea el suyo arriba.'
+                    : undefined
+                }
+              />
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 9, alignItems: 'flex-end' }}>
+                <button
+                  onClick={() => window.print()}
+                  disabled={laResolucion === null}
+                  aria-describedby={laResolucion === null ? 'fisc-resolucion-sin-hoja' : undefined}
+                  title={laResolucion === null ? 'La hoja está vacía: no hay nada que mandar a la impresora.' : undefined}
+                  className={laResolucion === null ? undefined : 'hov-acento-2'}
+                  style={{
+                    border: 0,
+                    borderRadius: 6,
+                    padding: '9px 20px',
+                    background: 'var(--accent)',
+                    color: 'var(--accent-contraste)',
+                    fontSize: 13,
+                    fontWeight: 500,
+                    ...(laResolucion === null ? { cursor: 'not-allowed', opacity: 0.5 } : { cursor: 'pointer' }),
+                  }}
+                >
+                  Imprimir
+                </button>
+                {laResolucion === null && (
+                  <p
+                    id="fisc-resolucion-sin-hoja"
+                    style={{ margin: 0, maxWidth: 260, fontSize: 11.5, lineHeight: 1.5, color: 'var(--ink-3)', textAlign: 'right', textWrap: 'pretty' }}
+                  >
+                    La hoja está vacía: no hay nada que mandar a la impresora.
+                  </p>
+                )}
+              </div>
             </div>
 
-            <div data-noprint="1" style={{ width: '100%', maxWidth: 820 }}>
-              <Aviso tono="warn" titulo="Esta hoja está vacía a propósito">
-                Traía la resolución completa del prototipo —número, contribuyente, R.U.C. y seis ejercicios con sus importes al céntimo— y
-                se imprimía igual con la red cortada: ninguna de esas cifras venía del servidor. La resolución de verdad la sirve{' '}
-                <code style={{ fontFamily: 'var(--font-mono)' }}>GET /fiscalizacion/resoluciones/{'{numero}'}</code>, que exige un número
-                que esta pantalla no tiene dónde teclear, y ese endpoint <strong style={{ fontWeight: 600 }}>no emite documento</strong>:
-                no declara <code style={{ fontFamily: 'var(--font-mono)' }}>?formato</code>, al revés que la ficha del contribuyente o los
-                padrones de tránsito. Lo que falta es de las dos partes, y está en el issue #593.
-              </Aviso>
-            </div>
-            <section style={{ width: '100%', maxWidth: 820, background: '#fff', borderRadius: 6, boxShadow: 'var(--shadow-2)', padding: '40px 44px' }}>
-              <div style={{ display: 'flex', alignItems: 'flex-start', gap: 20, paddingBottom: 12, borderBottom: '2px solid var(--ink)' }}>
-                <div style={{ flex: 1 }}>
-                  <p style={{ margin: 0, fontFamily: 'var(--font-serif)', fontSize: 15, fontWeight: 600 }}>{pref.entidad}</p>
-                  <p style={{ margin: '3px 0 0', fontSize: 11, color: 'var(--ink-3)' }}>Sub Gerencia de Fiscalización Tributaria</p>
-                </div>
-                {/* El número y la fecha eran del artboard, y son lo que
-                    identifica un acto administrativo: un número de resolución
-                    inventado sobre un membrete es peor que ninguno. */}
-                <div style={{ textAlign: 'right', fontFamily: 'var(--font-mono)', fontSize: 11, color: 'var(--ink-3)' }}>
-                  <p style={{ margin: 0 }}>{SIN_DATO}</p>
-                  <p style={{ margin: '3px 0 0' }}>{SIN_DATO}</p>
-                </div>
-              </div>
-              <div style={{ borderTop: '1px solid var(--ink)', marginTop: 2, paddingTop: 26, textAlign: 'center' }}>
-                <h2 style={{ margin: 0, fontFamily: 'var(--font-serif)', fontSize: 23, fontWeight: 600, letterSpacing: '-.01em' }}>Resolución de determinación</h2>
-                <p style={{ margin: '5px 0 0', fontSize: 12, color: 'var(--ink-3)' }}>Procedimiento de fiscalización tributaria — impuesto predial y arbitrios</p>
-              </div>
-              <div
-                style={{
-                  display: 'grid',
-                  gridTemplateColumns: 'repeat(auto-fit,minmax(186px,1fr))',
-                  gap: '14px 20px',
-                  margin: '24px 0',
-                  padding: '16px 0',
-                  borderTop: '1px solid var(--line)',
-                  borderBottom: '1px solid var(--line)',
-                }}
-              >
-                {REP_META.map((x) => (
-                  <div key={x.k}>
-                    <p style={{ margin: '0 0 3px', fontSize: 10, textTransform: 'uppercase', letterSpacing: '.1em', color: 'var(--ink-3)' }}>{x.k}</p>
-                    <p style={{ margin: 0, fontSize: 13, color: 'var(--ink)' }}>{x.v}</p>
+            {/* ── La hoja, sólo con una resolución leída ──────────────
+                Todo lo que hay dentro sale de `ResolucionResource`. Ninguna
+                cifra se recompone aquí: `total` lo suma el servidor —y sólo
+                cuando conoce las dos partes—, y restar «determinado −
+                declarado» para llenar la diferencia sería componer dinero en la
+                pantalla (RNF-083) sobre un valor que se notifica. */}
+            {laResolucion !== null && (
+              /* Los 38 px de margen lateral —y no los 44 del artboard— salen de
+                 medir: el cuadro de la determinacion mide 735 px con sus siete
+                 columnas, y con 44 la hoja solo deja 732, asi que «Total S/»
+                 quedaba 3 px fuera y la impresion salia cortada por el borde. */
+              <section style={{ width: '100%', maxWidth: 820, background: '#fff', borderRadius: 6, boxShadow: 'var(--shadow-2)', padding: '40px 38px' }}>
+                <div style={{ display: 'flex', alignItems: 'flex-start', gap: 20, paddingBottom: 12, borderBottom: '2px solid var(--ink)' }}>
+                  <div style={{ flex: 1 }}>
+                    <p style={{ margin: 0, fontFamily: 'var(--font-serif)', fontSize: 15, fontWeight: 600 }}>{pref.entidad}</p>
+                    <p style={{ margin: '3px 0 0', fontSize: 11, color: 'var(--ink-3)' }}>Sub Gerencia de Fiscalización Tributaria</p>
                   </div>
-                ))}
-              </div>
-              <table style={{ width: '100%', borderCollapse: 'collapse' }}>
-                <thead>
-                  <tr>
-                    <Cabeceras cols={sinOrden(REP_COLS)} />
-                  </tr>
-                </thead>
-                <tbody>
-                  {REP_FILAS.map((f) => (
-                    <tr key={f[0]} style={{ borderTop: '1px solid var(--line)' }}>
-                      {f.map((c, j) => (
-                        <td key={j} style={estiloDeCelda(j, REP_COLS)}>
-                          {c}
-                        </td>
-                      ))}
-                    </tr>
+                  <div style={{ textAlign: 'right', fontFamily: 'var(--font-mono)', fontSize: 11, color: 'var(--ink-3)' }}>
+                    <p style={{ margin: 0 }}>{laResolucion.numero}</p>
+                    <p style={{ margin: '3px 0 0' }}>{laResolucion.fecha}</p>
+                  </div>
+                </div>
+                <div style={{ borderTop: '1px solid var(--ink)', marginTop: 2, paddingTop: 26, textAlign: 'center' }}>
+                  <h2 style={{ margin: 0, fontFamily: 'var(--font-serif)', fontSize: 23, fontWeight: 600, letterSpacing: '-.01em' }}>Resolución de determinación</h2>
+                  <p style={{ margin: '5px 0 0', fontSize: 12, color: 'var(--ink-3)' }}>
+                    Procedimiento de fiscalización tributaria — liquidación {laResolucion.nLiquidacion}, versión{' '}
+                    {laResolucion.versionDeLaLiquidacion}
+                  </p>
+                </div>
+                <div
+                  style={{
+                    display: 'grid',
+                    gridTemplateColumns: 'repeat(auto-fit,minmax(186px,1fr))',
+                    gap: '14px 20px',
+                    margin: '24px 0',
+                    padding: '16px 0',
+                    borderTop: '1px solid var(--line)',
+                    borderBottom: '1px solid var(--line)',
+                  }}
+                >
+                  {metaDeLaResolucion(laResolucion).map((x) => (
+                    <div key={x.k}>
+                      <p style={{ margin: '0 0 3px', fontSize: 10, textTransform: 'uppercase', letterSpacing: '.1em', color: 'var(--ink-3)' }}>{x.k}</p>
+                      <p style={{ margin: 0, fontSize: 13, color: 'var(--ink)' }}>{x.v}</p>
+                    </div>
                   ))}
-                </tbody>
-              </table>
-              <p style={{ margin: '22px 0 0', fontFamily: 'var(--font-serif)', fontSize: 14, lineHeight: 1.65, color: 'var(--ink-2)', textWrap: 'pretty' }}>
-                Notifíquese al contribuyente el importe determinado. Contra la presente resolución procede recurso de reclamación dentro de
-                los veinte días hábiles siguientes a su notificación, conforme al artículo 137º del Código Tributario.
-              </p>
-              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 40, marginTop: 56 }}>
-                <div style={{ borderTop: '1px solid var(--ink)', paddingTop: 7, fontSize: 11, color: 'var(--ink-3)', textAlign: 'center' }}>Sub Gerente de Fiscalización Tributaria</div>
-                <div style={{ borderTop: '1px solid var(--ink)', paddingTop: 7, fontSize: 11, color: 'var(--ink-3)', textAlign: 'center' }}>Notificado — contribuyente</div>
+                </div>
+                {/* Regla 9: la fecha a la que están las cifras, dicha una vez y
+                    para todas. Van juntas porque se congelaron juntas —el día
+                    de la resolución— y el papel no se recompone nunca con datos
+                    vivos: el valor que arranca el plazo del artículo 137º es el
+                    que se notificó, no el que saldría hoy. */}
+                <p style={{ margin: '0 0 8px', fontSize: 12, color: 'var(--ink-3)' }}>Determinación al {laResolucion.aLaFecha}</p>
+                <div style={{ overflowX: 'auto' }}>
+                  <table style={{ width: '100%', borderCollapse: 'collapse' }}>
+                    <thead>
+                      <tr>
+                        <Cabeceras cols={sinOrden(REP_COLS)} />
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {laResolucion.lineas.map((l) => (
+                        <tr key={l.ejercicio} style={{ borderTop: '1px solid var(--line)' }}>
+                          {[
+                            String(l.ejercicio),
+                            l.condicion,
+                            l.determinado ?? SIN_DATO,
+                            l.declarado ?? SIN_DATO,
+                            l.diferencia ?? SIN_DATO,
+                            l.multa ?? SIN_DATO,
+                            l.total ?? SIN_DATO,
+                          ].map((c, j) => (
+                            <td key={j} style={estiloDeCelda(j, REP_COLS)}>
+                              {c}
+                            </td>
+                          ))}
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+                {/* La misma frase que el PDF emitido imprime al pie de su
+                    cuadro, y por el mismo motivo: un «—» en un valor
+                    notificable tiene que decir que es una determinación
+                    pendiente, porque leído como cero afirma que no se debe
+                    nada. Las cinco columnas de dinero salen «—» hoy en todas
+                    las filas: valorar un predio exige el cuadro de valores
+                    unitarios, la depreciación y el arancel (D-02a). */}
+                <p style={{ margin: '12px 0 0', fontSize: 11.5, lineHeight: 1.55, color: 'var(--ink-3)', textWrap: 'pretty' }}>
+                  Los importes marcados «{SIN_DATO}» están pendientes de determinación: no significan deuda cero.
+                </p>
+                {/* Las superficies, en su propio cuadro y no en el de arriba.
+                    No es una preferencia: con las dos columnas dentro la tabla
+                    medía 1 054 px sobre una hoja de 732 —medido en el
+                    navegador—, así que las cuatro últimas columnas de dinero se
+                    salían del papel y la impresión salía cortada. Y es además lo
+                    que hace el PDF que el servidor emite, que las lleva a su
+                    bloque «Inscripción en el padrón catastral».
+
+                    Sólo se dibuja si alguna línea trae alguna: un cuadro entero
+                    de «—» afirmaría que el acta midió y no halló nada, y lo que
+                    pasa es que esa resolución no versionó ninguna superficie. */}
+                {laResolucion.lineas.some((l) => l.areaDeclarada !== null || l.areaHallada !== null) && (
+                  <div style={{ marginTop: 20, overflowX: 'auto' }}>
+                    <p style={{ margin: '0 0 8px', fontSize: 12, color: 'var(--ink-3)' }}>Superficies que sostienen el hallazgo</p>
+                    <table style={{ width: '100%', borderCollapse: 'collapse' }}>
+                      <thead>
+                        <tr>
+                          <Cabeceras cols={sinOrden(REP_COLS_AREA)} />
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {laResolucion.lineas.map((l) => (
+                          <tr key={l.ejercicio} style={{ borderTop: '1px solid var(--line)' }}>
+                            {[String(l.ejercicio), l.areaDeclarada ?? SIN_DATO, l.areaHallada ?? SIN_DATO].map((c, j) => (
+                              <td key={j} style={estiloDeCelda(j, REP_COLS_AREA)}>
+                                {c}
+                              </td>
+                            ))}
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                )}
+                <div style={{ margin: '22px 0 0', display: 'flex', flexDirection: 'column', gap: 6 }}>
+                  <p style={{ margin: 0, fontSize: 12.5, lineHeight: 1.6, color: 'var(--ink-2)', textWrap: 'pretty' }}>
+                    <strong style={{ fontWeight: 600 }}>Sustento documental:</strong> {laResolucion.documentoSustento}
+                  </p>
+                  <p style={{ margin: 0, fontSize: 12.5, lineHeight: 1.6, color: 'var(--ink-2)', textWrap: 'pretty' }}>
+                    <strong style={{ fontWeight: 600 }}>Sustento:</strong> {laResolucion.sustento}
+                  </p>
+                  <p style={{ margin: 0, fontSize: 12.5, lineHeight: 1.6, color: 'var(--ink-2)', textWrap: 'pretty' }}>
+                    <strong style={{ fontWeight: 600 }}>Base legal:</strong> {laResolucion.baseLegal}
+                  </p>
+                </div>
+                <p style={{ margin: '18px 0 0', fontFamily: 'var(--font-serif)', fontSize: 14, lineHeight: 1.65, color: 'var(--ink-2)', textWrap: 'pretty' }}>
+                  Notifíquese al contribuyente el importe determinado. Contra la presente resolución procede recurso de reclamación dentro de
+                  los veinte días hábiles siguientes a su notificación, conforme al artículo 137º del Código Tributario.
+                </p>
+                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 40, marginTop: 56 }}>
+                  <div style={{ borderTop: '1px solid var(--ink)', paddingTop: 7, fontSize: 11, color: 'var(--ink-3)', textAlign: 'center' }}>Sub Gerente de Fiscalización Tributaria</div>
+                  <div style={{ borderTop: '1px solid var(--ink)', paddingTop: 7, fontSize: 11, color: 'var(--ink-3)', textAlign: 'center' }}>Notificado — contribuyente</div>
+                </div>
+              </section>
+            )}
+
+            {/* Lo que el recurso publica y el papel emitido NO imprime: queda
+                fuera de la hoja para que lo que salga por la impresora sea el
+                papel, y no el papel más lo que esta pantalla sabe.
+
+                Las dos referencias de ficha son identificadores de FILA, no
+                números de versión: el PDF imprime «versión de la ficha 2 → 3» y
+                el JSON trae 24 → 14473, que son otra cosa. Se dicen como lo que
+                son. */}
+            {laResolucion !== null && (
+              <div data-noprint="1" style={{ width: '100%', maxWidth: 820 }}>
+                <Aviso tono="neutro" titulo="Lo que queda registrado del acto, y no va en el papel">
+                  La registró <strong style={{ fontWeight: 600 }}>{laResolucion.usuarioRegistro ?? SIN_DATO}</strong> con la observación
+                  «{laResolucion.observacion}» (RNF-052). Versionó la ficha catastral{' '}
+                  {laResolucion.fichaAnteriorId === null ? SIN_DATO : laResolucion.fichaAnteriorId} →{' '}
+                  {laResolucion.fichaNuevaId === null ? SIN_DATO : laResolucion.fichaNuevaId}, identificadores de fila y no números de
+                  versión. Descargarla no la vuelve a emitir ni la marca «duplicado»: ya está numerada desde que se transfirió, y el
+                  servidor entrega el modelo guardado comprobando su SHA-256.
+                  <br />
+                  <br />
+                  El <strong style={{ fontWeight: 600 }}>R.U.C.</strong> y el <strong style={{ fontWeight: 600 }}>tipo de
+                  fiscalización</strong> salen «{SIN_DATO}» arriba porque esta respuesta no los trae: el documento de identidad lo
+                  compone el servidor al dibujar el papel —el PDF sí lo imprime— y el tipo de fiscalización es de la liquidación{' '}
+                  {laResolucion.nLiquidacion}, no de la resolución.
+                </Aviso>
               </div>
-            </section>
+            )}
           </div>
         )}
 
@@ -2687,6 +2941,55 @@ function pendientesDeVisita(filas: FilaDeMuestra[]): FilaDeMuestra[] {
 
 /** Lo que se dibuja donde el backend no publica cifra. */
 const SIN_DATO = '—';
+
+/**
+ * La cabecera del papel de la resolucion, con lo que el recurso publica.
+ *
+ * <h2>Dos rotulos del artboard que el recurso NO sostiene</h2>
+ *
+ * El artboard dibuja seis y `ResolucionResource` sostiene cuatro:
+ *
+ * <ul>
+ *   <li><b>R.U.C.</b> no viaja. El PDF que el servidor emite SI lo imprime
+ *       —«Documento: DNI 00000001»—, porque lo compone del padron al dibujar el
+ *       papel, y el JSON no lleva ningun campo de documento. Se queda el rotulo
+ *       con «—» y se dice donde si esta, que es la unica forma de que quien lo
+ *       necesita sepa que hacer.
+ *   <li><b>Tipo de fiscalizacion</b> tampoco: es de la LIQUIDACION
+ *       —`LiquidacionResource.tipoDeFiscalizacion`, «CIERTA», «PRESUNTA»…— y no
+ *       de la resolucion. Rellenarlo con lo que se parezca es lo que #427 se
+ *       nego a hacer con «ACTIVA»: la resolucion nombra su liquidacion, y de
+ *       ahi sale, pero eso es OTRA lectura y componerla aqui seria afirmar en
+ *       un valor notificable un dato que esta respuesta no trae.
+ * </ul>
+ *
+ * <h2>«Predio» pasa a «Unidad fiscalizada»</h2>
+ *
+ * Porque tambien puede ser un vehiculo: `ResolucionResource` publica
+ * `predioId` y `vehiculoId`, y son excluyentes. El rotulo es el que el propio
+ * PDF emitido imprime, y el valor tambien —«Predio 1»—: son los
+ * identificadores INTERNOS de la unidad, no el codigo de referencia catastral
+ * ni la placa, y ninguno de los dos viaja en esta respuesta. Se dibujan como lo
+ * que son en vez de cambiarse por un codigo que nadie leyo.
+ */
+function metaDeLaResolucion(r: ResolucionDeDeterminacion): { k: string; v: string }[] {
+  const unidad =
+    r.predioId !== null
+      ? `Predio ${r.predioId}`
+      : r.vehiculoId !== null
+        ? `Vehiculo ${r.vehiculoId}`
+        : SIN_DATO;
+  return [
+    { k: 'Nº de resolución', v: r.numero },
+    { k: 'Contribuyente', v: r.contribuyente ?? SIN_DATO },
+    { k: 'Cód. de contribuyente', v: r.codContribuyente ?? SIN_DATO },
+    { k: 'R.U.C.', v: SIN_DATO },
+    { k: 'Unidad fiscalizada', v: unidad },
+    { k: 'Periodo fiscalizado', v: `${r.periodoDesde} — ${r.periodoHasta}` },
+    { k: 'Tipo de fiscalización', v: SIN_DATO },
+    { k: 'Liquidación', v: `${r.nLiquidacion} · v${r.versionDeLaLiquidacion}` },
+  ];
+}
 
 /**
  * Una superficie, con separador de miles y SIN pasar por `Number`.

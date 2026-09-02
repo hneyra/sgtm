@@ -3,10 +3,6 @@
    maqueta. El acrónimo de los números de documento es `MDC` —Municipalidad
    Distrital de Catacaos—, que es la entidad del piloto. */
 
-/* `Fiscalizacion.tsx` tiene el suyo: aquí no se exporta para no dejar dos
-   nombres iguales viajando entre los dos archivos. */
-const SIN_DATO = '—';
-
 /** Una columna de tabla: rótulo y si es numérica (alineada a la derecha). */
 export type ColDef = [string, 0 | 1];
 
@@ -222,36 +218,58 @@ export const DET_VEHICULAR: CruceDeDeteccion = {
 /* ══════════ Resolución de determinación ══════════ */
 
 /**
- * La hoja de la resolución, VACÍA.
+ * Las columnas del cuadro de la determinación, con las que el backend publica.
  *
- * Traía la resolución entera del artboard —«000418-2026-SGFT/MDC»,
- * «INVERSIONES DEL NORTE SAC», R.U.C. 20525118447 y seis ejercicios con sus
- * importes al céntimo, 2 680.60 de 2021 al 2 962.00 de 2026— y la pantalla la
- * mandaba a la impresora con su membrete, su artículo 137º y sus dos líneas de
- * firma. Con la red cortada salía **exactamente igual**, que es la prueba de
- * que ninguna de esas cifras venía de ningún sitio: era una resolución de
- * determinación falsa, con un R.U.C. real de por medio, lista para entregar.
+ * <h2>«Interés S/» era una columna que no existe, y ha pasado a «Multa S/»</h2>
  *
- * `sin-red.mjs` no lo veía porque enumera sólo `m.destinos` y este destino es el
- * `documento` del módulo, que sólo mira `mirar.mjs`.
+ * El artboard rotulaba la quinta columna «Interés S/», y `LineaDeterminadaResource`
+ * publica `determinado`, `declarado`, `diferencia`, **`multa`** y `total`: ni un
+ * interés. El PDF que el propio servidor emite imprime su cabecera «Multa S/»
+ * —comprobado leyendo los bytes de `?formato=PDF`—, así que dejar el rótulo del
+ * artboard obligaba a una de dos: pintar la multa del art. 176 bajo una columna
+ * que promete intereses, o dejar la columna vacía para siempre y esconder la
+ * multa. Las dos son la cifra plausible y equivocada; se corrige el rótulo, que
+ * es lo que el papel notificado dice.
  *
- * Se quedan los rótulos —son los que el manual imprime y dicen qué llevará la
- * hoja— y se va el contenido. Conectarla es otra cosa: la resolución la sirve
- * `GET /fiscalizacion/resoluciones/{numero}`, que pide un número que esta
- * pantalla no tiene dónde teclear.
+ * Y se añade «Condición», que el recurso publica y el artboard no dibuja. Es lo
+ * mismo que este módulo ya hizo con la detección de omisos, y por lo mismo: con
+ * D-02a abierta las cinco columnas de dinero salen «—» en todas las filas, y
+ * una fila que sólo dice el ejercicio no deja ver de qué va la determinación.
+ *
+ * <h2>Las dos superficies van aparte, y eso lo decidió medir el ancho</h2>
+ *
+ * Estaban aquí y no caben: con ellas la tabla mide **1 054 px sobre una hoja de
+ * 732**, medido en el navegador, así que las cuatro últimas columnas de dinero
+ * quedaban fuera del papel y la impresión salía cortada. Y el propio PDF que el
+ * servidor emite ya las pone fuera de este cuadro —en su bloque «Inscripción en
+ * el padrón catastral», antes → después—, así que se hace lo que hace el papel:
+ * su propia tabla debajo, con la unidad en la cabecera (#546).
+ *
+ * Aquí ya no vive ninguna fila ni ninguna cabecera con valor: la hoja las
+ * compone de lo que lee `GET /fiscalizacion/resoluciones/{numero}`. Traía la
+ * resolución entera del artboard —«000418-2026-SGFT/MDC», «INVERSIONES DEL
+ * NORTE SAC», R.U.C. 20525118447 y seis ejercicios con sus importes al
+ * céntimo— y la pantalla la mandaba a la impresora con su membrete, su
+ * artículo 137º y sus dos líneas de firma; con la red cortada salía
+ * **exactamente igual**, que es la prueba de que ninguna de esas cifras venía
+ * de ningún sitio.
  */
-export const REP_META: { k: string; v: string }[] = [
-  { k: 'Nº de resolución', v: SIN_DATO },
-  { k: 'Contribuyente', v: SIN_DATO },
-  { k: 'R.U.C.', v: SIN_DATO },
-  { k: 'Predio', v: SIN_DATO },
-  { k: 'Periodo fiscalizado', v: SIN_DATO },
-  { k: 'Tipo de fiscalización', v: SIN_DATO },
+export const REP_COLS: ColDef[] = [
+  ['Ejercicio', 0],
+  ['Condición', 0],
+  ['Determinado S/', 1],
+  ['Declarado S/', 1],
+  ['Diferencia S/', 1],
+  ['Multa S/', 1],
+  ['Total S/', 1],
 ];
 
-export const REP_COLS: ColDef[] = [['Ejercicio', 0], ['Determinado S/', 1], ['Declarado S/', 1], ['Diferencia S/', 1], ['Interés S/', 1], ['Total S/', 1]];
-
-export const REP_FILAS: string[][] = [];
+/** Las superficies que sostienen el hallazgo, en su propio cuadro. */
+export const REP_COLS_AREA: ColDef[] = [
+  ['Ejercicio', 0],
+  ['Superficie declarada (m²)', 1],
+  ['Superficie hallada (m²)', 1],
+];
 
 /* ══════════ Paleta de comandos ══════════ */
 
