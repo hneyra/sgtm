@@ -161,6 +161,13 @@ jobs:
       - name: La fecha sin zona no se convierte, y el instante si
         run: node verificaciones/fechas.mjs
 
+      # Tampoco abre navegador. Va DESPUES del install a proposito: si `.nvmrc` y
+      # `engines` se desincronizan, yarn ya habra fallado antes con el mensaje
+      # que nombra las dos versiones, y esto solo tiene que cazar el caso en que
+      # la version instalada las cumple y aun asi no es la que vite admite.
+      - name: La version de Node dice lo mismo en los dos sitios
+        run: node verificaciones/node.mjs
+
       - name: Publicar las capturas de lo que fallara
         if: failure()
         uses: actions/upload-artifact@v4
