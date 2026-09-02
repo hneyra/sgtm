@@ -221,6 +221,39 @@ for (const [nombre, cuerpo, esCifra, ejercicio, llave] of DISCRIMINADOR) {
   }
 }
 
+/* ── Y lo que la pantalla DICE de cada uno (#691 AC 5) ──────────────────────
+
+   `causasDelRechazo` es la frase compartida que cuatro modulos ponen bajo un
+   422, y hasta que #714 llevo el discriminador fuera de convenios tenia que
+   ENUMERAR las dos posibilidades. Ahora dice una, y lo que se sujeta es que no
+   vuelva a enumerar: la mitad util de ese texto es la que no obliga a quien
+   atiende a clasificar un rechazo que el servidor ya clasifico. */
+const { causasDelRechazo } = await cargar('src/api/Fallo.tsx', 'fallo-errores');
+const FRASES = [
+  ['cifra normativa · falta el conjunto', { codigo: 'VALIDACION', mensaje: 'x', parametroQueFalta: { ejercicio: 2027 } }, 'cifra normativa', 'Si nombra'],
+  ['cifra normativa · falta la llave', { codigo: 'VALIDACION', mensaje: 'x', parametroQueFalta: { ejercicio: 2028, llave: 'REDONDEO' } }, 'REDONDEO', 'Si nombra'],
+  ['campo de la peticion', { codigo: 'VALIDACION', mensaje: "Falta el campo 'ano'" }, 'el del servidor', 'cifra normativa, no un dato'],
+];
+for (const [nombre, cuerpo, debeDecir, noDebeDecir] of FRASES) {
+  globalThis.fetch = async () =>
+    new Response(JSON.stringify({ status: 422, ...cuerpo }), { status: 422, headers: { 'Content-Type': 'application/problem+json' } });
+  let e = null;
+  try {
+    await solicitar('/lo/que/sea');
+  } catch (x) {
+    e = x;
+  }
+  const frase = causasDelRechazo(e) ?? '';
+  if (!frase.includes(debeDecir)) fallos.push(`la frase · ${nombre}: no dice «${debeDecir}» — salio «${frase.slice(0, 90)}…»`);
+  if (frase.includes(noDebeDecir)) fallos.push(`la frase · ${nombre}: dice «${noDebeDecir}», que es de la OTRA causa: vuelve a enumerar`);
+}
+/* Y el contraste: un rechazo que no es de validacion no lleva ninguna frase. */
+globalThis.fetch = async () =>
+  new Response(JSON.stringify({ status: 409, codigo: 'CONFLICTO', mensaje: 'x' }), { status: 409, headers: { 'Content-Type': 'application/problem+json' } });
+await solicitar('/lo/que/sea').catch((e) => {
+  if (causasDelRechazo(e) !== null) fallos.push('la frase · un 409 no es un rechazo de validacion y no deberia llevar esta frase');
+});
+
 // ─────────────────────────────────────────────────────────── 3. La pantalla ──
 
 const { MODULOS } = await cargar('src/shell/modulos.ts', 'modulos-errores');
@@ -305,7 +338,7 @@ if (conElFallo.ofrecen.length === 0) {
 
 console.log(
   `${CODIGOS_DE_ERROR.length} códigos declarados · ${CASOS.length} respuestas fabricadas · ` +
-    `${DISCRIMINADOR.length} casos del discriminador · ${paradas.length} pantallas recorridas dos veces (${conElVerbo.pedidas} y ${conElFallo.pedidas} peticiones contestadas)`,
+    `${DISCRIMINADOR.length} casos del discriminador · ${FRASES.length} frases · ${paradas.length} pantallas recorridas dos veces (${conElVerbo.pedidas} y ${conElFallo.pedidas} peticiones contestadas)`,
 );
 console.log(`«Reintentar» ante el 405: ${conElVerbo.ofrecen.length} pantallas · ante el 500: ${conElFallo.ofrecen.length}`);
 if (!fallos.length) {

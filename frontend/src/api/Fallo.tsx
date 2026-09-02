@@ -165,12 +165,40 @@ export function explicacionDelFallo(error: ErrorDeApi | null, acceso?: string): 
  */
 export function causasDelRechazo(error: ErrorDeApi | null, llave?: string): string | null {
   if (error?.codigo !== 'VALIDACION') return null;
+  /* UNA de las dos cosas, no las dos (#691, AC 5).
+     Hasta que #714 llevó el discriminador a los seis módulos que no eran
+     convenios, esta frase tenía que enumerar —«si nombra un dato de esta
+     pantalla…; si nombra un ejercicio sin conjunto…»— y dejarle la clasificación
+     a quien atiende, que es justo quien no puede hacerla: los dos casos salen con
+     el mismo `codigo` y el mismo `estado`, y lo único que los separaba era el
+     texto. Es la misma corrección que #604 hizo en Tesorería, ahora en el sitio
+     compartido y por tanto en los cuatro módulos que llaman aquí.
+
+     Se pregunta por la PRESENCIA del miembro y nunca por el texto: clasificar por
+     subcadena deja de funcionar en cuanto alguien reescribe la frase, y esa
+     reescritura no rompe ninguna compilación. */
+  if (error.faltaUnaCifraNormativa) {
+    const p = error.parametroQueFalta;
+    return (
+      'Lo que falta es una cifra normativa, no un dato de esta pantalla: ' +
+      (p?.llave === undefined
+        ? 'el ejercicio ' + String(p?.ejercicio) + ' no tiene conjunto de parámetros sellado'
+        : 'falta publicar «' + p.llave + '» en el conjunto de ' + String(p.ejercicio)) +
+      '. Eso no se arregla desde aquí, no es un fallo del servidor y no se corrige tecleando otra cosa ' +
+      '(D-02a, D-02b): lo resuelve quien publica los valores normativos.'
+    );
+  }
+  /* Sin el miembro, lo que falta es de la petición — **en las rutas cuyas
+     excepciones de parámetro lo llevan todas**. Donde no, la ausencia significa
+     tres cosas a la vez y el texto del servidor es lo único que las separa; por
+     eso se dice que es el del servidor y se deja delante, en vez de afirmar que
+     hay un campo que corregir. `llave` se conserva porque una pantalla que sabe
+     cuál es la suya puede nombrarla antes de que el rechazo llegue. */
   return (
     'El texto de arriba es el del servidor, tal cual: es el único sitio donde se nombra lo que falta, y ' +
-    'reintentar sin cambiar nada volvería a dar lo mismo. Si nombra un dato de esta pantalla, se corrige ' +
-    'aquí. Si nombra un ejercicio sin conjunto de parámetros sellado, o una llave ' +
-    (llave === undefined ? 'en mayúsculas del estilo «TIPO:CLAVE»' : `como «${llave}»`) +
-    ', es una cifra normativa que todavía no se ha publicado al conjunto del ejercicio: eso no se arregla ' +
-    'desde esta pantalla, no es un fallo del servidor y no se corrige tecleando otra cosa (D-02a, D-02b).'
+    'reintentar sin cambiar nada volvería a dar lo mismo. Lo corriente es que nombre un dato de esta ' +
+    'pantalla, y entonces se corrige aquí' +
+    (llave === undefined ? '' : `; si nombrara una llave como «${llave}», sería una cifra por publicar`) +
+    '.'
   );
 }
