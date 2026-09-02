@@ -100,7 +100,8 @@ public class ValorizacionDelFue {
         // matriz de categoria por anio de construccion (NEG-05 §RT-002), y elegir la fila por el
         // ejercicio del conjunto en vez de por el anio de la obra es el defecto que ese documento
         // describe.
-        TablaDeValoresUnitarios tabla = TablaDeValoresUnitarios.de(traducidas, ejercicio.valor());
+        TablaDeValoresUnitarios tabla =
+                TablaDeValoresUnitarios.de(traducidas, ejercicio, ejercicio.valor());
         if (tabla.tamano() == 0) {
             return Resultado.noDisponible(
                     ejercicio,
@@ -116,7 +117,7 @@ public class ValorizacionDelFue {
         try {
             return Resultado.calculada(ejercicio, ValorizacionDeObra.valorizar(estructuras, tabla));
         } catch (TablaDeValoresUnitarios.ValorUnitarioSinParametrizar falta) {
-            return Resultado.noDisponible(ejercicio, mensajeDe(falta), falta.llave());
+            return Resultado.noDisponible(ejercicio, mensajeDe(falta), falta.celda());
         }
     }
 
@@ -166,7 +167,8 @@ public class ValorizacionDelFue {
                             celda.anioConstruccionHasta(),
                             celda.valorM2()));
         }
-        TablaDeValoresUnitarios tabla = TablaDeValoresUnitarios.de(traducidas, ejercicio.valor());
+        TablaDeValoresUnitarios tabla =
+                TablaDeValoresUnitarios.de(traducidas, ejercicio, ejercicio.valor());
 
         Map<Long, Resultado> resultados = new LinkedHashMap<>();
         for (Map.Entry<Long, List<EstructuraDelProyecto>> entrada : porExpediente.entrySet()) {
@@ -194,7 +196,7 @@ public class ValorizacionDelFue {
             } catch (TablaDeValoresUnitarios.ValorUnitarioSinParametrizar falta) {
                 resultados.put(
                         entrada.getKey(),
-                        Resultado.noDisponible(ejercicio, mensajeDe(falta), falta.llave()));
+                        Resultado.noDisponible(ejercicio, mensajeDe(falta), falta.celda()));
             }
         }
         return Map.copyOf(resultados);

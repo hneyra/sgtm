@@ -8,8 +8,13 @@ import pe.gob.sgtm.web.ParametroQueFalta;
 import pe.gob.sgtm.web.ProblemaDeNegocio;
 
 /**
- * El <b>unico</b> sitio donde una cifra normativa sin publicar se convierte en un {@code 422}
- * (#691).
+ * El <b>unico</b> sitio donde una cifra normativa sin publicar se convierte en una respuesta de
+ * error (#691, #723).
+ *
+ * <p>Son dos codigos y no uno, y cual toca lo decide <b>que se pidio</b>: {@link #problema} da el
+ * {@code 422} de un calculo que no se pudo hacer, y {@link #noEncontrado} el {@code 404} de un
+ * cuadro publicado que no esta. Los dos llevan el mismo miembro, que es lo unico que un programa
+ * lee.
  *
  * <h2>Que problema resuelve</h2>
  *
@@ -54,13 +59,50 @@ public final class FaltaPublicar {
      */
     public static <E extends RuntimeException & ParametroSinPublicar> ProblemaDeNegocio problema(
             E falta) {
+        return con(CodigoDeError.VALIDACION, falta);
+    }
+
+    /**
+     * El mismo discriminador sobre un {@code 404}, para las tres lecturas que piden un <b>cuadro
+     * publicado</b> y no un calculo (#723).
+     *
+     * <h2>Por que hay dos codigos y no uno</h2>
+     *
+     * <p>{@code GET /catastro/tablas/aranceles?anio=2026} nombra un documento —la tabla de
+     * aranceles sellada de 2026—, y cuando no hay ninguna «no esta» es literalmente lo que pasa.
+     * Los 422 de esta familia estan todos detras de una peticion que el servidor <b>intento
+     * ejecutar</b>: determinar un predial, abrir un convenio, dictar una REC. Aqui no habia nada
+     * que ejecutar. Es la distincion que #540 y #547 ya dejaron escrita —«alli se lee un cuadro,
+     * aqui se pide un calculo»— y que este metodo hace posible sin repetir el ayudante.
+     *
+     * <p>Y hay un motivo medido para no unificarlos en 422: <b>en esa misma ruta el 422 ya
+     * significa otra cosa</b>. {@code ?anio=1800} construye un {@link
+     * pe.gob.sgtm.dominio.Ejercicio} fuera de rango, sale como {@code IllegalArgumentException} y
+     * {@code ManejadorDeErrores} lo traduce a {@code 422 VALIDACION} — un error que quien atiende
+     * corrige tecleando un ano de verdad. Mover ahi «el ejercicio no esta sellado» pondria las dos
+     * cosas bajo el mismo codigo justo en la ruta donde conviven, y el discriminador tendria que
+     * hacer solo el trabajo que hoy hacen entre los dos.
+     *
+     * <h2>Lo que el codigo NO decide</h2>
+     *
+     * <p>Ni el estado ni el mensaje le dicen a un programa que hacer: eso lo dice el miembro. Por
+     * eso el 404 de aqui lo lleva y el 404 de «ese contribuyente no esta en el padron» no —y esa
+     * diferencia es lo unico que los separa—.
+     */
+    public static <E extends RuntimeException & ParametroSinPublicar>
+            ProblemaDeNegocio noEncontrado(E falta) {
+        return con(CodigoDeError.NO_ENCONTRADO, falta);
+    }
+
+    private static <E extends RuntimeException & ParametroSinPublicar> ProblemaDeNegocio con(
+            CodigoDeError codigo, E falta) {
         Objects.requireNonNull(falta, "Traducir «falta publicar» exige la excepcion que lo dice");
         int ejercicio = falta.ejercicio().valor();
         ParametroQueFalta discriminador =
                 falta.llave()
                         .map(llave -> ParametroQueFalta.llave(ejercicio, llave))
                         .orElseGet(() -> ParametroQueFalta.conjuntoDelEjercicio(ejercicio));
-        return new ProblemaDeNegocio(CodigoDeError.VALIDACION, mensajeDe(falta), discriminador);
+        return new ProblemaDeNegocio(codigo, mensajeDe(falta), discriminador);
     }
 
     /**
