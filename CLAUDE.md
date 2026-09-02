@@ -114,11 +114,11 @@ dos fuentes reales. Un corredor traería una segunda forma de verificar —dos s
 cuando algo se pone rojo— y, sobre todo, la tentación de probar la función y no la pantalla, que
 es lo contrario de lo que esta interfaz necesita: sus defectos se ven al dibujar.
 
-Lo que sujeta al `frontend/` de hoy es `tsc -b --noEmit`, que caza el tipo que miente, y **trece**
-arneses en `frontend/verificaciones/`: nueve **operan un navegador de verdad** contra la
-compilación —`mirar`, `sin-red`, `paleta`, `impedimentos`, `impresion`, `errores`,
+Lo que sujeta al `frontend/` de hoy es `tsc -b --noEmit`, que caza el tipo que miente, y
+**catorce** arneses en `frontend/verificaciones/`: nueve **operan un navegador de verdad** contra
+la compilación —`mirar`, `sin-red`, `paleta`, `impedimentos`, `impresion`, `errores`,
 `ficha-catastral`, `desplegables` y `filas`—, `flujos` además pulsa contra el backend real,
-`vocabularios` compila las dos fuentes reales y las compara, y `fechas` y `node` no abren
+`vocabularios` compila las dos fuentes reales y las compara, y `fechas`, `node` y `prosa` no abren
 navegador. `errores` (#625) hace las dos cosas a la vez, porque
 las dos mitades fallan por separado: compara el catálogo de `cliente.ts` con el enumerado
 `CodigoDeError` del backend, mide `solicitar()` contra respuestas fabricadas —el 405 pelado de
@@ -138,6 +138,21 @@ municipalidad no tiene ninguno» cuando lo que ha pasado es que la lectura conte
 declara cuál se alimenta de una lectura: lo mide** —recorre con todas las lecturas en 500, y el que
 se queda sin opción real lo es por construcción—, porque una marca en el DOM habría que ponerla a
 mano en 49 desplegables y la que alguien olvidara diría que está bien.
+
+`prosa` (#735) vigila lo que ninguno puede ver desde el navegador: **la prosa que habla del
+backend envejece igual que una cifra**. Esta interfaz dice en muchos sitios por qué no puede saber
+algo —«ninguna lectura del contrato publica ese catálogo»—, y el 2026-09-02 se encontraron **cinco
+frases falsas en un día**, las cinco porque el backend había publicado la operación que decían que
+faltaba, y **ninguna la detectó nada**: los diez arneses de entonces pasaban en verde con las cinco
+dentro. Un «—» con un motivo falso es peor que un campo vacío, porque un «—» honesto y uno que se
+podía haber llenado se leen igual y la frase es lo único que los separa. Ata la frase a la
+operación **en las dos direcciones**: toda ruta que la prosa nombra afirmativamente existe en el
+contrato con ese verbo —291 menciones, emparejadas segmento a segmento, y sin el comodín salen 19
+falsos positivos—, y toda afirmación de que algo **no** se publica declara en
+`LO_QUE_NADIE_PUBLICA` qué operación lo publicaría, que tiene que seguir sin estar. La lista es
+además la de exenciones de la primera dirección, así que no hay dónde callar un hallazgo. **Ancla 8
+de las 54 afirmaciones que llegan a la pantalla, y lo dice**: anclar una es decidir cuál operación
+la publicaría, y decidirlo mal deja una guarda que no puede fallar.
 
 Lista completa con su justificación:
 [`docs/30-arquitectura/estandares-de-codigo-backend.md`](docs/30-arquitectura/estandares-de-codigo-backend.md)
@@ -389,13 +404,14 @@ yarn ficha-catastral              # los 123 campos de la ficha: cual sale de una
 yarn desplegables                 # con las lecturas rotas, ningun desplegable se queda sin nada que ofrecer y mudo
 yarn fechas                       # la fecha sin zona no se convierte, y el instante si. Sin navegador
 yarn node                         # `.nvmrc`, `engines` y lo que vite pide, los tres de acuerdo. Sin navegador
+yarn prosa                        # la prosa que habla del backend, contra el contrato: lo que nombra existe y lo que dice que falta sigue faltando. Sin navegador
 yarn filas                        # lo que se abre con el raton se abre con el teclado; NO esta en CI (necesita token)
 yarn flujos                       # opera los botones contra el backend real; NO esta en CI (necesita token)
 
 # Van contra `yarn preview` SIN backend: `sin-red`, `paleta`, `impedimentos`, `impresion`, `errores`
 # y `desplegables` —los tres ultimos fabrican la respuesta, que es la unica forma de ver el defecto:
 # con el backend delante los catalogos vienen llenos y la pantalla parece correcta siempre—.
-# `fechas` y `node` no abren navegador. `mirar`, `ficha-catastral`, `filas` y `flujos` necesitan
+# `fechas`, `node` y `prosa` no abren navegador. `mirar`, `ficha-catastral`, `filas` y `flujos` necesitan
 # SGTM_TOKEN, y cualquier 401 invalida la corrida: un token caducado a mitad del recorrido dejaba
 # estos arneses en verde sin haber mirado nada.
 ```

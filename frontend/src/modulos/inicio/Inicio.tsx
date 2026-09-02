@@ -5,7 +5,7 @@ import { Aviso, Esqueleto, Insignia, tonoDe, type Tono } from '../../ds/componen
 import { MODULOS } from '../../shell/modulos';
 import { personaDeLaSesion } from '../../shell/persona';
 import { hayPuerta, salir } from '../../api/sesion';
-import { EJERCICIOS, miles, soles, usarPreferencias } from '../../shell/preferencias';
+import { ejerciciosCon, miles, soles, usarPreferencias } from '../../shell/preferencias';
 import { DEUDA, PAGOS, UNIDADES } from '../../datos/inicio';
 import { indicadores, trabajoParado, type ImporteConFecha } from '../../api/rentas';
 import { useRecurso } from '../../api/useRecurso';
@@ -437,7 +437,14 @@ export default function Inicio() {
                   cursor: 'pointer',
                 }}
               >
-                {EJERCICIOS.map((a) => (
+                {/* La lista lleva SIEMPRE el año que se está mirando (#557).
+                    Medido aquí antes de arreglarlo: con la sesión declarando
+                    `ejercicioDeTrabajo` 2019 —un año que la lista compilada no
+                    tiene— este panel pedía sus indicadores de 2019 y la píldora
+                    de encima decía «2026», porque un `<select>` cuyo `value` no
+                    está entre sus `<option>` no se queda en el valor. La
+                    cabecera contradecía a la cifra que tenía debajo. */}
+                {ejerciciosCon(pref.ejercicio).map((a) => (
                   <option key={a} value={a}>
                     {a}
                   </option>

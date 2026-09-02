@@ -2,7 +2,7 @@ import { useEffect, useMemo, useState, type ReactNode } from 'react';
 import { Icono } from '../ds/Icono';
 import { ICONOS, ICO } from '../ds/iconos';
 import { MODULOS, moduloDe, type Modulo } from './modulos';
-import { EJERCICIOS, usarPreferencias } from './preferencias';
+import { ejerciciosCon, usarPreferencias } from './preferencias';
 import { hayPuerta, salir } from '../api/sesion';
 import { personaDeLaSesion } from './persona';
 
@@ -541,12 +541,14 @@ export function Shell({
                 /* Se dice lo que pasa y nada más.
                    Cada módulo traía su frase —«se recargaron UIT, escala y
                    tablas», «se recargaron programas y cruces», «el cambio queda
-                   en la auditoría»— y ninguna de las doce era cierta: el
-                   ejercicio es un `useState` de esta pantalla, no se escribe en
-                   ningún sitio y no recarga nada más que lo que las consultas
-                   vuelvan a pedir con ese año. El backend SÍ sabe registrarlo
-                   —`PUT /seguridad/sesion/ejercicio`, con su observación y su
-                   privilegio— y nadie lo llama todavía (#557). */
+                   en la auditoría»— y ninguna de las doce era cierta.
+
+                   Y la última sigue sin serlo, ahora que el acto existe (#557):
+                   esto es el FILTRO DE VISTA —vive en el navegador, no pide
+                   permiso y no deja rastro—, y el acto registrado es otra cosa,
+                   con su observación y su privilegio `ESPECIAL` sobre
+                   `cambiar_anio`, en Seguridad › Sistema. Decir aquí «queda en
+                   la auditoría» nombraría una fila que nadie escribió. */
                 toast(`Ejercicio ${e.target.value}. Las consultas pasan a pedir ese año.`);
               }}
               aria-label="Ejercicio de trabajo"
@@ -561,7 +563,7 @@ export function Shell({
                 cursor: 'pointer',
               }}
             >
-              {EJERCICIOS.map((a) => (
+              {ejerciciosCon(pref.ejercicio).map((a) => (
                 <option key={a} value={a}>
                   {a}
                 </option>

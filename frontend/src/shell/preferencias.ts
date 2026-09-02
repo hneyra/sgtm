@@ -20,7 +20,38 @@ export const ACENTOS = [
   { v: '#444444', label: 'Pizarra' },
 ];
 
+/**
+ * Los años que el selector de la cabecera ofrece de partida.
+ *
+ * Es una lista compilada, y por eso NO es la lista definitiva: ver
+ * {@link ejerciciosCon}.
+ */
 export const EJERCICIOS = ['2026', '2025', '2024', '2023'];
+
+/**
+ * `EJERCICIOS` mas el año que se esta mirando, si no estuviera ya.
+ *
+ * <h2>Por que no basta con la lista compilada (#557)</h2>
+ *
+ * Desde #557 el año de partida puede venir del backend —`ejercicioDeTrabajo` de
+ * la sesion—, y ese numero no tiene por que estar entre los cuatro de arriba:
+ * lo escribe `PUT /seguridad/sesion/ejercicio`, cuyo dominio admite de 1990 a
+ * 2100, y la lista compilada se queda corta sola con que pase el tiempo.
+ *
+ * Un `<select>` cuyo `value` no esta entre sus `<option>` **no se queda en el
+ * valor: cae en la primera opcion**. Medido el 2026-09-02 en el panel de
+ * inicio, con la sesion declarando 2019: la pildora de la cabecera decia
+ * **2026** mientras los indicadores de debajo se pedian de 2019 — o sea un año
+ * plausible y equivocado encima de las cifras de otro, que es peor que dejarla
+ * en blanco porque no se nota. Asi que la lista se compone con el valor dentro
+ * y el control no puede desincronizarse por construccion, en vez de confiar en
+ * que las dos listas coincidan.
+ *
+ * Ordena descendente porque es como se leen los ejercicios, y el mas reciente es
+ * el que se pide casi siempre.
+ */
+export const ejerciciosCon = (anio: string): string[] =>
+  (EJERCICIOS.includes(anio) ? EJERCICIOS : [...EJERCICIOS, anio]).slice().sort((a, b) => Number(b) - Number(a));
 
 export const DENSIDADES: Record<Densidad, string> = {
   Compacta: '0.85',

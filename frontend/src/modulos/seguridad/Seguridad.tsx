@@ -3,6 +3,7 @@ import { Icono } from '../../ds/Icono';
 import {
   darDeBajaGrupo,
   darDeBajaUsuario,
+  fijarEjercicioDeTrabajo,
   fijarPermisosDelGrupo,
   fijarPermisosDelUsuario,
   fijarVigenciaDeGrupo,
@@ -33,6 +34,7 @@ import {
   type CambioDeVigencia,
   type PermisoEfectivo,
   type Privilegio,
+  type SesionDeTrabajo,
 } from '../../api/seguridad';
 import { FalloDeLectura } from '../../api/Fallo';
 import { Aviso, Paginador } from '../../ds/componentes';
@@ -42,7 +44,8 @@ import { enElProveedorDeIdentidad } from '../../api/sesion';
 import { useRebote, useRecurso } from '../../api/useRecurso';
 import { ICO } from '../../ds/iconos';
 import { Shell, type EntradaDePaleta } from '../../shell/Shell';
-import { usarPreferencias } from '../../shell/preferencias';
+import { ejerciciosCon, usarPreferencias } from '../../shell/preferencias';
+import { puede, usarPermisos } from '../../shell/permisos';
 import type { PantallaProps } from '../../App';
 import { OPCIONES_DE_PALETA, panelesDeSistema, type CampoDeSistema } from '../../datos/seguridad';
 
@@ -207,7 +210,7 @@ type FilaDeMatriz = {
 };
 
 export default function Seguridad({ dest, onDest }: PantallaProps) {
-  const { pref, toast } = usarPreferencias();
+  const { pref, fijar, toast } = usarPreferencias();
 
   const [q, setQ] = useState('');
   const [sel, setSel] = useState<Seleccion | null>(null);
@@ -224,7 +227,14 @@ export default function Seguridad({ dest, onDest }: PantallaProps) {
   const [observacion, setObservacion] = useState('');
   const [guardando, setGuardando] = useState(false);
   const [errorAlGuardar, setErrorAlGuardar] = useState<ErrorDeApi | null>(null);
-  const [sisTab, setSisTab] = useState(0);
+  /* La pestaña elegida se guarda por su ROTULO y no por su indice (#557).
+     Hasta aqui eran cuatro fijas y el indice bastaba —con el riesgo que el
+     comentario de `enClave` ya nombraba: un panel insertado delante movia el
+     acto—. Desde #557 la lista **cambia de tamaño con el permiso de la
+     sesion**, asi que el indice 0 es «Ejercicio de trabajo» para quien lo
+     tiene y «Parametros» para quien no: guardarlo cambiaria de pestaña sola en
+     cuanto llegara la respuesta de permisos. */
+  const [sisTab, setSisTab] = useState('Ejercicio de trabajo');
   const [vals, setVals] = useState<Record<string, string | boolean>>({});
   /* El cambio de contraseña, que es la otra escritura de esta pantalla (#559).
      `cambioIniciado` no es un rótulo de éxito: es lo que el servidor contestó
@@ -267,6 +277,16 @@ export default function Seguridad({ dest, onDest }: PantallaProps) {
   const [cambiandoClave, setCambiandoClave] = useState(false);
   const [errorAlCambiar, setErrorAlCambiar] = useState<ErrorDeApi | null>(null);
   const [cambioIniciado, setCambioIniciado] = useState<CambioDeClaveIniciado | null>(null);
+
+  /* ── El ejercicio de trabajo, la tercera escritura de esta pantalla (#557) ──
+     `ejercicioFijado` no es un rotulo de exito: es la sesion que contesto el
+     servidor, y lo que se dibuja despues sale de ella y no del año que se
+     eligio en el desplegable. La diferencia importa porque el aviso afirma que
+     algo quedo en la bitacora: decirlo desde lo tecleado seria afirmarlo antes
+     de que nadie lo hubiera escrito. */
+  const [fijandoEjercicio, setFijandoEjercicio] = useState(false);
+  const [errorAlFijar, setErrorAlFijar] = useState<ErrorDeApi | null>(null);
+  const [ejercicioFijado, setEjercicioFijado] = useState<SesionDeTrabajo | null>(null);
 
   const val = (k: string, d: string | boolean) => (vals[k] === undefined ? d : vals[k]);
   const set = (k: string, v: string | boolean) => setVals((s) => ({ ...s, [k]: v }));
@@ -1123,16 +1143,48 @@ export default function Seguridad({ dest, onDest }: PantallaProps) {
   const filasDeAuditoria = auditoria.datos?.contenido ?? [];
 
   /* ── Sistema ───────────────────────────────────────────────── */
-  const SIS = panelesDeSistema(pref.ejercicio);
-  const sisIdx = Math.min(sisTab, SIS.length - 1);
-  const sisDef = SIS[sisIdx];
-  const enCopias = dest === 'sistema' && sisIdx === 3;
+  /**
+   * Quien no puede cambiar el ejercicio de trabajo NO VE el acto (#557).
+   *
+   * No lo ve apagado con un 403 detras: la pestaña entera desaparece. Es lo
+   * unico que se puede hacer honestamente, porque a un acto apagado hay que
+   * darle un motivo (RNF-082) y el motivo seria «no tienes este permiso» dicho
+   * al lado de un formulario que no lleva a ninguna parte — y el selector de la
+   * cabecera, que es lo que esa persona SI puede hacer, sigue donde estaba.
+   *
+   * <h2>Mientras se lee y ante un fallo tampoco se dibuja, y es a proposito</h2>
+   *
+   * `puede` devuelve `false` en los tres casos —sin el privilegio, mientras se
+   * leen los permisos y si la lectura fallo— y aqui los tres se tratan igual, al
+   * reves de lo que hace `impedimentoDelPrivilegio` (`api/descarga.tsx`) con
+   * las descargas.
+   * Alli hay un boton que ya esta en pantalla y lo que se decide es que decir
+   * encima; aqui lo que se decide es si aparece, y aparecer «por si acaso»
+   * mientras no se sabe es justo lo que ADR-0013 prohibe: **cuando no se pueden
+   * leer los permisos, la interfaz enseña el menu vacio, no todo** —#297 lo
+   * midio con el endpoint contestando 500—. Lo que cuesta es que una lectura
+   * caida esconde una pestaña que quiza se tendria; lo que costaria al reves es
+   * ofrecer un acto registrado a quien el guardia va a rechazar.
+   */
+  const permisosDeLaSesion = usarPermisos();
+  const puedeCambiarElEjercicio = puede(permisosDeLaSesion, 'cambiar_anio', 'especial');
+
+  /* Las cuatro pestañas menos la que el permiso no autoriza. Se filtra aqui y
+     no en `panelesDeSistema` porque el catalogo describe la pantalla y no la
+     sesion: el mismo archivo lo lee quien tiene el privilegio y quien no. */
+  const SIS = panelesDeSistema(pref.ejercicio, ejerciciosCon(pref.ejercicio)).filter(
+    (t) => t.label !== 'Ejercicio de trabajo' || puedeCambiarElEjercicio,
+  );
+  /* Con el rotulo guardado, una pestaña que aun no esta —o que no va a estar—
+     cae en la primera visible en vez de en un panel indefinido. */
+  const sisDef = SIS.find((t) => t.label === sisTab) ?? SIS[0];
+  const enCopias = dest === 'sistema' && sisDef.label === 'Copias de seguridad';
   const respaldos = useRecurso((s) => listarRespaldos({ tamano: 20 }, s), [], enCopias);
   /* `GET /seguridad/parametros` SÍ existe —y el prototipo no lo usaba—: publica
      los conjuntos por ejercicio y su estado. No sus cifras, a propósito: la
      pregunta que contesta esta pestaña es «con qué juego de valores se emitió
      este ejercicio», y esa sólo tiene respuesta a nivel de conjunto. */
-  const enParametros = dest === 'sistema' && sisIdx === 1;
+  const enParametros = dest === 'sistema' && sisDef.label === 'Parámetros';
   const conjuntos = useRecurso((s) => listarConjuntosDeParametros({ tamano: 20, ordenarPor: 'ejercicio', direccion: 'DESCENDENTE' }, s), [], enParametros);
 
   /* ── Mi contraseña: la segunda escritura de esta pantalla (#559) ──
@@ -1162,8 +1214,31 @@ export default function Seguridad({ dest, onDest }: PantallaProps) {
           : observacionDelCambio === ''
             ? 'Falta el motivo: toda modificación se registra con el motivo de quien la hace (RNF-052).'
             : '';
-  const impedimentoDeSistema = enClave ? impedimentoDelCambioDeClave : sisDef.impedimento;
+  /* ── El ejercicio de trabajo (#557) ──────────────────────────
+     La pestaña se reconoce por su rotulo, como «Mi contraseña» y por lo mismo:
+     de aqui cuelga un acto, y un indice movido mandaria el `PUT` equivocado. */
+  const enEjercicio = dest === 'sistema' && sisDef.label === 'Ejercicio de trabajo';
+  const ejercicioElegido = String(val('ejNuevo', pref.ejercicio));
+  const observacionDelEjercicio = String(val('ejMotivo', '')).trim();
+  /* El permiso no entra aqui: sin el no hay pestaña, asi que lo unico que puede
+     impedir el acto es lo que falte por rellenar. */
+  const impedimentoDelCambioDeEjercicio =
+    ejercicioFijado !== null
+      ? 'El ejercicio de trabajo ya se cambió: el acto queda registrado una vez, no se repite pulsando otra vez.'
+      : observacionDelEjercicio === ''
+        ? 'Falta el motivo: toda modificación se registra con el motivo de quien la hace (RNF-052).'
+        : '';
+
+  const impedimentoDeSistema = enEjercicio
+    ? impedimentoDelCambioDeEjercicio
+    : enClave
+      ? impedimentoDelCambioDeClave
+      : sisDef.impedimento;
   const puedeCambiarLaClave = enClave && impedimentoDeSistema === '' && !cambiandoClave;
+  const puedeFijarElEjercicio = enEjercicio && impedimentoDeSistema === '' && !fijandoEjercicio;
+  /* Las dos escrituras de «Sistema» comparten primaria, asi que tambien
+     comparten el «en curso» que la apaga. */
+  const enviandoDeSistema = cambiandoClave || fijandoEjercicio;
 
   /* Al salir de la pestaña se olvida lo que pasó en ella. La confirmación de un
      cambio ya iniciado, leída al volver, diría de un acto de hace una hora lo
@@ -1173,6 +1248,15 @@ export default function Seguridad({ dest, onDest }: PantallaProps) {
     setCambioIniciado(null);
     setErrorAlCambiar(null);
   }, [enClave]);
+
+  /* Lo mismo para el ejercicio, y aqui importa mas: el aviso dice «quedó en la
+     bitácora», y leido al volver una hora despues diria de un acto viejo lo
+     mismo que del que se acaba de hacer. */
+  useEffect(() => {
+    if (enEjercicio) return;
+    setEjercicioFijado(null);
+    setErrorAlFijar(null);
+  }, [enEjercicio]);
 
   const cambiarLaClave = async () => {
     const yo = identidad.datos;
@@ -1197,9 +1281,53 @@ export default function Seguridad({ dest, onDest }: PantallaProps) {
     }
   };
 
+  /**
+   * Fija el ejercicio de trabajo de la sesion (#557).
+   *
+   * <h2>Lo que se dice despues sale de la respuesta, no de lo tecleado</h2>
+   *
+   * El aviso afirma que el acto quedo en la bitacora, y eso solo es cierto
+   * cuando el `PUT` ha vuelto bien: se guarda la sesion que contesto el
+   * servidor y el año que se enseña es el suyo. Anunciarlo desde el desplegable
+   * —o antes del `await`— seria afirmar una fila de auditoria que nadie ha
+   * escrito todavia.
+   *
+   * <h2>Y el selector de la cabecera se mueve DESPUES, como efecto</h2>
+   *
+   * Es lo coherente: quien acaba de decidir que se trabaja en 2024 no quiere
+   * seguir mirando 2026. Pero es un efecto y no lo que se registro, asi que se
+   * mueve aqui —una linea, con `fijar`— y no se menciona en la frase que habla
+   * de la bitacora: lo que quedo registrado es el ejercicio de trabajo de la
+   * sesion, y el filtro de vista sigue sin dejar rastro en ninguna parte.
+   */
+  const fijarElEjercicio = async () => {
+    if (!puedeFijarElEjercicio) return;
+    setFijandoEjercicio(true);
+    setErrorAlFijar(null);
+    try {
+      const sesion = await fijarEjercicioDeTrabajo(Number(ejercicioElegido), observacionDelEjercicio);
+      setEjercicioFijado(sesion);
+      set('ejMotivo', '');
+      if (sesion.ejercicioDeTrabajo !== null) fijar({ ejercicio: String(sesion.ejercicioDeTrabajo) });
+      toast(`Ejercicio de trabajo ${sesion.ejercicioDeTrabajo ?? ejercicioElegido}. Queda en la auditoría con tu usuario.`);
+    } catch (fallo) {
+      setErrorAlFijar(
+        fallo instanceof ErrorDeApi ? fallo : new ErrorDeApi('ERROR_INTERNO', 'No se pudo cambiar el ejercicio', 0),
+      );
+    } finally {
+      setFijandoEjercicio(false);
+    }
+  };
+
   /* ── Shell ─────────────────────────────────────────────────── */
   const labelDest = (DESTINOS.find((d) => d[0] === dest) || ['', 'Seguridad'])[1];
-  const paleta: EntradaDePaleta[] = OPCIONES_DE_PALETA.map(([label, k]) => ({
+  /* «Cambiar el año» se va con su pestaña (#557): una entrada de la paleta que
+     lleva a una pantalla donde ese acto no esta promete algo que la pantalla no
+     puede cumplir. Es la misma regla con la que el lanzador esconde los modulos
+     que la sesion no puede abrir (ADR-0014). */
+  const paleta: EntradaDePaleta[] = OPCIONES_DE_PALETA.filter(
+    ([label]) => label !== 'Cambiar el año' || puedeCambiarElEjercicio,
+  ).map(([label, k]) => ({
     label,
     nota: 'Seguridad',
     ir: () => onDest(k),
@@ -2536,12 +2664,12 @@ export default function Seguridad({ dest, onDest }: PantallaProps) {
             </p>
 
             <div style={{ display: 'flex', alignItems: 'center', gap: 14, flexWrap: 'wrap', borderBottom: '1px solid var(--line)' }}>
-              {SIS.map((t, i) => {
-                const on = sisIdx === i;
+              {SIS.map((t) => {
+                const on = sisDef.label === t.label;
                 return (
                   <button
                     key={t.label}
-                    onClick={() => setSisTab(i)}
+                    onClick={() => setSisTab(t.label)}
                     aria-pressed={on}
                     style={{
                       border: 0,
@@ -2688,6 +2816,43 @@ export default function Seguridad({ dest, onDest }: PantallaProps) {
                 </div>
               )}
 
+              {/* Las dos cosas que se confunden, dichas una al lado de la otra
+                  (#557). El artboard dibujaba sólo el desplegable, así que no
+                  había forma de saber que cambiar de año ahí no era lo mismo
+                  que cambiarlo en la cabecera. */}
+              {enEjercicio && (
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 12, padding: '14px 16px', borderTop: '1px solid var(--line)' }}>
+                  <p style={{ margin: 0, fontSize: 12.5, lineHeight: 1.55, color: 'var(--ink-3)', textWrap: 'pretty' }}>
+                    El selector de la cabecera está en{' '}
+                    <span style={{ fontFamily: 'var(--font-mono)' }}>{pref.ejercicio}</span> y es sólo lo que estás mirando: no
+                    pide permiso y no queda en ninguna parte. Esto de aquí fija el{' '}
+                    <strong style={{ fontWeight: 600, color: 'var(--ink-2)' }}>ejercicio de trabajo de tu sesión</strong>, que es
+                    sobre el que escriben los doce módulos, y por eso lleva motivo y exige el privilegio Especial sobre
+                    «cambiar_anio».
+                  </p>
+                  {errorAlFijar !== null && (
+                    <Aviso tono="bad" titulo="No se cambió el ejercicio de trabajo">
+                      {errorAlFijar.mensaje}
+                      {errorAlFijar.incidencia !== undefined && (
+                        <>
+                          {' '}
+                          <span style={{ opacity: 0.75 }}>Incidencia {errorAlFijar.incidencia}.</span>
+                        </>
+                      )}
+                    </Aviso>
+                  )}
+                  {ejercicioFijado !== null && (
+                    <Aviso tono="ok" titulo="Ejercicio de trabajo cambiado, y anotado en la bitácora">
+                      Tu sesión trabaja ahora en{' '}
+                      <span style={{ fontFamily: 'var(--font-mono)' }}>{ejercicioFijado.ejercicioDeTrabajo}</span>. El servidor
+                      registró el acto con tu usuario, la hora y el motivo que escribiste, y se puede ver en «Auditoría». El
+                      selector de la cabecera ha pasado también a ese año, pero eso es un efecto: lo registrado es el ejercicio de
+                      trabajo, no lo que estés mirando.
+                    </Aviso>
+                  )}
+                </div>
+              )}
+
               {/* Quién eres, que es lo único que la petición lleva además del
                   motivo. El artboard no dibujaba nada de esto: daba por hecho
                   que la pantalla sabía a quién estaba cambiando la contraseña, y
@@ -2748,9 +2913,14 @@ export default function Seguridad({ dest, onDest }: PantallaProps) {
                 <p id="motivo-de-la-primaria" style={{ margin: 0, flex: 1, minWidth: 170, fontSize: 12, color: 'var(--ink-3)', textWrap: 'pretty' }}>
                   {impedimentoDeSistema === '' ? sisDef.pie : impedimentoDeSistema}
                 </p>
+                {/* Una primaria para cuatro pestañas, y por eso el reparto va
+                    por ROTULO: con el indice, una pestaña escondida por permiso
+                    haria que «Cambiar el ejercicio» mandara el `PUT` de la
+                    contraseña. Las dos pestañas que no escriben nada la dejan
+                    apagada con su impedimento, que es lo que ya hacian. */}
                 <button
-                  onClick={() => void cambiarLaClave()}
-                  disabled={impedimentoDeSistema !== '' || cambiandoClave}
+                  onClick={() => void (enEjercicio ? fijarElEjercicio() : cambiarLaClave())}
+                  disabled={impedimentoDeSistema !== '' || enviandoDeSistema}
                   title={impedimentoDeSistema || undefined}
                   aria-describedby="motivo-de-la-primaria"
                   style={{
@@ -2761,11 +2931,11 @@ export default function Seguridad({ dest, onDest }: PantallaProps) {
                     color: '#fff',
                     fontSize: 13,
                     fontWeight: 500,
-                    cursor: impedimentoDeSistema === '' && !cambiandoClave ? 'pointer' : 'not-allowed',
-                    opacity: impedimentoDeSistema === '' && !cambiandoClave ? 1 : 0.5,
+                    cursor: impedimentoDeSistema === '' && !enviandoDeSistema ? 'pointer' : 'not-allowed',
+                    opacity: impedimentoDeSistema === '' && !enviandoDeSistema ? 1 : 0.5,
                   }}
                 >
-                  {cambiandoClave ? 'Iniciando…' : sisDef.primaria}
+                  {cambiandoClave ? 'Iniciando…' : fijandoEjercicio ? 'Cambiando…' : sisDef.primaria}
                 </button>
               </div>
             </section>

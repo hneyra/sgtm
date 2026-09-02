@@ -5,7 +5,7 @@ import { PermisosCtx, type EstadoDePermisos } from './shell/permisos';
 import { Icono } from './ds/Icono';
 import { ICO } from './ds/iconos';
 import { rotuloDeLaEntidad } from './api/sesion';
-import { municipalidadDeLaSesion, permisosDeLaSesion } from './api/seguridad';
+import { identidadDeLaSesion, municipalidadDeLaSesion, permisosDeLaSesion } from './api/seguridad';
 import { useRecurso } from './api/useRecurso';
 
 /* Cada módulo llega en su propio trozo: el arranque no paga los doce. */
@@ -116,6 +116,50 @@ export function App() {
     const nombre = laMunicipalidad.datos?.nombre;
     if (nombre !== undefined && nombre !== '') setPref((p) => ({ ...p, entidad: nombre }));
   }, [laMunicipalidad.datos]);
+
+  /**
+   * El año con el que se abre, cuando la sesion tiene uno fijado (#557).
+   *
+   * <h2>Nulo NO quiere decir «el corriente»</h2>
+   *
+   * Quiere decir que nadie ha ejecutado `PUT /seguridad/sesion/ejercicio`, y el
+   * contrato lo dice con todas las letras. Asi que con nulo el filtro de vista
+   * se queda en su valor local de partida y **no se deriva ninguno del reloj**:
+   * un año sacado de `new Date()` afirmaria que alguien lo eligio, que es la
+   * misma clase de dato inventado que un cero en una celda de dinero.
+   *
+   * Y lo que se fija aqui es el **filtro de vista**, no el acto: esta linea no
+   * escribe nada en ninguna parte. Lo unico que hace es empezar mirando el año
+   * sobre el que esta sesion dijo que trabaja, en vez de uno compilado.
+   *
+   * <h2>El año que llega puede no estar en la lista del selector</h2>
+   *
+   * `EJERCICIOS` son cuatro años compilados y el dominio admite de 1990 a 2100,
+   * asi que se toma **el que diga la sesion** y es el selector el que se
+   * ensancha para poder ofrecerlo (`ejerciciosCon`, en `shell/preferencias`).
+   *
+   * Las dos alternativas se descartaron midiendo: ignorar el año por no estar
+   * en la lista deja la cabecera diciendo uno distinto del que la sesion
+   * declara, sin que nada lo explique; y fijarlo sin ensanchar la lista deja el
+   * `<select>` fuera de sitio, porque un `value` que no esta entre las
+   * `<option>` no se queda en el valor —medido con `ejercicioDeTrabajo` 2019 en
+   * el panel de inicio: pedia los indicadores de 2019 y la pildora decia 2026—.
+   *
+   * <h2>Se lee aqui aunque Seguridad lo lea tambien</h2>
+   *
+   * Son dos lecturas de la misma ruta y a proposito: esta la hace toda sesion al
+   * arrancar y calla —un fallo deja el año local, no una pantalla rota—,
+   * mientras la de `Seguridad.tsx` solo ocurre al abrir «Mi contraseña» y
+   * necesita su propio `cargando`, su fallo y su «Reintentar», porque sin el
+   * `usuarioId` ese acto no puede salir. Compartirla exigiria un contexto mas
+   * para ahorrar un GET de sesion.
+   */
+  const laIdentidad = useRecurso((senal) => identidadDeLaSesion(senal), []);
+  useEffect(() => {
+    const ejercicio = laIdentidad.datos?.ejercicioDeTrabajo;
+    if (ejercicio === undefined || ejercicio === null) return;
+    setPref((p) => ({ ...p, ejercicio: String(ejercicio) }));
+  }, [laIdentidad.datos]);
 
   /* Lo que la sesion puede, leido UNA vez para las doce pantallas (#592).
 

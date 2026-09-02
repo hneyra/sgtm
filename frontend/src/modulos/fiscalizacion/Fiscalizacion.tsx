@@ -882,12 +882,12 @@ export default function Fiscalizacion({ dest, onDest }: PantallaProps) {
    *
    * Los cuatro primeros son los que el servidor exige. El quinto —ejercicio,
    * criterio y fiscalizador— **el servidor lo admite en blanco y esta pantalla
-   * no**, y el motivo esta medido: `POST /programas/{id}/muestra` contesta «El
-   * programa no declara 'X', y sin el no se puede sortear su muestra» por cada
-   * uno de los tres, y **no hay ninguna ruta de edicion de un programa**
-   * —«reprogramar es registrar otro»—, de modo que lo que nace sin ellos es una
-   * fila esteril que nadie puede arreglar. Dejar pasar aqui el dato que falta
-   * traslada el fallo a un acto despues y sin vuelta atras.
+   * no**, y el motivo esta medido: `POST /fiscalizacion/programas/{id}/muestra`
+   * contesta «El programa no declara 'X', y sin el no se puede sortear su
+   * muestra» por cada uno de los tres, y **no hay ninguna ruta de edicion de un
+   * programa** —«reprogramar es registrar otro»—, de modo que lo que nace sin
+   * ellos es una fila esteril que nadie puede arreglar. Dejar pasar aqui el
+   * dato que falta traslada el fallo a un acto despues y sin vuelta atras.
    *
    * Los tres se descubrieron **de uno en uno y operando la pantalla**, que es
    * lo que este orden de comprobacion obliga a hacer: el 422 nombra el primero

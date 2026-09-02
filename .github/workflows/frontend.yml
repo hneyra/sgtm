@@ -78,6 +78,16 @@ jobs:
       - name: Los vocabularios cerrados cuadran con lo que la pantalla ofrece
         run: yarn vocabularios
 
+      # Tampoco: lee el fuente y el contrato. Va en este trabajo y no en el del
+      # navegador porque no necesita ni compilar ni servir nada, y porque lo que
+      # mide se rompe al integrar el contrato — que es un camino que dispara
+      # este flujo (`docs/50-api/**`, arriba). La prosa que dice «esto el backend
+      # no lo publica» envejece igual que una cifra, y hasta #735 nadie la
+      # miraba: los cinco casos del 2026-09-02 pasaron en verde por los diez
+      # arneses que habia.
+      - name: Lo que la prosa dice del backend sigue siendo verdad
+        run: yarn prosa
+
       - name: Compilar para producción
         run: yarn build
 

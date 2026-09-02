@@ -23,7 +23,8 @@
     "impresion": "node verificaciones/impresion.mjs",
     "ficha-catastral": "node verificaciones/ficha-catastral.mjs",
     "fechas": "node verificaciones/fechas.mjs",
-    "node": "node verificaciones/node.mjs"
+    "node": "node verificaciones/node.mjs",
+    "prosa": "node verificaciones/prosa.mjs"
   },
   "dependencies": {
     "react": "^19.1.0",
