@@ -9,10 +9,9 @@ import pe.gob.sgtm.autorizacion.Privilegio;
 import pe.gob.sgtm.autorizacion.RequiereAcceso;
 import pe.gob.sgtm.catastro.aplicacion.TablasDeValuacion;
 import pe.gob.sgtm.dominio.Ejercicio;
+import pe.gob.sgtm.parametros.FaltaPublicar;
 import pe.gob.sgtm.parametros.LectorDeParametros;
 import pe.gob.sgtm.web.Api;
-import pe.gob.sgtm.web.CodigoDeError;
-import pe.gob.sgtm.web.ProblemaDeNegocio;
 
 /**
  * Aranceles de terreno: {@code GET /api/v1/catastro/tablas/aranceles?anio=2026} (RF-009).
@@ -21,6 +20,35 @@ import pe.gob.sgtm.web.ProblemaDeNegocio;
  * ejercicio no tiene ninguno, es {@code NO_ENCONTRADO} y no una lista vacia —una lista vacia diria
  * que la municipalidad no tiene aranceles, cuando lo que pasa es que todavia nadie cerro la carga
  * del ejercicio—.
+ *
+ * <h2>Por que sigue siendo 404, y por que el cuerpo lleva el discriminador (#723)</h2>
+ *
+ * <p>Esta ruta y sus dos hermanas —{@link DepreciacionController}, {@link ValorUnitarioController}—
+ * eran las <b>tres unicas</b> del backend que traducian una excepcion de la familia «falta
+ * publicar» a algo que no fuera un 422, y por eso el censo de #691 no las toco. #723 pregunta si el
+ * codigo es el correcto. Lo es, por tres cosas medidas:
+ *
+ * <ol>
+ *   <li><b>Lo que se pide es un documento, no un acto.</b> La ruta nombra un recurso —la tabla de
+ *       aranceles sellada de ese ano— y cuando no hay ninguna, «no esta» es literalmente lo que
+ *       pasa. Los 422 de esta familia estan todos detras de una peticion que el servidor intento
+ *       <b>ejecutar</b>. Es la distincion que #540 y #547 ya dejaron escrita.
+ *   <li><b>En esta misma ruta el 422 ya significa otra cosa.</b> {@code ?anio=1800} construye un
+ *       {@link Ejercicio} fuera de rango y sale como {@code 422 VALIDACION} sin discriminador: un
+ *       error que quien atiende corrige tecleando un ano de verdad. Unificar pondria las dos cosas
+ *       —una que se arregla en la pantalla y otra que no— bajo el mismo codigo justo donde
+ *       conviven.
+ *   <li><b>El codigo no es lo que le dice a un programa que hacer.</b> Eso lo dice el miembro
+ *       {@code parametroQueFalta} (#604), que el contrato ya declara en el esquema compartido
+ *       {@code Error} y que hasta #723 estas tres no llevaban. Con el, un 404 de aqui se distingue
+ *       de los otros ciento trece del backend —«ese contribuyente no esta en el padron»— sin leer
+ *       el texto.
+ * </ol>
+ *
+ * <p>Lo que <b>no</b> se hizo, y conviene decirlo: no se cambio el estado. Cambiarlo habria movido
+ * lo que sale por el cable sin cambiar lo que nadie puede hacer con ello —ningun cliente lee hoy
+ * este cuerpo por programa—, mientras que el miembro cambia lo que se puede hacer sin mover el
+ * cable.
  */
 @RestController
 @RequestMapping(Api.RAIZ + "/catastro/tablas/aranceles")
@@ -38,10 +66,7 @@ public class ArancelController {
         try {
             return tablas.aranceles(new Ejercicio(anio)).stream().map(ArancelResource::de).toList();
         } catch (LectorDeParametros.EjercicioSinSellar excepcion) {
-            String mensaje = excepcion.getMessage();
-            throw new ProblemaDeNegocio(
-                    CodigoDeError.NO_ENCONTRADO,
-                    mensaje == null ? "Ejercicio sin sellar" : mensaje);
+            throw FaltaPublicar.noEncontrado(excepcion);
         }
     }
 }

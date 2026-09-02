@@ -81,6 +81,23 @@ class DiscriminadorDeLoQueFaltaPublicarTest {
                         "CampaniaIncompleta",
                         "BaseDesconocida",
                         "CondicionesSinPublicar");
+        // El censo va PRIMERO, y no es un detalle de orden: AssertJ para en la primera
+        // asercion que falla, asi que con el `contains` delante el rojo nombraria la
+        // excepcion y no diria cuantas quedan. Asi la primera cifra que se lee es «18
+        // donde deberia haber 19», que es lo que el AC 2 de #723 pide.
+        assertThat(familia)
+                .as(
+                        "y el censo no puede encoger sin que se vea. Es un suelo y no una cifra"
+                                + " exacta a proposito: anadir una excepcion a la familia no obliga a"
+                                + " tocar esta guarda, pero quitarle la interfaz a una si la pone roja"
+                                + " diciendo las dos cifras")
+                .hasSizeGreaterThanOrEqualTo(19);
+        assertThat(familia)
+                .as(
+                        "y la del cuadro de valores unitarios, que tenia llave() y no declaraba la"
+                                + " interfaz: hoy no la traduce nadie a una respuesta, y por eso"
+                                + " justamente la trampa solo saltaba al pisarla (#723)")
+                .contains("ValorUnitarioSinParametrizar");
         assertThat(familia)
                 .as(
                         "y la del dominio puro, que no puede declararla: vive bajo la interfaz en el"
@@ -112,8 +129,8 @@ class DiscriminadorDeLoQueFaltaPublicarTest {
                         RevisorDelDiscriminador.familiaSegunLasFuentes(fuentesDeProduccion()));
 
         assertThat(hallazgos)
-                .as("los tres que traducen sin el miembro; los dos en regla no")
-                .hasSize(3);
+                .as("los cuatro que traducen sin el miembro; los tres en regla no")
+                .hasSize(4);
         assertThat(hallazgos.stream().map(Hallazgo::fragmento).toList())
                 .as("y el hallazgo nombra la clase y el metodo, no «el catch de la linea 40»")
                 .containsExactlyInAnyOrder(
@@ -121,7 +138,9 @@ class DiscriminadorDeLoQueFaltaPublicarTest {
                                 + " EjercicioSinSellar",
                         "MuestraDeControladorSinDiscriminador.sinLaFila captura ParametroAusente",
                         "MuestraDeControladorSinDiscriminador.sinElPuntoDeRedondeo captura"
-                                + " PuntoSinPolitica");
+                                + " PuntoSinPolitica",
+                        "MuestraDeControladorSinDiscriminador.sinConjuntoSelladoEnUn404 captura"
+                                + " EjercicioSinSellar");
     }
 
     @Test
@@ -187,8 +206,8 @@ class DiscriminadorDeLoQueFaltaPublicarTest {
     }
 
     @Test
-    @DisplayName("un catch de la familia que no contesta 422 se deja pasar")
-    void loQueNoEsUn422NoEsAsuntoDeEstaGuarda() {
+    @DisplayName("un catch de la familia que no compone ninguna respuesta se deja pasar")
+    void loQueNoContestaNadaNoEsAsuntoDeEstaGuarda() {
         String fuente =
                 """
                 class Ejemplo {
@@ -199,7 +218,23 @@ class DiscriminadorDeLoQueFaltaPublicarTest {
                             return Fila.sinDerecho(sinSellar.getMessage());
                         }
                     }
+                }
+                """;
+        assertThat(
+                        RevisorDelDiscriminador.revisar(
+                                "Ejemplo.java", fuente, Set.of("EjercicioSinSellar")))
+                .as(
+                        "contar lo que si se puede contar y decir por que falta el resto no deja"
+                                + " ninguna respuesta sin miembro: no hay respuesta")
+                .isEmpty();
+    }
 
+    @Test
+    @DisplayName("y uno que contesta 404 SI lo es: el miembro falta igual (#723)")
+    void unCuatrocientosCuatroTambienNecesitaElMiembro() {
+        String fuente =
+                """
+                class Ejemplo {
                     Cuadro cuadro() {
                         try {
                             return leerCuadro();
@@ -208,16 +243,28 @@ class DiscriminadorDeLoQueFaltaPublicarTest {
                                     CodigoDeError.NO_ENCONTRADO, sinSellar.getMessage());
                         }
                     }
+
+                    Cuadro conMiembro() {
+                        try {
+                            return leerCuadro();
+                        } catch (LectorDeParametros.EjercicioSinSellar sinSellar) {
+                            throw FaltaPublicar.noEncontrado(sinSellar);
+                        }
+                    }
                 }
                 """;
         assertThat(
                         RevisorDelDiscriminador.revisar(
                                 "Ejemplo.java", fuente, Set.of("EjercicioSinSellar")))
                 .as(
-                        "el criterio es el del issue, literal: todo catch que traduce estas"
-                                + " excepciones A UN 422. Contar lo que si se puede contar, o"
-                                + " contestar 404 al pedir un cuadro publicado, no lo es")
-                .isEmpty();
+                        "#691 escribio el criterio literal —«a un 422»— y con el las tres lecturas"
+                                + " de cuadro de catastro se quedaron fuera de la guarda, mudas. Lo que"
+                                + " le falta a la respuesta no depende del numero")
+                .singleElement()
+                .satisfies(
+                        hallazgo ->
+                                assertThat(hallazgo.fragmento())
+                                        .isEqualTo("Ejemplo.cuadro captura EjercicioSinSellar"));
     }
 
     @Test
