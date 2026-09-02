@@ -26,6 +26,12 @@ yarn mirar      # recorre las 65 pantallas en Chromium y guarda una captura de
                 # cada una en .capturas/; falla si alguna da un error de consola
                 # o si el <main> se queda en blanco (que es como falla de verdad
                 # una pantalla sin conectar: en silencio)
+yarn sin-red    # las mismas CON LA RED CORTADA: ninguna puede enseñar una cifra
+yarn errores    # el catálogo de errores contra el del backend, la puerta contra
+                # respuestas fabricadas, y las pantallas ante un 405 y un 500
+yarn paleta     # la paleta de comandos se opera sólo con el teclado
+yarn vocabularios  # los desplegables, contra el enumerado del backend
+yarn flujos     # opera los botones contra el backend real; necesita SGTM_TOKEN
 ```
 
 `yarn mirar` necesita la vista previa levantada; si no está en el 5180, se le dice con
@@ -137,6 +143,16 @@ Mientras no exista la puerta de sesión, el token sale de `VITE_SGTM_TOKEN` o de
 `localStorage['sgtm.token']`; cuando la haya, cambia una sola función —`token()` en
 `cliente.ts`—. **Caduca a los 15 minutos y no se renueva solo**: al vencer, la pantalla
 dice «La sesión no vale» y no ofrece reintentar, porque reintentar no lo arregla.
+
+Esa es la regla entera del trato de errores, y vale para todos: **«Reintentar» sólo sale
+donde reintentar puede cambiar algo**. Un permiso que falta sale igual las veces que se
+pulse; un verbo que la ruta no admite no puede funcionar nunca. Lo sujeta `yarn errores`,
+que la mide por sus tres mitades —fallan por separado—: el catálogo de `cliente.ts`
+contra el enumerado del backend, `solicitar()` contra respuestas fabricadas, y las
+pantallas en un navegador con **todas** las peticiones contestadas 405, donde ninguna
+puede ofrecer el botón, y con un 500, donde alguna tiene que ofrecerlo. Sin ese contraste,
+quitar el botón de los once sitios en que se escribe —ocho módulos con su propio aviso, más el
+compartido— dejaría la primera mitad en verde.
 
 ### Desplegado con el resto del sistema
 

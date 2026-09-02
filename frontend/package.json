@@ -12,7 +12,8 @@
     "flujos": "node verificaciones/flujos.mjs",
     "sin-red": "node verificaciones/sin-red.mjs",
     "paleta": "node verificaciones/paleta.mjs",
-    "vocabularios": "node verificaciones/vocabularios.mjs"
+    "vocabularios": "node verificaciones/vocabularios.mjs",
+    "errores": "node verificaciones/errores.mjs"
   },
   "dependencies": {
     "react": "^19.1.0",
