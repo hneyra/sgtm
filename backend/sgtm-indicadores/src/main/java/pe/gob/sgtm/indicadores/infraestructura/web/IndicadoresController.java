@@ -3,15 +3,21 @@ package pe.gob.sgtm.indicadores.infraestructura.web;
 import java.time.Clock;
 import java.time.Instant;
 import java.time.LocalDate;
+import java.util.EnumSet;
+import java.util.Set;
 import org.jspecify.annotations.Nullable;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
+import pe.gob.sgtm.auditoria.OrigenContext;
+import pe.gob.sgtm.autorizacion.ComprobadorDeAcceso;
 import pe.gob.sgtm.autorizacion.Privilegio;
 import pe.gob.sgtm.autorizacion.RequiereAcceso;
 import pe.gob.sgtm.dominio.Ejercicio;
+import pe.gob.sgtm.indicadores.aplicacion.ConsultaDeTrabajoParado;
 import pe.gob.sgtm.indicadores.aplicacion.PanelDeRecaudacion;
+import pe.gob.sgtm.indicadores.dominio.FrenteDeTrabajo;
 import pe.gob.sgtm.web.Api;
 import pe.gob.sgtm.web.CodigoDeError;
 import pe.gob.sgtm.web.ProblemaDeNegocio;
@@ -46,10 +52,18 @@ public class IndicadoresController {
     static final String ACCESO = "inicio";
 
     private final PanelDeRecaudacion panel;
+    private final ConsultaDeTrabajoParado trabajoParado;
+    private final ComprobadorDeAcceso comprobador;
     private final Clock reloj;
 
-    public IndicadoresController(PanelDeRecaudacion panel, Clock reloj) {
+    public IndicadoresController(
+            PanelDeRecaudacion panel,
+            ConsultaDeTrabajoParado trabajoParado,
+            ComprobadorDeAcceso comprobador,
+            Clock reloj) {
         this.panel = panel;
+        this.trabajoParado = trabajoParado;
+        this.comprobador = comprobador;
         this.reloj = reloj;
     }
 
@@ -60,6 +74,41 @@ public class IndicadoresController {
         Instant ahora = reloj.instant();
         LocalDate hoy = LocalDate.now(reloj);
         return PanelResource.de(panel.del(ejercicioDe(ejercicio, hoy), hoy, ahora));
+    }
+
+    /**
+     * El trabajo parado por modulo: que espera un acto y no cobra mientras espera (#549).
+     *
+     * <h2>El permiso de cada frente se comprueba aqui, uno por uno</h2>
+     *
+     * <p>{@code @RequiereAcceso} abre la pantalla de inicio, y eso es lo unico que ese guardia
+     * puede decir: el endpoint es uno y los frentes son de cuatro modulos distintos. Asi que el
+     * controlador —que es quien conoce al usuario en curso, por {@code OrigenContext}— pregunta al
+     * {@link ComprobadorDeAcceso} por el acceso de <b>cada</b> frente y le pasa al caso de uso solo
+     * los que salen que si. Es el mismo reparto que {@code ConsultaDeConciliacion} eligio para el
+     * permiso de fiscalizacion de {@code conciliadaConRentas=No}.
+     *
+     * <p>Un frente que el perfil no puede ver <b>no se consulta y no se publica</b>. No sale vacio
+     * ni con un guion: una fila vacia ya dice que ahi hay algo que mirar (#297).
+     */
+    @GetMapping("/trabajo-parado")
+    @RequiereAcceso(acceso = ACCESO, privilegio = Privilegio.LECTURA)
+    public TrabajoParadoResource trabajoParado(
+            @RequestParam(required = false) @Nullable String ejercicio) {
+
+        Instant ahora = reloj.instant();
+        LocalDate hoy = LocalDate.now(reloj);
+        String usuario = OrigenContext.actual().usuario();
+
+        Set<FrenteDeTrabajo> visibles = EnumSet.noneOf(FrenteDeTrabajo.class);
+        for (FrenteDeTrabajo frente : FrenteDeTrabajo.values()) {
+            if (comprobador.autoriza(usuario, frente.acceso(), Privilegio.LECTURA, hoy)) {
+                visibles.add(frente);
+            }
+        }
+
+        return TrabajoParadoResource.de(
+                trabajoParado.del(ejercicioDe(ejercicio, hoy), hoy, ahora, visibles));
     }
 
     private static Ejercicio ejercicioDe(@Nullable String texto, LocalDate hoy) {

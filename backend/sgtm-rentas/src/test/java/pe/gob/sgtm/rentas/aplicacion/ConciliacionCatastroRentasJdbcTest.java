@@ -48,6 +48,7 @@ import pe.gob.sgtm.dominio.Observacion;
 import pe.gob.sgtm.esquema.BaseDeDatosDePrueba;
 import pe.gob.sgtm.esquema.ContextoDeTenant;
 import pe.gob.sgtm.plataforma.tenant.TenantTransactionManager;
+import pe.gob.sgtm.rentas.PrediosSinConciliar;
 import pe.gob.sgtm.rentas.aplicacion.ConsultaDeConciliacion.FichaConciliada;
 import pe.gob.sgtm.rentas.dominio.ConciliacionRepository.ResumenDeConciliacion;
 import pe.gob.sgtm.rentas.dominio.DeclaracionJurada;
@@ -678,6 +679,33 @@ class ConciliacionCatastroRentasJdbcTest {
                                     + " de «3 predios en el padron»: una acusacion de omision a"
                                     + " todo el distrito")
                     .isEqualTo(1);
+        }
+
+        @Test
+        @DisplayName("#549 — el frente de Catastro publica los que FALTAN, no el padron entero")
+        void elFrenteDeCatastroPublicaLosQueFaltan() {
+            // AC 2.4 por construccion: el puerto del panel NO cuenta por su cuenta, llama a
+            // este mismo resumen. Lo que esta prueba sujeta es CUAL de sus tres cifras
+            // publica: `total` seria «14 422 predios sin conciliar» sobre un padron de
+            // 14 422, que es exactamente la acusacion de omision que #564 vino a cerrar.
+            PrediosSinConciliar puerto = new PrediosSinConciliarRentas(consulta);
+            ResumenDeConciliacion resumen = consulta.resumen(E2026, HOY);
+
+            assertThat(puerto.cuantosA(E2026, HOY)).isEqualTo(resumen.noConciliados()).isEqualTo(1);
+            assertThat(puerto.cuantosA(E2026, HOY))
+                    .as("y no el total del padron, ni los que si declararon")
+                    .isNotEqualTo(resumen.total())
+                    .isNotEqualTo(resumen.conciliados());
+        }
+
+        @Test
+        @DisplayName("#549 — y el frente lleva su ejercicio: con otro, faltan todos")
+        void elFrenteLlevaSuEjercicio() {
+            PrediosSinConciliar puerto = new PrediosSinConciliarRentas(consulta);
+
+            assertThat(puerto.cuantosA(E2025, HOY))
+                    .as("la DJ de 2026 no concilia 2025: el padron afecto se rehace cada año")
+                    .isEqualTo(3);
         }
 
         @Test

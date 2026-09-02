@@ -51,4 +51,15 @@ public interface PadronDePapeletasRepository {
      * @return una línea por grupo con papeletas, en el orden de la clave; vacía si no hay ninguna
      */
     List<LineaDelResumen> resumir(CriterioDePadron criterio, AgrupacionDelResumen agrupacion);
+
+    /**
+     * Cuántas papeletas cumplen el criterio y cuánto suman, <b>sin traerse ninguna</b> (#549).
+     *
+     * <p>Corre el <b>mismo</b> {@code FROM} y el <b>mismo</b> {@code WHERE} que {@link #buscar}: es
+     * el {@code count(*)} que esa página ya ejecuta, con un {@code sum(...)} al lado y sin la
+     * consulta de filas. Que sea la misma expresión y no otra es lo que impide que el recuento de
+     * la pantalla de aterrizaje y el pie del padrón digan cosas distintas de la misma población (AC
+     * 2.4 de #549); si alguien cambia {@code donde(...)}, las dos cifras cambian juntas.
+     */
+    RecuentoDelPadron contar(CriterioDePadron criterio);
 }
