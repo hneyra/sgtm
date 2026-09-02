@@ -196,6 +196,34 @@ día, y no habría forma de saber cuál está mal.
    nunca `…​.dominio.…` ni `…​.infraestructura.…` de otro. Lo verifica Spring Modulith.
 2. **`cuentacorriente` no conoce a nadie.** Recibe asientos; no sabe si vienen de un predial, de
    una papeleta o de una licencia. Si tuviera que saberlo, el modelo estaría mal.
+
+   **El matiz que #635 obligó a escribir: puede *preguntar*, sin conocer a nadie.** La regla
+   prohíbe que este contexto **importe un tipo** de otro, y eso sigue siendo cierto al pie de la
+   letra. Lo que #635 necesitaba —que el `predioId` o el `vehiculoId` de un alta de deuda sea del
+   contribuyente del movimiento— no se podía resolver ni copiando el predicado de vigencia de la
+   titularidad en SQL de `cuentacorriente` (sería una segunda definición de una regla de
+   `catastro`, y la que decidiera quién es el titular acabaría siendo la que nadie recuerda que
+   existe) ni moviendo el acto a `rentas` (el libro es quien asienta). Se resuelve con un **puerto
+   de salida** escrito en el vocabulario del libro —`TitularesDeLaUnidad`: dos `long` y una fecha,
+   sin un solo tipo ajeno— que **implementa `rentas`**, el único contexto que ve predio, vehículo
+   y padrón de personas a la vez. Es la misma forma que `pe.gob.sgtm.autorizacion.ComprobadorDeAcceso`
+   —declarado en `plataforma`, implementado en `seguridad`—, y **no crea ninguna arista nueva** en
+   el mapa de §2: `rentas ──► cuentacorriente` ya existía.
+
+   El precedente que **no** vale aquí, y conviene tenerlo dicho:
+   `AsientoRepository.contribuyentePorCodigo` resuelve una tabla ajena en SQL y se justifica en su
+   javadoc «contra una tabla con la que ya hay clave foránea». Con `titularidad` y `vehiculo` **no
+   la hay** —`cuenta_corriente_asiento` y `saldo_proyectado` sólo referencian `contribuyente`—, así
+   que copiar ese patrón sería apoyarse en una justificación que no aplica.
+
+   **Y lo que el puerto contesta son dos cosas, no una lista** ([#680](https://github.com/hneyra/sgtm/issues/680)).
+   Hasta ahí devolvía los titulares y su vacío significaba a la vez «ese identificador no apunta a
+   nada» y «la unidad existe y a esa fecha no la reclama nadie», que se arreglan de forma distinta
+   y acababan en el mismo 422 con el mismo texto — con lo cual **no se podía dar de alta deuda
+   sobre un predio sin titularidad vigente**, que es el 34,5 % del padrón de Catacaos (#586) y
+   justo el predio que la fiscalización detecta y visita. La distinción vive en el tipo que el
+   puerto devuelve, `TitularidadDeLaUnidad`, y su compacto rechaza la respuesta incoherente —una
+   unidad fuera del padrón con titulares dentro—, que es lo que impide volver a confundirlas.
 3. **`parametros` es de solo lectura** para todos los demás.
 4. **Nadie escribe en `catastro` salvo `catastro` y las dos transferencias.** La de `rentas`
    va por el puerto público `GestorDeTitularidad` del paquete raíz de catastro
