@@ -28,6 +28,7 @@ historial de por qué se hizo algo vale más que la coherencia del documento.
 | [0020](ADR-0020-la-sesion-del-ciudadano.md) | El ciudadano tiene sesión propia —realm y emisor distintos— y su consulta recorre el registro de municipalidades, una a la vez | Aceptado |
 | [0021](ADR-0021-la-geometria-del-predio.md) | La base modela la geometría del predio, en `geography(MultiPolygon, 4326)` porque una instalación atiende zonas UTM distintas — y esa geometría **no** valoriza | Aceptado |
 | [0022](ADR-0022-el-visor-del-plano-catastral.md) | El visor del plano: el polígono entero en 4326, acotado por marco y **negándose** antes que recortarse; los predios sin geometría se cuentan, y de las cinco capas del diseño sólo los lotes tienen con qué dibujarse | Aceptado |
+| [0023](ADR-0023-la-muestra-se-sortea.md) | La muestra de fiscalización se **sortea** a partir de los parámetros del programa; «Omisos y subvaluadores» aporta sus **filtros**, no una lista de predios — y la esquela no existe | Aceptado |
 
 Decisiones **pendientes**: [GOB-02](../../00-gobierno/decisiones-abiertas.md).
 

@@ -53,9 +53,10 @@ import pe.gob.sgtm.web.ProblemaDeNegocio;
  *       pantalla—, y eso es una decision que este issue no toma. Tiene issue propio: <b>#572</b>.
  * </ul>
  *
- * <p>{@code AdministrarPermisos.fijarParaUsuario} esta en la misma situacion y por un motivo
- * propio: es la excepcion de usuario, y escribirla sin poder <b>leerla</b> antes era administrar a
- * ciegas. Leerla ya se puede ({@code GET /seguridad/usuarios/&#123;id&#125;/permisos}, #543).
+ * <p>{@code AdministrarPermisos.fijarParaUsuario} <b>ya no</b>: estuvo en la misma situacion por un
+ * motivo propio —es la excepcion de usuario, y escribirla sin poder <b>leerla</b> antes era
+ * administrar a ciegas—, y ese motivo se agoto cuando #543 publico la lectura. La escritura es
+ * {@code PUT /seguridad/usuarios/&#123;id&#125;/permisos} desde #585.
  */
 @Service
 public class AdministrarSeguridad {
