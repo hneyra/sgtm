@@ -68,6 +68,8 @@ public class MuestraDelProgramaRepositoryJdbc extends RepositorioJdbc
             campos.put("programaId", fila.programaId());
             campos.put("predioId", fila.predioId());
             campos.put("codRefCatastral", fila.codigoReferenciaCatastral());
+            // Nulo cuando el predio no tiene titular vigente (#586, V73): es el predio que nadie
+            // reclama, y la columna lo dice en vez de apartarlo.
             campos.put("contribuyenteId", fila.contribuyenteId());
             campos.put("condicion", fila.condicion().name());
             campos.put("areaCatastral", valor(fila.areaCatastral()));
@@ -172,7 +174,10 @@ public class MuestraDelProgramaRepositoryJdbc extends RepositorioJdbc
                 fila.getLong("programa_id"),
                 fila.getLong("predio_id"),
                 fila.getString("cod_ref_catastral"),
-                fila.getLong("contribuyente_id"),
+                // getObject y no getLong: `getLong` devuelve 0 ante un NULL, y desde V73 esa
+                // columna puede serlo. Un titular «0» no existe en ningun padron y es
+                // indistinguible de uno que si — el defecto que #188 midio con getInt.
+                fila.getObject("contribuyente_id", Long.class),
                 CondicionFiscalizada.valueOf(fila.getString("condicion")),
                 area(fila, "area_catastral"),
                 area(fila, "area_declarada"),

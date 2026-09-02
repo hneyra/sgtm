@@ -67,6 +67,46 @@ public final class DocumentosEnMemoria implements DocumentoRepository {
         return conUnaMas;
     }
 
+    /** Cuantos documentos hay guardados. Para comprobar que mirar uno no emite otro (#593). */
+    public int cuantos() {
+        return guardados.size();
+    }
+
+    /** Cuantas veces se registro una reimpresion de ese numero. Cero es el original. */
+    public int reimpresionesDe(String numero) {
+        return guardados.stream()
+                .filter(d -> d.numero().equals(numero))
+                .mapToInt(DocumentoEmitido::reimpresiones)
+                .max()
+                .orElseThrow(() -> new IllegalStateException("No hay ningun documento " + numero));
+    }
+
+    /**
+     * Deja el documento con un resumen que ya no es el de sus bytes.
+     *
+     * <p>Es lo que pasaria si alguien cambiara el renderizador —una fuente, un margen— entre la
+     * emision y la descarga: los datos guardados siguen ahi y ya no dan los mismos bytes. No se
+     * puede provocar de otra forma sin tener dos renderizadores distintos en la misma prueba.
+     */
+    public void corromperElResumenDe(String numero) {
+        guardados.replaceAll(
+                d ->
+                        d.numero().equals(numero)
+                                ? new DocumentoEmitido(
+                                        d.id(),
+                                        d.tipo(),
+                                        d.numero(),
+                                        d.ejercicio(),
+                                        d.referencia(),
+                                        d.datos(),
+                                        d.formato(),
+                                        "0".repeat(64),
+                                        d.fechaEmision(),
+                                        d.reimpresiones(),
+                                        d.observacion())
+                                : d);
+    }
+
     @Override
     public long siguienteCorrelativo(String tipo, Ejercicio ejercicio) {
         String llave = tipo + "-" + ejercicio.valor();

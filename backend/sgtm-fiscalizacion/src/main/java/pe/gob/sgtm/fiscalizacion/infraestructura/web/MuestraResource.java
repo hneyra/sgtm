@@ -22,15 +22,27 @@ import pe.gob.sgtm.fiscalizacion.dominio.MuestraDelPrograma;
  * resolución. Con {@code toString()} salían {@code "180.50 m2"} — dos formas del mismo dato en el
  * mismo módulo, y la unidad la pone la cabecera de la columna.
  *
+ * <h2>Los tres campos del titular van en {@code null} cuando el predio no tiene ninguno (#586)</h2>
+ *
+ * <p>Desde {@code V73} la muestra admite el predio <b>sin titularidad vigente</b> —el que nadie
+ * reclama, el candidato de primer orden—, así que {@code contribuyenteId}, {@code codContribuyente}
+ * y {@code titular} salen nulos los tres. Es la misma convención que {@code OmisoResource} usa
+ * desde #545 para la misma situación y por el mismo motivo: sale así, y sale en la lista.
+ *
+ * <p>Nulo aquí significa <b>que el padrón no tiene a nadie</b>. Es distinto de que el titular no
+ * esté: cuando la muestra guardó un identificador y el padrón ya no lo resuelve, {@code
+ * contribuyenteId} viaja con valor y los otros dos se caen al identificador, porque un predio cuyo
+ * titular se dio de baja es justamente el que hay que revisar.
+ *
  * @param visitado si ese predio ya tiene acta en este programa; se DERIVA, no se guarda
  */
 public record MuestraResource(
         long programaId,
         long predioId,
         String codRefCatastral,
-        long contribuyenteId,
-        String codContribuyente,
-        String titular,
+        @Nullable Long contribuyenteId,
+        @Nullable String codContribuyente,
+        @Nullable String titular,
         @Nullable String sector,
         String condicion,
         @Nullable AreaM2 areaCatastral,
@@ -40,7 +52,10 @@ public record MuestraResource(
         String fechaSorteo) {
 
     public static MuestraResource de(
-            MuestraDelPrograma fila, String codContribuyente, String titular, boolean visitado) {
+            MuestraDelPrograma fila,
+            @Nullable String codContribuyente,
+            @Nullable String titular,
+            boolean visitado) {
         return new MuestraResource(
                 fila.programaId(),
                 fila.predioId(),

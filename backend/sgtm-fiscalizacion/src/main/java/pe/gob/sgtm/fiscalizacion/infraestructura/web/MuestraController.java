@@ -22,6 +22,7 @@ import pe.gob.sgtm.dominio.Observacion;
 import pe.gob.sgtm.fiscalizacion.aplicacion.ConsultaDeMuestra;
 import pe.gob.sgtm.fiscalizacion.aplicacion.GenerarMuestra;
 import pe.gob.sgtm.fiscalizacion.dominio.MuestraDelPrograma;
+import pe.gob.sgtm.fiscalizacion.dominio.ResultadoDelSorteo;
 import pe.gob.sgtm.web.Api;
 import pe.gob.sgtm.web.CodigoDeError;
 import pe.gob.sgtm.web.ParametrosDePaginacion;
@@ -108,6 +109,11 @@ public class MuestraController {
      * <p>Responde <b>409</b> si el programa ya la sorteó. Una muestra es un acto y no se regenera:
      * hay actas levantadas sobre ella, y volver a sortear cambiaría la foto bajo sus pies. Para
      * otra muestra, otro programa.
+     *
+     * <p><b>Y la respuesta dice sobre qué padrón se sorteó</b> (#586). Hasta este issue devolvía
+     * {@code {"programaId":N,"predios":M}} y nada más, así que una muestra de 100 sobre un padrón
+     * donde 4 977 predios no podían entrar era indistinguible de una muestra de 100 sobre un padrón
+     * de 100.
      */
     @PostMapping("/{id}/muestra")
     @ResponseStatus(HttpStatus.CREATED)
@@ -116,7 +122,7 @@ public class MuestraController {
         Observacion observacion = observacionDe(peticion.observacion());
 
         try {
-            return new MuestraSorteadaResource(id, sorteo.generar(id, observacion));
+            return MuestraSorteadaResource.de(id, sorteo.generar(id, observacion));
         } catch (GenerarMuestra.ProgramaInexistente inexistente) {
             throw new ProblemaDeNegocio(CodigoDeError.NO_ENCONTRADO, mensajeDe(inexistente));
         } catch (GenerarMuestra.MuestraYaSorteada repetida) {
@@ -156,23 +162,39 @@ public class MuestraController {
         }
     }
 
-    /** Una sola lectura del padrón por página, no una por fila. */
+    /**
+     * Una sola lectura del padrón por página, no una por fila.
+     *
+     * <p>Las filas <b>sin titular</b> no piden nada: desde #586 la muestra las admite y su columna
+     * es nula, así que no hay identificador que resolver.
+     */
     private Map<Long, ResumenDeContribuyente> padronDe(Pagina<MuestraDelPrograma> pagina) {
         Set<Long> ids = new HashSet<>();
         for (MuestraDelPrograma fila : pagina.contenido()) {
-            ids.add(fila.contribuyenteId());
+            if (fila.contribuyenteId() != null) {
+                ids.add(fila.contribuyenteId());
+            }
         }
         return ids.isEmpty() ? Map.of() : contribuyentes.porIds(ids);
     }
 
-    // Sin fila en el padron se cae al identificador en vez de ocultar el predio: uno cuyo titular
-    // se dio de baja es justamente el que hay que revisar. Mismo criterio que OmisosController.
-    private static String codigoDe(Map<Long, ResumenDeContribuyente> padron, long contribuyenteId) {
+    // Sin titular en la fila, nulo: es el predio que nadie reclama (#586). Con titular pero sin
+    // fila en el padron se cae al identificador en vez de ocultar el predio: uno cuyo titular se
+    // dio de baja es justamente el que hay que revisar. Mismo criterio que OmisosController.
+    private static @Nullable String codigoDe(
+            Map<Long, ResumenDeContribuyente> padron, @Nullable Long contribuyenteId) {
+        if (contribuyenteId == null) {
+            return null;
+        }
         ResumenDeContribuyente enElMapa = padron.get(contribuyenteId);
         return enElMapa == null ? String.valueOf(contribuyenteId) : enElMapa.codigo();
     }
 
-    private static String nombreDe(Map<Long, ResumenDeContribuyente> padron, long contribuyenteId) {
+    private static @Nullable String nombreDe(
+            Map<Long, ResumenDeContribuyente> padron, @Nullable Long contribuyenteId) {
+        if (contribuyenteId == null) {
+            return null;
+        }
         ResumenDeContribuyente enElMapa = padron.get(contribuyenteId);
         return enElMapa == null ? String.valueOf(contribuyenteId) : enElMapa.nombre();
     }
@@ -189,6 +211,47 @@ public class MuestraController {
      */
     public record PeticionDeMuestra(@Nullable String observacion) {}
 
-    /** Lo que el sorteo devuelve: sobre cuántos predios va a actuar el programa. */
-    public record MuestraSorteadaResource(long programaId, int predios) {}
+    /**
+     * Lo que el sorteo devuelve: sobre cuántos predios va a actuar el programa, y <b>sobre qué
+     * padrón se sorteó</b> (#586).
+     *
+     * <p>Con {@code predios} solo no se podía distinguir «el padrón tiene dos candidatos» de «tenía
+     * cien y noventa y ocho no podían entrar», que es exactamente el silencio que este issue cierra
+     * — y el criterio con el que se cerraron #538, #539 y #545.
+     *
+     * <p>{@code detectados} = {@code predios} + {@code excluidosPorOtroPrograma} + {@code
+     * excluidosPorActaDelEjercicio}, siempre: el dominio no deja construir un reparto que no
+     * cuadre, así que quien lea esta respuesta puede reconstruir el padrón examinado sin fiarse de
+     * nadie.
+     *
+     * <p>Los excluidos van <b>por motivo</b> y no en un número solo: uno suelto no distingue «otro
+     * programa abierto se lo llevó» de «ya se fiscalizó este ejercicio», que se arreglan de maneras
+     * distintas.
+     *
+     * @param sinTitular cuántos de los sorteados no tienen titular vigente. Desde {@code V73}
+     *     entran, y salen contados: quien visita va sabiendo que ahí tiene que averiguar quién
+     *     ocupa
+     * @param fechaSorteo el día al que se resolvió el padrón. La muestra es una foto y estas cifras
+     *     son las de ese día (regla 9, RNF-075)
+     */
+    public record MuestraSorteadaResource(
+            long programaId,
+            int predios,
+            int sinTitular,
+            int detectados,
+            int excluidosPorOtroPrograma,
+            int excluidosPorActaDelEjercicio,
+            String fechaSorteo) {
+
+        static MuestraSorteadaResource de(long programaId, ResultadoDelSorteo resultado) {
+            return new MuestraSorteadaResource(
+                    programaId,
+                    resultado.sorteados(),
+                    resultado.sorteadosSinTitular(),
+                    resultado.detectados(),
+                    resultado.excluidosPorOtroPrograma(),
+                    resultado.excluidosPorActaDelEjercicio(),
+                    resultado.fechaSorteo().toString());
+        }
+    }
 }

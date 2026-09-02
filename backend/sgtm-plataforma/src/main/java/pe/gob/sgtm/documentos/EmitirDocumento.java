@@ -134,6 +134,43 @@ public class EmitirDocumento {
     }
 
     /**
+     * Vuelve a dibujar un documento ya emitido, <b>sin registrar nada y sin marcarlo</b>.
+     *
+     * <h2>Por que existe, si ya esta {@link #reimprimir}</h2>
+     *
+     * <p>Porque no todo documento emitido <b>entrego</b> sus bytes. El recibo de caja si: la
+     * ventanilla se lleva el papel en la cobranza, asi que sacarlo otra vez es un duplicado y tiene
+     * que salir marcado y contado. La resolucion de determinacion de fiscalizacion no: {@code
+     * TransferirARentas} la emite, la numera, guarda su modelo y su resumen, y los bytes se
+     * <b>descartan</b> —{@code POST /fiscalizacion/transferencias} devuelve JSON—. La primera vez
+     * que ese papel sale del sistema es por su pantalla de consulta, y entregarlo diciendo
+     * «DUPLICADO N° 1» seria falso.
+     *
+     * <p>Asi que la eleccion no es de gusto: <b>si la emision entrego el papel, se reimprime; si no
+     * lo entrego, se copia</b>. Y copiar no escribe, de modo que no pide observacion (regla 10) ni
+     * gasta un correlativo: el numero es el que la emision ya puso.
+     *
+     * <p>Lo que si comparte con {@link #reimprimir} es la comprobacion que hace verdadera la
+     * promesa: se exige que dibujar los datos guardados siga dando los mismos bytes. Sin ella, un
+     * cambio del renderizador haria que el mismo numero identificara dos papeles distintos, y no lo
+     * notaria nadie.
+     *
+     * @return los bytes y el registro que los respalda, o vacio si nunca se emitio ese documento
+     */
+    @Transactional(readOnly = true)
+    public Optional<Emision> copia(
+            String tipo, Ejercicio ejercicio, String numero, FormatoDeDocumento formato) {
+        return repositorio
+                .porNumero(tipo, ejercicio, numero)
+                .map(
+                        original -> {
+                            exigirQueSalgaIgual(original);
+                            return new Emision(
+                                    original, generador.generarFirmado(original.datos(), formato));
+                        });
+    }
+
+    /**
      * Emision masiva: escribe cada documento en el flujo que devuelva {@code destino} y lo olvida.
      *
      * <p>Recibe un {@link Iterator} y no una {@code List} a proposito. Con una lista, emitir el
