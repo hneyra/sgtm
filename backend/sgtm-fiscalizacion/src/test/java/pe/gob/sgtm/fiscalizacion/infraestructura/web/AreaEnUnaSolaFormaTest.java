@@ -106,6 +106,7 @@ class AreaEnUnaSolaFormaTest {
                                 "SUBVALUADOR",
                                 AREA,
                                 null,
+                                null,
                                 "ABIERTA"));
 
         assertThat(campoDe(acta, "areaHallada")).isEqualTo(ESPERADO);

@@ -241,6 +241,10 @@ class ContratoDeApiTest {
                     "POST /fiscalizacion/programas/{id}/muestra",
                     "POST /fiscalizacion/predial/actas",
                     "POST /fiscalizacion/vehicular",
+                    // #599: la lectura de actas, que faltaba. Hasta que el acta tuvo donde
+                    // consignar el uso hallado (V76) no habia nada honesto que publicar, y
+                    // eso es lo que #546 midio al negarse a esta misma lectura.
+                    "GET /fiscalizacion/actas",
                     // #49: la liquidacion, su reliquidacion y su estado, mas las cuatro
                     // consultas del modulo. Las tres primeras son rutas que la pantalla no
                     // declara —una pantalla declara UN endpoint— y entran por
@@ -391,6 +395,10 @@ class ContratoDeApiTest {
                     // lo que este issue hace es publicarla. No tiene modelo propio: agrega
                     // lo que cuentacorriente y tesoreria publican.
                     "GET /indicadores/recaudacion",
+                    // #549 — RF-130: el trabajo parado por modulo, la SEGUNDA lectura de la
+                    // misma pantalla. Entra por OPERACIONES_ADICIONALES del generador, porque
+                    // no sale de ninguno de los cuatro modulos que cuenta sino de `inicio`.
+                    "GET /indicadores/trabajo-parado",
                     // #344 — ADR-0015: la conciliacion catastro-rentas. Es una adicion al
                     // contrato: `consulta_fichas` declara «GET /catastro/fichas» —la grilla, que
                     // sirve catastro— y la misma grilla CON la columna «Conciliada» no la puede

@@ -75,6 +75,17 @@ public interface ExpedienteRepository {
      */
     Pagina<ExpedienteEnConsulta> consultar(CriterioDeExpedientes criterio, Paginacion paginacion);
 
+    /**
+     * Cuantos expedientes cumplen ese criterio, <b>sin traerse ninguno</b> (#549).
+     *
+     * <p>Es el {@code count(*)} que {@link #consultar} ya ejecuta para poder paginar, con el mismo
+     * {@code FROM} y el mismo {@code WHERE} —incluida la derivacion del estado desde el ultimo
+     * movimiento, que no es una columna—. Tenerlo aqui y no escrito aparte es lo que impide que
+     * «sin REC-1» signifique una cosa en la grilla del modulo y otra en el panel de la pantalla de
+     * aterrizaje (AC 2.4 de #549).
+     */
+    long contar(CriterioDeExpedientes criterio);
+
     /** Ese valor ya estaba en un expediente coactivo. */
     final class ValorYaEnUnExpediente extends RuntimeException {
 

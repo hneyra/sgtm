@@ -39,9 +39,11 @@ import pe.gob.sgtm.auditoria.Auditoria;
 import pe.gob.sgtm.auditoria.AuditoriaJdbc;
 import pe.gob.sgtm.auditoria.Origen;
 import pe.gob.sgtm.auditoria.OrigenContext;
+import pe.gob.sgtm.coactiva.ExpedientesSinRec;
 import pe.gob.sgtm.coactiva.aplicacion.CambiarDireccionReferencial;
 import pe.gob.sgtm.coactiva.aplicacion.CambiarEstadoDelExpediente;
 import pe.gob.sgtm.coactiva.aplicacion.ConsultaDeExpedientes;
+import pe.gob.sgtm.coactiva.aplicacion.ExpedientesSinRecCoactiva;
 import pe.gob.sgtm.coactiva.aplicacion.ImportarValoresACoactiva;
 import pe.gob.sgtm.coactiva.dominio.CriterioDeExpedientes;
 import pe.gob.sgtm.coactiva.dominio.DeudaDelExpediente;
@@ -1020,6 +1022,50 @@ class ExpedienteCoactivoJdbcTest {
                                                             unaPagina()))
                                     .totalElementos())
                     .isZero();
+        }
+    }
+
+    @Nested
+    @DisplayName("#549 — El frente de Coactiva: expedientes importados sin REC-1")
+    class ElFrenteDeCoactiva {
+
+        private final ExpedientesSinRec puerto = new ExpedientesSinRecCoactiva(expedientes);
+
+        @Test
+        @DisplayName("AC 2.5 — importar dos expedientes sube el recuento del frente en dos")
+        void importarDosSubeElRecuentoEnDos() {
+            // Delta y no total: esta clase importa expedientes en muchas pruebas y un total
+            // absoluto dependeria del orden de ejecucion (#397).
+            long antes = cuantosSinRec();
+
+            abrirExpediente("F-0001");
+            abrirExpediente("F-0002");
+
+            assertThat(cuantosSinRec()).isEqualTo(antes + 2);
+        }
+
+        @Test
+        @DisplayName("AC 2.4 — el recuento es el mismo total que la grilla de expedientes anuncia")
+        void elRecuentoEsElMismoTotalQueLaGrilla() {
+            abrirExpediente("F-0003");
+
+            assertThat(cuantosSinRec())
+                    .as(
+                            "el estado del expediente se DERIVA del ultimo movimiento: dos"
+                                    + " transcripciones de esa derivacion divergen, y la del panel"
+                                    + " se lee primero (#397)")
+                    .isEqualTo(filtrarPor(EstadoDelExpediente.INICIADO).totalElementos());
+        }
+
+        /** Un expediente recien importado: nace en {@code INICIADO}, sin ningun movimiento. */
+        private void abrirExpediente(String sufijo) {
+            long contribuyente = contribuyenteConDeuda(sufijo);
+            pasarACoactiva(emitir(contribuyente, "OP-2026-" + sufijo));
+            importarTodo(contribuyente, "R. MENDOZA CRUZ");
+        }
+
+        private long cuantosSinRec() {
+            return enTransaccion(puerto::cuantosSinRec1);
         }
     }
 

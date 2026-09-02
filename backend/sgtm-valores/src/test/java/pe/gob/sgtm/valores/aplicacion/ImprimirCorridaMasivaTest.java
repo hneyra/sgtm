@@ -193,6 +193,11 @@ class ImprimirCorridaMasivaTest {
         }
 
         @Override
+        public long contar(CriterioDeConsultaDeValores criterio) {
+            throw new UnsupportedOperationException("Este doble no cuenta la grilla de consulta");
+        }
+
+        @Override
         public long siguienteCorrelativo(TipoValor tipo, Ejercicio ejercicio) {
             throw new UnsupportedOperationException();
         }

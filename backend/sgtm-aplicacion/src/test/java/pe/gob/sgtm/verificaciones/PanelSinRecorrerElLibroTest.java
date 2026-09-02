@@ -10,10 +10,15 @@ import java.util.Set;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.springframework.transaction.annotation.Transactional;
+import pe.gob.sgtm.coactiva.ExpedientesSinRec;
 import pe.gob.sgtm.cuentacorriente.CarteraDelLibro;
 import pe.gob.sgtm.cuentacorriente.RecaudacionDelLibro;
+import pe.gob.sgtm.indicadores.aplicacion.ConsultaDeTrabajoParado;
 import pe.gob.sgtm.indicadores.aplicacion.PanelDeRecaudacion;
+import pe.gob.sgtm.rentas.PrediosSinConciliar;
+import pe.gob.sgtm.sanciones.PapeletasSinNotificar;
 import pe.gob.sgtm.tesoreria.AvanceDeCaja;
+import pe.gob.sgtm.valores.ValoresSinNotificar;
 
 /**
  * AC 4 de #56 — el panel no recorre el libro, y AC 3 — no toca mas que APIs publicas.
@@ -44,7 +49,27 @@ class PanelSinRecorrerElLibroTest {
      * que devuelve esta agregado.
      */
     private static final List<Class<?>> PUERTOS_DEL_PANEL =
-            List.of(RecaudacionDelLibro.class, CarteraDelLibro.class, AvanceDeCaja.class);
+            List.of(
+                    RecaudacionDelLibro.class,
+                    CarteraDelLibro.class,
+                    AvanceDeCaja.class,
+                    // Los cuatro frentes del trabajo parado (#549). Cada uno costo una linea
+                    // aqui y otra en `sgtm-indicadores/build.gradle.kts`, con su motivo.
+                    PapeletasSinNotificar.class,
+                    ValoresSinNotificar.class,
+                    ExpedientesSinRec.class,
+                    PrediosSinConciliar.class);
+
+    /**
+     * Las dos lecturas del panel. Las dos se revisan igual, y por lo mismo.
+     *
+     * <p>{@code ConsultaDeTrabajoParado} entro con #549 y es la segunda lectura de la misma
+     * pantalla de aterrizaje: cuatro consultas mas a cuatro modulos mas. Si esta prueba solo mirara
+     * {@code PanelDeRecaudacion}, la mitad del coste de la pantalla que todo el mundo abre al
+     * entrar no la vigilaria nadie.
+     */
+    private static final List<Class<?>> LECTURAS_DEL_PANEL =
+            List.of(PanelDeRecaudacion.class, ConsultaDeTrabajoParado.class);
 
     /**
      * Los tipos que son <b>una fila del padron</b>: tantos como obligaciones o asientos hay.
@@ -60,25 +85,38 @@ class PanelSinRecorrerElLibroTest {
                     "Asiento",
                     "SaldoProyectado",
                     "ConvenioDelContribuyente",
-                    "ReciboDeTramite");
+                    "ReciboDeTramite",
+                    // Las filas de los cuatro frentes de #549: una por papeleta, por valor,
+                    // por expediente y por predio. Cada una de esas listas crece con el
+                    // padron; el recuento que sus puertos devuelven, no.
+                    "PapeletaDelPadron",
+                    "ValorEnConsulta",
+                    "ExpedienteEnConsulta",
+                    "FichaConciliada");
 
     @Test
-    @DisplayName("el panel solo inyecta puertos publicos, y son los tres enumerados")
+    @DisplayName("las lecturas del panel solo inyectan puertos publicos, y son los enumerados")
     void elPanelSoloInyectaPuertosPublicos() {
-        Constructor<?>[] constructores = PanelDeRecaudacion.class.getDeclaredConstructors();
-        assertThat(constructores).as("un componente de Spring con un solo constructor").hasSize(1);
+        for (Class<?> lectura : LECTURAS_DEL_PANEL) {
+            Constructor<?>[] constructores = lectura.getDeclaredConstructors();
+            assertThat(constructores)
+                    .as("%s: un componente de Spring con un solo constructor", lectura.getName())
+                    .hasSize(1);
 
-        List<Class<?>> colaboradores = List.of(constructores[0].getParameterTypes());
+            List<Class<?>> colaboradores = List.of(constructores[0].getParameterTypes());
 
-        assertThat(colaboradores)
-                .as("si esto quedara vacio, la prueba pasaria sin comprobar nada")
-                .isNotEmpty();
-        assertThat(colaboradores)
-                .as(
-                        "el panel no tiene modelo propio: lo unico que puede inyectar son APIs"
-                                + " publicas de otros modulos. Un repositorio, un JdbcClient o un"
-                                + " DataSource aqui serian el panel leyendo tablas ajenas (AC 3)")
-                .isSubsetOf(PUERTOS_DEL_PANEL);
+            assertThat(colaboradores)
+                    .as("si esto quedara vacio, la prueba pasaria sin comprobar nada")
+                    .isNotEmpty();
+            assertThat(colaboradores)
+                    .as(
+                            "%s no tiene modelo propio: lo unico que puede inyectar son APIs"
+                                    + " publicas de otros modulos. Un repositorio, un JdbcClient o"
+                                    + " un DataSource aqui serian el panel leyendo tablas ajenas"
+                                    + " (AC 3)",
+                            lectura.getSimpleName())
+                    .isSubsetOf(PUERTOS_DEL_PANEL);
+        }
     }
 
     @Test
@@ -108,15 +146,24 @@ class PanelSinRecorrerElLibroTest {
     }
 
     @Test
-    @DisplayName("la lectura del panel es transaccional y de solo lectura")
+    @DisplayName("las dos lecturas del panel son transaccionales y de solo lectura")
     void laLecturaEsTransaccionalYDeSoloLectura() throws Exception {
-        Method del =
+        exigirLecturaTransaccional(
                 PanelDeRecaudacion.class.getMethod(
                         "del",
                         pe.gob.sgtm.dominio.Ejercicio.class,
                         java.time.LocalDate.class,
-                        java.time.Instant.class);
+                        java.time.Instant.class));
+        exigirLecturaTransaccional(
+                ConsultaDeTrabajoParado.class.getMethod(
+                        "del",
+                        pe.gob.sgtm.dominio.Ejercicio.class,
+                        java.time.LocalDate.class,
+                        java.time.Instant.class,
+                        Set.class));
+    }
 
+    private static void exigirLecturaTransaccional(Method del) {
         Transactional transaccional = del.getAnnotation(Transactional.class);
 
         assertThat(transaccional)
@@ -175,8 +222,10 @@ class PanelSinRecorrerElLibroTest {
     private static List<Class<?>> puertosRevisados() {
         java.util.LinkedHashSet<Class<?>> puertos =
                 new java.util.LinkedHashSet<>(PUERTOS_DEL_PANEL);
-        for (Constructor<?> constructor : PanelDeRecaudacion.class.getDeclaredConstructors()) {
-            puertos.addAll(List.of(constructor.getParameterTypes()));
+        for (Class<?> lectura : LECTURAS_DEL_PANEL) {
+            for (Constructor<?> constructor : lectura.getDeclaredConstructors()) {
+                puertos.addAll(List.of(constructor.getParameterTypes()));
+            }
         }
         return List.copyOf(puertos);
     }
