@@ -91,6 +91,11 @@ class ContratoDeApiTest {
                     // las atendiera, y la otra —`GET /portal/deuda`— no va a tenerlo (ADR-0016
                     // §3).
                     "GET /catastro/predios/plano",
+                    // #612 — donde esta lo levantado. `plano` exige `bbox` y ninguna operacion
+                    // decia donde esta la municipalidad, asi que el visor abria sobre el pais
+                    // entero: con geometria cargada eso contesta «acercate» y desde la pantalla
+                    // no se sabe hacia donde.
+                    "GET /catastro/predios/plano/marco",
                     "GET /catastro/tablas/aranceles",
                     "GET /catastro/tablas/valores-unitarios",
                     "GET /catastro/tablas/depreciacion",

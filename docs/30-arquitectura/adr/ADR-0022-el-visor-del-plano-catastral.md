@@ -60,6 +60,29 @@ Por eso tampoco se pagina: la paginación de un plano no significa nada —no ha
 que «la página 2» sea una porción del territorio— y las dos formas de terminar son legítimas: cabe,
 o acércate.
 
+#### 2.1 De dónde sale el **primer** marco (#612)
+
+Exigir `bbox` deja una pregunta abierta que nadie contestaba: **dónde está la municipalidad**.
+Medido, ninguna otra operación del contrato publicaba un rectángulo, un centroide ni un ubigeo
+resoluble a coordenadas, así que la pantalla abría sobre un marco **declarado** —el Perú
+continental— y encuadraba después sobre los polígonos que volvían. Hoy eso pasa inadvertido porque
+no hay ni un lote digitalizado; el día que se cargue el primer plano, ese marco contiene más lotes
+que el tope y la respuesta pasa a ser el 422 de arriba: **correcta, y imposible de obedecer**,
+porque desde la pantalla no se sabe hacia dónde acercarse.
+
+Lo cierra una segunda lectura, `GET /catastro/predios/plano/marco`, que publica el rectángulo que
+envuelve **la geometría ya cargada** —agregando las cuatro columnas de `V65`, no una constante— con
+los **mismos** filtros de sector y manzana. Que sean los mismos no es una comodidad: un marco
+calculado sobre otro conjunto de predios encuadraría sobre algo que después no se dibuja, y eso, sin
+base cartográfica debajo, **no se ve**.
+
+Publica un rectángulo y una cuenta, y nada más: ni un `predioId`, ni un código, ni una dirección
+—añadir el del lote más al norte la convertiría en una forma de recorrer el padrón sin pedir el
+padrón—. Y **puede no haber marco**, en dos situaciones que se dicen por separado porque se arreglan
+distinto: con cero lotes levantados —el estado de hoy— lo que falta es la carga cartográfica; con
+lotes y sin rectángulo, todo lo levantado cae sobre la misma línea y su envolvente no encuadra nada.
+Nunca `0,0,0,0`: ese punto está en el golfo de Guinea, y nada delataría un visor abierto ahí.
+
 ### 3. Los predios sin geometría se **cuentan**, no se esconden
 
 ADR-0021 dice que son «todos los de hoy, y muchos no la tendrán nunca». La lectura devuelve, junto a
@@ -162,8 +185,10 @@ lo informa quien compare las dos columnas, con su acto y su observación.
 ## Consecuencias
 
 - **Una operación de lectura más en el contrato**, y de una forma que ninguna otra tiene: se niega
-  en vez de paginar. Queda declarada y **sin controlador que la sirva** hasta que se cierre el issue
-  de backend, igual que `GET /portal/deuda`; el censo de #400 la cuenta y la nombra.
+  en vez de paginar. Nació declarada y **sin controlador que la sirviera** —el censo de #400 la
+  contaba, igual que `GET /portal/deuda`— y #536 la sirvió. **Son dos desde #612**: la del plano y
+  la de su marco (§2.1), que cuelga de la misma ruta y hereda su acceso porque es el encuadre del
+  mismo mapa.
 - **El visor no es una opción número 135.** Las 134 siguen siendo 134: `mapa` es una ruta del módulo,
   como la portada, sin id en el catálogo y sin permiso propio (ADR-0014 §5). El permiso que exige es
   el de **encontrar un predio** —`consulta_fichas`, con `LECTURA`—, porque el mapa es esa misma

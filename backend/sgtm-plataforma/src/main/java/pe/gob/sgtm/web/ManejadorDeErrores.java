@@ -49,10 +49,27 @@ public class ManejadorDeErrores {
     static final String CAMPO_DETALLES = "detalles";
     static final String CAMPO_INCIDENCIA = "incidencia";
 
+    /**
+     * Campo de extension con la cifra normativa que hay que publicar (#604).
+     *
+     * <p>Sale <b>solo</b> cuando el problema lo trae, y por eso significa algo: un 422 con este
+     * miembro no se arregla desde la pantalla —hay que sellar el conjunto o publicar la fila—, y
+     * uno sin el es un campo que falta o un valor que no vale. Ponerlo en todos seria tan inutil
+     * como no ponerlo en ninguno.
+     */
+    static final String CAMPO_PARAMETRO_QUE_FALTA = "parametroQueFalta";
+
     @ExceptionHandler(ProblemaDeNegocio.class)
     public ResponseEntity<ProblemDetail> problemaDeNegocio(ProblemaDeNegocio problema) {
-        return respuesta(
-                problema.codigo(), mensajeDe(problema, problema.codigo()), problema.detalles());
+        ProblemDetail cuerpo = cuerpoDe(problema.codigo(), mensajeDe(problema, problema.codigo()));
+        if (!problema.detalles().isEmpty()) {
+            cuerpo.setProperty(CAMPO_DETALLES, problema.detalles());
+        }
+        problema.parametroQueFalta()
+                .ifPresent(
+                        falta ->
+                                cuerpo.setProperty(CAMPO_PARAMETRO_QUE_FALTA, falta.comoMiembro()));
+        return ResponseEntity.status(problema.codigo().estado()).body(cuerpo);
     }
 
     @ExceptionHandler(OrdenSeguro.OrdenNoAdmitido.class)

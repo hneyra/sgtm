@@ -613,6 +613,16 @@
     ],
     "sinGeometria": "entero"
   },
+  "GET /catastro/predios/plano/marco": {
+    "marco": {
+      "oeste": "numero",
+      "sur": "numero",
+      "este": "numero",
+      "norte": "numero"
+    },
+    "lotes": "entero",
+    "notaDelMarco": "texto"
+  },
   "GET /catastro/predios/{predioId}/inquilinos": [
     {
       "inquilinoId": "entero",

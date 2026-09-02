@@ -1682,6 +1682,55 @@ const OPERACIONES_ADICIONALES = {
         },
       ],
     },
+    // El marco de lo levantado (#612). Existe porque `plano_catastral` exige
+    // `bbox` —y hace bien: sin el la consulta seria el padron entero— y NINGUNA
+    // operacion del contrato decia donde esta la municipalidad: ni su extension,
+    // ni la de un sector, ni un centroide, ni un ubigeo resoluble a coordenadas.
+    //
+    // Cuelga de la misma ruta y hereda su acceso, porque es el encuadre del
+    // mismo mapa. No tiene `bbox` —es justo lo que calcula— ni `limite` —su
+    // respuesta son cuatro cifras y una cuenta, pese lo que pese el padron—.
+    {
+      operationId: 'marco_del_plano',
+      metodo: 'get',
+      ruta: '/api/v1/catastro/predios/plano/marco',
+      titulo: 'Dónde está lo levantado: el marco del plano',
+      descripcion: literal(`
+        El rectángulo que envuelve la geometría **ya cargada**, con los mismos filtros de sector
+        y de manzana que \`GET /catastro/predios/plano\` (#612). Es de dónde sale el primer
+        \`bbox\`: aquella operación lo exige, y hasta ahora ninguna decía dónde está la
+        municipalidad, así que el visor abría sobre un marco declarado del país entero — y con
+        geometría cargada eso contesta «hay N lotes, acércate», una respuesta correcta que desde
+        la pantalla no se puede obedecer.
+
+        **Sale de la geometría cargada, nunca de una constante.** Se agrega sobre las cuatro
+        columnas que \`V65\` deriva del polígono de cada lote, con los **mismos** filtros que el
+        plano: un marco calculado sobre otro conjunto de predios encuadraría sobre algo que
+        después no se dibuja, y sobre un plano sin base cartográfica un encuadre equivocado **no
+        se ve**.
+
+        **\`marco\` es \`null\` cuando no hay ninguno que publicar, y \`notaDelMarco\` dice por
+        qué.** Son dos situaciones distintas y se arreglan distinto: \`lotes: 0\` es que no hay
+        ni un predio con polígono —el estado de hoy en todas las municipalidades, lo que falta es
+        la carga cartográfica de ADR-0021— y \`lotes > 0\` con \`marco: null\` es que todo lo
+        levantado cae sobre la misma línea, o sea que su envolvente no es un rectángulo. Nunca
+        \`0,0,0,0\`: ese punto está en el golfo de Guinea.
+
+        Lo que publica es **un rectángulo y una cuenta**, y nada más: ni un \`predioId\`, ni un
+        código, ni una dirección. Añadir el del lote más al norte la convertiría en una forma de
+        recorrer el padrón sin pedir el padrón.
+      `),
+      parametros: [
+        {
+          nombre: 'codigoDeSector',
+          descripcion: 'Filtro «Sector» de la pantalla, por código. El mismo que el del plano',
+        },
+        {
+          nombre: 'codigoDeManzana',
+          descripcion: 'Filtro «Manzana» de la pantalla, por código. El mismo que el del plano',
+        },
+      ],
+    },
   ],
   // `declaracion_jurada` declara «GET /rentas/declaraciones/{djNro}» como su
   // endpoint —consultar la DJ ya presentada—, y hasta #365 eso era todo lo que
@@ -3537,6 +3586,36 @@ lineas.push('      properties:');
 lineas.push('        codigo: { type: string, example: "DEUDA_YA_CANCELADA" }');
 lineas.push('        mensaje: { type: string, description: "En castellano; se muestra al usuario" }');
 lineas.push('        detalles: { type: array, items: { type: string } }');
+lineas.push('        parametroQueFalta:');
+lineas.push('          type: object');
+lineas.push('          description: |');
+lineas.push('            **Solo** cuando el 422 se debe a una cifra normativa que no esta');
+lineas.push('            publicada en el conjunto de parametros sellado (#604). Es el');
+lineas.push('            discriminador que separa dos errores que hasta ahora salian con el');
+lineas.push('            mismo `codigo` y el mismo `mensaje` y piden acciones distintas:');
+lineas.push('');
+lineas.push('            - **sin** este miembro: falta un campo de la peticion o un valor no');
+lineas.push('              vale. Lo arregla quien atiende, en la misma pantalla.');
+lineas.push('            - **con** este miembro: falta publicar una cifra o sellar el');
+lineas.push('              conjunto del ejercicio. No lo arregla nadie desde la pantalla');
+lineas.push('              (D-02a, D-02b, D-03c).');
+lineas.push('');
+lineas.push('            La interfaz reacciona a la **presencia** del miembro, nunca al texto');
+lineas.push('            del mensaje: el texto se reescribe y el contrato no.');
+lineas.push('          required: [ejercicio]');
+lineas.push('          properties:');
+lineas.push('            ejercicio:');
+lineas.push('              type: integer');
+lineas.push('              description: El ejercicio de cuyo conjunto sellado se trata.');
+lineas.push('              example: 2026');
+lineas.push('            llave:');
+lineas.push('              type: string');
+lineas.push('              description: |');
+lineas.push('                Lo que hay que publicar: `TIPO:CLAVE` cuando falta una sola fila,');
+lineas.push('                o el `TIPO` solo cuando falta el bloque entero. **Ausente** cuando');
+lineas.push('                lo que falta es el conjunto sellado: no hay donde publicar nada.');
+lineas.push('                Nunca una clave inventada para rellenar el hueco.');
+lineas.push('              example: "INTERES_FRACCIONAMIENTO:ORDINARIO"');
 lineas.push('  responses:');
 lineas.push('    SinMunicipalidad:');
 lineas.push('      description: |');
