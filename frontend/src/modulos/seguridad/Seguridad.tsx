@@ -12,6 +12,8 @@ import {
   listarModulos,
   listarRespaldos,
   listarUsuarios,
+  permisosConfiguradosDelUsuario,
+  titularesDelPrivilegio,
   miembrosDelGrupo,
   permisosDelGrupo,
   permisosEfectivosDelUsuario,
@@ -473,8 +475,46 @@ export default function Seguridad({ dest, onDest }: PantallaProps) {
   const hoy = new Date().toISOString().slice(0, 10);
 
   const cuentasDeshabilitadas = usuarios.filter((u) => !u.habilitado);
+
+  /* ── Cuál de las deshabilitadas CONSERVA permisos (#583) ────────────────
+     Hasta #693 esto no se podía preguntar: la lectura efectiva aplica la misma
+     regla que el guardia y a una cuenta deshabilitada le contesta la lista
+     vacía, tanto si conserva permisos como si nunca los tuvo. `configurados`
+     contesta la otra pregunta.
+
+     Cuesta UNA petición por cuenta deshabilitada, así que se acota y se dice
+     cuántas quedaron fuera: un padrón con cien cuentas caídas no puede convertir
+     la apertura del panel en cien viajes. El tope es generoso a propósito
+     —quedarse corto es lo corriente, no lo normal—. */
+  const TOPE_DE_SONDEO = 12;
+  const sondeadas = cuentasDeshabilitadas.slice(0, TOPE_DE_SONDEO);
+  const llaveDeLasSondeadas = sondeadas.map((u) => u.id).join(',');
+  const conservan = useRecurso(
+    (s) => Promise.all(sondeadas.map((u) => permisosConfiguradosDelUsuario(u.id, s))),
+    [llaveDeLasSondeadas],
+    enPanel && sondeadas.length > 0,
+  );
   const cuentasVencidas = usuarios.filter((u) => u.vigenciaHasta !== null && u.vigenciaHasta < hoy);
   const gruposDeshabilitados = grupos.filter((g) => !g.habilitado);
+
+  /* ── Quién tiene un privilegio sobre una opción (#583) ──────────────────
+     Es la pregunta INVERSA a la matriz de una cuenta, y hasta #693 costaba una
+     petición por usuario del padrón: en la práctica no se hacía.
+
+     Se pregunta POR OPCIÓN y no del padrón entero, y eso no es una comodidad:
+     la lectura contesta quién tiene un privilegio sobre UNA opción, así que
+     «quién tiene Especial en algo» seguiría costando 134 peticiones. La pantalla
+     lo dice en vez de fingir que contesta la otra pregunta.
+
+     Empieza en `ESPECIAL` porque es el que el diseño pedía: es el que abre las
+     opciones que ningún otro privilegio abre. */
+  const [accesoSondeado, setAccesoSondeado] = useState('');
+  const [privilegioSondeado, setPrivilegioSondeado] = useState<Privilegio>('ESPECIAL');
+  const titulares = useRecurso(
+    (s) => titularesDelPrivilegio(accesoSondeado, privilegioSondeado, { tamano: 50 }, s),
+    [accesoSondeado, privilegioSondeado],
+    enPanel && accesoSondeado !== '',
+  );
 
   const hallazgos = [
     {
@@ -484,10 +524,39 @@ export default function Seguridad({ dest, onDest }: PantallaProps) {
       detalle:
         cuentasDeshabilitadas.length === 0
           ? 'Ninguna cuenta del padrón está deshabilitada.'
-          : 'No pueden entrar, y conservan lo que tuvieran configurado: ' +
-            cuentasDeshabilitadas.map((u) => u.cuenta).join(', ') +
-            '.',
+          : 'No pueden entrar: ' + cuentasDeshabilitadas.map((u) => u.cuenta).join(', ') + '.',
       conteo: String(cuentasDeshabilitadas.length),
+    },
+    /* Este hallazgo lo pedía el diseño y hasta #693 se decía imposible. La
+       redacción no promete lo que no se midió: si el sondeo no ha vuelto o
+       falló, se dice eso y no un cero — un cero aquí se lee como «ninguna
+       conserva permisos», que es la frase tranquilizadora y falsa. */
+    {
+      etiqueta: 'Llave',
+      tono: 'bad' as TonoDeSeguridad,
+      titulo: 'Cuentas deshabilitadas que conservan permisos',
+      detalle: (() => {
+        if (cuentasDeshabilitadas.length === 0) return 'No hay ninguna cuenta deshabilitada que mirar.';
+        if (conservan.cargando) return 'Preguntando qué conserva cada cuenta caída…';
+        if (conservan.error !== null)
+          return 'No se pudo leer lo configurado de las cuentas caídas, así que no se sabe cuáles conservan permisos.';
+        const con = (conservan.datos ?? []).filter((c) => c.permisos.length > 0);
+        const deMas = cuentasDeshabilitadas.length - sondeadas.length;
+        const cola = deMas > 0 ? ' Quedan ' + deMas + ' sin preguntar: se sondean ' + TOPE_DE_SONDEO + ' como mucho.' : '';
+        if (con.length === 0) return 'Ninguna de las caídas conserva ningún permiso configurado.' + cola;
+        return (
+          'Basta rehabilitarlas para que vuelvan a abrir: ' +
+          con.map((c) => c.cuenta + ' (' + c.permisos.length + ')').join(', ') +
+          '.' +
+          cola
+        );
+      })(),
+      conteo:
+        cuentasDeshabilitadas.length === 0
+          ? '0'
+          : conservan.cargando || conservan.error !== null || conservan.datos === null
+            ? SIN_DATO
+            : String((conservan.datos ?? []).filter((c) => c.permisos.length > 0).length),
     },
     {
       etiqueta: 'Vigencia',
@@ -820,7 +889,15 @@ export default function Seguridad({ dest, onDest }: PantallaProps) {
                 <div style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '13px 16px', borderBottom: '1px solid var(--line)' }}>
                   <h2 style={{ margin: 0, flex: 1, fontFamily: 'var(--font-serif)', fontSize: 16, fontWeight: 600 }}>Lo que hay que revisar</h2>
                   <span style={{ fontFamily: 'var(--font-mono)', fontSize: 11, color: 'var(--ink-3)' }}>
-                    {cuentasDeshabilitadas.length + cuentasVencidas.length + gruposDeshabilitados.length} hallazgos
+                    {/* Se suma lo CONTADO, no las tarjetas: las cuentas que conservan
+                        permisos son un subconjunto de las caídas, así que sumar la
+                        tarjeta entera las contaría dos veces. Y cuando el sondeo no
+                        ha vuelto, ese sumando no existe todavía y no vale cero. */}
+                    {cuentasDeshabilitadas.length +
+                      cuentasVencidas.length +
+                      gruposDeshabilitados.length +
+                      (conservan.datos === null ? 0 : conservan.datos.filter((c) => c.permisos.length > 0).length)}{' '}
+                    hallazgos
                   </span>
                 </div>
                 {(usuariosReales.cargando || gruposReales.cargando) && (
@@ -861,16 +938,111 @@ export default function Seguridad({ dest, onDest }: PantallaProps) {
                     jquispe, aayca, fruiz» nombraba a tres personas que no existen
                     en ninguna de las dos municipalidades. */}
                 <p style={{ margin: 0, padding: '11px 16px', background: 'var(--bg-elev)', fontSize: 12, lineHeight: 1.5, color: 'var(--ink-3)', textWrap: 'pretty' }}>
-                  Faltan cuatro hallazgos que el diseño pedía y hoy no se pueden calcular. <strong>Quién tiene el privilegio
-                  Especial</strong> ya se puede preguntar de una cuenta —está en su matriz (#543)—, pero no del padrón: haría falta una
-                  petición por usuario y no hay filtro por privilegio (#583). <strong>Qué cuenta deshabilitada conserva permisos</strong>
-                  no se puede ni así, y no por falta de lectura: la de permisos efectivos aplica la misma regla que el guardia y a una
-                  cuenta deshabilitada le contesta la lista <strong>vacía</strong>, tanto si conserva permisos como si nunca los tuvo
-                  (#583). La <strong>caducidad de la contraseña</strong> la gobierna el proveedor de identidad y no este sistema; y la
-                  <strong>última restauración verificada</strong> no es un campo de la consulta de respaldos. Un permiso total sobre un
-                  módulo tributario permite anular recibos y dar de baja deuda: no es una preferencia, es la llave de la caja, y por eso
-                  no se enseña una cifra inventada en su sitio.
+                  Faltan <strong>dos</strong> hallazgos que el diseño pedía, y ya no son cuatro. <strong>Qué cuenta deshabilitada
+                  conserva permisos</strong> ya está arriba: #693 publicó la lectura de lo <em>configurado</em>, que contesta otra
+                  pregunta que la de permisos efectivos —ésa aplica la misma regla que el guardia y a una cuenta caída le contesta la
+                  lista vacía, conserve permisos o no los haya tenido nunca—. <strong>Quién tiene el privilegio Especial</strong> se
+                  pregunta abajo, y se pregunta <em>por opción</em>: la lectura contesta quién lo tiene sobre una, y hacerlo del padrón
+                  entero seguiría costando una petición por cada una de las 134. Siguen sin poder calcularse la <strong>caducidad de la
+                  contraseña</strong>, que la gobierna el proveedor de identidad y no este sistema, y la <strong>última restauración
+                  verificada</strong>, que no es un campo de la consulta de respaldos. Un permiso total sobre un módulo tributario permite
+                  anular recibos y dar de baja deuda: no es una preferencia, es la llave de la caja, y por eso en su sitio no se enseña una
+                  cifra inventada.
                 </p>
+              </section>
+            )}
+
+            {/* La pregunta inversa (#583, #693). Va en el panel y no en «Accesos»
+                porque la hace quien audita —«¿quién puede anular recibos?»— y no
+                quien configura una cuenta. */}
+            {enPanel && (
+              <section style={{ background: 'var(--bg-card)', border: '1px solid var(--line)', borderRadius: 10, boxShadow: 'var(--shadow-1)', overflow: 'hidden' }}>
+                <div style={{ padding: '13px 16px', borderBottom: '1px solid var(--line)' }}>
+                  <h2 style={{ margin: 0, fontSize: 13.5, fontWeight: 600 }}>Quién tiene un privilegio sobre una opción</h2>
+                  <p style={{ margin: '3px 0 0', fontSize: 11.5, color: 'var(--ink-4)' }}>
+                    GET /api/v1/seguridad/accesos/&#123;codigo&#125;/usuarios
+                  </p>
+                </div>
+                <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap', alignItems: 'center', padding: '11px 16px', borderBottom: '1px solid var(--line)', background: 'var(--bg-elev)' }}>
+                  <label htmlFor="acceso-sondeado" style={{ fontSize: 11.5, color: 'var(--ink-3)' }}>
+                    Opción
+                  </label>
+                  <select
+                    id="acceso-sondeado"
+                    value={accesoSondeado}
+                    onChange={(e) => setAccesoSondeado(e.target.value)}
+                    style={{ flex: 1, minWidth: 230, border: '1px solid var(--line-2)', borderRadius: 6, padding: '6px 9px', background: 'var(--bg-card)', fontSize: 12 }}
+                  >
+                    {/* La opción vacía se queda: sin ella la pantalla preguntaría
+                        sola por la primera del catálogo, que es una elección que
+                        nadie hizo y una petición que nadie pidió. */}
+                    <option value="">Elige una opción del catálogo…</option>
+                    {catalogo.map((a) => (
+                      <option key={a.codigo} value={a.codigo}>
+                        {a.nombre} ({a.codigo})
+                      </option>
+                    ))}
+                  </select>
+                  <label htmlFor="privilegio-sondeado" style={{ fontSize: 11.5, color: 'var(--ink-3)' }}>
+                    Privilegio
+                  </label>
+                  <select
+                    id="privilegio-sondeado"
+                    value={privilegioSondeado}
+                    onChange={(e) => setPrivilegioSondeado(e.target.value as Privilegio)}
+                    style={{ border: '1px solid var(--line-2)', borderRadius: 6, padding: '6px 9px', background: 'var(--bg-card)', fontSize: 12 }}
+                  >
+                    {/* Los siete salen del enumerado que la fachada declara, no de
+                        una lista escrita aquí: uno nuevo en el backend aparece
+                        solo, y uno inventado no se puede elegir. */}
+                    {PRIVILEGIOS.map((pv) => (
+                      <option key={pv} value={pv}>
+                        {pv}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+                {accesoSondeado === '' ? (
+                  <p style={{ margin: 0, padding: '13px 16px', fontSize: 12, color: 'var(--ink-4)' }}>
+                    Elige una opción para ver quién tiene ese privilegio sobre ella. Se pregunta por opción y no del padrón entero: la
+                    lectura contesta quién lo tiene sobre <strong>una</strong>, y hacerlo de todas costaría {catalogo.length || 134}{' '}
+                    peticiones.
+                  </p>
+                ) : titulares.cargando ? (
+                  <p style={{ margin: 0, padding: '13px 16px', fontSize: 12, color: 'var(--ink-4)' }}>Preguntando…</p>
+                ) : titulares.error !== null ? (
+                  <FalloDeLectura
+                    error={titulares.error}
+                    que="quién tiene ese privilegio"
+                    acceso="permisos"
+                    alReintentar={titulares.reintentar}
+                  />
+                ) : (
+                  <div style={{ padding: '13px 16px', display: 'flex', flexDirection: 'column', gap: 8 }}>
+                    <p style={{ margin: 0, fontSize: 12, color: 'var(--ink-3)' }}>
+                      {(titulares.datos?.totalElementos ?? 0) === 0
+                        ? 'Nadie tiene ' + privilegioSondeado + ' sobre «' + accesoSondeado + '».'
+                        : titulares.datos!.totalElementos +
+                          (titulares.datos!.totalElementos === 1 ? ' cuenta tiene ' : ' cuentas tienen ') +
+                          privilegioSondeado +
+                          ' sobre «' +
+                          accesoSondeado +
+                          '».'}
+                    </p>
+                    {(titulares.datos?.contenido ?? []).map((t) => (
+                      <div key={t.usuarioId} style={{ display: 'flex', gap: 10, alignItems: 'baseline', fontSize: 12 }}>
+                        <span style={{ fontFamily: 'var(--font-mono)', minWidth: 110 }}>{t.cuenta}</span>
+                        <span style={{ flex: 1, minWidth: 0 }}>{t.nombre}</span>
+                        {/* De dónde le viene, que es la mitad que ningún recorrido
+                            por grupos encontraría: una excepción propia no se ve
+                            mirando a qué grupo pertenece nadie. */}
+                        <span style={{ fontSize: 11, color: 'var(--ink-4)' }}>
+                          {t.origen === 'GRUPO' ? 'por el grupo ' + String(t.grupoId) : 'excepción propia de la cuenta'}
+                        </span>
+                      </div>
+                    ))}
+                  </div>
+                )}
               </section>
             )}
 

@@ -303,6 +303,91 @@ export const permisosEfectivosDelUsuario = (usuarioId: number, s?: AbortSignal) 
   solicitar<PermisoEfectivo[]>(`/seguridad/usuarios/${usuarioId}/permisos`, { senal: s });
 
 /**
+ * Lo CONFIGURADO de una cuenta, que no es lo mismo que lo efectivo (#583).
+ *
+ * <h2>La pregunta que esto contesta y la otra no</h2>
+ *
+ * {@link permisosEfectivosDelUsuario} aplica la misma regla que el guardia, y a
+ * una cuenta deshabilitada le contesta la lista **vacía**. Eso está bien: es lo
+ * que esa persona puede hacer hoy, que es nada. Pero deja dos situaciones
+ * distintas con la misma respuesta — la cuenta que **conserva** permisos y la
+ * que nunca tuvo ninguno—, y son las dos que quien administra necesita separar:
+ * la primera es una llave que sigue existiendo y que basta rehabilitar para que
+ * vuelva a abrir.
+ *
+ * Medido contra el backend, municipalidad 1:
+ *
+ * ```
+ * jperez    habilitada      surtenEfectoHoy=true    configurados=134  efectivos=134
+ * avilchez  deshabilitada   surtenEfectoHoy=false   configurados=134  efectivos=0
+ * ccruz     deshabilitada   surtenEfectoHoy=false   configurados= 11  efectivos=0
+ * ```
+ *
+ * Antes de #583 las dos últimas eran `[]` y no había forma de distinguirlas.
+ *
+ * **`surtenEfectoHoy` es el discriminador y se lee, no se deduce.** Deducirlo de
+ * `usuario.habilitado` funcionaría hoy y dejaría de funcionar en cuanto la
+ * vigencia o cualquier otra condición entre en la regla del guardia: la
+ * respuesta la da quien aplica esa regla.
+ */
+export type PermisosConfigurados = {
+  usuarioId: number;
+  cuenta: string;
+  /** Si lo configurado surte efecto hoy. Con `false`, la cuenta no puede operar. */
+  surtenEfectoHoy: boolean;
+  permisos: PermisoEfectivo[];
+};
+
+export const permisosConfiguradosDelUsuario = (usuarioId: number, s?: AbortSignal) =>
+  solicitar<PermisosConfigurados>(`/seguridad/usuarios/${usuarioId}/permisos/configurados`, { senal: s });
+
+/**
+ * Una fila de «quién tiene este privilegio sobre esta opción». Es
+ * `TitularDelPrivilegioResource`.
+ *
+ * `origen` dice de dónde le viene: `GRUPO` con su `grupoId`, o `EXCEPCION`
+ * cuando es una excepción propia de la cuenta. Esa segunda mitad es la que
+ * ningún recorrido por grupos encontraría, y es justo la que importa —una
+ * excepción propia no se ve mirando a qué grupo pertenece nadie—.
+ */
+export type TitularDelPrivilegio = {
+  usuarioId: number;
+  cuenta: string;
+  nombre: string;
+  origen: OrigenDelPermiso;
+  grupoId: number | null;
+};
+
+/**
+ * Quién tiene un privilegio sobre una opción (#583).
+ *
+ * Es **la pregunta inversa** a la matriz de una cuenta, y hasta #693 costaba una
+ * petición por usuario del padrón: en la práctica no se hacía.
+ *
+ * El vocabulario se admite en cualquier caja —`especial` y `ESPECIAL` son la
+ * misma palabra, medido: 200 las dos— y cualquier otra palabra es **422
+ * enumerando los siete**, no una página vacía: «nadie tiene Especial» es la
+ * lectura plausible y equivocada por la que #427 se negó a traducir vocabularios
+ * (medido: `?privilegio=TOTAL` → «Privilegio desconocido: 'TOTAL'. Los siete son
+ * [EJECUCION, LECTURA, REGISTRO, MODIFICACION, ELIMINACION, IMPRESION,
+ * ESPECIAL]»).
+ *
+ * **Es por opción, no del padrón entero.** Preguntar «quién tiene Especial en
+ * algo» seguiría costando una petición por acceso —134—, así que la pantalla
+ * pregunta por la opción que se elija y lo dice.
+ */
+export const titularesDelPrivilegio = (
+  codigoDeAcceso: string,
+  privilegio: Privilegio,
+  paginacion: { pagina?: number; tamano?: number },
+  s?: AbortSignal,
+) =>
+  solicitar<RespuestaPaginada<TitularDelPrivilegio>>(`/seguridad/accesos/${codigoDeAcceso}/usuarios`, {
+    parametros: { privilegio, ...paginacion },
+    senal: s,
+  });
+
+/**
  * La bitacora.
  *
  * `ejercicio` es OBLIGATORIO —sin el, 422— porque la tabla esta particionada
