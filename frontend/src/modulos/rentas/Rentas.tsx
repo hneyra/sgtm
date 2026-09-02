@@ -482,6 +482,12 @@ function BloqueDeTabla({ tabla, onAnadir }: { tabla: TablaDef; onAnadir: () => v
  */
 type CruceDeLaUnidad =
   | { estado: 'suya' }
+  /* La unidad EXISTE y a esa fecha no figura a nombre de nadie. Desde #680 el
+     servidor la ADMITE sin declaración —4 977 de los 14 422 predios de Catacaos
+     están así, el 34,5 %, y son justo los que la detección de omisos enseña—,
+     así que no es «es de otro» y decirlo como tal manda a declarar algo que no
+     hay que declarar. */
+  | { estado: 'sin-titular'; aLaFecha: string }
   | { estado: 'ajena'; de: string }
   | { estado: 'sin-comprobar'; por: string };
 
@@ -534,9 +540,24 @@ async function resolverLaUnidadDelAlta(
     let cruce: CruceDeLaUnidad;
     try {
       const suyos = await listarPrediosDelContribuyente(codContribuyente, { codigoPredial: escrito }, { tamano: 20 }, senal);
-      cruce = suyos.contenido.some((p) => p.predioId === predio.predioId)
-        ? { estado: 'suya' }
-        : { estado: 'ajena', de: 'no figura entre los predios de este contribuyente' };
+      if (suyos.contenido.some((p) => p.predioId === predio.predioId)) {
+        cruce = { estado: 'suya' };
+      } else {
+        /* No está entre los suyos, y hasta #680 eso se decía «ajena» sin más.
+           Pero son DOS cosas: el predio de otro —que el servidor rechaza y que
+           hay que declarar— y el predio **sin titular vigente**, que desde #680
+           entra tal cual y no hay nada que declarar. La lista del contribuyente
+           no las distingue: un predio sin titular no está en la de nadie.
+
+           Se pregunta por los titulares del predio, y **sólo aquí**: cuando sí
+           es suyo no hace falta, que es el camino corriente. Una petición más en
+           la rama que la necesita. */
+        const r = await titularesDelPredio(predio.predioId, undefined, senal);
+        cruce =
+          r.titulares.length === 0
+            ? { estado: 'sin-titular', aLaFecha: r.vigenteA }
+            : { estado: 'ajena', de: 'no figura entre los predios de este contribuyente' };
+      }
     } catch {
       /* Que no se pueda comprobar NO es que sea de otro, y tampoco que sea suya:
          un fallo de la lectura del padrón se dice como lo que es. Y no tumba la
@@ -654,10 +675,16 @@ async function resolverElCruceDeLaBaja(
        compara acaba de salir de una búsqueda del padrón, así que si fuera
        titular saldría con su código puesto. */
     if (r.titulares.some((t) => t.codigo === codContribuyente)) return { estado: 'suya' };
-    /* Un predio sin ningún titular a esa fecha lo rechaza el servidor igual, y
-       con razón: sin titular no se puede comprobar que la obligación sea suya.
-       Se dice como lo que es y no como «es de otro», que sería afirmar de más. */
-    if (r.titulares.length === 0) return { estado: 'ajena', de: `no tiene ningún titular al ${r.vigenteA}` };
+    /* Un predio sin ningún titular a esa fecha **entra** desde #680, y sin
+       declarar nada: medido contra el backend, el alta sobre el predio 17 —que
+       existe y no tiene titular vigente— devuelve su nota de abono. Hasta
+       entonces esta rama devolvía «ajena», que hacía dos cosas mal: decía «así
+       el servidor no la va a admitir», que es falso, y ofrecía la declaración de
+       titular anterior, que aquí no hay que dar.
+
+       Lo que el servidor sí sigue rechazando es el identificador que **no está
+       en el padrón**, y ése no llega hasta aquí: la unidad se resolvió antes. */
+    if (r.titulares.length === 0) return { estado: 'sin-titular', aLaFecha: r.vigenteA };
     const quienes = r.titulares.map((t) => `${t.nombre ?? 'sin nombre en el padrón'} (${t.codigo ?? SIN_DATO})`).join(', ');
     return { estado: 'ajena', de: `es de ${quienes} al ${r.vigenteA}` };
   }
@@ -818,6 +845,17 @@ function UnidadDelAltaResuelta({
           {esPredioDeLaUnidad ? `predioId ${String(unidad.cuerpo.predioId)}` : `vehiculoId ${String(unidad.cuerpo.vehiculoId)}`}
         </span>
       </div>
+      {/* La unidad existe y no figura a nombre de nadie: desde #680 el servidor
+          lo ADMITE sin declaración. Se dice —quien atiende tiene que saber sobre
+          qué carga— y no se ofrece la declaración, porque aquí no hay titular
+          anterior que declarar. Sin esta rama la pantalla no diría nada. */}
+      {unidad.cruce.estado === 'sin-titular' && (
+        <Aviso tono="neutro" titulo={`La unidad resuelta no figura a nombre de nadie al ${unidad.cruce.aLaFecha}`}>
+          Está en el padrón y su titularidad no está registrada, que es lo corriente en un padrón sin sanear —4 977 de los 14 422 predios
+          de Catacaos están así—. El servidor lo admite tal cual y no hay nada que declarar: el cargo queda sobre{' '}
+          {contribuyente.nombreRazonSocial} ({contribuyente.codigo}) y sobre esta unidad.
+        </Aviso>
+      )}
       {unidad.cruce.estado === 'ajena' && (
         <Aviso tono="warn" titulo={`La unidad resuelta ${unidad.cruce.de}`}>
           El alta se registra sobre {contribuyente.nombreRazonSocial} ({contribuyente.codigo}), y así el servidor no la va a admitir: desde
@@ -910,6 +948,16 @@ function UnidadDeLaBajaCruzada({
       <p role="status" style={{ margin: 0, fontSize: 12.5, lineHeight: 1.5, color: 'var(--ink-3)', textWrap: 'pretty' }}>
         {conMayuscula(que)} es de {contribuyente.nombreRazonSocial} a la fecha de la resolución.
       </p>
+    );
+  /* Ni bloquea ni pide nada: es un estado legítimo del padrón y el servidor lo
+     admite. Se dice —quien atiende tiene que saber sobre qué está cargando— y se
+     dice en tono neutro, porque no hay nada que corregir. */
+  if (cruce.estado === 'sin-titular')
+    return (
+      <Aviso tono="neutro" titulo={`${conMayuscula(que)} no figura a nombre de nadie al ${cruce.aLaFecha}`}>
+        Está en el padrón y su titularidad no está registrada, que es lo corriente en un padrón sin sanear. El servidor lo admite tal cual
+        y no hay nada que declarar: el cargo queda sobre {contribuyente.nombreRazonSocial} ({contribuyente.codigo}) y sobre esta unidad.
+      </Aviso>
     );
   if (cruce.estado === 'sin-comprobar')
     return (
@@ -2339,13 +2387,18 @@ export default function Rentas({ dest, onDest }: PantallaProps) {
    * unidad que sí es suya el servidor ni siquiera lo miraría —de modo que la
    * afirmación falsa quedaría escrita sin que nada la contradijera—.
    */
+  /* Se manda sólo en los DOS estados que ofrecen la casilla. Con `!== 'suya'`
+     también viajaría en `sin-titular`, donde desde #680 no hay titular anterior
+     que declarar y el servidor admite el movimiento tal cual: sería afirmar en la
+     bitácora algo que nadie preguntó y que además es falso. */
+  const OFRECEN_LA_DECLARACION = ['ajena', 'sin-comprobar'];
   const declaracionDelAlta =
     declaraTitularAnteriorEnElAlta &&
     unidadResuelta !== null &&
     unidadResuelta.clase !== 'nada' &&
-    unidadResuelta.cruce.estado !== 'suya';
+    OFRECEN_LA_DECLARACION.includes(unidadResuelta.cruce.estado);
   const declaracionDeLaBaja =
-    declaraTitularAnteriorEnLaBaja && cruceDeLaBaja.datos !== null && cruceDeLaBaja.datos.estado !== 'suya';
+    declaraTitularAnteriorEnLaBaja && cruceDeLaBaja.datos !== null && OFRECEN_LA_DECLARACION.includes(cruceDeLaBaja.datos.estado);
 
   /**
    * Lo que impide dar de alta, o `undefined`.
