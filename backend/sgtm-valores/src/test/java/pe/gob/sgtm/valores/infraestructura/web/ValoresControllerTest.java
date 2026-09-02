@@ -545,6 +545,9 @@ class ValoresControllerTest {
         assertThat(cuerpo)
                 .as("un 500 traeria identificador de incidencia; esto no es una incidencia")
                 .doesNotContain("incidencia");
+        assertThat(cuerpo)
+                .as("#691 — sin conjunto sellado no hay llave: viaja el ejercicio solo")
+                .contains("\"parametroQueFalta\":{\"ejercicio\":2026}");
         assertThat(notificaciones.todas()).isEmpty();
     }
 
@@ -560,6 +563,11 @@ class ValoresControllerTest {
                 .as("hay conjunto y le falta una cifra: lo que se nombra es la llave")
                 .contains("PLAZO:NOTIFICACION_VALOR-OP")
                 .doesNotContain("incidencia");
+        assertThat(resultado.getResponse().getContentAsString())
+                .as("#691 — y la llave, legible por programa")
+                .contains(
+                        "\"parametroQueFalta\":{\"ejercicio\":2026,"
+                                + "\"llave\":\"PLAZO:NOTIFICACION_VALOR-OP\"}");
     }
 
     @Test

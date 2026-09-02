@@ -11,6 +11,7 @@ import pe.gob.sgtm.autorizacion.Privilegio;
 import pe.gob.sgtm.autorizacion.RequiereAcceso;
 import pe.gob.sgtm.compartido.Paginacion;
 import pe.gob.sgtm.cuentacorriente.TributoDelLibro;
+import pe.gob.sgtm.parametros.FaltaPublicar;
 import pe.gob.sgtm.rentas.aplicacion.CampaniasDeBeneficioParametrizadas;
 import pe.gob.sgtm.rentas.aplicacion.SimularAcogimiento;
 import pe.gob.sgtm.web.Api;
@@ -111,14 +112,17 @@ public class DeudasConBeneficioController {
 
         try {
             return DeudasConBeneficioResource.de(simulacion.de(criterio, paginacionDe(parametros)));
-        } catch (CampaniasDeBeneficioParametrizadas.CampaniaSinParametrizar sinCampania) {
+        } catch (CampaniasDeBeneficioParametrizadas.CampaniaSinParametrizar
+                | CampaniasDeBeneficioParametrizadas.CampaniaIncompleta
+                | CampaniasDeBeneficioParametrizadas.BaseDesconocida falta) {
             // 422 y no 500: la peticion esta bien y el sistema tampoco esta roto. Lo que falta es
             // un dato de configuracion —la ordenanza de D-02b/D-02c— y quien opera tiene que
             // enterarse de cual para poder pedirlo. Mismo trato que TASA_ANUNCIO:<CLASE> en #51.
-            throw new ProblemaDeNegocio(CodigoDeError.VALIDACION, mensajeDe(sinCampania));
-        } catch (CampaniasDeBeneficioParametrizadas.CampaniaIncompleta
-                | CampaniasDeBeneficioParametrizadas.BaseDesconocida mal) {
-            throw new ProblemaDeNegocio(CodigoDeError.VALIDACION, mensajeDe(mal));
+            // Falta publicar una cifra normativa, no un campo de la peticion: el 422 sale con
+            // el miembro `parametroQueFalta` (#604, #691). Sin el, la interfaz no puede decir UNA
+            // de las dos cosas —«corrige el formulario» o «hay que publicar una cifra»— y acaba
+            // enumerando las dos, que es peor que no decir nada.
+            throw FaltaPublicar.problema(falta);
         }
     }
 

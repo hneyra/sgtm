@@ -143,6 +143,11 @@ class AlcabalaControllerTest {
         assertThat(cuerpo)
                 .as("un 500 traeria identificador de incidencia; esto no es una incidencia")
                 .doesNotContain("incidencia");
+        assertThat(cuerpo)
+                .as(
+                        "#691 — y el discriminador: sin conjunto no hay llave que nombrar, asi que"
+                                + " viaja el ejercicio solo")
+                .contains("\"parametroQueFalta\":{\"ejercicio\":2026}");
         assertThat(determinaciones.insertadas).isZero();
     }
 
@@ -162,6 +167,31 @@ class AlcabalaControllerTest {
         assertThat(resultado.getResponse().getContentAsString())
                 .contains("ALICUOTA_ALCABALA")
                 .doesNotContain("incidencia");
+        assertThat(resultado.getResponse().getContentAsString())
+                .as(
+                        "#691 — la llave viaja legible por programa, no solo dentro del texto: el"
+                                + " texto se reescribe en cuanto alguien lo lee en voz alta")
+                .contains(
+                        "\"parametroQueFalta\":{\"ejercicio\":2026,\"llave\":\"ALICUOTA_ALCABALA\"}");
+    }
+
+    @Test
+    @DisplayName("#691 — CONTRASTE: el 422 de un campo que falta NO lleva el discriminador")
+    void elCampoQueFaltaNoLlevaElMiembro() throws Exception {
+        MvcResult resultado =
+                mvc.perform(
+                                post("/api/v1/rentas/alcabala")
+                                        .contentType(MediaType.APPLICATION_JSON)
+                                        .content(
+                                                "{\"transferenciaId\":1,\"autovaluoAjustado\":\"100000.00\"}"))
+                        .andReturn();
+
+        assertThat(resultado.getResponse().getStatus())
+                .as("tambien es 422 VALIDACION: eso es justo lo que hacia falta discriminar")
+                .isEqualTo(422);
+        assertThat(resultado.getResponse().getContentAsString())
+                .as("esto lo arregla quien atiende, aqui mismo: escribir la observacion")
+                .doesNotContain("parametroQueFalta");
     }
 
     @Test

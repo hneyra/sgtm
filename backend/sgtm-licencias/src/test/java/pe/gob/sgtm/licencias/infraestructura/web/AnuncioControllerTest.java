@@ -263,6 +263,11 @@ class AnuncioControllerTest {
                                     + " incidencia")
                     .contains("TASA_ANUNCIO:TOLDO")
                     .contains("#199");
+            assertThat(cuerpo)
+                    .as("#691 — y la llave, legible por programa")
+                    .contains(
+                            "\"parametroQueFalta\":{\"ejercicio\":2026,"
+                                    + "\"llave\":\"TASA_ANUNCIO:TOLDO\"}");
             assertThat(libro.cuantos()).isZero();
         }
 
@@ -403,6 +408,9 @@ class AnuncioControllerTest {
                     .contains("VALIDACION")
                     .contains("2026")
                     .doesNotContain("incidencia");
+            assertThat(cuerpo)
+                    .as("#691 — sin conjunto sellado no hay llave: viaja el ejercicio solo")
+                    .contains("\"parametroQueFalta\":{\"ejercicio\":2026}");
             assertThat(libro.cuantos()).as("y no se asienta ningun cargo").isZero();
         }
 

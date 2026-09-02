@@ -19,6 +19,7 @@ import pe.gob.sgtm.compartido.Paginacion;
 import pe.gob.sgtm.dominio.Ejercicio;
 import pe.gob.sgtm.dominio.Observacion;
 import pe.gob.sgtm.dominio.Placa;
+import pe.gob.sgtm.parametros.FaltaPublicar;
 import pe.gob.sgtm.parametros.LectorDeParametros;
 import pe.gob.sgtm.parametros.ParametrosSellados;
 import pe.gob.sgtm.rentas.aplicacion.ConsultaDeVehiculos;
@@ -168,9 +169,18 @@ public class VehicularController {
                 }
             }
         } catch (ParametrosSellados.ParametroAusente
-                | LectorDeParametros.EjercicioSinSellar
-                | RegistrarDeterminacionVehicular.SinValorReferencial falta) {
-            throw new ProblemaDeNegocio(CodigoDeError.VALIDACION, mensajeDe(falta));
+                | LectorDeParametros.EjercicioSinSellar falta) {
+            // Falta publicar una cifra normativa, no un campo de la peticion: el 422 sale con
+            // el miembro `parametroQueFalta` (#604, #691). Sin el, la interfaz no puede decir UNA
+            // de las dos cosas —«corrige el formulario» o «hay que publicar una cifra»— y acaba
+            // enumerando las dos, que es peor que no decir nada.
+            throw FaltaPublicar.problema(falta);
+        } catch (RegistrarDeterminacionVehicular.SinValorReferencial sinValor) {
+            // Esta NO lleva el discriminador, y esa es la mitad del criterio: el valor
+            // referencial de un vehiculo no es una fila del conjunto sellado sino del cuadro que
+            // publica el MEF por marca, modelo y ano (D-13, ADR-0017). Lo que falta se busca en
+            // otro sitio, asi que darle el mismo miembro diria por contrato que no.
+            throw new ProblemaDeNegocio(CodigoDeError.VALIDACION, mensajeDe(sinValor));
         }
         return ultimo == null
                 ? CalculoVehicularResource.sinDeterminaciones(fechaCalculo)

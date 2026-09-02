@@ -384,6 +384,9 @@ class CostasYConveniosControllerTest {
         assertThat(cuerpo)
                 .as("un 500 traeria identificador de incidencia; esto no es una incidencia")
                 .doesNotContain("incidencia");
+        assertThat(cuerpo)
+                .as("#691 — sin conjunto sellado no hay llave: viaja el ejercicio solo")
+                .contains("\"parametroQueFalta\":{\"ejercicio\":2026}");
         assertThat(cargos.asentados).as("y no se asienta ningun cargo").isEmpty();
     }
 
@@ -404,6 +407,11 @@ class CostasYConveniosControllerTest {
                 .contains("ARANCEL_COSTA:REC1")
                 .contains("#193")
                 .doesNotContain("incidencia");
+        assertThat(resultado.getResponse().getContentAsString())
+                .as("#691 — y la llave, legible por programa")
+                .contains(
+                        "\"parametroQueFalta\":{\"ejercicio\":2026,"
+                                + "\"llave\":\"ARANCEL_COSTA:REC1\"}");
         assertThat(cargos.asentados).as("y no se asienta ningun cargo").isEmpty();
     }
 
@@ -424,6 +432,11 @@ class CostasYConveniosControllerTest {
                 .contains("no tiene ningun acto pendiente de liquidar")
                 .doesNotContain("ARANCEL_COSTA")
                 .doesNotContain("incidencia");
+        assertThat(resultado.getResponse().getContentAsString())
+                .as(
+                        "#691 — y por lo mismo NO lleva el discriminador: que la ordenanza no"
+                                + " tarife un acto es una decision suya, no una cifra sin publicar")
+                .doesNotContain("parametroQueFalta");
         assertThat(cargos.asentados).isEmpty();
     }
 
@@ -434,6 +447,7 @@ class CostasYConveniosControllerTest {
         convenios.faltaPublicar =
                 "El conjunto sellado del ejercicio 2026 no tiene el parametro"
                         + " INTERES_FRACCIONAMIENTO:ORDINARIO";
+        convenios.llaveQueFalta = "INTERES_FRACCIONAMIENTO:ORDINARIO";
 
         MvcResult resultado = fraccionar(expediente, false, "Se registra el convenio coactivo");
 
@@ -445,6 +459,14 @@ class CostasYConveniosControllerTest {
         assertThat(resultado.getResponse().getContentAsString())
                 .contains("INTERES_FRACCIONAMIENTO:ORDINARIO")
                 .doesNotContain("incidencia");
+        assertThat(resultado.getResponse().getContentAsString())
+                .as(
+                        "#691 — el envoltorio de la frontera COPIA el ejercicio y la llave de su"
+                                + " causa: hasta aqui solo conservaba el mensaje, asi que este 422"
+                                + " salia mudo aunque la excepcion original lo supiera todo")
+                .contains(
+                        "\"parametroQueFalta\":{\"ejercicio\":2026,"
+                                + "\"llave\":\"INTERES_FRACCIONAMIENTO:ORDINARIO\"}");
         assertThat(convenios.registrados).isZero();
     }
 
@@ -461,6 +483,9 @@ class CostasYConveniosControllerTest {
                 .as("sin conjunto no hay llave que nombrar: se nombra el ejercicio")
                 .contains("2026")
                 .doesNotContain("incidencia");
+        assertThat(resultado.getResponse().getContentAsString())
+                .as("#691 — y el miembro tampoco la lleva")
+                .contains("\"parametroQueFalta\":{\"ejercicio\":2026}");
     }
 
     @Test
@@ -813,6 +838,14 @@ class CostasYConveniosControllerTest {
          */
         private @org.jspecify.annotations.Nullable String faltaPublicar;
 
+        /**
+         * La llave que la causa publica, o {@code null} cuando lo que falta es el conjunto entero.
+         *
+         * <p>El doble tiene que poder decir las dos cosas porque el discriminador de #604 las
+         * distingue: con llave cuando falta una fila, sin ella cuando no hay donde publicar nada.
+         */
+        private @org.jspecify.annotations.Nullable String llaveQueFalta;
+
         /** Un defecto de verdad del servidor, para el contraste. */
         private boolean revienta;
 
@@ -845,7 +878,39 @@ class CostasYConveniosControllerTest {
             }
             if (faltaPublicar != null) {
                 throw new CondicionesSinPublicar(
-                        faltaPublicar, new IllegalStateException(faltaPublicar));
+                        faltaPublicar, new FaltaDeMentira(faltaPublicar, llaveQueFalta));
+            }
+        }
+
+        /**
+         * Una excepcion de mentira que publica lo que falta, como las de verdad (#691).
+         *
+         * <p>{@code CondicionesSinPublicar} copia el ejercicio y la llave de su causa, y su
+         * constructor exige {@code RuntimeException & ParametroSinPublicar}: un doble que lanzara
+         * un {@code IllegalStateException} pelado ya no compila, que es exactamente lo que ese
+         * limite existe para conseguir.
+         */
+        private static final class FaltaDeMentira extends RuntimeException
+                implements pe.gob.sgtm.parametros.ParametroSinPublicar {
+
+            @java.io.Serial private static final long serialVersionUID = 1L;
+
+            @SuppressWarnings("serial")
+            private final @org.jspecify.annotations.Nullable String llave;
+
+            FaltaDeMentira(String mensaje, @org.jspecify.annotations.Nullable String llave) {
+                super(mensaje);
+                this.llave = llave;
+            }
+
+            @Override
+            public pe.gob.sgtm.dominio.Ejercicio ejercicio() {
+                return new pe.gob.sgtm.dominio.Ejercicio(2026);
+            }
+
+            @Override
+            public java.util.Optional<String> llave() {
+                return java.util.Optional.ofNullable(llave);
             }
         }
 

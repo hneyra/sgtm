@@ -18,6 +18,7 @@ import pe.gob.sgtm.autorizacion.Privilegio;
 import pe.gob.sgtm.autorizacion.RequiereAcceso;
 import pe.gob.sgtm.dominio.Ejercicio;
 import pe.gob.sgtm.dominio.Observacion;
+import pe.gob.sgtm.parametros.FaltaPublicar;
 import pe.gob.sgtm.parametros.LectorDeParametros;
 import pe.gob.sgtm.rentas.aplicacion.ConsultaDeLaHojaDeDeclaracion;
 import pe.gob.sgtm.rentas.aplicacion.ConsultasDeRentas;
@@ -250,10 +251,13 @@ public class DeclaracionJuradaController {
             // esta la declaracion. La interfaz distingue las dos cosas para saber si reintentar
             // tiene sentido.
             throw new ProblemaDeNegocio(CodigoDeError.CONFLICTO, mensajeDe(ilegal));
-        } catch (RegistrarDeclaracionJurada.PlazoSinParametrizar sinPlazo) {
-            throw new ProblemaDeNegocio(CodigoDeError.VALIDACION, mensajeDe(sinPlazo));
-        } catch (LectorDeParametros.EjercicioSinSellar sinSellar) {
-            throw new ProblemaDeNegocio(CodigoDeError.VALIDACION, mensajeDe(sinSellar));
+        } catch (RegistrarDeclaracionJurada.PlazoSinParametrizar
+                | LectorDeParametros.EjercicioSinSellar falta) {
+            // Falta publicar una cifra normativa, no un campo de la peticion: el 422 sale con
+            // el miembro `parametroQueFalta` (#604, #691). Sin el, la interfaz no puede decir UNA
+            // de las dos cosas —«corrige el formulario» o «hay que publicar una cifra»— y acaba
+            // enumerando las dos, que es peor que no decir nada.
+            throw FaltaPublicar.problema(falta);
         } catch (IllegalArgumentException invalido) {
             throw new ProblemaDeNegocio(CodigoDeError.VALIDACION, mensajeDe(invalido));
         }

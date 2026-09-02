@@ -110,6 +110,9 @@ class EspectaculoControllerTest {
         assertThat(cuerpo)
                 .as("un 500 traeria identificador de incidencia; esto no es una incidencia")
                 .doesNotContain("incidencia");
+        assertThat(cuerpo)
+                .as("#691 — sin conjunto sellado no hay llave: viaja el ejercicio solo")
+                .contains("\"parametroQueFalta\":{\"ejercicio\":2026}");
         assertThat(determinaciones.insertadas).isZero();
     }
 
@@ -125,6 +128,10 @@ class EspectaculoControllerTest {
                 .as("sin el tipo, quien atiende no sabe que ordenanza pedir")
                 .contains("ALICUOTA_ESPECTACULO:CINE")
                 .doesNotContain("incidencia");
+        assertThat(resultado.getResponse().getContentAsString())
+                .as("#691 — y la misma llave, legible por programa")
+                .contains(
+                        "\"parametroQueFalta\":{\"ejercicio\":2026,\"llave\":\"ALICUOTA_ESPECTACULO:CINE\"}");
     }
 
     @Test

@@ -207,6 +207,11 @@ class LiquidacionControllerTest {
 
         assertThat(resultado.getResponse().getStatus()).isEqualTo(422);
         assertThat(resultado.getResponse().getContentAsString()).contains("2023");
+        assertThat(resultado.getResponse().getContentAsString())
+                .as(
+                        "#691 — y el discriminador. Fiscalizacion no estaba ni en el censo del"
+                                + " enunciado, que contaba coactiva, licencias, sanciones y valores")
+                .contains("\"parametroQueFalta\":{\"ejercicio\":2023}");
     }
 
     @Test

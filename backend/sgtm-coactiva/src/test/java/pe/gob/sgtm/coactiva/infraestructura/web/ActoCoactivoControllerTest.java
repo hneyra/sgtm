@@ -583,6 +583,9 @@ class ActoCoactivoControllerTest {
             assertThat(cuerpo)
                     .as("un 500 traeria identificador de incidencia; esto no es una incidencia")
                     .doesNotContain("incidencia");
+            assertThat(cuerpo)
+                    .as("#691 — sin conjunto sellado no hay llave: viaja el ejercicio solo")
+                    .contains("\"parametroQueFalta\":{\"ejercicio\":2026}");
         }
 
         @Test
@@ -595,6 +598,32 @@ class ActoCoactivoControllerTest {
                     .as("hay conjunto y le falta una cifra: lo que se nombra es la llave")
                     .contains("PLAZO:REC1_CUMPLIMIENTO")
                     .doesNotContain("incidencia");
+            assertThat(resultado.getResponse().getContentAsString())
+                    .as("#691 — y la llave viaja legible por programa, no solo dentro del texto")
+                    .contains(
+                            "\"parametroQueFalta\":{\"ejercicio\":2026,"
+                                    + "\"llave\":\"PLAZO:REC1_CUMPLIMIENTO\"}");
+        }
+
+        @Test
+        @DisplayName("#691 — CONTRASTE: dictar sin observacion es 422 y NO lleva el miembro")
+        void sinObservacionNoLlevaElMiembro() throws Exception {
+            MvcResult resultado =
+                    mvc.perform(
+                                    MockMvcRequestBuilders.post(
+                                                    "/api/v1/coactiva/expedientes/EXP-2026-000001/actos")
+                                            .contentType(MediaType.APPLICATION_JSON)
+                                            .content(
+                                                    "{\"tipo\":\"REC1\",\"glosa\":\"Se inicia la"
+                                                            + " cobranza\"}"))
+                            .andReturn();
+
+            assertThat(resultado.getResponse().getStatus())
+                    .as("tambien es 422 VALIDACION: eso es justo lo que hacia falta discriminar")
+                    .isEqualTo(422);
+            assertThat(resultado.getResponse().getContentAsString())
+                    .as("esto lo arregla quien atiende, aqui mismo: escribir la observacion")
+                    .doesNotContain("parametroQueFalta");
         }
 
         @Test
