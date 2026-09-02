@@ -265,6 +265,37 @@ public interface AsientoRepository {
      */
     List<String> tributosFueraDelVocabulario();
 
-    /** Inserta el asiento y devuelve la fila guardada, con su {@code id} y su {@code usuarioId}. */
+    /**
+     * Inserta el asiento y devuelve la fila guardada, con su {@code id} y su {@code usuarioId}.
+     *
+     * @throws AltaYaAsentada si el asiento es de un alta de deuda que ya esta en el libro con el
+     *     mismo sustento (#588). Lo decide {@code asiento_alta_unica_uq} (V75), no un {@code if}
+     */
     Asiento registrar(Asiento asiento);
+
+    /**
+     * Ya hay en el libro un alta de esta obligacion con este sustento y este concepto (#588).
+     *
+     * <h2>Quien lo garantiza, y por que no hay ninguna comprobacion previa</h2>
+     *
+     * <p>Lo garantiza {@code asiento_alta_unica_uq} (V75), un indice unico parcial sobre {@code
+     * cuenta_corriente_asiento}. Esta excepcion <b>no</b> es una guarda: es la traduccion del
+     * choque al vocabulario del dominio, hecha en el unico sitio donde se sabe con certeza que el
+     * {@code INSERT} que fallo fue el del asiento y no otro —{@code documento_numero_uq} (V15)
+     * tambien lanza {@code DuplicateKeyException} y significa algo completamente distinto—.
+     *
+     * <p>Y no hay un {@code SELECT} previo a proposito. No anadiria nada: el mensaje se compone con
+     * el asiento que se iba a escribir, asi que ya nombra la obligacion, la cuota, el concepto y el
+     * sustento; no evita gastar nada, porque el documento se emite <b>despues</b> de los asientos;
+     * y entre leer y escribir cabe otra peticion, de modo que dos envios simultaneos lo pasarian
+     * los dos. Es la leccion de #188 —«la regla la sostiene la restriccion y no el codigo»— llevada
+     * un paso mas alla: alli la guarda de Java quedo documentada como inutil, aqui no se escribe.
+     */
+    final class AltaYaAsentada extends RuntimeException {
+        @java.io.Serial private static final long serialVersionUID = 1L;
+
+        public AltaYaAsentada(String mensaje, Throwable causa) {
+            super(mensaje, causa);
+        }
+    }
 }

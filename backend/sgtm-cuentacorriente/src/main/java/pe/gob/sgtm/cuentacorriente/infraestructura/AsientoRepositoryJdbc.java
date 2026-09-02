@@ -9,6 +9,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 import org.jspecify.annotations.Nullable;
+import org.springframework.dao.DuplicateKeyException;
 import org.springframework.jdbc.core.simple.JdbcClient;
 import org.springframework.stereotype.Repository;
 import pe.gob.sgtm.auditoria.OrigenContext;
@@ -725,8 +726,63 @@ public class AsientoRepositoryJdbc extends RepositorioJdbc implements AsientoRep
                 .list();
     }
 
+    /**
+     * {@inheritDoc}
+     *
+     * <h2>Por que la traduccion solo envuelve al alta</h2>
+     *
+     * <p>El unico indice unico que este {@code INSERT} puede violar hoy es {@code
+     * asiento_alta_unica_uq} (V75, #588), que es <b>parcial</b> y solo cubre {@code acto =
+     * 'ALTA_DEUDA'}: la clave primaria la genera la base con {@code IDENTITY} y no hay ningun otro
+     * indice unico sobre {@code cuenta_corriente_asiento}. Envolver tambien a los demas actos daria
+     * un {@code catch} que **no puede dispararse**, y el dia que alguien anadiera otro indice unico
+     * a esta tabla ese {@code catch} contestaria «ya se dio de alta esta deuda» sobre un choque que
+     * no es ese — un mensaje plausible y falso, que es la forma exacta del defecto que #588 cierra.
+     *
+     * <p><b>Medido</b>: quitar esta distincion —envolver todo por igual— deja las 400+ pruebas del
+     * modulo en verde, porque hoy ningun otro insert puede producir un {@code 23505}. Lo que la
+     * distincion compra no es una prueba que muerda: es que el mensaje no pueda empezar a mentir
+     * sin que nadie lo decida.
+     */
     @Override
     public Asiento registrar(Asiento asiento) {
+        if (asiento.acto() != ActoDelLibro.ALTA_DEUDA) {
+            return insertar(asiento);
+        }
+        try {
+            return insertar(asiento);
+        } catch (DuplicateKeyException choque) {
+            throw new AsientoRepository.AltaYaAsentada(descripcionDelAltaRepetida(asiento), choque);
+        }
+    }
+
+    /**
+     * El mensaje del alta repetida: la obligacion, el concepto y el sustento, y nada mas.
+     *
+     * <p>Ni tabla, ni indice, ni SQL (RNF-033). Lo que lleva es lo que quien atiende necesita para
+     * saber que fue lo que ya estaba: el <b>documento de sustento</b> —que es lo que separa dos
+     * altas legitimas sobre la misma obligacion— y la cuota y el concepto, porque un acto puede
+     * abarcar un rango y un desglose y sin ellos no se sabria cual de los {@code n} asientos choco.
+     */
+    private static String descripcionDelAltaRepetida(Asiento asiento) {
+        Integer periodo = asiento.periodo();
+        String cuota = periodo == null || periodo == 0 ? "anual" : "cuota " + periodo;
+        return "Ya se dio de alta esta deuda con el mismo sustento: "
+                + asiento.tributo()
+                + " "
+                + asiento.ejercicio().valor()
+                + ", "
+                + cuota
+                + ", "
+                + asiento.concepto().name().toLowerCase(java.util.Locale.ROOT)
+                + ", documento de origen '"
+                + asiento.documentoOrigen()
+                + "'. Un alta repetida cargaria dos veces la misma obligacion al mismo"
+                + " contribuyente, y ninguna cifra pareceria mal. Si es un acto distinto, va con"
+                + " su propio documento de sustento";
+    }
+
+    private Asiento insertar(Asiento asiento) {
         String usuario = OrigenContext.actual().usuario();
 
         Long id =
