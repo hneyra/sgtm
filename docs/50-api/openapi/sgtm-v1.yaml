@@ -9037,6 +9037,64 @@ paths:
           $ref: "#/components/responses/SinMunicipalidad"
         "422":
           $ref: "#/components/responses/ErrorDeValidacion"
+    put:
+      operationId: fijar_permisos_de_usuario
+      summary: "Excepción de permisos de un usuario"
+      description: |
+        Fija la **excepción propia** de una cuenta sobre los accesos que viajen en el
+        cuerpo (#585, RF-121). Es la única forma de expresar «este cajero está en el
+        grupo de caja y a él no se le deja anular recibos» sin sacarlo del grupo ni
+        fabricarle un grupo de una persona; hasta aquí sólo se podía por SQL directo,
+        que no deja fila de auditoría con quien lo decidió ni pasa por la guarda del
+        último administrador.
+
+        **Mismo cuerpo y mismo *upsert* por acceso que `PUT /seguridad/grupos/{id}/permisos`**:
+        recibe la lista de accesos con sus privilegios, y un acceso **ausente del cuerpo
+        se queda como estaba** — una lista parcial no puede traducirse en retirar en
+        silencio todo lo demás.
+
+        **Lo que cambia es qué significa `privilegios: []`.** En el grupo es «este grupo
+        no otorga nada aquí»; en la cuenta es una **negación** que sustituye a lo que su
+        grupo le da, y la fila **se escribe en cero, nunca se borra**: sin ella el acceso
+        volvería a heredar del grupo, y «se le negó expresamente» y «nunca lo tuvo»
+        volverían a ser el mismo JSON — justo lo que el `GET` de esta ruta existe para
+        distinguir. La clave que **falta** en el cuerpo no es lo mismo que la lista
+        vacía: se rechaza con 422, porque retirar siete privilegios por un campo
+        olvidado no puede ser el resultado de una omisión.
+
+        Exige la observación del usuario, obligatoria (regla 10, RNF-052), y queda en la
+        auditoría como `PERMISO` con quien la firmó (ADR-0008 §5). Sin ella, **422**.
+
+        **Puede contestar 409**, con la misma guarda que la matriz del grupo y contando
+        con la precedencia del guardia: un cambio que dejara a la municipalidad **sin
+        ningún usuario capaz de administrar permisos** se rechaza, y de ahí no se sale
+        por el sistema. La comprobación corre **después** de escribir y dentro de la
+        misma transacción, así que lo que deshace el cambio es el rollback: no se
+        escribe nada.
+
+        Un `id` que no existe en esta municipalidad es **404**.
+      tags: ["Seguridad"]
+      parameters:
+        - name: id
+          in: path
+          required: true
+          description: "El usuario, por el `id` que publica cada fila de `GET /seguridad/usuarios`"
+          schema: { type: string }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { type: object }
+      responses:
+        200:
+          description: Operacion realizada
+          content:
+            application/json:
+              schema: { type: object }
+        "403":
+          $ref: "#/components/responses/SinMunicipalidad"
+        "422":
+          $ref: "#/components/responses/ErrorDeValidacion"
   "/seguridad/usuarios/{id}/permisos/configurados":
     get:
       operationId: permisos_configurados_de_usuario
