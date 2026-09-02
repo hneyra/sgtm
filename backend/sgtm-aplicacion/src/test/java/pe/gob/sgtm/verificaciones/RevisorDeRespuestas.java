@@ -159,8 +159,8 @@ final class RevisorDeRespuestas {
      * <p>Dos comprobaciones, y las dos hacen falta. Que <b>no</b> venga precedida de {@code @} ni de
      * {@code .}: una anotacion casa con el patron y se come la firma de su propio metodo —#691 lo
      * midio, y el hallazgo salia diciendo «PostMapping» en vez del nombre—, y {@code x.metodo(} es
-     * una llamada. Y que tras cerrar el parentesis venga {@code {}: una llamada acaba en {@code ;},
-     * en {@code .} o en otro parentesis.
+     * una llamada. Y que tras cerrar el parentesis venga una llave de apertura: una llamada acaba
+     * en punto y coma, en punto o en otro parentesis.
      */
     private static boolean esDeclaracion(String fuente, int inicio, int trasElParentesis) {
         int anterior = inicio - 1;
