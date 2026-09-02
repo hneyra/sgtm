@@ -207,12 +207,12 @@ class BajaDeDeudaYLoCargadoJdbcTest {
         void unaBajaParcialDevuelveSoloSuParte() throws SQLException {
             long titular = nuevoTitular();
 
-            Dinero cargadoAntes = cargado("ARBITRIOS");
+            Dinero cargadoAntes = cargado("ARBITRIO");
 
-            darDeAlta(titular, "ARBITRIOS", "300.00");
-            darDeBaja(titular, "ARBITRIOS", "120.00");
+            darDeAlta(titular, "ARBITRIO", "300.00");
+            darDeBaja(titular, "ARBITRIO", "120.00");
 
-            assertThat(cargado("ARBITRIOS"))
+            assertThat(cargado("ARBITRIO"))
                     .as("300 dados de alta menos 120 dados de baja son 180 puestos a cobrar")
                     .isEqualTo(cargadoAntes.mas(Dinero.de("180.00")));
         }
@@ -314,18 +314,18 @@ class BajaDeDeudaYLoCargadoJdbcTest {
             long deB = nuevoTitular(municipalidadB);
 
             TenantContext.fijar(new MunicipalidadId(municipalidadA));
-            darDeAlta(deA, "SERENAZGO", "700.00");
+            darDeAlta(deA, "ANUNCIOS", "700.00");
             TenantContext.fijar(new MunicipalidadId(municipalidadB));
-            darDeAlta(deB, "SERENAZGO", "700.00");
-            darDeBaja(deB, "SERENAZGO", "700.00");
+            darDeAlta(deB, "ANUNCIOS", "700.00");
+            darDeBaja(deB, "ANUNCIOS", "700.00");
 
             TenantContext.fijar(new MunicipalidadId(municipalidadA));
-            assertThat(cargado("SERENAZGO"))
+            assertThat(cargado("ANUNCIOS"))
                     .as("la baja de B no descuenta nada de A")
                     .isEqualTo(Dinero.de("700.00"));
 
             TenantContext.fijar(new MunicipalidadId(municipalidadB));
-            assertThat(cargado("SERENAZGO"))
+            assertThat(cargado("ANUNCIOS"))
                     .as("y en B el alta y su baja se cancelan")
                     .isEqualTo(Dinero.CERO);
 
@@ -338,7 +338,7 @@ class BajaDeDeudaYLoCargadoJdbcTest {
                             admin.prepareStatement(
                                     "SELECT count(DISTINCT municipalidad_id)"
                                             + " FROM cuenta_corriente_asiento"
-                                            + " WHERE tributo = 'SERENAZGO'")) {
+                                            + " WHERE tributo = 'ANUNCIOS'")) {
                 try (ResultSet fila = sentencia.executeQuery()) {
                     fila.next();
                     assertThat(fila.getLong(1)).isEqualTo(2);
@@ -352,7 +352,7 @@ class BajaDeDeudaYLoCargadoJdbcTest {
                                     jdbc.sql(
                                                     "SELECT count(DISTINCT municipalidad_id)"
                                                             + " FROM cuenta_corriente_asiento"
-                                                            + " WHERE tributo = 'SERENAZGO'")
+                                                            + " WHERE tributo = 'ANUNCIOS'")
                                             .query(Long.class)
                                             .single());
             assertThat(municipalidades).isEqualTo(1);
@@ -372,8 +372,8 @@ class BajaDeDeudaYLoCargadoJdbcTest {
         void elActoVuelveDelLibro() throws SQLException {
             long titular = nuevoTitular();
 
-            darDeAlta(titular, "PARQUES", "90.00");
-            darDeBaja(titular, "PARQUES", "90.00");
+            darDeAlta(titular, "JUEGOS", "90.00");
+            darDeBaja(titular, "JUEGOS", "90.00");
 
             List<Asiento> delLibro =
                     transaccion.execute(estado -> asientos.deContribuyente(titular));

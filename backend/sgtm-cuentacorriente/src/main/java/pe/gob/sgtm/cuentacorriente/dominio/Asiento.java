@@ -5,6 +5,7 @@ import java.util.Locale;
 import java.util.Objects;
 import org.jspecify.annotations.Nullable;
 import pe.gob.sgtm.cuentacorriente.CausalDeBaja;
+import pe.gob.sgtm.cuentacorriente.TributoDelLibro;
 import pe.gob.sgtm.dominio.Dinero;
 import pe.gob.sgtm.dominio.Ejercicio;
 
@@ -449,7 +450,7 @@ public record Asiento(
                 null,
                 ejercicio,
                 contribuyenteId,
-                tributo,
+                delVocabulario(tributo),
                 concepto,
                 tipo,
                 fase,
@@ -501,7 +502,7 @@ public record Asiento(
                 null,
                 ejercicio,
                 contribuyenteId,
-                tributo,
+                delVocabulario(tributo),
                 concepto,
                 tipo,
                 fase,
@@ -516,6 +517,33 @@ public record Asiento(
                 null,
                 motivo,
                 null);
+    }
+
+    /**
+     * Exige que el tributo de un asiento <b>nuevo</b> este en el vocabulario del libro (#553).
+     *
+     * <p><b>Aqui y no en el constructor canonico</b>, y la diferencia es lo que separa arreglar el
+     * defecto de crear uno peor. El constructor lo usan otros dos caminos que <b>tienen</b> que
+     * seguir funcionando con una grafia vieja:
+     *
+     * <ul>
+     *   <li>{@code AsientoRepositoryJdbc.mapear}, que reconstruye un asiento <b>leido</b> de la
+     *       base. Las filas escritas antes de que el vocabulario existiera no se pueden corregir
+     *       —el libro no admite {@code UPDATE} ni {@code DELETE} (V7, regla 4)—, asi que validar al
+     *       leer dejaria a esa instalacion sin estado de cuenta, sin panel y sin caja: un defecto
+     *       silencioso convertido en una aplicacion que no arranca su pantalla mas usada.
+     *   <li>{@link #reversionDe}, que <b>copia</b> el tributo del original. Reversar es el unico
+     *       mecanismo de correccion que la regla 4 deja abierto: cerrarlo sobre las filas
+     *       equivocadas seria cerrarlo justo donde hace falta. Por eso {@code V74} exceptua del
+     *       {@code CHECK} a la fila que reversa otra.
+     * </ul>
+     *
+     * <p>Lo que si pasa por aqui es <b>todo</b> lo que escribe una obligacion nueva: las tres
+     * fabricas {@code nuevo*} son la unica puerta, y por ella entran los siete contextos que
+     * asientan.
+     */
+    private static String delVocabulario(String tributo) {
+        return TributoDelLibro.de(tributo).texto();
     }
 
     public boolean esNuevo() {

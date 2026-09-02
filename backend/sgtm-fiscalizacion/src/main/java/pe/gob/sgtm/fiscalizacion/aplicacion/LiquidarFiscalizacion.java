@@ -7,7 +7,6 @@ import java.util.List;
 import java.util.Objects;
 import java.util.Optional;
 import java.util.Set;
-import org.jspecify.annotations.Nullable;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import pe.gob.sgtm.auditoria.Auditoria;
@@ -72,6 +71,16 @@ import pe.gob.sgtm.rentas.DeclaracionesDelEjercicio;
  * entonces existía —y es el mismo motivo por el que la propia declaración guarda su {@code
  * fichaCatastralId} desde #28—.
  *
+ * <h2>El uso hallado sale del acta, no de quien liquida (#599)</h2>
+ *
+ * <p>Hasta que {@code acta_fiscalizacion} tuvo su columna {@code uso_hallado} (V76), el uso
+ * observado llegaba como <b>argumento de este método</b>: lo tecleaba quien liquidaba, no quien
+ * visitó. Ahora se lee del acta, y con eso el hecho tiene un solo sitio donde vive. Corregirlo
+ * sigue siendo <b>reliquidar</b> —{@link ReliquidarFiscalizacion.CorreccionDeLinea} ya lo admitía—,
+ * que es otra versión que referencia a la anterior y explica la diferencia: mantener además el
+ * argumento habría dejado dos verdades sobre lo mismo, que es lo que #397 y #481 evitaron derivando
+ * en vez de guardar dos veces.
+ *
  * <h2>Ni un importe</h2>
  *
  * <p>Las líneas salen con {@code baseDeclarada}, {@code baseHallada}, {@code insolutoOmitido} y
@@ -125,9 +134,6 @@ public class LiquidarFiscalizacion {
      * @param hasta último ejercicio del periodo fiscalizado
      * @param tipo cómo se determinó lo hallado
      * @param motivoDeterminante por qué se fiscalizó
-     * @param usoHallado el uso que la inspección observó, si difiere del declarado; {@code null} si
-     *     no se consignó. Llega aquí y no del acta porque {@code acta_fiscalizacion} (V4) guarda el
-     *     área hallada pero no el uso: inventarlo desde el detalle libre del acta sería suponer
      * @param fecha el día de la liquidación
      * @param observacion por qué se registra (regla 10)
      */
@@ -138,7 +144,6 @@ public class LiquidarFiscalizacion {
             Ejercicio hasta,
             TipoDeFiscalizacion tipo,
             String motivoDeterminante,
-            @Nullable String usoHallado,
             LocalDate fecha,
             Observacion observacion) {
 
@@ -151,7 +156,7 @@ public class LiquidarFiscalizacion {
                             throw new ActaYaLiquidada(existente.numero());
                         });
 
-        List<LineaDeLiquidacion> lineas = contrastar(acta, desde, hasta, usoHallado);
+        List<LineaDeLiquidacion> lineas = contrastar(acta, desde, hasta);
 
         // El correlativo se pide UNA vez: `siguienteCorrelativo` incrementa, asi que llamarlo
         // dos veces -una para el numero impreso y otra para la columna- dejaria la liquidacion
@@ -208,7 +213,7 @@ public class LiquidarFiscalizacion {
      * nada salvo para que un día difieran.
      */
     private List<LineaDeLiquidacion> contrastar(
-            ActaFiscalizacion acta, Ejercicio desde, Ejercicio hasta, @Nullable String usoHallado) {
+            ActaFiscalizacion acta, Ejercicio desde, Ejercicio hasta) {
 
         List<LineaDeLiquidacion> lineas = new ArrayList<>();
         for (Ejercicio ejercicio = desde;
@@ -237,7 +242,7 @@ public class LiquidarFiscalizacion {
                     acta.hallazgo() == Hallazgo.NO_UBICADO
                             ? ComparacionHalladoDeclarado.LoHallado.noUbicado()
                             : ComparacionHalladoDeclarado.LoHallado.de(
-                                    acta.areaHallada(), usoHallado);
+                                    acta.areaHallada(), acta.usoHallado());
 
             lineas.add(
                     LineaDeLiquidacion.predialSinCifras(
@@ -300,6 +305,12 @@ public class LiquidarFiscalizacion {
             case OMISO -> CondicionFiscalizada.OMISO;
             case SUBVALUADOR -> CondicionFiscalizada.SUBVALUADOR;
             case NO_UBICADO -> CondicionFiscalizada.NO_UBICADO;
+            // Inalcanzable por construccion, y se deja dicho en vez de mapeado: `USO_DISTINTO`
+            // exige el uso observado y un acta vehicular no puede consignarlo -las dos reglas
+            // estan en el compacto de `ActaFiscalizacion` y otra vez en la base (V76)-. Mapearlo
+            // a CondicionFiscalizada.USO_DISTINTO afirmaria que un vehiculo tiene un uso distinto
+            // del declarado, y ningun vehiculo declara uso.
+            case USO_DISTINTO -> throw new HallazgoQueNoCabeEnUnActaVehicular(acta);
         };
     }
 
@@ -355,6 +366,27 @@ public class LiquidarFiscalizacion {
                             + acta.id()
                             + " no anota ningun hallazgo, y sin el no se puede decir que encontro"
                             + " la visita: leer el nulo como CONFORME seria declararla en regla");
+        }
+    }
+
+    /**
+     * El acta es de un vehiculo y anota un hallazgo que solo cabe en un predio.
+     *
+     * <p>No la puede alcanzar ningun acta registrada por el sistema: {@link ActaFiscalizacion}
+     * rechaza {@code USO_DISTINTO} sin uso observado y rechaza el uso observado en un acta
+     * vehicular, y {@code acta_fisc_uso_distinto_ck} lo repite en la base (V76). Existe para que la
+     * rama del {@code switch} diga lo que pasa en vez de traducir el hallazgo a una condicion que
+     * ningun vehiculo puede tener.
+     */
+    public static final class HallazgoQueNoCabeEnUnActaVehicular extends RuntimeException {
+        @java.io.Serial private static final long serialVersionUID = 1L;
+
+        HallazgoQueNoCabeEnUnActaVehicular(ActaFiscalizacion acta) {
+            super(
+                    "El acta "
+                            + acta.id()
+                            + " es de un vehiculo y anota USO_DISTINTO: un vehiculo no declara uso,"
+                            + " asi que no hay un uso declarado del que difiera");
         }
     }
 

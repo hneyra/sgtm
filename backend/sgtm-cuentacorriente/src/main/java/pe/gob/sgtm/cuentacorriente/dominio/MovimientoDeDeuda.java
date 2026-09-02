@@ -6,6 +6,7 @@ import java.util.List;
 import java.util.Objects;
 import org.jspecify.annotations.Nullable;
 import pe.gob.sgtm.cuentacorriente.CausalDeBaja;
+import pe.gob.sgtm.cuentacorriente.TributoDelLibro;
 import pe.gob.sgtm.dominio.Dinero;
 
 /**
@@ -81,6 +82,14 @@ public record MovimientoDeDeuda(
     public MovimientoDeDeuda {
         Objects.requireNonNull(sentido, "Un movimiento de deuda es un alta o una baja");
         Objects.requireNonNull(clave, "El movimiento afecta a una obligacion concreta");
+        // #553: aqui, y no en ClaveDeSaldo, porque la clave tambien identifica una obligacion
+        // que se LEE —el repositorio la construye al mapear una fila, y los criterios de
+        // consulta la usan para buscar—, y las filas escritas con otra grafia antes de que el
+        // vocabulario existiera no se pueden corregir (V7, regla 4): hay que poder seguir
+        // consultandolas. Un MovimientoDeDeuda, en cambio, es siempre una PETICION de escritura.
+        // Ponerlo aqui es ademas lo que hace que el alta conteste 422 y no 500: el controlador
+        // construye este objeto dentro del try que traduce IllegalArgumentException.
+        TributoDelLibro.de(clave.tributo());
         Objects.requireNonNull(
                 insoluto, "El desglose lleva sus cuatro partes, en cero si no aplica");
         Objects.requireNonNull(

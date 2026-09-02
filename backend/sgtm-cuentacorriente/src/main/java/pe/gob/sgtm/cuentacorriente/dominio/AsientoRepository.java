@@ -250,6 +250,22 @@ public interface AsientoRepository {
     List<Ejercicio> ejerciciosAsentables();
 
     /**
+     * Las grafias de {@code tributo} presentes en el libro que <b>no</b> estan en {@link
+     * pe.gob.sgtm.cuentacorriente.TributoDelLibro}, sin repetir y ordenadas (#553).
+     *
+     * <p>Existe porque esas filas no se pueden corregir y hay que poder <b>verlas</b>. El libro no
+     * admite {@code UPDATE} ni {@code DELETE} desde la aplicacion (V7, regla 4) y el migrador
+     * tampoco puede reescribirlas —corre sin contexto de tenant, y un {@code UPDATE} sobre una
+     * tabla con RLS muere con «unrecognized configuration parameter» (DAT-01 §0, medido igual en
+     * V64)—. Lo unico que el sistema puede hacer con una obligacion escrita como {@code ARBITRIOS}
+     * es decir que esta ahi: no aparece con la de {@code ARBITRIO} en ninguna consulta, y sin esta
+     * lectura nadie sabria por que.
+     *
+     * <p>Devuelve la lista vacia en una instalacion sana, que es el caso corriente desde V74.
+     */
+    List<String> tributosFueraDelVocabulario();
+
+    /**
      * Inserta el asiento y devuelve la fila guardada, con su {@code id} y su {@code usuarioId}.
      *
      * @throws AltaYaAsentada si el asiento es de un alta de deuda que ya esta en el libro con el

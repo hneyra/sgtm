@@ -16,6 +16,7 @@ import pe.gob.sgtm.auditoria.OrigenContext;
 import pe.gob.sgtm.compartido.Pagina;
 import pe.gob.sgtm.compartido.Paginacion;
 import pe.gob.sgtm.cuentacorriente.CausalDeBaja;
+import pe.gob.sgtm.cuentacorriente.TributoDelLibro;
 import pe.gob.sgtm.cuentacorriente.dominio.ActoDelLibro;
 import pe.gob.sgtm.cuentacorriente.dominio.Asiento;
 import pe.gob.sgtm.cuentacorriente.dominio.AsientoRepository;
@@ -718,6 +719,26 @@ public class AsientoRepositoryJdbc extends RepositorioJdbc implements AsientoRep
                         .list();
         particiones = List.copyOf(leidos);
         return particiones;
+    }
+
+    /**
+     * Las grafias del libro que el vocabulario de V74 no admite (#553).
+     *
+     * <p>La lista de admitidos <b>no</b> se escribe en el SQL: se pasa como parametro desde {@link
+     * TributoDelLibro#admitidos()}, que es lo que impide que este {@code NOT IN} y el {@code CHECK}
+     * de la migracion se separen sin que nadie lo note. Y la comprobacion va sobre el texto tal
+     * cual esta guardado: aqui no se normaliza, porque lo que se busca es precisamente lo que se
+     * escribio distinto.
+     */
+    @Override
+    public List<String> tributosFueraDelVocabulario() {
+        return jdbc().sql(
+                        "SELECT DISTINCT tributo FROM cuenta_corriente_asiento"
+                                + " WHERE tributo <> ALL (:admitidos)"
+                                + " ORDER BY tributo")
+                .param("admitidos", TributoDelLibro.admitidos().toArray(new String[0]))
+                .query((fila, numeroDeFila) -> fila.getString("tributo"))
+                .list();
     }
 
     /**

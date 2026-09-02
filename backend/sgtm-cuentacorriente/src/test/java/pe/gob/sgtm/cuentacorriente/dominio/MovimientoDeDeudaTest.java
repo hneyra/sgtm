@@ -139,7 +139,7 @@ class MovimientoDeDeudaTest {
     @DisplayName("los asientos heredan la obligacion entera: tributo, ejercicio, cuota y unidad")
     void losAsientosHeredanLaObligacion() {
         ClaveDeSaldo conPredio =
-                new ClaveDeSaldo(7L, "ARBITRIOS", new Ejercicio(2027), 3, 42L, null);
+                new ClaveDeSaldo(7L, "ARBITRIO", new Ejercicio(2027), 3, 42L, null);
         MovimientoDeDeuda alta =
                 new MovimientoDeDeuda(
                         SentidoDelMovimiento.ALTA,
@@ -158,7 +158,7 @@ class MovimientoDeDeudaTest {
                 .satisfies(
                         asiento -> {
                             assertThat(asiento.contribuyenteId()).isEqualTo(7L);
-                            assertThat(asiento.tributo()).isEqualTo("ARBITRIOS");
+                            assertThat(asiento.tributo()).isEqualTo("ARBITRIO");
                             assertThat(asiento.ejercicio()).isEqualTo(new Ejercicio(2027));
                             assertThat(asiento.periodo()).isEqualTo(3);
                             assertThat(asiento.predioId()).isEqualTo(42L);

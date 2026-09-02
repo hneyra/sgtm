@@ -110,6 +110,7 @@ class ActaFiscalizacionRepositoryJdbcTest {
                                                     "J. Perez",
                                                     Hallazgo.CONFORME,
                                                     pe.gob.sgtm.dominio.AreaM2.de("125.50"),
+                                                    null,
                                                     "sin novedad",
                                                     OBSERVACION)));
 
@@ -142,6 +143,7 @@ class ActaFiscalizacionRepositoryJdbcTest {
                                             "J. Perez",
                                             Hallazgo.SUBVALUADOR,
                                             pe.gob.sgtm.dominio.AreaM2.de("300.00"),
+                                            null,
                                             "area distinta a la declarada",
                                             OBSERVACION)));
 
@@ -311,7 +313,142 @@ class ActaFiscalizacionRepositoryJdbcTest {
                 Hallazgo.CONFORME,
                 null,
                 null,
+                null,
                 OBSERVACION);
+    }
+
+    @Nested
+    @DisplayName("#599 — el uso hallado, y las guardas que lo sostienen en la base")
+    class ElUsoHallado {
+
+        @Test
+        @DisplayName("un acta predial guarda el uso hallado y lo devuelve al releerla")
+        void unActaPredialGuardaElUsoHallado() {
+            TenantContext.fijar(new MunicipalidadId(municipalidadA));
+            long titular = crearContribuyente(municipalidadA, "F-0020", "60100020");
+            long predioId = crearPredio(municipalidadA, "F-0020");
+            long programaId = crearPrograma(municipalidadA, "PF-0020", "PREDIAL");
+
+            ActaFiscalizacion guardada =
+                    transaccion.execute(
+                            estado ->
+                                    repositorio.insertar(
+                                            ActaFiscalizacion.nuevaPredial(
+                                                    programaId,
+                                                    1,
+                                                    titular,
+                                                    predioId,
+                                                    null,
+                                                    VISITA,
+                                                    "J. Perez",
+                                                    Hallazgo.USO_DISTINTO,
+                                                    pe.gob.sgtm.dominio.AreaM2.de("120.00"),
+                                                    "COMERCIO",
+                                                    "vivienda convertida en bodega",
+                                                    OBSERVACION)));
+
+            ActaFiscalizacion releida =
+                    transaccion
+                            .execute(
+                                    estado ->
+                                            repositorio.findById(
+                                                    java.util.Objects.requireNonNull(
+                                                            guardada.id())))
+                            .orElseThrow();
+
+            assertThat(releida.usoHallado())
+                    .as("sin la columna en el INSERT y en el SELECT vuelve nulo")
+                    .isEqualTo("COMERCIO");
+            assertThat(releida.hallazgo()).isEqualTo(Hallazgo.USO_DISTINTO);
+        }
+
+        @Test
+        @DisplayName("el CHECK de la columna admite USO_DISTINTO desde V76")
+        void elCheckAdmiteUsoDistinto() {
+            // Mide la guarda de la BASE y no el `if` de Java (#188, #435, #542): sin el DROP+ADD
+            // de V76 esta fila da 23514 y las pruebas del dominio siguen todas en verde.
+            TenantContext.fijar(new MunicipalidadId(municipalidadA));
+            long titular = crearContribuyente(municipalidadA, "F-0021", "60100021");
+            long predioId = crearPredio(municipalidadA, "F-0021");
+            long programaId = crearPrograma(municipalidadA, "PF-0021", "PREDIAL");
+
+            long id =
+                    insertarActaPorSql(
+                            programaId, titular, predioId, null, "USO_DISTINTO", "COMERCIO");
+
+            assertThat(id).isPositive();
+        }
+
+        @Test
+        @DisplayName("un acta VEHICULAR con uso hallado la rechaza la base, no el dominio")
+        void unActaVehicularConUsoHalladoLaRechazaLaBase() {
+            TenantContext.fijar(new MunicipalidadId(municipalidadA));
+            long titular = crearContribuyente(municipalidadA, "F-0022", "60100022");
+            long vehiculoId = crearVehiculo(municipalidadA, titular, "F22");
+            long programaId = crearPrograma(municipalidadA, "PF-0022", "VEHICULAR");
+
+            org.assertj.core.api.Assertions.assertThatThrownBy(
+                            () ->
+                                    insertarActaPorSql(
+                                            programaId,
+                                            titular,
+                                            null,
+                                            vehiculoId,
+                                            "CONFORME",
+                                            "COMERCIO"))
+                    .as("un vehiculo no declara uso: no hay uso declarado del que difiera")
+                    .hasMessageContaining("acta_fisc_uso_hallado_predial_ck");
+        }
+
+        @Test
+        @DisplayName("USO_DISTINTO sin uso observado la rechaza la base, no el dominio")
+        void usoDistintoSinUsoLaRechazaLaBase() {
+            TenantContext.fijar(new MunicipalidadId(municipalidadA));
+            long titular = crearContribuyente(municipalidadA, "F-0023", "60100023");
+            long predioId = crearPredio(municipalidadA, "F-0023");
+            long programaId = crearPrograma(municipalidadA, "PF-0023", "PREDIAL");
+
+            org.assertj.core.api.Assertions.assertThatThrownBy(
+                            () ->
+                                    insertarActaPorSql(
+                                            programaId,
+                                            titular,
+                                            predioId,
+                                            null,
+                                            "USO_DISTINTO",
+                                            null))
+                    .hasMessageContaining("acta_fisc_uso_distinto_ck");
+        }
+    }
+
+    /**
+     * Inserta un acta por SQL directo, saltandose el dominio a proposito.
+     *
+     * <p>Es lo unico que mide una restriccion de la base: por el caso de uso, la guarda de Java
+     * rechaza antes y el `CHECK` nunca llega a hablar (#188, #435, #542).
+     */
+    private static long insertarActaPorSql(
+            long programaId,
+            long contribuyenteId,
+            @org.jspecify.annotations.Nullable Long predioId,
+            @org.jspecify.annotations.Nullable Long vehiculoId,
+            String hallazgo,
+            @org.jspecify.annotations.Nullable String usoHallado) {
+        return ejecutarComoApp(
+                municipalidadA,
+                "INSERT INTO acta_fiscalizacion (municipalidad_id, programa_id, version,"
+                        + " contribuyente_id, predio_id, vehiculo_id, fecha_visita, fiscalizador,"
+                        + " hallazgo, uso_hallado, estado, observacion, usuario_registro)"
+                        + " VALUES (?, ?, 1, ?, ?, ?, ?, 'J. Perez', ?, ?, 'ABIERTA',"
+                        + "         'siembra por SQL directo', 'prueba') RETURNING id",
+                municipalidadA,
+                programaId,
+                contribuyenteId,
+                predioId,
+                vehiculoId,
+                VISITA,
+                hallazgo,
+                usoHallado);
     }
 
     // ------------------------------------------------------------------

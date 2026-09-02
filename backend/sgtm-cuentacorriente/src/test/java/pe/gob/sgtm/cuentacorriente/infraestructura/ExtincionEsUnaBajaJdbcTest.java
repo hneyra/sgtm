@@ -276,10 +276,10 @@ class ExtincionEsUnaBajaJdbcTest {
         void extinguirNoEsRecaudar() throws SQLException {
             long titular = nuevoTitular();
 
-            emitirMulta(titular, "SERENAZGO", "250.00");
+            emitirMulta(titular, "ANUNCIOS", "250.00");
             Dinero recaudadoAntes = recaudado();
 
-            extinguir(titular, "SERENAZGO");
+            extinguir(titular, "ANUNCIOS");
 
             // El abono de una extincion es un ABONO de concepto INSOLUTO, la misma forma
             // exacta que el de una cobranza: sin el acto, extinguir deuda se publicaba
@@ -297,9 +297,9 @@ class ExtincionEsUnaBajaJdbcTest {
 
             Dinero recaudadoAntes = recaudado();
 
-            emitirMulta(titular, "PARQUES", "500.00");
-            cobrar(titular, "PARQUES", "200.00");
-            extinguir(titular, "PARQUES");
+            emitirMulta(titular, "JUEGOS", "500.00");
+            cobrar(titular, "JUEGOS", "200.00");
+            extinguir(titular, "JUEGOS");
 
             assertThat(recaudado())
                     .as("los 200 cobrados son recaudacion; los 300 extinguidos no son nada")
@@ -470,18 +470,18 @@ class ExtincionEsUnaBajaJdbcTest {
             long deB = nuevoTitular(municipalidadB, nuevoCodigo());
 
             TenantContext.fijar(new MunicipalidadId(municipalidadA));
-            emitirMulta(deA, "CEMENTERIO", "700.00");
+            emitirMulta(deA, "VEHICULAR", "700.00");
             TenantContext.fijar(new MunicipalidadId(municipalidadB));
-            emitirMulta(deB, "CEMENTERIO", "700.00");
-            extinguir(deB, "CEMENTERIO");
+            emitirMulta(deB, "VEHICULAR", "700.00");
+            extinguir(deB, "VEHICULAR");
 
             TenantContext.fijar(new MunicipalidadId(municipalidadA));
-            assertThat(cargado("CEMENTERIO"))
+            assertThat(cargado("VEHICULAR"))
                     .as("la extincion de B no descuenta nada de A")
                     .isEqualTo(Dinero.de("700.00"));
 
             TenantContext.fijar(new MunicipalidadId(municipalidadB));
-            assertThat(cargado("CEMENTERIO"))
+            assertThat(cargado("VEHICULAR"))
                     .as("y en B la emision y su extincion se cancelan")
                     .isEqualTo(Dinero.CERO);
 
@@ -492,7 +492,7 @@ class ExtincionEsUnaBajaJdbcTest {
                             admin.prepareStatement(
                                     "SELECT count(DISTINCT municipalidad_id)"
                                             + " FROM cuenta_corriente_asiento"
-                                            + " WHERE tributo = 'CEMENTERIO'")) {
+                                            + " WHERE tributo = 'VEHICULAR'")) {
                 try (ResultSet fila = sentencia.executeQuery()) {
                     fila.next();
                     assertThat(fila.getLong(1)).isEqualTo(2);
@@ -506,7 +506,7 @@ class ExtincionEsUnaBajaJdbcTest {
                                     jdbc.sql(
                                                     "SELECT count(DISTINCT municipalidad_id)"
                                                             + " FROM cuenta_corriente_asiento"
-                                                            + " WHERE tributo = 'CEMENTERIO'")
+                                                            + " WHERE tributo = 'VEHICULAR'")
                                             .query(Long.class)
                                             .single());
             assertThat(municipalidades).isEqualTo(1);

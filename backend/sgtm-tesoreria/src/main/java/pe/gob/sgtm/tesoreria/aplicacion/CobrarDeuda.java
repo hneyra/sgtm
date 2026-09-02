@@ -15,6 +15,7 @@ import pe.gob.sgtm.auditoria.RegistroDeAuditoria;
 import pe.gob.sgtm.cuentacorriente.AbonoAsentado;
 import pe.gob.sgtm.cuentacorriente.RegistroDeAbonos;
 import pe.gob.sgtm.cuentacorriente.SeleccionDeObligacion;
+import pe.gob.sgtm.cuentacorriente.TributoDelLibro;
 import pe.gob.sgtm.dominio.Dinero;
 import pe.gob.sgtm.dominio.Observacion;
 import pe.gob.sgtm.tesoreria.dominio.FormaDePago;
@@ -76,7 +77,7 @@ public class CobrarDeuda {
     private static final String CONCEPTO_CUOTA_INICIAL = "CUOTA INICIAL";
 
     /** El tributo con el que se rotula esa misma linea. */
-    private static final String TRIBUTO_CONVENIO = "CONVENIO";
+    private static final String TRIBUTO_CONVENIO = TributoDelLibro.CONVENIO.texto();
 
     private final AbrirCaja abrirCaja;
     private final RegistroDeAbonos abonos;

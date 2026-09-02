@@ -10,6 +10,7 @@ import org.springframework.web.bind.annotation.RestController;
 import pe.gob.sgtm.autorizacion.Privilegio;
 import pe.gob.sgtm.autorizacion.RequiereAcceso;
 import pe.gob.sgtm.compartido.Paginacion;
+import pe.gob.sgtm.cuentacorriente.TributoDelLibro;
 import pe.gob.sgtm.rentas.aplicacion.CampaniasDeBeneficioParametrizadas;
 import pe.gob.sgtm.rentas.aplicacion.SimularAcogimiento;
 import pe.gob.sgtm.web.Api;
@@ -68,10 +69,11 @@ public class DeudasConBeneficioController {
     private static final String ORDEN_POR_OMISION = "ejercicio";
 
     /** Como se asienta cada familia de multa en el libro. Ver el javadoc de la clase. */
-    private static final String TRIBUTO_TRIBUTARIA = "MULTA_TRIBUTARIA";
+    private static final String TRIBUTO_TRIBUTARIA = TributoDelLibro.MULTA_TRIBUTARIA.texto();
 
-    private static final String TRIBUTO_TRANSITO = "MULTA_TRANSITO";
-    private static final String TRIBUTO_ADMINISTRATIVA = "MULTA_ADMINISTRATIVA";
+    private static final String TRIBUTO_TRANSITO = TributoDelLibro.MULTA_TRANSITO.texto();
+    private static final String TRIBUTO_ADMINISTRATIVA =
+            TributoDelLibro.MULTA_ADMINISTRATIVA.texto();
 
     private final SimularAcogimiento simulacion;
 

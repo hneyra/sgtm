@@ -171,7 +171,7 @@ class CarteraDelLibroJdbcTest {
             // Se sembraron 500 + 300 de PREDIAL y 120 de ARBITRIOS que despues se
             // reverso. Si el NOT EXISTS faltara, el total incluiria los 120 y ademas
             // la reversion, y la cifra saldria MAS ALTA que lo que entro de verdad.
-            assertThat(recaudado.de("ARBITRIOS")).isEqualTo(Dinero.CERO);
+            assertThat(recaudado.de("ARBITRIO")).isEqualTo(Dinero.CERO);
             assertThat(recaudado.total()).isEqualTo(Dinero.de("800.00"));
             assertThat(recaudado.abonos()).isEqualTo(2);
         }
@@ -206,7 +206,7 @@ class CarteraDelLibroJdbcTest {
             assertThat(cargado).isNotNull();
             assertThat(cargado.total()).isEqualTo(sumaDeCargosVivosDeInsoluto(municipalidadA));
             assertThat(cargado.de("PREDIAL")).isEqualTo(Dinero.de("1000.00"));
-            assertThat(cargado.de("ARBITRIOS")).isEqualTo(Dinero.de("400.00"));
+            assertThat(cargado.de("ARBITRIO")).isEqualTo(Dinero.de("400.00"));
             assertThat(cargado.lineas()).hasSize(2);
         }
 
@@ -224,9 +224,9 @@ class CarteraDelLibroJdbcTest {
             CargadoEnElLibro cargado =
                     transaccion.execute(estado -> cartera.cargadoPorTributo(EJERCICIO, HOY));
 
-            assertThat(cargado.de("ARBITRIOS")).isEqualTo(Dinero.de("400.00"));
+            assertThat(cargado.de("ARBITRIO")).isEqualTo(Dinero.de("400.00"));
             assertThat(cargado.lineas())
-                    .filteredOn(linea -> linea.tributo().equals("ARBITRIOS"))
+                    .filteredOn(linea -> linea.tributo().equals("ARBITRIO"))
                     .singleElement()
                     .satisfies(linea -> assertThat(linea.cargos()).isEqualTo(1));
         }
@@ -268,7 +268,7 @@ class CarteraDelLibroJdbcTest {
                     .as(
                             "MULTA_TRANSITO esta en saldo_proyectado y no en el libro: si"
                                     + " apareciera, la cartera seguiria saliendo del cache")
-                    .containsExactly("ARBITRIOS", "PREDIAL");
+                    .containsExactly("ARBITRIO", "PREDIAL");
         }
 
         @Test
@@ -286,7 +286,7 @@ class CarteraDelLibroJdbcTest {
             // abono reversado sin su cargo y la cartera sale 280,00 donde el libro dice
             // 400,00, o sea 120,00 de deuda viva restados de la cartera del ejercicio.
             assertThat(pendiente.lineas())
-                    .filteredOn(linea -> linea.tributo().equals("ARBITRIOS"))
+                    .filteredOn(linea -> linea.tributo().equals("ARBITRIO"))
                     .singleElement()
                     .satisfies(
                             linea -> assertThat(linea.pendiente()).isEqualTo(Dinero.de("400.00")));
@@ -434,7 +434,7 @@ class CarteraDelLibroJdbcTest {
                     asientos.registrar(
                             asiento(
                                     titular,
-                                    "ARBITRIOS",
+                                    "ARBITRIO",
                                     Concepto.INSOLUTO,
                                     TipoAsiento.CARGO,
                                     "400.00",
@@ -469,7 +469,7 @@ class CarteraDelLibroJdbcTest {
                             asientos.registrar(
                                     asiento(
                                             titular,
-                                            "ARBITRIOS",
+                                            "ARBITRIO",
                                             Concepto.INSOLUTO,
                                             TipoAsiento.ABONO,
                                             "120.00",
@@ -505,7 +505,7 @@ class CarteraDelLibroJdbcTest {
                     saldos.proyectar(saldo(titular, "PREDIAL", 1, "999.00", PROYECTADO));
                     saldos.proyectar(saldo(titular, "PREDIAL", 2, "111.00", PROYECTADO_HOY));
                     saldos.proyectar(saldo(titular, "MULTA_TRANSITO", 1, "50.00", PROYECTADO_HOY));
-                    saldos.proyectar(saldo(titular, "ARBITRIOS", 1, "0.00", PROYECTADO));
+                    saldos.proyectar(saldo(titular, "ARBITRIO", 1, "0.00", PROYECTADO));
                     saldos.proyectar(saldo(titular, "ALCABALA", 1, "-50.00", PROYECTADO));
                 });
         TenantContext.limpiar();
