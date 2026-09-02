@@ -18,7 +18,6 @@ import pe.gob.sgtm.dominio.Ejercicio;
 import pe.gob.sgtm.dominio.Observacion;
 import pe.gob.sgtm.fiscalizacion.aplicacion.ConsultaDeProgramas;
 import pe.gob.sgtm.fiscalizacion.aplicacion.RegistrarPrograma;
-import pe.gob.sgtm.fiscalizacion.dominio.CondicionFiscalizada;
 import pe.gob.sgtm.fiscalizacion.dominio.CriterioDeProgramas;
 import pe.gob.sgtm.fiscalizacion.dominio.TipoDePrograma;
 import pe.gob.sgtm.web.Api;
@@ -41,6 +40,14 @@ import pe.gob.sgtm.web.RespuestaPaginada;
  * diría «Falta el campo 'tipo'» mientras la pantalla lo estaba mandando—. Se siguen aceptando en el
  * cuerpo, y ahí ganan: ver {@link FiltroDeLaConsulta}. {@code ejercicio} entra en ese reparto con
  * #481, que es cuando el programa empieza a guardarlo: hasta entonces el cuerpo no lo leía.
+ *
+ * <p><b>Y es por aquí por donde la detección programa</b> (#550, ADR-0023). «Omisos y
+ * subvaluadores» no manda una lista de predios a ninguna parte: la muestra la <b>sortea</b> el
+ * programa a partir de sus parámetros, y lo que esa pantalla aporta son sus dos filtros —sector y
+ * condición—, que ya son dos de los cuatro. Por eso los lee {@link FiltroDeLaDeteccion} y no este
+ * controlador por su cuenta: hasta #550 «Todos» del desplegable de sector se guardaba
+ * <b>literal</b> en {@code sector_codigo} y el sorteo salía vacío en silencio, y «USO DISTINTO» se
+ * aceptaba en la detección y se rechazaba aquí.
  *
  * <p><b>La lectura llegó después que la escritura</b> (#431), y hasta entonces un programa se podía
  * registrar y no se podía volver a encontrar: la pantalla {@code fisc_programa} declaraba el {@code
@@ -108,8 +115,8 @@ public class ProgramasController {
                             ejercicioDeLaMuestra(
                                     FiltroDeLaConsulta.primeroNoVacio(
                                             peticion.ejercicio(), ejercicio)),
-                            vacioAnulo(peticion.sector()),
-                            criterioDe(peticion.criterio()),
+                            FiltroDeLaDeteccion.sectorOpcional(peticion.sector()),
+                            FiltroDeLaDeteccion.criterioDelPrograma(peticion.criterio()),
                             vacioAnulo(peticion.fiscalizador()),
                             observacion));
         } catch (IllegalArgumentException invalido) {
@@ -199,19 +206,6 @@ public class ProgramasController {
             return new Ejercicio(anio);
         } catch (IllegalArgumentException fueraDeRango) {
             throw new ProblemaDeNegocio(CodigoDeError.VALIDACION, mensajeDe(fueraDeRango));
-        }
-    }
-
-    private static @Nullable CondicionFiscalizada criterioDe(@Nullable String texto) {
-        String valor = vacioAnulo(texto);
-        if (valor == null) {
-            return null;
-        }
-        try {
-            return CondicionFiscalizada.valueOf(valor.toUpperCase(Locale.ROOT));
-        } catch (IllegalArgumentException desconocido) {
-            throw new ProblemaDeNegocio(
-                    CodigoDeError.VALIDACION, "Criterio de riesgo desconocido: '" + texto + "'");
         }
     }
 
