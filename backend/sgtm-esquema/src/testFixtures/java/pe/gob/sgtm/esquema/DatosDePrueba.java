@@ -1389,6 +1389,13 @@ public final class DatosDePrueba {
         // dos. Sembrarla de otro modo dejaria la fila cumpliendo sus CHECK y describiendo un
         // padron imposible —dos versiones abiertas del mismo predio, o una transferencia predial
         // sin ficha nueva—, y la prueba de aislamiento estaria aislando datos que no existen.
+        //
+        // Y aun asi lo describia: la version nueva empezaba EL MISMO DIA en que se cerraba la
+        // anterior, asi que las dos cubrian ese dia y «la ficha vigente al 1 de enero» devolvia
+        // dos filas del mismo predio. Nada podia decirlo —`ficha_vigente_uq` es parcial y solo
+        // mira las abiertas— hasta que `ficha_vigencias_no_se_pisan` (V72, #669) lo rechazo en la
+        // primera corrida. La version nueva empieza al dia SIGUIENTE, que es lo que
+        // `ActualizarFichaCatastral` hace en produccion (cierra la anterior el dia antes).
         long fichaAnterior =
                 insertar(
                         app,
@@ -1408,7 +1415,7 @@ public final class DatosDePrueba {
                                 + " prueba', 'prueba') RETURNING id",
                         muni,
                         predioId,
-                        VIGENCIA,
+                        VIGENCIA.plusDays(1),
                         "LIQ-" + sufijo);
         long documentoDeLaDeterminacion =
                 insertar(

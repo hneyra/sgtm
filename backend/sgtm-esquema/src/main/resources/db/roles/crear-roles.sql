@@ -60,6 +60,16 @@ GRANT USAGE           ON SCHEMA public TO sgtm_app, sgtm_readonly, rol_carga_par
 --             sgtm_owner. Trae consigo la tabla `spatial_ref_sys`, un catalogo
 --             de sistemas de coordenadas sin dato municipal, que por eso figura
 --             entre las TABLAS_EXENTAS de la prueba de aislamiento.
+--   btree_gist  compara bigint y varchar con `=` DENTRO de un indice GiST, que es
+--             lo que `EXCLUDE USING gist` necesita para decir «dos vigencias del
+--             mismo predio no se pisan» (#669, V72). Es *trusted* —medido:
+--             `SELECT trusted FROM pg_available_extension_versions WHERE
+--             name='btree_gist'` da `t`— y aun asi va AQUI y no en la migracion,
+--             porque una extension trusted la crea quien tiene CREATE sobre la
+--             BASE, y `sgtm_owner` no es su dueño: intentarlo desde la migracion
+--             da «permission denied to create extension "btree_gist"». Medido
+--             ejecutando, no supuesto.
 CREATE EXTENSION IF NOT EXISTS pg_trgm;
 CREATE EXTENSION IF NOT EXISTS unaccent;
 CREATE EXTENSION IF NOT EXISTS postgis;
+CREATE EXTENSION IF NOT EXISTS btree_gist;
