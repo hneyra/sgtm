@@ -9100,6 +9100,36 @@ components:
         codigo: { type: string, example: "DEUDA_YA_CANCELADA" }
         mensaje: { type: string, description: "En castellano; se muestra al usuario" }
         detalles: { type: array, items: { type: string } }
+        parametroQueFalta:
+          type: object
+          description: |
+            **Solo** cuando el 422 se debe a una cifra normativa que no esta
+            publicada en el conjunto de parametros sellado (#604). Es el
+            discriminador que separa dos errores que hasta ahora salian con el
+            mismo `codigo` y el mismo `mensaje` y piden acciones distintas:
+
+            - **sin** este miembro: falta un campo de la peticion o un valor no
+              vale. Lo arregla quien atiende, en la misma pantalla.
+            - **con** este miembro: falta publicar una cifra o sellar el
+              conjunto del ejercicio. No lo arregla nadie desde la pantalla
+              (D-02a, D-02b, D-03c).
+
+            La interfaz reacciona a la **presencia** del miembro, nunca al texto
+            del mensaje: el texto se reescribe y el contrato no.
+          required: [ejercicio]
+          properties:
+            ejercicio:
+              type: integer
+              description: El ejercicio de cuyo conjunto sellado se trata.
+              example: 2026
+            llave:
+              type: string
+              description: |
+                Lo que hay que publicar: `TIPO:CLAVE` cuando falta una sola fila,
+                o el `TIPO` solo cuando falta el bloque entero. **Ausente** cuando
+                lo que falta es el conjunto sellado: no hay donde publicar nada.
+                Nunca una clave inventada para rellenar el hueco.
+              example: "INTERES_FRACCIONAMIENTO:ORDINARIO"
   responses:
     SinMunicipalidad:
       description: |
