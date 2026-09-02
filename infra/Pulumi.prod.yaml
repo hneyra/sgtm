@@ -138,7 +138,17 @@ config:
   # siguiente, **no se ha ejecutado nunca contra producción**. Por eso ese guion pasa a
   # correr también en `deteccion-de-deriva`, que sí corre a diario.
   #
-  # `cb4c1482` (2026-09-02T05:49Z, `success` en los tres jobs de imagen) trae las 62.
+  # **Desde #720 esta linea NO la escribe una persona.** La escribe el merge:
+  # `.github/workflows/declarar-version.yml` se dispara al terminar
+  # `publicar-imagenes.yml` en verde sobre `main` —el unico momento en que se saben las
+  # dos cosas que hacen falta, cual es el `sha` y que sus tres imagenes existen— y la
+  # sube si algun ambiente tiene deriva. Por eso aqui no se narra ningun `sha` concreto:
+  # el valor cambia solo y un comentario que dijera «se sube a X porque trae N
+  # migraciones» quedaria falso en el siguiente merge, sin que nadie lo notara.
+  #
+  # Que la escriba el merge **no despliega prod solo**: `aplicar-prod` sigue detras del
+  # *environment* protegido, y sigue haciendo falta que alguien lo apruebe. Lo que cambia
+  # es que la version que se aprueba ya no lleva semanas sin moverse.
   sgtm:applicationBootstrapVersion: fd3ffaa748aae3353a8c1eb7818f6830c5fe5000
   # La municipalidad que se implanta. D-01 —municipalidad piloto— se decidió el
   # 2026-08-24: Municipalidad Distrital de Catacaos (`decisiones-abiertas.md`), en

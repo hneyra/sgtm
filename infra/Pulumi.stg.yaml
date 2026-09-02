@@ -75,13 +75,17 @@ config:
   # porque compara la base con **esta** línea y no con `main`. Ese tercer número lo mide
   # ahora `infra/verificaciones/deriva-de-migraciones.test.ts`, que corre sin clúster.
   #
-  # `cb4c1482` (2026-09-02T05:49Z, `publicar-imagenes.yml` en verde para las tres
-  # imágenes) es el `sha` de `main` al que se sube, y trae **62**.
+  # **Desde #720 esta linea NO la escribe una persona.** La escribe el merge:
+  # `.github/workflows/declarar-version.yml` se dispara al terminar
+  # `publicar-imagenes.yml` en verde sobre `main` —el unico momento en que se saben las
+  # dos cosas que hacen falta, cual es el `sha` y que sus tres imagenes existen— y la
+  # sube si algun ambiente tiene deriva. Por eso aqui no se narra ningun `sha` concreto:
+  # el valor cambia solo y un comentario que dijera «se sube a X porque trae N
+  # migraciones» quedaria falso en el siguiente merge, sin que nadie lo notara.
   #
-  # Se subió dos veces en el mismo PR, y la segunda la pidió la guarda nueva: se había
-  # puesto en `6ce252c0` —61 migraciones— y mientras se medía entró `V73` en `main`;
-  # `deriva-de-migraciones.test.ts` se puso roja sola, sin provocarla, diciendo «declara
-  # 61, origin/main declara 62: le faltan 1 (V73…)». Es exactamente el aviso que faltaba.
+  # Lo llevaba una persona hasta el 2026-09-02, y ese dia se midio lo que costaba:
+  # **cuatro** PR de dos lineas en hora y media (#705, #715, #717, #719), y el tercero
+  # obsoleto durante su propio CI porque otra migracion entro mientras corria.
   sgtm:applicationBootstrapVersion: fd3ffaa748aae3353a8c1eb7818f6830c5fe5000
   sgtm:webReplicas: "1"
   # La municipalidad de ensayo. El ubigeo es el de Catacaos, igual que en prod (D-01,
