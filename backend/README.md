@@ -68,22 +68,30 @@ imagen oficial no la trae).
 la prueba:
 
 ```bash
-./gradlew verificarAislamiento --max-workers=1 \
+./gradlew verificarAislamiento \
   -Dsgtm.pruebas.postgres.url=jdbc:postgresql://localhost:5432/postgres \
   -Dsgtm.pruebas.postgres.usuario=postgres \
   -Dsgtm.pruebas.postgres.clave=…
 ```
 
-El usuario debe ser superusuario: la prueba crea los cuatro roles, les asigna claves efímeras y
-crea una base nueva por corrida. También sirven las variables de entorno equivalentes
+El usuario debe ser superusuario: la prueba crea los cuatro roles, les asigna su clave y crea una
+base nueva por corrida. También sirven las variables de entorno equivalentes
 (`SGTM_PRUEBAS_POSTGRES_URL`, …) y `-Dsgtm.pruebas.postgres.imagen` para cambiar la imagen.
 
-**`--max-workers=1` no es decorativo en este camino.** Cada módulo crea su propia base, pero los
-**roles de PostgreSQL son del clúster, no de la base**: dos módulos de prueba en paralelo sobre el
-mismo motor se pisan la clave efímera de `sgtm_owner`, y el fallo aparece como
-`password authentication failed`, que no se parece en nada a su causa. Con Testcontainers el
-problema no existe —cada módulo levanta su propio motor—, así que es un detalle exclusivo de esta
-salida de emergencia.
+**Qué garantiza este camino, y qué no.** Cada tarea `test` crea su propia base, y eso aísla las
+migraciones y los datos sembrados. Lo que **no** es de la base son los **roles**: `ALTER ROLE` vale
+para todo el clúster (INF-01 §4.1), así que las cuatro filas de `pg_authid` las comparten todas las
+corridas que apunten al mismo motor. Por eso:
+
+| Garantiza | No garantiza |
+|---|---|
+| Varias tareas `test` **de la misma corrida** en paralelo (`org.gradle.parallel=true` es el valor de este build). La clave del rol **se deriva** del clúster y de la credencial con que se provisiona, así que las dos escriben lo mismo, y el provisionamiento entero se serializa con un candado de asesoramiento del propio motor (#698) | Que convivan con una corrida que traiga **otro código** —una rama anterior a #698, con su clave aleatoria por tarea— o **otra credencial de superusuario**: esas siguen pisando la clave. Lo que cambia es que el fallo **nombra la causa** en vez de salir como `password authentication failed` |
+| Que no haga falta `--max-workers=1`: la orden más natural —nombrar los dos módulos que tu cambio toca— ya no falla de forma intermitente | Que el clúster quede como estaba. Los roles, las extensiones y sus claves se reescriben: apuntar esto a un motor **en servicio** deja fuera a la aplicación, y eso no lo arregla ninguna de las dos cosas de arriba |
+
+Con Testcontainers nada de esto aplica —cada tarea `test` levanta su propio motor—, así que es un
+detalle exclusivo de esta salida de emergencia. La clave derivada tampoco es un secreto versionado:
+no está en el repositorio, sale de la credencial de superusuario que ya hace falta para provisionar,
+y cambia con el clúster —cada `initdb`, y por tanto cada contenedor, tiene su propio identificador—.
 
 **La base de prueba declara su codificación; no hereda la del clúster** (#706). `CREATE DATABASE`
 a secas la toma de `template1`, y esa la fija `initdb` con el *locale* del entorno: basta que quien

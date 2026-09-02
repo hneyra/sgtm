@@ -58,20 +58,21 @@ prueba bloqueante que se salta a sí misma deja el build en verde sin haber veri
 cd backend && ./gradlew verificarArquitectura
 ```
 
-## 4. `password authentication failed for user "sgtm_owner"` con un PostgreSQL externo
+## 4. «otra corrida de pruebas … le puso otra clave» con un PostgreSQL externo
 
-**Causa:** falta `--max-workers=1`. Cada módulo de prueba crea su propia base, pero **los roles son
-del clúster, no de la base**: dos módulos en paralelo sobre el mismo motor se pisan la clave
-efímera de `sgtm_owner`.
+**Causa:** hay otra corrida usando el mismo clúster. Cada módulo de prueba crea su propia base,
+pero **los roles son del clúster, no de la base**, y quien provisiona reescribe sus claves.
 
-**Salida:**
+Desde #698 dos tareas de la **misma** corrida ya no se pisan —la clave se deriva del clúster y el
+provisionamiento se serializa con un candado del propio motor—, así que si este mensaje sale, al
+otro lado hay una corrida con **otro código** (una rama anterior a #698) o con **otra credencial de
+superusuario**.
 
-```bash
-./gradlew verificarAislamiento --max-workers=1 -Dsgtm.pruebas.postgres.url=…
-```
+**Salida:** esperar a que la otra corrida termine, levantar un motor propio, o usar Testcontainers
+—donde el problema no existe, porque cada módulo levanta el suyo—.
 
-Con Testcontainers el problema no existe —cada módulo levanta su propio motor—, así que es un
-detalle exclusivo de la salida sin Docker.
+Si lo que sale es el `password authentication failed` pelado y no este mensaje, quien lo produjo no
+pasó por el arnés: mira quién más tiene abierta una sesión contra ese motor.
 
 ## 5. Una consulta devuelve **dos** municipalidades
 

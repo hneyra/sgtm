@@ -242,8 +242,8 @@ motor_reiniciar || { echo "FALLO: el motor no volvio tras el reinicio" >&2; exit
 # aislamiento sigue en pie es ejecutarlo aqui.
 #
 # ⚠ **Nunca contra el motor de una municipalidad en marcha.** La prueba provisiona: crea
-# una base para la corrida y le asigna a los cuatro roles claves efimeras con `ALTER
-# ROLE` (`BaseDeDatosDePrueba.crearRoles`). Los roles son objetos del clúster de
+# una base para la corrida y le asigna a los cuatro roles su clave con `ALTER
+# ROLE` (`BaseDeDatosDePrueba.provisionarRoles`). Los roles son objetos del clúster de
 # PostgreSQL, no de la base, asi que esas claves nuevas valen para TODAS sus bases: la
 # aplicacion que estuviera corriendo contra ese motor se quedaria fuera hasta que
 # alguien volviera a aplicar el Secret. Por eso esto corre contra la instancia
@@ -262,8 +262,13 @@ if [ "$CON_AISLAMIENTO" = "si" ]; then
     # `password authentication failed for user "sgtm_owner"` en la otra —la clave que
     # acababa de poner se la habia cambiado la vecina—.
     #
-    # En serie no hay carrera: cada clase provisiona, usa lo suyo y termina. Cuesta unos
-    # segundos mas y es lo que hace que este camino signifique algo.
+    # Desde #698 la carrera esta cerrada en el arnes —la clave se DERIVA del cluster en
+    # vez de sortearse, y el provisionamiento se serializa con un candado de asesoramiento
+    # tomado siempre en la base `postgres`—, asi que la orden en paralelo ya funciona. Las
+    # dos banderas se quedan igual, y a proposito: aqui el motor es desechable, correr en
+    # serie cuesta unos segundos, y con ellas este trabajo no depende de que aquel arreglo
+    # siga siendo correcto. Quien guarda el caso en paralelo es
+    # `ProvisionamientoCompartidoTest`, no esta linea.
     (
         cd "$INFRA/../backend"
         ./gradlew verificarAislamiento --no-daemon --no-parallel --max-workers=1 \
