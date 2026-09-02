@@ -20,6 +20,10 @@ import pe.gob.sgtm.verificaciones.RevisorDeCodigoFuente.Hallazgo;
  * <p>Se revisa {@code src/main} y no {@code src/test}: una prueba que demuestre el peligro de
  * {@code SET SESSION} tiene que poder escribirlo. La de {@code sgtm-plataforma} lo hace, y es lo
  * que prueba que el guardia de conexiones sirve para algo.
+ *
+ * <p>El unico escaner que recorre {@code src/test} es {@link AsercionesQueNoPuedenFallarTest}, y
+ * tiene que serlo porque el defecto que busca —#724— vive en las aserciones. No es una excepcion a
+ * lo de arriba: es otra prohibicion, con otro recorrido y otra lista de exclusiones.
  */
 @DisplayName("ARQ-04 §2 — Prohibiciones en el codigo fuente")
 class ProhibicionesEnElCodigoFuenteTest {

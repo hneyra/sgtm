@@ -101,3 +101,20 @@ Ver [CAL-01](../A0-calidad/estrategia-de-pruebas.md). En resumen:
 - Persistencia: PostgreSQL real con Testcontainers. **Prohibida la base en memoria**: H2 no tiene
   RLS y daría falsos verdes.
 - Una prueba bloqueante **no se omite sola**: sin motor de base de datos, falla.
+- **Ninguna aserción de AssertJ compara un `Optional` con algo que no lo es** (#724). Lo revisa
+  `AsercionesQueNoPuedenFallarTest`, el único escáner que recorre `src/test` —ahí es donde viven
+  las aserciones—, y salta el directorio de muestras. `isEqualTo(Object)` acepta cualquier cosa,
+  así que cambiar un accesor de `String` a `Optional` deja las comparaciones compilando y
+  significando otra cosa: en una dirección la aserción no puede pasar nunca —sale rojo, tarde, en
+  CI, que es como se encontró—, y en la otra pasa **siempre** y no da ningún rojo. Medido: con
+  `assertThat(((DerechoSinParametrizar) fallo).llave()).isNotEqualTo("CUALQUIER_OTRA_COSA")`,
+  las 31 pruebas de `LicenciaDeEdificacionJdbcTest` siguen en verde contra PostgreSQL real y lo
+  único que lo dice es el escáner.
+- El `Optional` se reconoce **sin tipos**, por dos anclas medidas: el nombre del accesor sin
+  argumentos cuando **todas** sus declaraciones en el backend devuelven `Optional<…>`, y el cast
+  del receptor cuando lo hay. Lo que la regla **no** puede ver está escrito en el javadoc de
+  `RevisorDeAserciones`, y no es poco: el nombre ambiguo sin cast, la comparación contra una
+  variable y `assertThat(lista).doesNotContain(unOptional)`. Marcar esa última sin poder ver el
+  sujeto da **46 hallazgos en el árbol de hoy y los 46 son falsos**; censar por nombre sin exigir
+  que sea inequívoco da **40 en 33 archivos**, que es la lección de #437 —un escáner que grita en
+  verde deja de leerse—.
