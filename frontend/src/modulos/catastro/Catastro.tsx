@@ -56,7 +56,7 @@ import { ErrorDeApi, fijarToken } from '../../api/cliente';
 import { FalloDeLectura } from '../../api/Fallo';
 import { Descargas } from '../../api/descarga';
 import { hayPuerta } from '../../api/sesion';
-import { Aviso, Paginador, PasoAtras } from '../../ds/componentes';
+import { Aviso, Paginador, PasoAtras, filaPulsable } from '../../ds/componentes';
 import {
   CAPAS,
   DEFECTOS_DE_FICHA_NUEVA,
@@ -3166,7 +3166,10 @@ export default function Catastro({ dest, onDest }: PantallaProps) {
                       {filas.map((r) => (
                         <tr
                           key={r.predioId}
-                          onClick={() => abrirPredio(r, r.codRefCatastral)}
+                          {...filaPulsable(
+                            `Abrir la ficha del predio ${r.codRefCatastral}, ${direccionDe(r)}`,
+                            () => abrirPredio(r, r.codRefCatastral),
+                          )}
                           className="hov-acento"
                           style={{ borderTop: '1px solid var(--line)', cursor: 'pointer' }}
                         >

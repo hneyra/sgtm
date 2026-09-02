@@ -52,7 +52,7 @@ import { FalloDeLectura, explicacionDelFallo } from '../../api/Fallo';
 import { useRebote, useRecurso } from '../../api/useRecurso';
 import { Icono } from '../../ds/Icono';
 import { ICO } from '../../ds/iconos';
-import { Aviso, Insignia, Paginador, PasoAtras, type Tono } from '../../ds/componentes';
+import { Aviso, Insignia, Paginador, PasoAtras, filaPulsable, type Tono } from '../../ds/componentes';
 import { moduloDe } from '../../shell/modulos';
 import { soles, usarPreferencias } from '../../shell/preferencias';
 import {
@@ -3083,7 +3083,10 @@ export default function Rentas({ dest, onDest }: PantallaProps) {
                       {filasDelPadron.map((r) => (
                         <tr
                           key={r.id}
-                          onClick={() => abrirExpediente(r.codigo)}
+                          {...filaPulsable(
+                            `Abrir la ficha de ${r.nombreRazonSocial}, ${r.codigo}`,
+                            () => abrirExpediente(r.codigo),
+                          )}
                           className="hov-acento"
                           style={{ borderTop: '1px solid var(--line)', cursor: 'pointer' }}
                         >

@@ -3,7 +3,7 @@ import { Shell } from '../../shell/Shell';
 import type { PantallaProps } from '../../App';
 import { Icono } from '../../ds/Icono';
 import { ICO } from '../../ds/iconos';
-import { Aviso, Dato, Entradilla, Insignia, Nota, Seccion, type Tono } from '../../ds/componentes';
+import { Aviso, Dato, Entradilla, Insignia, Nota, Seccion, filaPulsable, type Tono } from '../../ds/componentes';
 import { usarPreferencias } from '../../shell/preferencias';
 import { ErrorDeApi, fijarToken } from '../../api/cliente';
 import { causasDelRechazo } from '../../api/Fallo';
@@ -344,7 +344,11 @@ function TablaDeTextos({
             <tr
               key={i}
               className={onFila ? 'hov-acento' : 'hov-elev'}
-              onClick={onFila ? () => onFila(i) : undefined}
+              /* Cuando la fila abre algo, tiene que abrirlo también con el
+                 teclado (#683). El nombre sale de la PRIMERA celda, que en las
+                 tablas de este módulo es el número que identifica la fila —el
+                 del valor, el del recibo—: es lo que distingue una de otra. */
+              {...(onFila ? filaPulsable(`Abrir ${String(f[0] ?? '')}`, () => onFila(i)) : {})}
               style={{ borderTop: '1px solid var(--line)', cursor: onFila ? 'pointer' : undefined }}
             >
               {f.map((c, j) =>

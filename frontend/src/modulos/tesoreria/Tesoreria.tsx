@@ -2,7 +2,7 @@ import { useEffect, useMemo, useRef, useState, type CSSProperties, type ReactNod
 import { Shell, type EntradaDePaleta } from '../../shell/Shell';
 import type { PantallaProps } from '../../App';
 import { Icono } from '../../ds/Icono';
-import { Aviso, Insignia, Paginador, type Tono } from '../../ds/componentes';
+import { Aviso, Insignia, Paginador, filaPulsable, type Tono } from '../../ds/componentes';
 import { dia, instante, zonaDelLector } from '../../ds/fechas';
 import { usarPreferencias } from '../../shell/preferencias';
 import { ErrorDeApi, claveDeIdempotencia, fijarToken } from '../../api/cliente';
@@ -2057,7 +2057,10 @@ export default function Tesoreria({ dest, onDest }: PantallaProps) {
                       return (
                         <tr
                           key={c.nroConvenio}
-                          onClick={() => { setAbierto(c.nroConvenio); setFalloCierre(null); }}
+                          {...filaPulsable(`Abrir el convenio ${c.nroConvenio}`, () => {
+                            setAbierto(c.nroConvenio);
+                            setFalloCierre(null);
+                          })}
                           className="hov-acento"
                           style={{
                             borderTop: '1px solid var(--line)',
@@ -2408,7 +2411,9 @@ export default function Tesoreria({ dest, onDest }: PantallaProps) {
                     return (
                       <tr
                         key={r.numero}
-                        onClick={() => setNumeroDeRecibo(r.numero)}
+                        {...filaPulsable(`Abrir el recibo ${r.numero}, de ${r.contribuyente ?? 'contribuyente sin resolver'}`, () =>
+                          setNumeroDeRecibo(r.numero),
+                        )}
                         className="hov-acento"
                         style={{
                           borderTop: '1px solid var(--line)',
