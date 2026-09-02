@@ -13,12 +13,16 @@ import pe.gob.sgtm.auditoria.Auditoria;
 import pe.gob.sgtm.auditoria.Operacion;
 import pe.gob.sgtm.auditoria.RegistroDeAuditoria;
 import pe.gob.sgtm.autorizacion.Privilegio;
+import pe.gob.sgtm.compartido.Pagina;
+import pe.gob.sgtm.compartido.Paginacion;
 import pe.gob.sgtm.dominio.Observacion;
 import pe.gob.sgtm.seguridad.dominio.Acceso;
 import pe.gob.sgtm.seguridad.dominio.AdministracionRepository;
 import pe.gob.sgtm.seguridad.dominio.Permiso;
 import pe.gob.sgtm.seguridad.dominio.PermisoEfectivo;
 import pe.gob.sgtm.seguridad.dominio.PermisoRepository;
+import pe.gob.sgtm.seguridad.dominio.TitularDelPrivilegio;
+import pe.gob.sgtm.seguridad.dominio.Usuario;
 import pe.gob.sgtm.web.CodigoDeError;
 import pe.gob.sgtm.web.ProblemaDeNegocio;
 
@@ -122,6 +126,68 @@ public class AdministrarPermisos {
         exigirQueElUsuarioExista(usuarioId);
         return permisos.efectivosConOrigenDe(usuarioId, LocalDate.now(reloj));
     }
+
+    /**
+     * Lo que una cuenta tiene <b>configurado</b>, pueda operar hoy o no (#583).
+     *
+     * <p>No es {@link #efectivosDeUsuario(long)} con otra guarda: es la otra pregunta. Aquella
+     * aplica la regla del guardia entera —una cuenta deshabilitada recibe la lista vacia, porque
+     * ensenar privilegios que despues responden 403 seria peor—, y su consecuencia es que <b>«se
+     * deshabilito y conserva permisos» y «nunca tuvo ninguno» devuelven el mismo JSON</b>.
+     * Deshabilitar no retira nada y rehabilitar lo devuelve entero, asi que quien audita necesita
+     * saber que volveria a poder esa cuenta el dia que alguien la reactive.
+     *
+     * <p>Por eso la respuesta lleva {@code surtenEfectoHoy}: la lista de filas es, campo a campo,
+     * la misma forma que la de la matriz efectiva, y sin esa marca un cliente que se equivoque de
+     * lectura ensenaria como vigente lo que hoy responde 403. La marca se calcula con {@link
+     * pe.gob.sgtm.seguridad.dominio.Usuario#autorizaEn(LocalDate)}, o sea con la misma regla que el
+     * guardia aplica al usuario.
+     *
+     * <p>Un {@code usuarioId} que no existe en esta municipalidad es 404 y no una respuesta vacia,
+     * igual que en la matriz efectiva.
+     */
+    @Transactional(readOnly = true)
+    public PermisosConfigurados configuradosDeUsuario(long usuarioId) {
+        Usuario usuario = exigirQueElUsuarioExista(usuarioId);
+        LocalDate hoy = LocalDate.now(reloj);
+        return new PermisosConfigurados(
+                usuarioId,
+                usuario.cuenta(),
+                usuario.autorizaEn(hoy),
+                permisos.configuradosDe(usuarioId, hoy));
+    }
+
+    /**
+     * Que cuentas pueden hoy ejercer un privilegio sobre un acceso (#583).
+     *
+     * <p>La pregunta del panel que auditaba quien tiene la llave de la caja, y que hasta ahora
+     * costaba <b>una peticion por cuenta del padron</b>. No se compone con {@link
+     * #efectivosDeUsuario(long)} ni recorriendo los grupos: la excepcion propia de una cuenta
+     * sustituye a lo que su grupo le da, asi que un usuario cuyo grupo no tiene el privilegio puede
+     * tenerlo por excepcion, y al reves.
+     *
+     * <p>Un {@code codigoDeAcceso} que no existe en esta municipalidad es 404 nombrandolo, no una
+     * pagina vacia: no tener titulares y no existir son dos respuestas distintas, y la segunda no
+     * se puede decir callando.
+     */
+    @Transactional(readOnly = true)
+    public Pagina<TitularDelPrivilegio> quienesTienen(
+            String codigoDeAcceso, Privilegio privilegio, Paginacion paginacion) {
+        long accesoId = acceso(codigoDeAcceso);
+        return permisos.quienesTienen(accesoId, privilegio, LocalDate.now(reloj), paginacion);
+    }
+
+    /**
+     * Lo configurado de una cuenta, con la marca de si hoy surte efecto.
+     *
+     * @param surtenEfectoHoy falso cuando la cuenta esta deshabilitada o fuera de vigencia; los
+     *     permisos siguen ahi y volverian a valer el dia que se reactive
+     */
+    public record PermisosConfigurados(
+            long usuarioId,
+            String cuenta,
+            boolean surtenEfectoHoy,
+            List<PermisoEfectivo> permisos) {}
 
     /** Un permiso ya resuelto: el codigo de su acceso en vez del id interno. */
     public record PermisoDeAcceso(
@@ -231,8 +297,8 @@ public class AdministrarPermisos {
                                         "No hay ningun grupo con identificador " + grupoId));
     }
 
-    private void exigirQueElUsuarioExista(long usuarioId) {
-        administracion
+    private Usuario exigirQueElUsuarioExista(long usuarioId) {
+        return administracion
                 .usuario(usuarioId)
                 .orElseThrow(
                         () ->

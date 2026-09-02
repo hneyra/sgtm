@@ -53,4 +53,37 @@ public class PermisosDeUsuarioController {
         }
         return resultado;
     }
+
+    /**
+     * Lo <b>configurado</b> de esa cuenta: {@code GET
+     * /api/v1/seguridad/usuarios/{id}/permisos/configurados} (#583).
+     *
+     * <h2>Por que es otra ruta y no un parametro de la de arriba</h2>
+     *
+     * <p>Porque es otra pregunta, no otra respuesta a la misma. La de arriba <b>no cambia</b>: a
+     * una cuenta deshabilitada le sigue contestando la lista vacia, con la misma regla que el
+     * guardia, porque ensenar en la matriz privilegios que despues responden 403 seria peor que no
+     * ensenar nada. Un parametro que apagara esa guarda convertiria una ruta en dos respuestas
+     * distintas segun quien la llame, y la que se lee en pantalla acabaria dependiendo de un
+     * booleano.
+     *
+     * <p>Lo que aqui se puede contestar y alli no: <b>que cuenta deshabilitada conserva
+     * permisos</b>. Hasta este issue las dos situaciones —conservarlos y no haberlos tenido nunca—
+     * eran el mismo JSON, y la diferencia importa porque deshabilitar no retira nada: rehabilitar
+     * la cuenta se lo devuelve entero, y quien audita quiere saber que volveria a poder.
+     *
+     * <p>La respuesta lleva {@code surtenEfectoHoy} y no es adorno: las filas son campo a campo las
+     * mismas que las de la matriz efectiva, y sin esa marca las dos lecturas son indistinguibles
+     * para quien se equivoque de ruta.
+     *
+     * <p>Mismo acceso y mismo privilegio que la de arriba —{@code permisos} con {@code LECTURA}—,
+     * declarado <b>en el metodo</b>: es lo que hace que una escritura anadida despues no herede en
+     * silencio el privilegio de una lectura.
+     */
+    @GetMapping("/configurados")
+    @RequiereAcceso(acceso = "permisos", privilegio = Privilegio.LECTURA)
+    public Recursos.PermisosConfiguradosResource configuradosDeUsuario(
+            @PathVariable("id") long usuario) {
+        return Recursos.PermisosConfiguradosResource.de(administrar.configuradosDeUsuario(usuario));
+    }
 }

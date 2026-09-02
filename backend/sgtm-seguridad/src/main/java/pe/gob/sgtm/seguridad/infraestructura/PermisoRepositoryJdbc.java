@@ -16,10 +16,14 @@ import org.springframework.stereotype.Repository;
 import pe.gob.sgtm.auditoria.Origen;
 import pe.gob.sgtm.auditoria.OrigenContext;
 import pe.gob.sgtm.autorizacion.Privilegio;
+import pe.gob.sgtm.compartido.Pagina;
+import pe.gob.sgtm.compartido.Paginacion;
+import pe.gob.sgtm.persistencia.OrdenSeguro;
 import pe.gob.sgtm.persistencia.RepositorioJdbc;
 import pe.gob.sgtm.seguridad.dominio.Permiso;
 import pe.gob.sgtm.seguridad.dominio.PermisoEfectivo;
 import pe.gob.sgtm.seguridad.dominio.PermisoRepository;
+import pe.gob.sgtm.seguridad.dominio.TitularDelPrivilegio;
 
 /**
  * Persistencia de los permisos.
@@ -45,6 +49,27 @@ public class PermisoRepositoryJdbc extends RepositorioJdbc implements PermisoRep
      * para ejercerla. Es el id de esa pantalla en el catalogo (NEG-03).
      */
     static final String ACCESO_DE_ADMINISTRACION = "permisos";
+
+    /**
+     * La guarda del guardia sobre la propia cuenta: habilitada y dentro de su vigencia (RF-123).
+     *
+     * <p>Escrita una vez porque de ella depende la diferencia entre las dos preguntas de #583:
+     * {@code efectivosConOrigenDe} la aplica —lo que la cuenta <b>puede</b>— y {@code
+     * configuradosDe} no —lo que <b>conserva</b>—. Con la guarda en los dos sitios, «se deshabilito
+     * y conserva permisos» y «nunca tuvo ninguno» vuelven a ser el mismo JSON.
+     *
+     * <p>El parametro se llama {@code :usuario} y no {@code :cuenta} porque las tres consultas que
+     * la usan resuelven al usuario por su identificador.
+     */
+    private static final String LA_CUENTA_OPERA =
+            "EXISTS (SELECT 1 FROM usuario u"
+                    + "         WHERE u.id = :usuario AND u.habilitado"
+                    + "           AND (u.vigencia_desde IS NULL OR u.vigencia_desde <= :fecha)"
+                    + "           AND (u.vigencia_hasta IS NULL OR u.vigencia_hasta >= :fecha))";
+
+    /** El orden de las cuentas que ejercen un privilegio, con desempate por {@code id} (#548). */
+    private static final OrdenSeguro ORDEN_TITULAR =
+            OrdenSeguro.sobre("cuenta", "nombre", "id").desempatandoPor("id");
 
     public PermisoRepositoryJdbc(JdbcClient jdbc) {
         super(jdbc);
@@ -177,6 +202,30 @@ public class PermisoRepositoryJdbc extends RepositorioJdbc implements PermisoRep
      */
     @Override
     public List<PermisoEfectivo> efectivosConOrigenDe(long usuarioId, LocalDate fecha) {
+        return conOrigen(usuarioId, fecha, true);
+    }
+
+    /**
+     * Lo <b>configurado</b> de una cuenta: la misma matriz sin la guarda del usuario (#583).
+     *
+     * <p>Comparte el SQL con la de arriba y no lo copia, y esa es la mitad de la decision: la
+     * precedencia vive en {@link #columnaEfectiva(String)}, y dos copias del mismo {@code CASE}
+     * divergen —#397 lo midio con el «Estado» de la infraccion administrativa—. Aqui divergir
+     * significaria que la pantalla que audita permisos y el servidor que los concede dicen cosas
+     * distintas sobre la misma cuenta.
+     *
+     * <p>Lo unico que cambia es que <b>no</b> se exige que el usuario este habilitado y vigente.
+     * Con esa guarda puesta —lo que hace la lectura efectiva, a proposito— una cuenta deshabilitada
+     * que conserva permisos y una que nunca tuvo ninguno devuelven exactamente el mismo JSON, y
+     * deshabilitar no retira nada: rehabilitarla se lo devuelve entero.
+     */
+    @Override
+    public List<PermisoEfectivo> configuradosDe(long usuarioId, LocalDate fecha) {
+        return conOrigen(usuarioId, fecha, false);
+    }
+
+    private List<PermisoEfectivo> conOrigen(
+            long usuarioId, LocalDate fecha, boolean soloSiLaCuentaOpera) {
         String sql =
                 "SELECT a.codigo,"
                         + " (ux.acceso_id IS NOT NULL) AS por_excepcion,"
@@ -224,10 +273,7 @@ public class PermisoRepositoryJdbc extends RepositorioJdbc implements PermisoRep
                         + "           OR p.eliminacion OR p.impresion OR p.especial)"
                         + " ) gx ON true"
                         + " WHERE a.activo"
-                        + "   AND EXISTS (SELECT 1 FROM usuario u"
-                        + "                WHERE u.id = :usuario AND u.habilitado"
-                        + "                  AND (u.vigencia_desde IS NULL OR u.vigencia_desde <= :fecha)"
-                        + "                  AND (u.vigencia_hasta IS NULL OR u.vigencia_hasta >= :fecha))"
+                        + (soloSiLaCuentaOpera ? " AND " + LA_CUENTA_OPERA : "")
                         + " ORDER BY a.codigo";
 
         List<PermisoEfectivo> efectivos = new ArrayList<>();
@@ -264,6 +310,99 @@ public class PermisoRepositoryJdbc extends RepositorioJdbc implements PermisoRep
                         })
                 .list();
         return List.copyOf(efectivos);
+    }
+
+    /**
+     * Que cuentas ejercen hoy un privilegio sobre un acceso, sin recorrer el padron (#583).
+     *
+     * <p>La inversa de {@link #conOrigen(long, LocalDate, boolean)}, y con la <b>misma</b>
+     * expresion de precedencia: {@link #columnaEfectiva(String)}, la unica columna que interesa.
+     * Eso es lo que impide que esta pantalla y el guardia acaben diciendo cosas distintas —y
+     * tambien lo que hace que la comprobacion sea posible: una mutacion de la precedencia pone en
+     * rojo las tres lecturas a la vez—.
+     *
+     * <p><b>El filtro va fuera y el {@code CASE} dentro</b>, en un subconsulta. Repetir el {@code
+     * CASE} en el {@code WHERE} seria escribir la regla dos veces en la misma consulta, que es el
+     * defecto que #397 midio con el «Estado» de la infraccion administrativa: las dos copias
+     * divergen y la que se lee en pantalla acaba no siendo la que filtro.
+     *
+     * <p>El lateral de los grupos acota por <b>este</b> privilegio y no por «aporta algo», al reves
+     * que la matriz de un usuario. Ahi la pregunta es de que grupo viene la fila del acceso; aqui,
+     * quien concede {@code ESPECIAL}: con «aporta algo», alguien de dos grupos de los que solo uno
+     * lo concede saldria con {@code grupoId} nulo —«viene de varios»— y quien administra se queda
+     * sin saber de cual retirarlo.
+     *
+     * <p>El nombre de la columna sale de {@link Privilegio#columna()} y no del cliente: es un
+     * enumerado de siete valores, asi que concatenarlo no abre ninguna puerta que {@link
+     * OrdenSeguro} no cierre ya para el orden.
+     */
+    @Override
+    public Pagina<TitularDelPrivilegio> quienesTienen(
+            long accesoId, Privilegio privilegio, LocalDate fecha, Paginacion paginacion) {
+
+        String columna = privilegio.columna();
+        String candidatas =
+                " FROM ("
+                        + "   SELECT u.id, u.cuenta, u.nombre,"
+                        + "          (ux.acceso_id IS NOT NULL) AS por_excepcion,"
+                        + "          COALESCE(gx.grupos, 0) AS grupos, gx.grupo AS grupo_id, "
+                        + columnaEfectiva(columna)
+                        + "     FROM usuario u"
+                        + "     LEFT JOIN LATERAL ("
+                        + "       SELECT p.acceso_id, p."
+                        + columna
+                        + "         FROM permiso p"
+                        + "        WHERE p.acceso_id = :acceso AND p.usuario_id = u.id"
+                        + "     ) ux ON true"
+                        + "     LEFT JOIN LATERAL ("
+                        + "       SELECT bool_or(p."
+                        + columna
+                        + ") AS "
+                        + columna
+                        + ","
+                        + "              count(*) AS grupos, min(g.id) AS grupo"
+                        + "         FROM permiso p"
+                        + "         JOIN grupo g ON g.id = p.grupo_id AND g.habilitado"
+                        + "                     AND (g.vigencia_desde IS NULL OR g.vigencia_desde <= :fecha)"
+                        + "                     AND (g.vigencia_hasta IS NULL OR g.vigencia_hasta >= :fecha)"
+                        + "         JOIN miembro m ON m.grupo_id = g.id AND m.activo"
+                        + "                       AND m.usuario_id = u.id"
+                        + "        WHERE p.acceso_id = :acceso AND p."
+                        + columna
+                        + "     ) gx ON true"
+                        + "    WHERE u.habilitado"
+                        + "      AND (u.vigencia_desde IS NULL OR u.vigencia_desde <= :fecha)"
+                        + "      AND (u.vigencia_hasta IS NULL OR u.vigencia_hasta >= :fecha)"
+                        + " ) titular WHERE titular."
+                        + columna;
+
+        return paginar(
+                "SELECT id, cuenta, nombre, por_excepcion, grupos, grupo_id" + candidatas,
+                "SELECT count(*)" + candidatas,
+                Map.of("acceso", accesoId, "fecha", fecha),
+                paginacion,
+                ORDEN_TITULAR,
+                PermisoRepositoryJdbc::mapearTitular);
+    }
+
+    private static TitularDelPrivilegio mapearTitular(ResultSet fila, int numero)
+            throws SQLException {
+        if (fila.getBoolean("por_excepcion")) {
+            return new TitularDelPrivilegio(
+                    fila.getLong("id"),
+                    fila.getString("cuenta"),
+                    fila.getString("nombre"),
+                    PermisoEfectivo.OrigenDelPermiso.EXCEPCION,
+                    null);
+        }
+        long grupos = fila.getLong("grupos");
+        long grupo = fila.getLong("grupo_id");
+        return new TitularDelPrivilegio(
+                fila.getLong("id"),
+                fila.getString("cuenta"),
+                fila.getString("nombre"),
+                PermisoEfectivo.OrigenDelPermiso.GRUPO,
+                grupos == 1 ? grupo : null);
     }
 
     /**
