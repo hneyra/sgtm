@@ -2828,6 +2828,20 @@ const OPERACIONES_ADICIONALES = {
             '`true` o `false`, y nada más —cualquier otro valor es 422, no un false silencioso—.' +
             ' Si falta, salen los dos',
         },
+        {
+          nombre: 'titularidad',
+          ejemplo: 'SIN_TITULAR',
+          descripcion:
+            'El censo de saneamiento de titularidad (#690). `SIN_TITULAR` son los predios sin' +
+            ' ninguna cuota abierta —en Catacaos, 4 977 de 14 422—; `INCOMPLETA`, los que tienen' +
+            ' cuotas y no suman 100 % —otros 304—; `COMPLETA`, los que sí. Importa porque el %' +
+            ' de propiedad **pondera la base imponible** del predio (NEG-05 §1): uno cuyas cuotas' +
+            ' suman 0,349 % tributa por el 0,349 % de su valor, y ninguna cifra parece mal porque' +
+            ' la determinación sale correcta para lo registrado. Se suman las cuotas ABIERTAS,' +
+            ' que es lo mismo que suma el disparador que impide pasar de 100. Cualquier otro' +
+            ' valor es 422: un filtro ignorado devolvería el padrón entero y se leería como que' +
+            ' todo está incompleto',
+        },
       ],
     },
     {

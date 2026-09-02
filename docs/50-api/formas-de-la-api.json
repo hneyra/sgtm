@@ -5531,7 +5531,9 @@
         "autovaluo": "texto",
         "valuoExonerado": "texto",
         "valuoAfecto": "texto",
-        "baseImponible": "texto"
+        "baseImponible": "texto",
+        "porcentajeRegistradoDelPredio": "texto",
+        "titularidadCompleta": "booleano"
       }
     ],
     "valuoTotal": "texto",
