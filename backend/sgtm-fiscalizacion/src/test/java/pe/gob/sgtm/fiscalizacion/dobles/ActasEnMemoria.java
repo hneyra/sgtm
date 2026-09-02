@@ -67,6 +67,26 @@ public final class ActasEnMemoria implements ActaFiscalizacionRepository {
                 .collect(java.util.stream.Collectors.toSet());
     }
 
+    @Override
+    public pe.gob.sgtm.compartido.Pagina<ActaFiscalizacion> consultar(
+            pe.gob.sgtm.fiscalizacion.dominio.CriterioDeActas criterio,
+            pe.gob.sgtm.compartido.Paginacion paginacion) {
+        List<ActaFiscalizacion> filtradas =
+                guardadas.stream()
+                        .filter(
+                                acta ->
+                                        criterio.programaId() == null
+                                                || acta.programaId() == criterio.programaId())
+                        .toList();
+        if (filtradas.isEmpty()) {
+            return pe.gob.sgtm.compartido.Pagina.vacia(paginacion);
+        }
+        int desde = Math.min((int) paginacion.desplazamiento(), filtradas.size());
+        int hasta = Math.min(desde + paginacion.tamano(), filtradas.size());
+        return pe.gob.sgtm.compartido.Pagina.de(
+                filtradas.subList(desde, hasta), paginacion, filtradas.size());
+    }
+
     /** Siembra un acta ya guardada y devuelve su identificador. */
     public long sembrar(ActaFiscalizacion acta) {
         ActaFiscalizacion guardada = insertar(acta);
@@ -86,6 +106,7 @@ public final class ActasEnMemoria implements ActaFiscalizacionRepository {
                 acta.fiscalizador(),
                 acta.hallazgo(),
                 acta.areaHallada(),
+                acta.usoHallado(),
                 acta.detalle(),
                 acta.estado(),
                 acta.observacion());

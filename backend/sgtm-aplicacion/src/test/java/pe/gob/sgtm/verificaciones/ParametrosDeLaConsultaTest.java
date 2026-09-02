@@ -31,9 +31,11 @@ import org.springframework.web.bind.annotation.RequestMethod;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 import pe.gob.sgtm.auditoria.Operacion;
+import pe.gob.sgtm.fiscalizacion.dominio.ActaFiscalizacion;
 import pe.gob.sgtm.fiscalizacion.dominio.CondicionFiscalizada;
 import pe.gob.sgtm.fiscalizacion.dominio.EstadoDeLiquidacion;
 import pe.gob.sgtm.fiscalizacion.dominio.Hallazgo;
+import pe.gob.sgtm.fiscalizacion.dominio.LineaDeLiquidacion;
 import pe.gob.sgtm.web.GuardiaDeParametros;
 
 /**
@@ -723,27 +725,50 @@ class ParametrosDeLaConsultaTest {
                 .containsExactly(nombresDe(EstadoDeLiquidacion.values()));
         assertThat(vocabularioDelContrato("/fiscalizacion/vehicular", "hallazgo"))
                 .as(
-                        "y el del acta es Hallazgo -CUATRO-, que no es CondicionFiscalizada: el"
-                                + " acta no consigna el uso observado, asi que USO_DISTINTO no se"
+                        "y el del acta es Hallazgo, que desde #599 son CINCO: el acta ya consigna"
+                                + " el uso observado (uso_hallado, V76), asi que USO_DISTINTO se"
                                 + " puede anotar")
                 .containsExactly(nombresDe(Hallazgo.values()));
     }
 
     @Test
-    @DisplayName("y los dos vocabularios de fiscalizacion NO son el mismo: son cuatro y cinco")
+    @DisplayName("y los dos vocabularios de fiscalizacion siguen siendo DOS, aunque digan lo mismo")
     void hallazgoNoEsCondicionFiscalizada() {
-        // Sin esto, las cuatro comprobaciones de arriba seguirian pasando el dia que
-        // alguien «unificara» los dos enumerados, que es exactamente el arreglo comodo
-        // ante una discrepancia futura -el que #436 tuvo que impedir por escrito con
-        // las partidas del cuadro y las de la ficha-.
+        // Esta guarda existe para impedir que alguien «unifique» los dos enumerados, que
+        // es el arreglo comodo ante una discrepancia futura -el que #436 tuvo que impedir
+        // por escrito con las partidas del cuadro y las de la ficha-. Hasta #599 lo decia
+        // contando: cuatro y cinco. Ahora los dos tienen los MISMOS cinco nombres, asi que
+        // contar ya no distingue nada y lo que se guarda es que sigan siendo dos tipos.
+        //
+        // Y siguen siendolo por lo que cada uno es: `Hallazgo` es lo que una PERSONA anota
+        // en el acta y `CondicionFiscalizada` lo que el sistema DERIVA comparando los dos
+        // lados. Uno puede equivocarse y el otro no: un acta puede decir CONFORME sobre un
+        // predio cuya area hallada supera la declarada, y la liquidacion lo clasificara
+        // SUBVALUADOR igual, porque la condicion sale de las superficies y no de la
+        // casilla. Fundirlos borraria esa diferencia y haria del acta la ultima palabra.
         assertThat(nombresDe(Hallazgo.values()))
                 .as(
-                        "USO_DISTINTO lo DERIVA el sistema comparando usos; el acta no tiene"
-                                + " columna donde anotarlo (V4, V24), asi que no puede ser un"
-                                + " hallazgo de campo mientras eso no cambie")
-                .hasSize(4)
-                .doesNotContain("USO_DISTINTO");
-        assertThat(nombresDe(CondicionFiscalizada.values())).hasSize(5).contains("USO_DISTINTO");
+                        "los dos vocabularios coinciden desde #599, cuando el acta gano donde"
+                                + " consignar el uso observado (uso_hallado, V76)")
+                .containsExactly(nombresDe(CondicionFiscalizada.values()));
+
+        // Coincidir no es ser el mismo tipo, y esto es lo que lo mide: el acta ANOTA un
+        // `Hallazgo` y la linea de liquidacion lleva la `CondicionFiscalizada` DERIVADA.
+        // Sustituir uno por el otro «ya que dicen lo mismo» cambia el tipo de uno de los dos
+        // componentes, y entonces esta comprobacion lo dice nombrandolo.
+        assertThat(tipoDelComponente(ActaFiscalizacion.class, "hallazgo"))
+                .as("lo que el acta ANOTA es un Hallazgo, no la condicion derivada")
+                .isEqualTo(Hallazgo.class);
+        assertThat(tipoDelComponente(LineaDeLiquidacion.class, "condicion"))
+                .as(
+                        "y lo que la linea de liquidacion lleva es la CondicionFiscalizada que"
+                                + " ComparacionHalladoDeclarado derivo de los dos lados")
+                .isEqualTo(CondicionFiscalizada.class);
+
+        // Y el uso hallado es lo que sostiene el quinto valor: sin la columna, un acta que
+        // lo anota afirma un hallazgo que no puede sustentar, que es por lo que #546 se
+        // nego a anadirlo. La guarda vive en el dominio y otra vez en la base.
+        assertThat(nombresDe(Hallazgo.values())).contains("USO_DISTINTO");
     }
 
     @Test
@@ -778,6 +803,17 @@ class ParametrosDeLaConsultaTest {
     }
 
     // ------------------------------------------------------------------
+
+    /** El tipo declarado de un componente de un {@code record}, por su nombre. */
+    private static Class<?> tipoDelComponente(Class<?> registro, String componente) {
+        for (java.lang.reflect.RecordComponent candidato : registro.getRecordComponents()) {
+            if (candidato.getName().equals(componente)) {
+                return candidato.getType();
+            }
+        }
+        throw new AssertionError(
+                registro.getSimpleName() + " ya no declara el componente '" + componente + "'");
+    }
 
     /** Lo que un handler publicado sabe leer: de la consulta, y del cuerpo. */
     private record Handler(Set<String> deLaConsulta, Set<String> delCuerpo) {

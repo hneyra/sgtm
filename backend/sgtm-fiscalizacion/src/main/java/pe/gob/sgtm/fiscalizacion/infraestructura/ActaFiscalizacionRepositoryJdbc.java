@@ -8,6 +8,7 @@ import org.springframework.stereotype.Repository;
 import pe.gob.sgtm.auditoria.OrigenContext;
 import pe.gob.sgtm.fiscalizacion.dominio.ActaFiscalizacion;
 import pe.gob.sgtm.fiscalizacion.dominio.ActaFiscalizacionRepository;
+import pe.gob.sgtm.persistencia.OrdenSeguro;
 import pe.gob.sgtm.persistencia.RepositorioJdbc;
 
 /**
@@ -20,6 +21,21 @@ public class ActaFiscalizacionRepositoryJdbc extends RepositorioJdbc
         implements ActaFiscalizacionRepository {
 
     private static final String DESDE = " FROM acta_fiscalizacion";
+
+    /**
+     * Por que se admite ordenar, y por que estas cinco.
+     *
+     * <p>Las cinco columnas las publica {@code ActaFiscalizacionResource} con el mismo nombre en
+     * {@code camelCase}, que es lo que {@code OrdenSeguro} traduce solo: pedir por un nombre que la
+     * fila no ensena es el defecto que #608 tuvo que arreglar con {@code publicandoComo}.
+     *
+     * <p>{@code desempatandoPor("id")} no es decoracion: {@code fecha_visita} empata en cuanto dos
+     * actas se levantan el mismo dia —que es lo normal en una jornada de campo—, y sin orden total
+     * dos paginas consecutivas pueden repetir un acta y omitir otra (#543, #548).
+     */
+    static final OrdenSeguro ORDEN =
+            OrdenSeguro.sobre("fecha_visita", "version", "hallazgo", "estado", "id")
+                    .desempatandoPor("id");
 
     public ActaFiscalizacionRepositoryJdbc(JdbcClient jdbc) {
         super(jdbc);
@@ -38,6 +54,7 @@ public class ActaFiscalizacionRepositoryJdbc extends RepositorioJdbc
         campos.put("fiscalizador", acta.fiscalizador());
         campos.put("hallazgo", acta.hallazgo() == null ? null : acta.hallazgo().name());
         campos.put("areaHallada", acta.areaHallada() == null ? null : acta.areaHallada().valor());
+        campos.put("usoHallado", acta.usoHallado());
         campos.put("detalle", acta.detalle());
         campos.put("estado", acta.estado().name());
         campos.put("observacion", acta.observacion().texto());
@@ -48,14 +65,14 @@ public class ActaFiscalizacionRepositoryJdbc extends RepositorioJdbc
                                 "INSERT INTO acta_fiscalizacion"
                                         + " (municipalidad_id, programa_id, version, contribuyente_id,"
                                         + "  predio_id, vehiculo_id, ficha_id, fecha_visita,"
-                                        + "  fiscalizador, hallazgo, area_hallada, detalle, estado,"
-                                        + "  observacion, usuario_registro)"
+                                        + "  fiscalizador, hallazgo, area_hallada, uso_hallado,"
+                                        + "  detalle, estado, observacion, usuario_registro)"
                                         + " VALUES ("
                                         + MUNICIPALIDAD_ACTUAL
                                         + ", :programaId, :version, :contribuyenteId, :predioId,"
                                         + "  :vehiculoId, :fichaId, :fechaVisita, :fiscalizador,"
-                                        + "  :hallazgo, :areaHallada, :detalle, :estado, :observacion,"
-                                        + "  :usuario)"
+                                        + "  :hallazgo, :areaHallada, :usoHallado, :detalle, :estado,"
+                                        + "  :observacion, :usuario)"
                                         + " RETURNING id")
                         .params(campos)
                         .query(Long.class)
@@ -73,6 +90,7 @@ public class ActaFiscalizacionRepositoryJdbc extends RepositorioJdbc
                 acta.fiscalizador(),
                 acta.hallazgo(),
                 acta.areaHallada(),
+                acta.usoHallado(),
                 acta.detalle(),
                 acta.estado(),
                 acta.observacion());
@@ -80,8 +98,8 @@ public class ActaFiscalizacionRepositoryJdbc extends RepositorioJdbc
 
     private static final String COLUMNAS =
             "id, programa_id, version, contribuyente_id, predio_id, vehiculo_id, ficha_id,"
-                    + " fecha_visita, fiscalizador, hallazgo, area_hallada, detalle, estado,"
-                    + " observacion";
+                    + " fecha_visita, fiscalizador, hallazgo, area_hallada, uso_hallado, detalle,"
+                    + " estado, observacion";
 
     @Override
     public java.util.Optional<ActaFiscalizacion> findById(long id) {
@@ -89,6 +107,36 @@ public class ActaFiscalizacionRepositoryJdbc extends RepositorioJdbc
                 .param("id", id)
                 .query(ActaFiscalizacionRepositoryJdbc::mapear)
                 .optional();
+    }
+
+    /**
+     * La grilla de actas (#599), paginada y ordenada por la fecha de la visita.
+     *
+     * <p>Un acta predial y una vehicular salen en la <b>misma</b> lista, porque comparten tabla y
+     * ciclo de vida ({@code acta_fiscalizacion}, V4) y porque lo que la pide —el embudo— pregunta
+     * por un programa, que es de un tipo o del otro. Cual es cual lo dice cual de {@code predioId}
+     * y {@code vehiculoId} trae valor, igual que en el dominio.
+     */
+    @Override
+    public pe.gob.sgtm.compartido.Pagina<ActaFiscalizacion> consultar(
+            pe.gob.sgtm.fiscalizacion.dominio.CriterioDeActas criterio,
+            pe.gob.sgtm.compartido.Paginacion paginacion) {
+
+        StringBuilder donde = new StringBuilder(" WHERE 1 = 1");
+        Map<String, Object> parametros = new HashMap<>();
+        if (criterio.programaId() != null) {
+            donde.append(" AND programa_id = :programaId");
+            parametros.put("programaId", criterio.programaId());
+        }
+
+        String filtro = DESDE + donde;
+        return paginar(
+                "SELECT " + COLUMNAS + filtro,
+                "SELECT count(*)" + filtro,
+                parametros,
+                paginacion,
+                ORDEN,
+                ActaFiscalizacionRepositoryJdbc::mapear);
     }
 
     private static ActaFiscalizacion mapear(java.sql.ResultSet fila, int numeroDeFila)
@@ -112,6 +160,7 @@ public class ActaFiscalizacionRepositoryJdbc extends RepositorioJdbc
                         ? null
                         : pe.gob.sgtm.fiscalizacion.dominio.Hallazgo.valueOf(hallazgo),
                 area == null ? null : new pe.gob.sgtm.dominio.AreaM2(area),
+                fila.getString("uso_hallado"),
                 fila.getString("detalle"),
                 pe.gob.sgtm.fiscalizacion.dominio.EstadoDeActa.valueOf(fila.getString("estado")),
                 pe.gob.sgtm.dominio.Observacion.de(fila.getString("observacion")));

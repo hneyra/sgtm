@@ -1568,6 +1568,31 @@
     "totalPaginas": "entero",
     "hayMas": "booleano"
   },
+  "GET /fiscalizacion/actas": {
+    "contenido": [
+      {
+        "id": "entero",
+        "programaId": "entero",
+        "version": "entero",
+        "contribuyenteId": "entero",
+        "predioId": "entero",
+        "vehiculoId": "entero",
+        "fichaId": "entero",
+        "fechaVisita": "texto",
+        "fiscalizador": "texto",
+        "hallazgo": "texto",
+        "areaHallada": "texto",
+        "usoHallado": "texto",
+        "detalle": "texto",
+        "estado": "texto"
+      }
+    ],
+    "pagina": "entero",
+    "tamano": "entero",
+    "totalElementos": "entero",
+    "totalPaginas": "entero",
+    "hayMas": "booleano"
+  },
   "GET /fiscalizacion/estado-cuenta": {
     "codContribuyente": "texto",
     "fechaDeConsulta": "texto",
@@ -4719,6 +4744,7 @@
     "fiscalizador": "texto",
     "hallazgo": "texto",
     "areaHallada": "texto",
+    "usoHallado": "texto",
     "detalle": "texto",
     "estado": "texto"
   },
@@ -4790,6 +4816,7 @@
     "fiscalizador": "texto",
     "hallazgo": "texto",
     "areaHallada": "texto",
+    "usoHallado": "texto",
     "detalle": "texto",
     "estado": "texto"
   },

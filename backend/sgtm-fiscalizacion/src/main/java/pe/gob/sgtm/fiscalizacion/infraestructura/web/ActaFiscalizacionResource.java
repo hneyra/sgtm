@@ -12,6 +12,10 @@ import pe.gob.sgtm.fiscalizacion.dominio.ActaFiscalizacion;
  * tipada, sin fecha de actualización, y la escribe el serializador de {@code ConfiguracionDeJson}
  * —{@code "180.50"}, sin unidad— igual que las de la muestra, la liquidación y la resolución
  * (#546).
+ *
+ * <p>{@code usoHallado} sale nulo mientras la inspección no lo consigne, y eso es un dato: nulo es
+ * «no se anotó», que no es lo mismo que «coincide con el declarado». Sólo un acta predial lo lleva
+ * (#599, V76).
  */
 public record ActaFiscalizacionResource(
         long id,
@@ -25,6 +29,7 @@ public record ActaFiscalizacionResource(
         String fiscalizador,
         @Nullable String hallazgo,
         @Nullable AreaM2 areaHallada,
+        @Nullable String usoHallado,
         @Nullable String detalle,
         String estado) {
 
@@ -41,6 +46,7 @@ public record ActaFiscalizacionResource(
                 acta.fiscalizador(),
                 acta.hallazgo() == null ? null : acta.hallazgo().name(),
                 acta.areaHallada(),
+                acta.usoHallado(),
                 acta.detalle(),
                 acta.estado().name());
     }
