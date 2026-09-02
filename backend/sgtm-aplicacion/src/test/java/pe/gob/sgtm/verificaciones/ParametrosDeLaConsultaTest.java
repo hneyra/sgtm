@@ -31,6 +31,7 @@ import org.springframework.web.bind.annotation.RequestMethod;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 import pe.gob.sgtm.auditoria.Operacion;
+import pe.gob.sgtm.autorizacion.Privilegio;
 import pe.gob.sgtm.fiscalizacion.dominio.ActaFiscalizacion;
 import pe.gob.sgtm.fiscalizacion.dominio.CondicionFiscalizada;
 import pe.gob.sgtm.fiscalizacion.dominio.EstadoDeLiquidacion;
@@ -261,7 +262,17 @@ class ParametrosDeLaConsultaTest {
                     // contrato declara, y comprometerlos cuando la operacion nace no cuesta
                     // nada. `resultado` se RECHAZA con 422 si no es uno de los tres, que
                     // tambien es leerlo.
-                    "GET /coactiva/prescripcion");
+                    "GET /coactiva/prescripcion",
+                    // #583 — quien tiene un privilegio sobre un acceso. Estrena
+                    // controlador, y comprometer las dos direcciones cuando la operacion
+                    // nace no cuesta nada: su unico filtro propio es `privilegio`, que el
+                    // controlador lee y RECHAZA con 422 si no es uno de los siete —y
+                    // rechazar tambien es leer—. La otra lectura de ese issue, la de lo
+                    // configurado, no declara ningun parametro de consulta y su promesa es
+                    // que siga sin declararlo: un filtro nuevo ahi tendria que leerlo
+                    // alguien.
+                    "GET /seguridad/accesos/{codigo}/usuarios",
+                    "GET /seguridad/usuarios/{id}/permisos/configurados");
 
     /**
      * Cuantas operaciones arrastran hoy cada mitad del desajuste. Medido, no estimado (#544).
@@ -729,6 +740,22 @@ class ParametrosDeLaConsultaTest {
                                 + " el uso observado (uso_hallado, V76), asi que USO_DISTINTO se"
                                 + " puede anotar")
                 .containsExactly(nombresDe(Hallazgo.values()));
+    }
+
+    @Test
+    @DisplayName("y el de «quien tiene un privilegio» son los siete de Privilegio (#583)")
+    void elVocabularioDelPrivilegioEsElDeSuEnumerado() throws IOException {
+        // El mismo eslabon, y aqui el parametro es ADEMAS obligatorio: una palabra
+        // que no sea una de las siete no da una pagina vacia sino 422 enumerandolas.
+        // Sin esta prueba el contrato seria una segunda copia de la lista que nadie
+        // compara con la primera, y un privilegio anadido al enumerado se quedaria
+        // fuera del desplegable sin que nada lo dijera (#192).
+        assertThat(vocabularioDelContrato("/seguridad/accesos/{codigo}/usuarios", "privilegio"))
+                .as(
+                        "los SIETE privilegios del manual (cap. 4, RF-121), letra por letra. Se"
+                                + " declara en docs/50-api/generar-openapi.mjs (VOCABULARIOS), nunca"
+                                + " a mano")
+                .containsExactly(nombresDe(Privilegio.values()));
     }
 
     @Test

@@ -1101,6 +1101,32 @@ const VOCABULARIOS = {
   // lista vacia — daba 422, y una que se omite deja el acta entrando con 201 y
   // SIN hallazgo, que `LiquidarFiscalizacion` ya no liquida (lanza
   // `ActaSinHallazgo`) pero que nadie ve al registrarla.
+  // Los SIETE privilegios del manual (cap. 4, RF-121), que es un enumerado del
+  // codigo y no una columna. Publicarlo importa aqui mas que en un listado
+  // corriente: `privilegio` es OBLIGATORIO y una palabra que no sea una de las
+  // siete se rechaza con 422 enumerandolas, en vez de devolver la pagina vacia
+  // — que se leeria como «nadie tiene Especial», que es exactamente la lectura
+  // plausible y equivocada por la que #427 se nego a traducir «ACTIVA» a
+  // «VIGENTE».
+  titulares_del_privilegio: {
+    privilegio: {
+      valores: [
+        'EJECUCION',
+        'LECTURA',
+        'REGISTRO',
+        'MODIFICACION',
+        'ELIMINACION',
+        'IMPRESION',
+        'ESPECIAL',
+      ],
+      enumerado: 'Privilegio',
+      descripcion:
+        'Cual de los siete privilegios se pregunta. El vocabulario es el del enumerado' +
+        ' «Privilegio», letra por letra —se admite en cualquier caja—; cualquier otra palabra se' +
+        ' rechaza con 422 enumerando los siete, en vez de devolver una pagina vacia. Es' +
+        ' OBLIGATORIO: omitirlo no significa «todos», significa que no se pregunto nada.',
+    },
+  },
   fisc_vehicular: {
     hallazgo: {
       valores: ['CONFORME', 'OMISO', 'SUBVALUADOR', 'USO_DISTINTO', 'NO_UBICADO'],
@@ -1316,6 +1342,91 @@ const OPERACIONES_ADICIONALES = {
         usuario deshabilitado o fuera de vigencia recibe la lista **vacía**. Un \`id\`
         que no existe en esta municipalidad es **404**, no una lista vacía: no tener
         permisos y no existir son dos respuestas distintas.
+      `),
+    },
+    // Lo CONFIGURADO de esa misma cuenta, que es otra pregunta y por eso otra
+    // ruta: la de arriba no cambia (#583).
+    {
+      operationId: 'permisos_configurados_de_usuario',
+      metodo: 'get',
+      ruta: '/api/v1/seguridad/usuarios/{id}/permisos/configurados',
+      titulo: 'Permisos configurados de un usuario',
+      descripcionesDeRuta: {
+        id: 'El usuario, por el `id` que publica cada fila de `GET /seguridad/usuarios`',
+      },
+      descripcion: literal(`
+        Lo que una cuenta tiene **configurado**, surta efecto hoy o no (#583, RF-121).
+
+        **Es otra pregunta, no otra respuesta a la misma.**
+        \`GET /seguridad/usuarios/{id}/permisos\` **no cambia**: aplica la misma regla que
+        el guardia y a una cuenta deshabilitada o fuera de vigencia le contesta la lista
+        vacía, porque enseñar en la matriz privilegios que después responden 403 sería
+        peor que no enseñar nada. Su consecuencia es que **«se deshabilitó y conserva
+        permisos» y «nunca tuvo ninguno» devolvían el mismo JSON**, y esa distinción es
+        justo la que audita quien revisa las cuentas: deshabilitar no retira nada, y
+        rehabilitar lo devuelve entero.
+
+        Aquí lo único que se levanta es la guarda del **usuario**. Las del grupo y la
+        pertenencia se quedan: lo que se pregunta es qué volvería a poder el día que
+        alguien reactive **la cuenta**, y reactivar una cuenta no reactiva un grupo
+        inhabilitado ni devuelve a nadie a un grupo del que salió.
+
+        \`surtenEfectoHoy\` **no es un adorno**: las filas son, campo a campo, las mismas
+        que las de la matriz efectiva —con su \`origen\` y su \`grupoId\`, misma
+        precedencia resuelta por el servidor—, así que sin esa marca las dos lecturas son
+        indistinguibles y quien se equivoque de ruta enseñaría como vigente lo que hoy
+        responde 403. Por qué no surten efecto lo dicen \`habilitado\` y las dos fechas de
+        vigencia que ya publica cada fila de \`GET /seguridad/usuarios\`.
+
+        Un \`id\` que no existe en esta municipalidad es **404**, no una respuesta vacía.
+      `),
+    },
+  ],
+  // Y la inversa de la matriz de un usuario: QUE CUENTAS tienen un privilegio
+  // sobre un acceso. Contestarla cuenta por cuenta costaba una peticion por
+  // usuario del padron, y no se puede componer recorriendo los grupos porque la
+  // excepcion propia SUSTITUYE a lo que el grupo da (#583).
+  accesos: [
+    {
+      operationId: 'titulares_del_privilegio',
+      metodo: 'get',
+      ruta: '/api/v1/seguridad/accesos/{codigo}/usuarios',
+      titulo: 'Cuentas que tienen un privilegio sobre un acceso',
+      descripcionesDeRuta: {
+        codigo:
+          'La opción del catálogo, por el `codigo` que publica cada fila de' +
+          ' `GET /seguridad/accesos` (NEG-03)',
+      },
+      parametros: [{ nombre: 'privilegio' }],
+      paginacion: true,
+      descripcion: literal(`
+        Qué cuentas pueden hoy ejercer un privilegio sobre una opción del catálogo
+        (#583, RF-121): la pregunta inversa de \`/seguridad/usuarios/{id}/permisos\`.
+
+        **Hasta ahora costaba una petición por cuenta.** Medido contra el backend local:
+        la matriz de un usuario devuelve 134 filas y ~21 KB, así que recorrer las 200 que
+        la pantalla pide de una vez eran 200 peticiones y ~4,2 MB de JSON para pintar una
+        insignia.
+
+        **Y no se puede componer acotando por grupo.** La excepción propia de una cuenta
+        **sustituye** a lo que su grupo le da: alguien cuyo grupo no tiene \`ESPECIAL\`
+        puede tenerlo por excepción, y al revés. Esa mitad no la encuentra ningún
+        recorrido por grupos, y ninguna lectura listaba las excepciones.
+
+        Cada fila dice **de dónde le viene**: \`origen: "EXCEPCION"\` cuando manda su
+        excepción propia, y \`origen: "GRUPO"\` con \`grupoId\` cuando lo hereda de un
+        solo grupo vigente que lo otorga. Nulo con \`origen: "GRUPO"\` significa que lo
+        conceden varios y no hay **uno** que nombrar.
+
+        **Sólo las cuentas que hoy pueden operar**, con la misma regla que el guardia:
+        habilitación y vigencia del usuario, del grupo y de la pertenencia (RF-123). Por
+        eso ninguna fila publica \`habilitado\` —valdría \`true\` en todas—, y lo que una
+        cuenta deshabilitada **conserva** lo contesta
+        \`/seguridad/usuarios/{id}/permisos/configurados\`.
+
+        \`privilegio\` es **obligatorio**: omitirlo no significa «todos», significa que no
+        se preguntó nada. Un \`codigo\` que no existe en esta municipalidad es **404**
+        nombrándolo, no una página vacía.
       `),
     },
   ],

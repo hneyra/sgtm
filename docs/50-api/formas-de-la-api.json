@@ -2710,6 +2710,22 @@
     "totalPaginas": "entero",
     "hayMas": "booleano"
   },
+  "GET /seguridad/accesos/{codigo}/usuarios": {
+    "contenido": [
+      {
+        "usuarioId": "entero",
+        "cuenta": "texto",
+        "nombre": "texto",
+        "origen": "texto",
+        "grupoId": "entero"
+      }
+    ],
+    "pagina": "entero",
+    "tamano": "entero",
+    "totalElementos": "entero",
+    "totalPaginas": "entero",
+    "hayMas": "booleano"
+  },
   "GET /seguridad/auditoria": {
     "contenido": [
       {
@@ -2876,6 +2892,21 @@
       "grupoId": "entero"
     }
   ],
+  "GET /seguridad/usuarios/{id}/permisos/configurados": {
+    "usuarioId": "entero",
+    "cuenta": "texto",
+    "surtenEfectoHoy": "booleano",
+    "permisos": [
+      {
+        "acceso": "texto",
+        "privilegios": [
+          "texto"
+        ],
+        "origen": "texto",
+        "grupoId": "entero"
+      }
+    ]
+  },
   "GET /tesoreria/convenios": {
     "contenido": [
       {

@@ -8667,6 +8667,83 @@ paths:
           $ref: "#/components/responses/SinMunicipalidad"
         "422":
           $ref: "#/components/responses/ErrorDeValidacion"
+  "/seguridad/accesos/{codigo}/usuarios":
+    get:
+      operationId: titulares_del_privilegio
+      summary: "Cuentas que tienen un privilegio sobre un acceso"
+      description: |
+        Qué cuentas pueden hoy ejercer un privilegio sobre una opción del catálogo
+        (#583, RF-121): la pregunta inversa de `/seguridad/usuarios/{id}/permisos`.
+
+        **Hasta ahora costaba una petición por cuenta.** Medido contra el backend local:
+        la matriz de un usuario devuelve 134 filas y ~21 KB, así que recorrer las 200 que
+        la pantalla pide de una vez eran 200 peticiones y ~4,2 MB de JSON para pintar una
+        insignia.
+
+        **Y no se puede componer acotando por grupo.** La excepción propia de una cuenta
+        **sustituye** a lo que su grupo le da: alguien cuyo grupo no tiene `ESPECIAL`
+        puede tenerlo por excepción, y al revés. Esa mitad no la encuentra ningún
+        recorrido por grupos, y ninguna lectura listaba las excepciones.
+
+        Cada fila dice **de dónde le viene**: `origen: "EXCEPCION"` cuando manda su
+        excepción propia, y `origen: "GRUPO"` con `grupoId` cuando lo hereda de un
+        solo grupo vigente que lo otorga. Nulo con `origen: "GRUPO"` significa que lo
+        conceden varios y no hay **uno** que nombrar.
+
+        **Sólo las cuentas que hoy pueden operar**, con la misma regla que el guardia:
+        habilitación y vigencia del usuario, del grupo y de la pertenencia (RF-123). Por
+        eso ninguna fila publica `habilitado` —valdría `true` en todas—, y lo que una
+        cuenta deshabilitada **conserva** lo contesta
+        `/seguridad/usuarios/{id}/permisos/configurados`.
+
+        `privilegio` es **obligatorio**: omitirlo no significa «todos», significa que no
+        se preguntó nada. Un `codigo` que no existe en esta municipalidad es **404**
+        nombrándolo, no una página vacía.
+      tags: ["Seguridad"]
+      parameters:
+        - name: codigo
+          in: path
+          required: true
+          description: "La opción del catálogo, por el `codigo` que publica cada fila de `GET /seguridad/accesos` (NEG-03)"
+          schema: { type: string }
+        - name: privilegio
+          in: query
+          required: false
+          description: "Cual de los siete privilegios se pregunta. El vocabulario es el del enumerado «Privilegio», letra por letra —se admite en cualquier caja—; cualquier otra palabra se rechaza con 422 enumerando los siete, en vez de devolver una pagina vacia. Es OBLIGATORIO: omitirlo no significa «todos», significa que no se pregunto nada."
+          schema: { type: string, enum: [EJECUCION, LECTURA, REGISTRO, MODIFICACION, ELIMINACION, IMPRESION, ESPECIAL] }
+        - name: pagina
+          in: query
+          required: false
+          description: "Pagina que se pide, contada desde 0"
+          schema: { type: string }
+          example: "0"
+        - name: tamano
+          in: query
+          required: false
+          description: "Filas por pagina"
+          schema: { type: string }
+          example: "20"
+        - name: ordenarPor
+          in: query
+          required: false
+          description: "Campo por el que se ordena, en camelCase"
+          schema: { type: string }
+        - name: direccion
+          in: query
+          required: false
+          description: "ASCENDENTE | DESCENDENTE"
+          schema: { type: string }
+          example: "ASCENDENTE"
+      responses:
+        200:
+          description: Operacion realizada
+          content:
+            application/json:
+              schema: { type: object }
+        "403":
+          $ref: "#/components/responses/SinMunicipalidad"
+        "422":
+          $ref: "#/components/responses/ErrorDeValidacion"
   "/seguridad/grupos/{grupo}/miembros":
     post:
       operationId: miembros
@@ -8988,6 +9065,52 @@ paths:
         usuario deshabilitado o fuera de vigencia recibe la lista **vacía**. Un `id`
         que no existe en esta municipalidad es **404**, no una lista vacía: no tener
         permisos y no existir son dos respuestas distintas.
+      tags: ["Seguridad"]
+      parameters:
+        - name: id
+          in: path
+          required: true
+          description: "El usuario, por el `id` que publica cada fila de `GET /seguridad/usuarios`"
+          schema: { type: string }
+      responses:
+        200:
+          description: Operacion realizada
+          content:
+            application/json:
+              schema: { type: object }
+        "403":
+          $ref: "#/components/responses/SinMunicipalidad"
+        "422":
+          $ref: "#/components/responses/ErrorDeValidacion"
+  "/seguridad/usuarios/{id}/permisos/configurados":
+    get:
+      operationId: permisos_configurados_de_usuario
+      summary: "Permisos configurados de un usuario"
+      description: |
+        Lo que una cuenta tiene **configurado**, surta efecto hoy o no (#583, RF-121).
+
+        **Es otra pregunta, no otra respuesta a la misma.**
+        `GET /seguridad/usuarios/{id}/permisos` **no cambia**: aplica la misma regla que
+        el guardia y a una cuenta deshabilitada o fuera de vigencia le contesta la lista
+        vacía, porque enseñar en la matriz privilegios que después responden 403 sería
+        peor que no enseñar nada. Su consecuencia es que **«se deshabilitó y conserva
+        permisos» y «nunca tuvo ninguno» devolvían el mismo JSON**, y esa distinción es
+        justo la que audita quien revisa las cuentas: deshabilitar no retira nada, y
+        rehabilitar lo devuelve entero.
+
+        Aquí lo único que se levanta es la guarda del **usuario**. Las del grupo y la
+        pertenencia se quedan: lo que se pregunta es qué volvería a poder el día que
+        alguien reactive **la cuenta**, y reactivar una cuenta no reactiva un grupo
+        inhabilitado ni devuelve a nadie a un grupo del que salió.
+
+        `surtenEfectoHoy` **no es un adorno**: las filas son, campo a campo, las mismas
+        que las de la matriz efectiva —con su `origen` y su `grupoId`, misma
+        precedencia resuelta por el servidor—, así que sin esa marca las dos lecturas son
+        indistinguibles y quien se equivoque de ruta enseñaría como vigente lo que hoy
+        responde 403. Por qué no surten efecto lo dicen `habilitado` y las dos fechas de
+        vigencia que ya publica cada fila de `GET /seguridad/usuarios`.
+
+        Un `id` que no existe en esta municipalidad es **404**, no una respuesta vacía.
       tags: ["Seguridad"]
       parameters:
         - name: id
