@@ -247,7 +247,11 @@ class LiquidarYReliquidarTest {
             // TIPO: los cuatro puertos que la liquidacion usa no declaran un solo metodo que
             // escriba, asi que no hay camino desde aqui al padron ni a las declaraciones.
             assertThat(metodosDe(pe.gob.sgtm.catastro.TitularesDelPredio.class))
-                    .containsExactlyInAnyOrder("de", "deVarios");
+                    .as(
+                            "«estaEnElPadron» entra con #680: pregunta si el identificador apunta a"
+                                    + " una fila, que es lo que separa «ese predio no existe» de"
+                                    + " «existe y no lo reclama nadie». Lee, no escribe")
+                    .containsExactlyInAnyOrder("de", "deVarios", "estaEnElPadron");
             assertThat(metodosDe(pe.gob.sgtm.catastro.LectorDeFichas.class))
                     .containsExactlyInAnyOrder("fichaVigenteEn", "areaDeLaVersion");
             assertThat(metodosDe(pe.gob.sgtm.catastro.LectorDeCaracteristicas.class))

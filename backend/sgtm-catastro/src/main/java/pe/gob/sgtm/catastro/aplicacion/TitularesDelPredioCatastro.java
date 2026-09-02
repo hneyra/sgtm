@@ -37,6 +37,19 @@ public class TitularesDelPredioCatastro implements TitularesDelPredio {
         return proyectar(repositorio.titularesDe(predioId, fecha));
     }
 
+    /**
+     * Si el identificador apunta a una fila del padron de esta municipalidad (#680).
+     *
+     * <p>{@code CatastroRepository.predio(long)} y no una consulta propia: bajo RLS esa lectura ya
+     * acota por municipalidad, y <b>no mira el estado</b>, que es lo que aqui se quiere — un predio
+     * dado de baja sigue estando en el padron y su deuda se tiene que poder mover.
+     */
+    @Override
+    @Transactional(readOnly = true)
+    public boolean estaEnElPadron(long predioId) {
+        return repositorio.predio(predioId).isPresent();
+    }
+
     @Override
     @Transactional(readOnly = true)
     public Map<Long, List<TitularDelPredio>> deVarios(Collection<Long> predioIds, LocalDate fecha) {

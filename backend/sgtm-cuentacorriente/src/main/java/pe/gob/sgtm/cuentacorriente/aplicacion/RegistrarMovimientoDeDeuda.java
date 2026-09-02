@@ -464,12 +464,13 @@ public class RegistrarMovimientoDeDeuda {
     }
 
     /**
-     * La unidad de la obligacion tiene que ser del contribuyente que la debe (#635).
+     * La unidad de la obligacion tiene que ser del contribuyente que la debe (#635, #680).
      *
-     * <p>Un predio que no existe y uno sin titularidad vigente contestan lo mismo, y es deliberado:
-     * lo decide {@code catastro.TitularesDelPredio} —contestar distinto convertiria la lectura en
-     * un detector de predios ajenos— y aqui se respeta. Los dos son «no se puede comprobar que sea
-     * suya», que es lo que el mensaje dice.
+     * <p>El puerto contesta <b>dos cosas separadas</b> —si la unidad esta en el padron y quienes la
+     * tienen a esa fecha— y no una lista cuyo vacio significara las dos. Hasta #680 significaba las
+     * dos, y con eso no se podia dar de alta deuda sobre un predio sin titularidad vigente: el 34,5
+     * % del padron de Catacaos (#586), que es exactamente el predio que la fiscalizacion detecta,
+     * sortea y visita.
      *
      * <p>La titularidad se resuelve a la <b>fecha valor</b> del movimiento y no con el reloj: la
      * deuda de 2024 la debe quien era titular en 2024, y comparar contra el titular de hoy
@@ -524,16 +525,42 @@ public class RegistrarMovimientoDeDeuda {
      *
      * <p>Lo que <b>no</b> cambia es la otra mitad: si la unidad existe y es de otro, la baja sigue
      * pidiendo la declaracion igual que el alta.
+     *
+     * <h2>Y la unidad que existe y no la reclama nadie entra, sin declararla (#680)</h2>
+     *
+     * <p>Es una tercera situacion, distinta de las dos anteriores, y la decision es que <b>pasa sin
+     * declaracion</b>. Los motivos, por orden:
+     *
+     * <ol>
+     *   <li><b>No hay nada que declarar.</b> La declaracion existe para pasar por encima de
+     *       <i>evidencia contraria</i> —«esta unidad es de fulano»—. Sin ningun titular no hay
+     *       evidencia contraria: el predicado «la unidad es de otro» es <b>falso</b>, no
+     *       indeterminado. Pedir una declaracion seria pedir que se declare por encima de nada.
+     *   <li><b>{@link ComprobacionDeUnidad#DECLARADA_DE_TITULAR_ANTERIOR} no se puede
+     *       reutilizar</b>, y no por gusto: dice <i>quien</i> era el titular antes, y aqui no hay
+     *       ninguno. Marcarla dejaria {@code cuenta_corriente_asiento.unidad_de_titular_anterior}
+     *       (V71) afirmando algo falso en la fila del libro y en su bitacora, y una marca falsa es
+     *       peor que ninguna — que es justamente lo que #653 arreglo por el otro lado.
+     *   <li><b>Es un estado que el propio sistema declaro legitimo y espera cobrar.</b> {@code V73}
+     *       relajo {@code programa_muestra.contribuyente_id} a nulo para que el predio sin titular
+     *       <b>entre</b> en la muestra de fiscalizacion sin inventarle titular (#586), porque «un
+     *       predio que nadie reclama es exactamente el que hay que fiscalizar». Son 4 977 de 14 422
+     *       en Catacaos: una casilla que hubiera que marcar en el 34,5 % de los actos deja de ser
+     *       una declaracion y pasa a ser ruido que nadie lee.
+     * </ol>
+     *
+     * <p>Lo que <b>si</b> se conserva es la guarda que la rama del vacio de verdad sostenia: un
+     * identificador que no apunta a ninguna fila sigue siendo 422, y ahora con su propio mensaje.
      */
     private static void comprobar(
             String unidad,
             long unidadId,
-            List<TitularesDeLaUnidad.TitularDeLaUnidad> deLaUnidad,
+            TitularesDeLaUnidad.TitularidadDeLaUnidad deLaUnidad,
             long contribuyenteId,
             ComprobacionDeUnidad comprobacion,
             boolean exigirQueLaUnidadExista) {
 
-        if (deLaUnidad.isEmpty()) {
+        if (!deLaUnidad.estaEnElPadron()) {
             if (!exigirQueLaUnidadExista) {
                 return;
             }
@@ -542,21 +569,24 @@ public class RegistrarMovimientoDeDeuda {
                             + unidad
                             + " "
                             + unidadId
-                            + " no tiene titular en esta municipalidad, asi que no se puede"
-                            + " comprobar que la obligacion sea suya. Un identificador que no"
-                            + " apunta a nada deja el cargo sobre una clave que ninguna consulta"
-                            + " va a mirar");
+                            + " no esta en el padron de esta municipalidad. Un identificador que"
+                            + " no apunta a nada deja el cargo sobre una clave que ninguna"
+                            + " consulta va a mirar, asi que no se registra: hay que corregir el"
+                            + " identificador, no declarar nada");
         }
-        for (TitularesDeLaUnidad.TitularDeLaUnidad titular : deLaUnidad) {
-            if (titular.contribuyenteId() == contribuyenteId) {
-                return;
-            }
+        if (deLaUnidad.sinTitularVigente()) {
+            // Existe y a esa fecha no figura a nombre de nadie: no hay evidencia contraria que
+            // declarar. Ver el javadoc de arriba.
+            return;
+        }
+        if (deLaUnidad.esDe(contribuyenteId)) {
+            return;
         }
         if (comprobacion == ComprobacionDeUnidad.DECLARADA_DE_TITULAR_ANTERIOR) {
             return;
         }
         StringBuilder quienes = new StringBuilder();
-        for (TitularesDeLaUnidad.TitularDeLaUnidad titular : deLaUnidad) {
+        for (TitularesDeLaUnidad.TitularDeLaUnidad titular : deLaUnidad.titulares()) {
             if (quienes.length() > 0) {
                 quienes.append(", ");
             }
