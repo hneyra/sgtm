@@ -54,6 +54,19 @@ const CIFRAS = [
      forma del dinero: un año no casa, «1.0206» tampoco, y un porcentaje ya lo
      caza su propio patrón. */
   { nombre: 'importe suelto', re: /(?<![\d.,%])\d[\d,]*\.\d{2}(?![\d%])/g },
+  /* Un identificador de documento o de predio: «ACT-2026-00418»,
+     «PF-2026-014», «EXP-2026-000009», «02-014-D-14-01». No es una cifra, y por
+     eso se escapaba de los cuatro patrones de arriba: con la red cortada la
+     pantalla del acta seguia diciendo su numero, su programa y su codigo
+     predial —los tres de la maqueta— y este arnes informaba «ninguna ensenia
+     una cifra», en verde (#702).
+
+     Se pide un grupo de **cuatro** digitos seguidos —el ano de un correlativo—
+     o **cinco** grupos separados por guion —la forma de un codigo catastral—,
+     que es lo que separa un identificador de un rotulo. «REC-1», «art. 176»,
+     «V-65», «2026-2027» y «01 — CONCRETO» no casan; se midio contra los 65
+     destinos y con la red cortada no sale ninguno. */
+  { nombre: 'identificador', re: /\b[A-Z]{2,4}-\d{4}-\d{2,7}\b|\b\d{2}(?:-[0-9A-Z]{1,3}){4,}\b/g },
   /* Una magnitud con su unidad: «1406.5 km», «820 m», «180.50 m2», «2.4 ha».
      Existe porque los tres patrones de arriba exigen separador de millares o
      dos decimales, y una medida no lleva ninguno de los dos: la escala de un
@@ -97,6 +110,47 @@ async function desplegarlo(pagina) {
   await pagina.waitForTimeout(200);
 }
 
+/**
+ * Los estados de la pantalla que hay que visitar uno a uno, porque `innerText`
+ * no ve lo que no esta montado.
+ *
+ * Desplegar no basta. Un asistente por pasos y una barra de pestanas **no
+ * ocultan** su contenido: no lo dibujan, y ahi no hay `aria-expanded` que abrir
+ * ni `<details>` que forzar. Con eso, `#/fiscalizacion/actas` pasaba en VERDE
+ * enseniando `S/ 1,842.60` y `S/ 267.50` —las dos cifras de la maqueta, en el
+ * bloque «Lo que va a pasar al cerrar el acta»— porque viven en el paso 4 y
+ * este arnes solo miraba el paso 1. Medido sobre el arbol anterior a #702: «7
+ * pantallas recorridas · ninguna ensenia una cifra».
+ *
+ * Las dos formas que este producto usa, y no hay una tercera:
+ *
+ *   - el paso de un asistente, que se declara con `aria-current="step"` (los
+ *     hermanos del activo son los demas pasos), y
+ *   - `role="tab"`.
+ */
+async function estadosDe(pagina) {
+  return pagina.evaluate(() => {
+    const fuera = new Set();
+    for (const activo of document.querySelectorAll('[aria-current="step"]')) {
+      const grupo = activo.parentElement;
+      if (grupo === null) continue;
+      for (const b of grupo.querySelectorAll('button')) fuera.add(b);
+    }
+    for (const t of document.querySelectorAll('[role="tab"]')) fuera.add(t);
+    /* Se devuelve una MARCA y no el elemento: entre clic y clic la pantalla se
+       vuelve a dibujar y un manejador de Playwright apuntaria a un nodo que ya
+       no esta. */
+    let i = 0;
+    const marcas = [];
+    for (const e of fuera) {
+      const marca = 'sin-red-' + i++;
+      e.setAttribute('data-sin-red', marca);
+      marcas.push(marca);
+    }
+    return marcas;
+  });
+}
+
 const sucias = [];
 let vistas = 0;
 
@@ -119,13 +173,27 @@ for (const m of MODULOS) {
     await pagina.waitForTimeout(900);
     vistas++;
     await desplegarlo(pagina);
-    const texto = await pagina.locator('body').innerText();
-    for (const { nombre, re } of CIFRAS) {
-      const halladas = [...texto.matchAll(re)].map((x) => x[0]).filter((x) => !/^S\/\s?[—-]$/.test(x));
-      if (halladas.length) {
-        const unicas = [...new Set(halladas)];
-        sucias.push({ ruta, nombre, halladas: unicas.slice(0, 6), total: unicas.length });
+
+    /** Lo que la pantalla dice en el estado en que esta ahora mismo. */
+    const revisar = async (donde) => {
+      const texto = await pagina.locator('body').innerText();
+      for (const { nombre, re } of CIFRAS) {
+        const halladas = [...texto.matchAll(re)].map((x) => x[0]).filter((x) => !/^S\/\s?[—-]$/.test(x));
+        if (halladas.length) {
+          const unicas = [...new Set(halladas)];
+          sucias.push({ ruta: ruta + donde, nombre, halladas: unicas.slice(0, 6), total: unicas.length });
+        }
       }
+    };
+    await revisar('');
+
+    for (const marca of await estadosDe(pagina)) {
+      const control = pagina.locator(`[data-sin-red="${marca}"]`);
+      const rotulo = (await control.getAttribute('aria-label').catch(() => null)) ?? (await control.innerText().catch(() => '')) ?? '';
+      await control.click({ timeout: 900 }).catch(() => {});
+      await pagina.waitForTimeout(260);
+      await desplegarlo(pagina);
+      await revisar(` · ${rotulo.replace(/\s+/g, ' ').trim().slice(0, 34)}`);
     }
   }
 }

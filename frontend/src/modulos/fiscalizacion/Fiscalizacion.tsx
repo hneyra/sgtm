@@ -568,6 +568,11 @@ function CampoDelActa({
       {f.t === 'date' && <input type="date" value={texto} onChange={(e) => onCambio(e.target.value)} style={base} />}
       {f.t === 'sel' && (
         <select value={texto} onChange={(e) => onCambio(e.target.value)} style={base}>
+          {/* La opcion vacia va primera y no es adorno: sin ella el desplegable
+              abre en «PROPIETARIO», «INSPECCION REALIZADA» o «AMPLIACION NO
+              DECLARADA» y eso se lee como una eleccion del fiscalizador. Es el
+              defecto que #331 midio en el concepto del alta de deuda. */}
+          <option value="">— sin elegir —</option>
           {(f.o ?? []).map((o) => (
             <option key={o} value={o}>
               {o}
@@ -598,10 +603,14 @@ function CampoDelActa({
             borderRadius: 6,
             fontFamily: 'var(--font-mono)',
             fontSize: 13,
-            color: 'var(--ink-2)',
+            color: texto === '' ? 'var(--ink-4)' : 'var(--ink-2)',
           }}
         >
-          {texto}
+          {/* Vacio significa que no hay acta abierta de la que sacarlo, y eso se
+              dice con el guion largo. Una caja de solo lectura EN BLANCO se lee
+              como un dato que todavia no se ha cargado; el guion dice que no lo
+              hay (#702). El motivo entero esta en el aviso de la barra. */}
+          {texto === '' ? SIN_DATO : texto}
         </span>
       )}
       {f.ayuda && <span style={{ fontSize: 11.5, lineHeight: 1.4, color: 'var(--ink-4)', textWrap: 'pretty' }}>{f.ayuda}</span>}
@@ -1164,6 +1173,13 @@ export default function Fiscalizacion({ dest, onDest }: PantallaProps) {
       const valor = String(vals[r.k] === undefined ? DEFECTOS[r.k] : vals[r.k]);
       let dif = '—';
       let cambio = false;
+      /* Sin nada declarado no hay diferencia, y decir «sin cambio» seria
+         afirmar que lo verificado coincide con lo declarado cuando lo declarado
+         no se ha leido de ninguna parte. Lo declarado sale de la ficha vigente
+         del predio que se inspecciona, y esta pantalla no tiene predio (#702). */
+      if (r.decl === '') {
+        return { r, valor, dif: SIN_DATO, cambio: false };
+      }
       if (r.n) {
         const a = parseFloat(String(r.decl).replace(/,/g, '')) || 0;
         const b = parseFloat(String(valor).replace(/,/g, '')) || 0;
@@ -1196,11 +1212,24 @@ export default function Fiscalizacion({ dest, onDest }: PantallaProps) {
     const ejercicios = String(vals.ejercicios === undefined ? DEFECTOS.ejercicios : vals.ejercicios);
     const construida = String(vals.construidaV === undefined ? DEFECTOS.construidaV : vals.construidaV);
     const uso = String(vals.usoV === undefined ? DEFECTOS.usoV : vals.usoV);
-    const conforme = hallazgo === 'SIN OBSERVACIONES' || !contraste.hayDif;
+    /* `!contraste.hayDif` ya no puede leerse como «coincide con lo declarado»:
+       con la columna «Declarado» vacia no hay con que comparar, y decir «no hay
+       diferencia» seria afirmar que el predio esta conforme sin haber mirado su
+       ficha (#702). Se separan los dos casos. */
+    const sinContraste = DIFF.every((r) => r.decl === '');
+    const conforme = !sinContraste && (hallazgo === 'SIN OBSERVACIONES' || !contraste.hayDif);
     const out: { titulo: string; detalle: string; valor: string; iconoStyle: CSSProperties }[] = [
-      { titulo: 'Se cierra el acta ' + DEFECTOS.acta, detalle: 'Deja de ser editable. Para corregirla habría que anularla y levantar otra.', valor: '', iconoStyle: ICONO_OK },
+      { titulo: 'Se cierra el acta', detalle: 'Deja de ser editable. Para corregirla habría que anularla y levantar otra.', valor: '', iconoStyle: ICONO_OK },
     ];
-    if (conforme) {
+    if (sinContraste) {
+      out.push({
+        titulo: 'No se puede decir si hay diferencia',
+        detalle:
+          'Lo declarado sale de la ficha catastral vigente del predio, y aquí no hay predio elegido: la columna «Declarado» del paso 2 está vacía, así que ni «conforme» ni «hay diferencia» se pueden afirmar.',
+        valor: '',
+        iconoStyle: ICONO_NEU,
+      });
+    } else if (conforme) {
       out.push({
         titulo: 'El acta se cierra como conforme',
         detalle: 'No hay diferencia con lo declarado: no se genera determinación ni multa, y el predio sale de la muestra.',
@@ -1210,8 +1239,18 @@ export default function Fiscalizacion({ dest, onDest }: PantallaProps) {
     } else if (determina) {
       out.push({
         titulo: 'Se genera la resolución de determinación',
-        detalle: 'Hallazgo: ' + hallazgo.toLowerCase() + '. Diferencia de impuesto predial y arbitrios de los ejercicios ' + ejercicios + '.',
-        valor: 'S/ 1,842.60',
+        detalle:
+          'Hallazgo: ' +
+          (hallazgo === '' ? 'sin elegir' : hallazgo.toLowerCase()) +
+          '. Diferencia de impuesto predial y arbitrios de los ejercicios ' +
+          (ejercicios === '' ? 'que se elijan' : ejercicios) +
+          '.',
+        /* Decia «S/ 1,842.60». Era la cifra de la captura del artboard,
+           presentada como el resultado de un acto que se acababa de ejecutar
+           (#702). El importe de una determinacion lo calcula el backend al
+           liquidar la fiscalizacion, con los valores del ejercicio sellado; esta
+           pantalla no compone dinero (RNF-083) y ademas no manda el acta. */
+        valor: SIN_DATO,
         iconoStyle: ICONO_OK,
       });
     } else {
@@ -1222,7 +1261,7 @@ export default function Fiscalizacion({ dest, onDest }: PantallaProps) {
         iconoStyle: ICONO_NEU,
       });
     }
-    if (!conforme && multa !== 'NO APLICA') {
+    if (!conforme && !sinContraste && multa !== 'NO APLICA' && multa !== '') {
       /* «Código Tributario» va con mayúsculas: es como se cita en la hoja de la
          resolución y en la baja de deuda de Rentas. Solo baja a minúsculas la
          descripción de la infracción, que es la parte variable. */
@@ -1232,14 +1271,22 @@ export default function Fiscalizacion({ dest, onDest }: PantallaProps) {
       out.push({
         titulo: 'Se liquida la multa tributaria',
         detalle: 'Artículo ' + numero + ' del Código Tributario: ' + descripcion + '.',
-        valor: 'S/ 267.50',
+        /* Y esta decia «S/ 267.50», por lo mismo: la multa del art. 176 se
+           calcula sobre un porcentaje de la UIT del ejercicio, que es un valor
+           normativo sellado (regla 5). */
+        valor: SIN_DATO,
         iconoStyle: ICONO_OK,
       });
     }
-    if (!conforme) {
+    if (!conforme && !sinContraste) {
       out.push({
         titulo: 'Se actualiza la ficha catastral del predio',
-        detalle: 'Área construida verificada ' + construida + ' m² y uso ' + uso + '. Queda como versión nueva.',
+        detalle:
+          'Área construida verificada ' +
+          (construida === '' ? SIN_DATO : construida + ' m²') +
+          ' y uso ' +
+          (uso === '' ? SIN_DATO : uso) +
+          '. Queda como versión nueva.',
         valor: '',
         iconoStyle: ICONO_NEU,
       });
@@ -1251,27 +1298,38 @@ export default function Fiscalizacion({ dest, onDest }: PantallaProps) {
   /* ── Cabecera ──────────────────────────────────────────────── */
   const destino = m.destinos.find((x) => x.k === dest);
   const miga = esActa
-    ? ['Fiscalización', 'Actas', String(DEFECTOS.acta)]
+    ? ['Fiscalización', 'Actas']
     : esResolucion
       ? ['Fiscalización', 'Documentos']
       : ['Fiscalización', destino?.label ?? 'Fiscalización'];
+  /* Decia «Acta ACT-2026-00418», un numero que no existe en ninguna
+     municipalidad. El h1 de una pantalla sin acta abierta no puede nombrar
+     ninguna (#702). */
   const titulo = esActa
-    ? 'Acta ' + DEFECTOS.acta
+    ? 'Acta de inspección'
     : esResolucion
       ? 'Resolución de determinación'
       : (destino?.label ?? 'Fiscalización');
 
   const paleta = OPCIONES.map((o) => ({ label: o[0], nota: 'Fiscalización', ir: () => onDest(o[1]) }));
 
+  /**
+   * Avanza el asistente, y **nada mas**.
+   *
+   * En el ultimo paso hacia tres cosas y las tres eran falsas: se daba el
+   * formulario por limpio (`setSucio(false)`), se navegaba a «Resultados» como
+   * si el acta hubiera quedado registrada, y se anunciaba «Acta cerrada.
+   * Determinacion por S/ 1,842.60 lista para emitir» — **una cifra de dinero de
+   * la maqueta presentada como el resultado de un acto que se acababa de
+   * ejecutar** (#702). Ninguna peticion salia al servidor.
+   *
+   * Ahora el ultimo paso no tiene boton que llame aqui: «Cerrar acta» esta
+   * apagado con su motivo, como sus dos vecinos.
+   */
   const adelante = () => {
-    if (pasoIdx >= PASOS_ACTA.length - 1) {
-      setSucio(false);
-      onDest('resultados');
-      toast('Acta cerrada. Determinación por S/ 1,842.60 lista para emitir.');
-    } else {
-      setPaso(pasoIdx + 1);
-      setSucio(true);
-    }
+    if (pasoIdx >= PASOS_ACTA.length - 1) return;
+    setPaso(pasoIdx + 1);
+    setSucio(true);
   };
 
   const filtroDe = (label: string, porOmision: string) => filtros[detTab + ':' + label] ?? porOmision;
@@ -1288,9 +1346,17 @@ export default function Fiscalizacion({ dest, onDest }: PantallaProps) {
         esActa
           ? {
               volver: { label: 'Muestra', onClick: () => onDest('programas') },
-              codigo: String(DEFECTOS.predio),
-              titular: 'MEDINA MEDINA, RUFINA (SUC.)',
-              ubic: 'CALLE SANTA ROSA 116 · programa PF-2026-014 · riesgo alto',
+              /* El sujeto tambien era de la captura: el predio
+                 `02-014-D-14-01`, «MEDINA MEDINA, RUFINA (SUC.)» y «CALLE SANTA
+                 ROSA 116 · programa PF-2026-014 · riesgo alto». Un acta se
+                 levanta sobre un predio de la muestra, y a esta pantalla no
+                 llega ninguno todavia: no hay lectura de un acta abierta
+                 —`GET /fiscalizacion/actas` lista, no abre— ni la muestra
+                 enlaza aqui con su fila. Asi que la cabecera dice de que carece
+                 en vez de nombrar a alguien del artboard (#702). */
+              codigo: SIN_DATO,
+              titular: 'Sin predio elegido',
+              ubic: 'El acta se levanta sobre un predio de la muestra, y aquí todavía no llega ninguno',
               /* Decia «Borrador guardado 10:52» EN VERDE, que es un acuse de
                  exito de algo que no ha pasado nunca: nada de esta pantalla se
                  guarda en ningun sitio —el propio boton «Guardar borrador»
@@ -2532,7 +2598,9 @@ export default function Fiscalizacion({ dest, onDest }: PantallaProps) {
                         return (
                           <tr key={r.k} style={{ borderTop: '1px solid var(--line)', background: cambio ? 'var(--warn-bg)' : 'transparent' }}>
                             <td style={{ padding: '11px 14px', fontSize: 13, fontWeight: 500, color: 'var(--ink)', whiteSpace: 'nowrap' }}>{r.l}</td>
-                            <td style={{ padding: '11px 14px', fontSize: 13, color: 'var(--ink-3)', whiteSpace: 'nowrap' }}>{r.decl}</td>
+                            <td style={{ padding: '11px 14px', fontSize: 13, color: r.decl === '' ? 'var(--ink-4)' : 'var(--ink-3)', whiteSpace: 'nowrap' }}>
+                              {r.decl === '' ? SIN_DATO : r.decl}
+                            </td>
                             <td style={{ padding: '9px 14px', minWidth: 190 }}>
                               {r.t === 'sel' ? (
                                 <select value={valor} onChange={(e) => set(r.k, e.target.value)} style={control}>
@@ -2629,20 +2697,29 @@ export default function Fiscalizacion({ dest, onDest }: PantallaProps) {
                 recibe el foco, así que su `title` no lo lee un lector de
                 pantalla (RNF-082). Y las tres cifras están medidas, no
                 supuestas. */}
-            <Aviso tono="warn" titulo="Esta acta todavía no se puede mandar, y ya no es por el hallazgo">
-              <code>POST /fiscalizacion/predial/actas</code> admite <strong>diez</strong> campos desde <code>V76</code> —el décimo es{' '}
-              <code>usoHallado</code>, que es lo que #599 construyó— y esta pantalla dibuja veintitrés controles y siete filas de contraste.
-              De esos diez, <strong>tres son identificadores internos</strong> —<code>programaId</code>, <code>contribuyenteId</code> y{' '}
-              <code>predioId</code>— y el formulario dibuja en su lugar el código del programa, el nombre del contribuyente y el código
-              predial, que no son lo mismo y que además llegan de la maqueta.
-              <br />
-              <br />
-              El desplegable «Hallazgo principal» ofrece seis rótulos y <strong>los seis contestan 422</strong> «Hallazgo desconocido»,
-              medido uno a uno contra el backend: el enumerado publica <code>CONFORME</code>, <code>OMISO</code>,{' '}
-              <code>SUBVALUADOR</code>, <code>USO_DISTINTO</code> y <code>NO_UBICADO</code>, y ninguno coincide letra por letra con ninguno
-              de los seis. No se traduce ninguno —parecerse no es serlo (#427, #546)—, así que lo que se elija aquí no viajaría aunque
-              hubiera dónde mandarlo. Lo que <code>V76</code> desbloqueó es la lectura de arriba, no esta escritura.
-            </Aviso>
+            <div id="acta-por-que-no">
+              <Aviso tono="warn" titulo="Esta acta todavía no se puede mandar, y ya no es por el hallazgo">
+                <code>POST /fiscalizacion/predial/actas</code> admite <strong>diez</strong> campos desde <code>V76</code> —el décimo es{' '}
+                <code>usoHallado</code>, que es lo que #599 construyó— y esta pantalla dibuja veintitrés controles y siete filas de
+                contraste. De esos diez, <strong>tres son identificadores internos</strong> —<code>programaId</code>,{' '}
+                <code>contribuyenteId</code> y <code>predioId</code>— y el formulario dibuja en su lugar el código del programa, el nombre
+                del contribuyente y el código predial, que no son lo mismo.
+                <br />
+                <br />
+                Por eso los cinco campos de solo lectura del paso 1 salen con el guion largo, y con él la columna «Declarado» del paso 2:
+                un acta se levanta sobre un predio de la muestra, y a esta pantalla no llega ninguno —<code>GET /fiscalizacion/actas</code>{' '}
+                lista actas, no abre una, y la muestra no enlaza aquí con su fila—. Hasta #702 los cinco traían un acta entera copiada del
+                artboard, con su número, su programa y su contribuyente, y «Cerrar acta» anunciaba un importe de determinación que no
+                existía. Ninguno de esos valores se repite aquí: citarlos para explicarlos volvería a ponerlos en la pantalla.
+                <br />
+                <br />
+                El desplegable «Hallazgo principal» ofrece seis rótulos y <strong>los seis contestan 422</strong> «Hallazgo
+                desconocido», medido uno a uno contra el backend: el enumerado publica <code>CONFORME</code>, <code>OMISO</code>,{' '}
+                <code>SUBVALUADOR</code>, <code>USO_DISTINTO</code> y <code>NO_UBICADO</code>, y ninguno coincide letra por letra con
+                ninguno de los seis. No se traduce ninguno —parecerse no es serlo (#427, #546)—, así que lo que se elija aquí no viajaría
+                aunque hubiera dónde mandarlo. Lo que <code>V76</code> desbloqueó es la lectura de arriba, no esta escritura.
+              </Aviso>
+            </div>
 
             <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>
               <PasoAtras
@@ -2650,10 +2727,14 @@ export default function Fiscalizacion({ dest, onDest }: PantallaProps) {
                 atras={() => setPaso(pasoIdx - 1)}
                 style={grande ? { padding: '13px 20px' } : undefined}
               />
+              {/* Decia «Lo del paso se guarda al continuar, tambien sin
+                  senal», y no se guarda nada en ningun sitio: el asistente solo
+                  cambia de paso, y lo tecleado vive en el estado de React hasta
+                  que se recargue la pagina (#702). */}
               <p style={{ margin: 0, flex: 1, minWidth: 170, fontSize: 12, color: 'var(--ink-3)', textWrap: 'pretty' }}>
                 {pasoIdx >= PASOS_ACTA.length - 1
-                  ? 'Cerrar el acta es el punto sin retorno del procedimiento.'
-                  : 'Lo del paso se guarda al continuar, también sin señal.'}
+                  ? 'Cerrar el acta sería el punto sin retorno del procedimiento, y todavía no se puede.'
+                  : 'Continuar solo cambia de paso: lo tecleado no se guarda en ningún sitio.'}
               </p>
               {/* Decia «Borrador guardado en el dispositivo» y no guardaba en
                   ninguna parte, que es el acto deshonesto de esta revision en
@@ -2669,26 +2750,57 @@ export default function Fiscalizacion({ dest, onDest }: PantallaProps) {
               >
                 Guardar borrador
               </button>
-              <button
-                onClick={adelante}
-                className="hov-acento-2"
-                style={{
-                  display: 'flex',
-                  alignItems: 'center',
-                  gap: 7,
-                  border: 0,
-                  borderRadius: 6,
-                  padding: grande ? '14px 26px' : '11px 22px',
-                  background: 'var(--accent)',
-                  color: '#fff',
-                  fontSize: grande ? 15 : 13.5,
-                  fontWeight: 500,
-                  cursor: 'pointer',
-                }}
-              >
-                {pasoIdx >= PASOS_ACTA.length - 1 ? 'Cerrar acta' : 'Guardar y continuar'}
-                <Icono d={ICO.flechaDer} tam={14} grosor={1.8} />
-              </button>
+              {/* «Cerrar acta» estaba ENCENDIDO, no mandaba nada, y su acuse
+                  anunciaba una determinacion de S/ 1,842.60 que no existe
+                  (#702). Se apaga con su motivo, como sus dos vecinos: el acta
+                  entera no se puede mandar todavia, asi que cerrarla tampoco.
+                  El motivo completo esta en el aviso de arriba, que si lee un
+                  lector de pantalla; el `title` lo repite en corto para quien
+                  pase el raton (RNF-082). */}
+              {pasoIdx >= PASOS_ACTA.length - 1 ? (
+                <button
+                  disabled
+                  aria-describedby="acta-por-que-no"
+                  title="Cerrar el acta la registraría, y el registro está bloqueado: POST /fiscalizacion/predial/actas pide diez campos —tres de ellos identificadores internos que esta pantalla no dibuja— y ninguno de los seis rótulos del hallazgo está en el enumerado (#546, #599)."
+                  style={{
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: 7,
+                    border: '1px solid var(--line-2)',
+                    borderRadius: 6,
+                    padding: grande ? '14px 26px' : '11px 22px',
+                    background: 'var(--bg-card)',
+                    color: 'var(--ink-3)',
+                    fontSize: grande ? 15 : 13.5,
+                    fontWeight: 500,
+                    cursor: 'not-allowed',
+                    opacity: 0.5,
+                  }}
+                >
+                  Cerrar acta
+                </button>
+              ) : (
+                <button
+                  onClick={adelante}
+                  className="hov-acento-2"
+                  style={{
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: 7,
+                    border: 0,
+                    borderRadius: 6,
+                    padding: grande ? '14px 26px' : '11px 22px',
+                    background: 'var(--accent)',
+                    color: '#fff',
+                    fontSize: grande ? 15 : 13.5,
+                    fontWeight: 500,
+                    cursor: 'pointer',
+                  }}
+                >
+                  Continuar
+                  <Icono d={ICO.flechaDer} tam={14} grosor={1.8} />
+                </button>
+              )}
             </div>
           </div>
         )}
