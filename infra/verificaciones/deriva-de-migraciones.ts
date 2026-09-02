@@ -48,6 +48,21 @@ import { invariantesDe } from "./stacks";
  *
  * La deriva sigue pudiendo existir —hace falta un PR mas para cerrarla—, pero deja de
  * poder crecer **en silencio**, que es lo que el issue #675 pide.
+ *
+ * ## Lo que esto cuesta, dicho antes de que lo descubra nadie
+ *
+ * Entre el merge de la migracion y el PR de una linea que sube la version, **todo PR que
+ * toque las rutas de `infra.yml` sale rojo aqui**, y su autor no es quien lo causo. Es
+ * deliberado y es la parte cara del diseño: la alternativa —avisar sin bloquear— es la
+ * que ya existia de hecho, porque nadie miraba, y trece migraciones despues el ambiente
+ * corria otro sistema. Lo que hace tolerable el bloqueo es que el remedio es una linea y
+ * el mensaje la dicta; si algun dia deja de serlo, es esta decision la que hay que
+ * revisar, no la guarda la que hay que quitar.
+ *
+ * Y esto **no** puede quedarse solo en el trabajo diario: `deteccion-de-deriva` corre con
+ * `if: github.event_name == 'schedule'`, asi que un rojo suyo no bloquea nada y no llega
+ * a ningun PR. Ahi vive la otra medida —la base contra su version declarada—, que
+ * necesita el cluster; esta no lo necesita y por eso puede correr donde se lee.
  */
 
 /** Donde viven las migraciones de Flyway, relativo a la raiz del repositorio. */
