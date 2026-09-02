@@ -25,6 +25,7 @@ import {
 } from '../../api/seguridad';
 import { FalloDeLectura } from '../../api/Fallo';
 import { Aviso, Paginador } from '../../ds/componentes';
+import { instante } from '../../ds/fechas';
 import { ErrorDeApi } from '../../api/cliente';
 import { enElProveedorDeIdentidad } from '../../api/sesion';
 import { useRebote, useRecurso } from '../../api/useRecurso';
@@ -916,7 +917,7 @@ export default function Seguridad({ dest, onDest }: PantallaProps) {
                   </span>
                   <span style={{ textAlign: 'right', flex: '0 0 auto' }}>
                     <span style={{ display: 'block', fontFamily: 'var(--font-mono)', fontSize: 11.5, color: 'var(--ink-3)' }}>
-                      {r.fecha.replace('T', ' ').slice(0, 16)}
+                      {instante(r.fecha)}
                     </span>
                     <span style={{ display: 'block', fontSize: 11, color: 'var(--ink-4)', marginTop: 2 }}>{r.usuario}</span>
                   </span>
@@ -1618,7 +1619,7 @@ export default function Seguridad({ dest, onDest }: PantallaProps) {
                       )}
                       {filasDeAuditoria.map((r) => (
                         <tr key={r.id} className="hov-elev" style={{ borderTop: '1px solid var(--line)' }}>
-                          <td style={TD1}>{r.fecha.replace('T', ' ').slice(0, 16)}</td>
+                          <td style={TD1}>{instante(r.fecha)}</td>
                           <td style={TD}>{r.usuario}</td>
                           <td style={{ ...TD, fontFamily: 'var(--font-mono)', fontSize: 12.5 }}>{r.tabla}</td>
                           <td style={{ ...TD, fontFamily: 'var(--font-mono)', fontSize: 12.5, whiteSpace: 'normal' }}>

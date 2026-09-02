@@ -3,6 +3,7 @@ import { Shell, type EntradaDePaleta } from '../../shell/Shell';
 import type { PantallaProps } from '../../App';
 import { Icono } from '../../ds/Icono';
 import { Aviso, Insignia, Paginador, type Tono } from '../../ds/componentes';
+import { dia, instante, zonaDelLector } from '../../ds/fechas';
 import { usarPreferencias } from '../../shell/preferencias';
 import { ErrorDeApi, claveDeIdempotencia, fijarToken } from '../../api/cliente';
 import { cuentaActual, hayPuerta } from '../../api/sesion';
@@ -219,22 +220,6 @@ function tono(texto: string): Tono {
 function moneda(texto: string | null | undefined): string {
   if (texto === null || texto === undefined || texto === '') return SIN_DATO;
   return 'S/ ' + (/^-?\d+$/.test(texto) ? texto + '.00' : texto);
-}
-
-/** Una fecha ISO en el orden en que se lee aquí. Sin `Date`: partir la cadena no
- *  tiene zona horaria que equivocar. */
-function dia(iso: string | null | undefined): string {
-  if (!iso) return SIN_DATO;
-  const [f] = iso.split('T');
-  const p = (f ?? '').split('-');
-  return p.length === 3 ? `${p[2]}/${p[1]}/${p[0]}` : iso;
-}
-
-/** El instante de emisión, partido en día y hora. */
-function instante(iso: string | null | undefined): string {
-  if (!iso) return SIN_DATO;
-  const [f, h] = iso.split('T');
-  return dia(f) + (h ? ' ' + h.slice(0, 5) : '');
 }
 
 /** La llave con la que se identifica una obligación marcada. Es la misma tupla
@@ -1259,7 +1244,15 @@ export default function Tesoreria({ dest, onDest }: PantallaProps) {
         </div>
         <div style={{ textAlign: 'right', fontFamily: 'var(--font-mono)', fontSize: 10.5, color: 'var(--ink-3)' }}>
           <p style={{ margin: 0 }}>{r.numero}</p>
+          {/* La hora va con su zona, y es el unico sitio del producto donde hace
+              falta decirla (#619). Es el dato con el que se distinguen dos cobros
+              del mismo dia y del mismo importe, y el papel que el contribuyente
+              trae lleva la del reloj de la caja: quien mire desde otra zona ve
+              aqui el nombre de la suya y sabe que no van a coincidir. En una
+              ventanilla de Piura las dos son la misma y la coletilla sobra, pero
+              no cuesta nada y su ausencia si costaria. */}
           <p style={{ margin: '2px 0 0' }}>{instante(r.emitidoEn)}</p>
+          <p style={{ margin: '1px 0 0', fontSize: 9.5 }}>hora de {zonaDelLector()}</p>
         </div>
       </div>
       <div style={{ padding: '14px 0', borderBottom: '1px solid var(--line)' }}>

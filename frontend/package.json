@@ -15,7 +15,8 @@
     "impedimentos": "node verificaciones/impedimentos.mjs",
     "vocabularios": "node verificaciones/vocabularios.mjs",
     "errores": "node verificaciones/errores.mjs",
-    "ficha-catastral": "node verificaciones/ficha-catastral.mjs"
+    "ficha-catastral": "node verificaciones/ficha-catastral.mjs",
+    "fechas": "node verificaciones/fechas.mjs"
   },
   "dependencies": {
     "react": "^19.1.0",
