@@ -15,6 +15,7 @@
     "impedimentos": "node verificaciones/impedimentos.mjs",
     "vocabularios": "node verificaciones/vocabularios.mjs",
     "errores": "node verificaciones/errores.mjs",
+    "impresion": "node verificaciones/impresion.mjs",
     "ficha-catastral": "node verificaciones/ficha-catastral.mjs",
     "fechas": "node verificaciones/fechas.mjs"
   },

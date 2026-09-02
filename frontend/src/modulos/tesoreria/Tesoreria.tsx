@@ -3322,13 +3322,27 @@ function queSePuedeHacer(error: ErrorDeApi): string {
     case 'ORDEN_NO_ADMITIDO':
     case 'CONFLICTO':
     case 'NO_ENCONTRADO':
-      return (
-        'El texto de arriba es el del servidor, tal cual: es el único sitio donde se nombra lo que falta, ' +
-        'y reintentar sin cambiar nada volvería a dar lo mismo. Si nombra un dato de este formulario, se ' +
-        'corrige aquí. Si nombra un ejercicio sin conjunto de parámetros sellado, o una llave como ' +
-        '«INTERES_FRACCIONAMIENTO:ORDINARIO», es una cifra que todavía no se ha publicado: eso no se ' +
-        'arregla desde esta pantalla y no es un fallo del servidor (D-02a, D-02b).'
-      );
+      /* UNA de las dos cosas, no las dos (#604). Hasta aquí esta frase
+         enumeraba —«si nombra un dato de este formulario…; si nombra un
+         ejercicio sin conjunto…»— y dejaba la clasificación a quien atiende,
+         que es justo quien no puede hacerla: los dos casos salen con el mismo
+         `codigo` y el mismo `estado`, y lo único que los separaba era el texto.
+         Desde #688 el servidor lo dice como dato, y se pregunta por la
+         PRESENCIA del miembro y nunca por el texto: clasificar por subcadena
+         deja de funcionar en cuanto alguien reescribe la frase, y esa
+         reescritura no rompe ninguna compilación. */
+      return error.faltaUnaCifraNormativa
+        ? 'Lo que falta es una cifra normativa, no un dato de este formulario: ' +
+          (error.parametroQueFalta?.llave === undefined
+            ? 'el ejercicio ' + String(error.parametroQueFalta?.ejercicio) + ' no tiene conjunto de parámetros sellado'
+            : 'falta publicar «' +
+              error.parametroQueFalta.llave +
+              '» en el conjunto de ' +
+              String(error.parametroQueFalta.ejercicio)) +
+          '. Eso no se arregla desde esta pantalla y no es un fallo del servidor (D-02a, D-02b): lo resuelve quien publica los valores normativos.'
+        : 'El texto de arriba es el del servidor, tal cual: es el único sitio donde se nombra lo que falta, ' +
+          'y reintentar sin cambiar nada volvería a dar lo mismo. Lo que nombra es un dato de esta petición, ' +
+          'así que se corrige aquí.';
     case 'SIN_RESPUESTA':
       return 'No llegó a haber respuesta, así que reintentar puede funcionar en cuanto el servidor conteste.';
     default:

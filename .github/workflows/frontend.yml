@@ -130,6 +130,37 @@ jobs:
       - name: La paleta se opera con el teclado
         run: SGTM_BASE=http://localhost:5210 node verificaciones/paleta.mjs
 
+      # Los seis que seguian: declarados en `package.json` y sin correrlos nadie,
+      # que es el defecto que #435 encontro con `verificar-rotacion.sh` y #188
+      # con `verificar-cuadros.mjs` — una verificacion escrita que nunca se
+      # ejecuta no protege nada. Los seis pasan contra la vista previa sola, sin
+      # backend y sin token: medido.
+      #
+      # `flujos` NO entra, y se dice por que: exige `SGTM_TOKEN` y un backend
+      # vivo —«Falta SGTM_TOKEN: sin sesion no hay flujo que validar»—, ninguno
+      # de los dos existe en este trabajo. Meterlo aqui lo pondria rojo por un
+      # motivo que no es el que mide, que es peor que no correrlo. Su sitio es un
+      # trabajo con el compose levantado, y no lo hay todavia.
+      - name: Ningun boton apagado se queda mudo
+        run: SGTM_BASE=http://localhost:5210 node verificaciones/impedimentos.mjs
+
+      - name: Ninguna hoja lleva el shell delante ni sale en blanco
+        run: SGTM_BASE=http://localhost:5210 node verificaciones/impresion.mjs
+
+      - name: Los vocabularios son los del backend
+        run: SGTM_BASE=http://localhost:5210 node verificaciones/vocabularios.mjs
+
+      - name: Cada error se clasifica como lo que es
+        run: SGTM_BASE=http://localhost:5210 node verificaciones/errores.mjs
+
+      - name: La ficha catastral dice lo que el backend publica
+        run: SGTM_BASE=http://localhost:5210 node verificaciones/ficha-catastral.mjs
+
+      # Este no abre navegador —mide dos funciones puras— y se reejecuta solo
+      # con `TZ=America/Lima`: en UTC los casos pasan con el defecto dentro.
+      - name: La fecha sin zona no se convierte, y el instante si
+        run: node verificaciones/fechas.mjs
+
       - name: Publicar las capturas de lo que fallara
         if: failure()
         uses: actions/upload-artifact@v4

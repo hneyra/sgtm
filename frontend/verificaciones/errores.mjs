@@ -168,6 +168,59 @@ for (const codigo of CODIGOS_DE_ERROR) {
   if (es !== debe) fallos.push(`la puerta · «${codigo}» dice reintentable=${es}: ${debe ? 'reintentar sí puede cambiarlo' : 'reintentar no lo cambia, sale igual las veces que se pulse'}`);
 }
 
+/* ── El discriminador de #604: que falta, una cifra o un campo ──────────────
+
+   Los dos salen con `422 VALIDACION` y con el mismo `estado`, asi que hasta #604
+   lo unico que los separaba era el texto en castellano — y el texto se reescribe
+   sin romper ninguna compilacion. Desde #688 el servidor lo dice como DATO, y lo
+   que se sujeta aqui es que se lea la PRESENCIA del miembro y no su contenido ni
+   la frase.
+
+   El ultimo caso es el que importa: un mensaje que dice «Falta publicar el
+   parametro …» SIN el miembro tiene que salir como campo. Clasificar por
+   subcadena lo daria por cifra normativa, y ademas imprimiria «el ejercicio
+   undefined», porque no hay miembro del que leer el ano — medido en la pantalla
+   de convenios con esa misma mutacion. */
+const DISCRIMINADOR = [
+  ['falta el conjunto sellado', { codigo: 'VALIDACION', mensaje: 'El ejercicio 2027 no tiene un conjunto de parametros sellado', parametroQueFalta: { ejercicio: 2027 } }, true, 2027, undefined],
+  ['falta una llave concreta', { codigo: 'VALIDACION', mensaje: 'x', parametroQueFalta: { ejercicio: 2028, llave: 'REDONDEO' } }, true, 2028, 'REDONDEO'],
+  ['falta el bloque de un tipo', { codigo: 'VALIDACION', mensaje: 'x', parametroQueFalta: { ejercicio: 2026, llave: 'INTERES_FRACCIONAMIENTO:ORDINARIO' } }, true, 2026, 'INTERES_FRACCIONAMIENTO:ORDINARIO'],
+  ['falta un campo de la peticion', { codigo: 'VALIDACION', mensaje: "Falta el campo 'nroDeCuotas'" }, false, undefined, undefined],
+  ['el mensaje engaña y no hay miembro', { codigo: 'VALIDACION', mensaje: 'Falta publicar el parametro INTERES_FRACCIONAMIENTO:ORDINARIO del ejercicio 2026' }, false, undefined, undefined],
+  /* Un miembro a medias no se reconoce: sin el ejercicio no se puede decir de
+     que ano falta la cifra, y ese es el dato con el que se busca que publicar.
+     Se prefiere no reconocerlo a reconocerlo vacio. */
+  ['el miembro sin su ejercicio', { codigo: 'VALIDACION', mensaje: 'x', parametroQueFalta: { llave: 'REDONDEO' } }, false, undefined, undefined],
+];
+
+for (const [nombre, cuerpo, esCifra, ejercicio, llave] of DISCRIMINADOR) {
+  globalThis.fetch = async () =>
+    new Response(JSON.stringify({ status: 422, ...cuerpo }), { status: 422, headers: { 'Content-Type': 'application/problem+json' } });
+  let e = null;
+  try {
+    await solicitar('/lo/que/sea');
+  } catch (x) {
+    e = x;
+  }
+  if (e === null) {
+    fallos.push(`el discriminador · ${nombre}: no lanzó nada`);
+    continue;
+  }
+  if (e.faltaUnaCifraNormativa !== esCifra) {
+    fallos.push(
+      `el discriminador · ${nombre}: faltaUnaCifraNormativa=${e.faltaUnaCifraNormativa} y tenía que ser ${esCifra}` +
+        (esCifra ? '' : ' — se clasificaría como cifra normativa lo que es un dato de la petición'),
+    );
+    continue;
+  }
+  if (e.parametroQueFalta?.ejercicio !== ejercicio) {
+    fallos.push(`el discriminador · ${nombre}: el ejercicio salió ${e.parametroQueFalta?.ejercicio} y tenía que ser ${ejercicio}`);
+  }
+  if (e.parametroQueFalta?.llave !== llave) {
+    fallos.push(`el discriminador · ${nombre}: la llave salió ${JSON.stringify(e.parametroQueFalta?.llave)} y tenía que ser ${JSON.stringify(llave)}`);
+  }
+}
+
 // ─────────────────────────────────────────────────────────── 3. La pantalla ──
 
 const { MODULOS } = await cargar('src/shell/modulos.ts', 'modulos-errores');
@@ -252,7 +305,7 @@ if (conElFallo.ofrecen.length === 0) {
 
 console.log(
   `${CODIGOS_DE_ERROR.length} códigos declarados · ${CASOS.length} respuestas fabricadas · ` +
-    `${paradas.length} pantallas recorridas dos veces (${conElVerbo.pedidas} y ${conElFallo.pedidas} peticiones contestadas)`,
+    `${DISCRIMINADOR.length} casos del discriminador · ${paradas.length} pantallas recorridas dos veces (${conElVerbo.pedidas} y ${conElFallo.pedidas} peticiones contestadas)`,
 );
 console.log(`«Reintentar» ante el 405: ${conElVerbo.ofrecen.length} pantallas · ante el 500: ${conElFallo.ofrecen.length}`);
 if (!fallos.length) {
