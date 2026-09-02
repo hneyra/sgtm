@@ -9,26 +9,34 @@ import java.util.Locale;
 import org.jspecify.annotations.Nullable;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
+import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
+import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 import pe.gob.sgtm.autorizacion.Privilegio;
 import pe.gob.sgtm.autorizacion.RequiereAcceso;
+import pe.gob.sgtm.compartido.Paginacion;
 import pe.gob.sgtm.contribuyentes.DirectorioDeContribuyentes;
 import pe.gob.sgtm.contribuyentes.ResumenDeContribuyente;
 import pe.gob.sgtm.dominio.Ejercicio;
 import pe.gob.sgtm.dominio.Observacion;
 import pe.gob.sgtm.parametros.LectorDeParametros;
+import pe.gob.sgtm.valores.aplicacion.ConsultaDePrescripciones;
 import pe.gob.sgtm.valores.aplicacion.DeclararPrescripcion;
 import pe.gob.sgtm.valores.aplicacion.PlazosParametrizados;
 import pe.gob.sgtm.valores.dominio.CausalDePrescripcion;
 import pe.gob.sgtm.valores.dominio.ClaseDeHecho;
+import pe.gob.sgtm.valores.dominio.CriterioDePrescripciones;
 import pe.gob.sgtm.valores.dominio.HechoDelComputo;
 import pe.gob.sgtm.valores.dominio.Prescripcion;
+import pe.gob.sgtm.valores.dominio.ResultadoDeLaSolicitud;
 import pe.gob.sgtm.web.Api;
 import pe.gob.sgtm.web.CodigoDeError;
+import pe.gob.sgtm.web.ParametrosDePaginacion;
 import pe.gob.sgtm.web.ProblemaDeNegocio;
+import pe.gob.sgtm.web.RespuestaPaginada;
 
 /**
  * Declaracion de prescripcion de la accion de cobro: {@code POST /api/v1/coactiva/prescripcion}
@@ -40,6 +48,22 @@ import pe.gob.sgtm.web.ProblemaDeNegocio;
  * coactivos y no lee ninguno —eso es #40—.
  *
  * <p>Sin {@code PUT} ni {@code PATCH}: una resolucion no se edita.
+ *
+ * <h2>Y la relacion que las publica: {@code GET /api/v1/coactiva/prescripcion} (#674)</h2>
+ *
+ * <p>Misma ruta y otro verbo, como {@code permisos_de_grupo} sobre la suya. Es la lectura por la
+ * que quien audita ve <b>que deuda quedo sin accion de cobro</b>, y la contrapartida de la decision
+ * de #674: la prescripcion declarada no toca el libro, asi que la deuda sigue en la cartera y en
+ * «lo cargado» del panel hasta que alguien la de de baja con RF-044. Si esa deuda no se puede
+ * <i>ver</i> en ninguna parte, la decision se vuelve indistinguible de un descuido. El razonamiento
+ * entero esta en {@link DeclararPrescripcion} y en {@code ActoDelLibro}.
+ *
+ * <p>Cuatro filtros y los cuatro se leen: {@code codContribuyente}, {@code tributo}, {@code
+ * ejercicio} y {@code resultado}. Un codigo que no esta en el padron es <b>404 nombrandolo</b> y no
+ * una pagina vacia —esa respuesta se lee como «esta persona no tiene ninguna declaracion», que es
+ * lo contrario de lo que pasa—, mismo criterio que {@code ConsultaValoresController} desde #622. Un
+ * {@code resultado} que no es ninguno de los tres es 422 diciendo cuales hay, y no un filtro
+ * ignorado que devolveria la relacion entera (#544).
  *
  * <h2>Que devuelve 422, y por que no 500 (#562)</h2>
  *
@@ -62,15 +86,68 @@ import pe.gob.sgtm.web.ProblemaDeNegocio;
 @RequestMapping(Api.RAIZ + "/coactiva")
 public class PrescripcionController {
 
+    /** Cronologico por presentacion, como se recorre un legajo de solicitudes. */
+    private static final String ORDEN_POR_OMISION = "fechaPresentacion";
+
     private final DeclararPrescripcion declarar;
+    private final ConsultaDePrescripciones consulta;
     private final DirectorioDeContribuyentes contribuyentes;
     private final Clock reloj;
 
     public PrescripcionController(
-            DeclararPrescripcion declarar, DirectorioDeContribuyentes contribuyentes, Clock reloj) {
+            DeclararPrescripcion declarar,
+            ConsultaDePrescripciones consulta,
+            DirectorioDeContribuyentes contribuyentes,
+            Clock reloj) {
         this.declarar = declarar;
+        this.consulta = consulta;
         this.contribuyentes = contribuyentes;
         this.reloj = reloj;
+    }
+
+    /**
+     * La relacion de declaraciones (#674).
+     *
+     * <p>{@code @RequiereAcceso} va <b>en el metodo</b> y no se hereda de ninguna anotacion de
+     * clase —esta clase no declara ninguna—, porque el privilegio no es el mismo: declarar una
+     * prescripcion es {@link Privilegio#REGISTRO} y leerla es {@link Privilegio#LECTURA}. Que sean
+     * la misma opcion del catalogo es lo correcto: es la misma pantalla.
+     */
+    @GetMapping("/prescripcion")
+    @RequiereAcceso(acceso = "prescripcion", privilegio = Privilegio.LECTURA)
+    public RespuestaPaginada<PrescripcionEnListaResource> relacion(
+            @RequestParam(required = false) @Nullable String codContribuyente,
+            @RequestParam(required = false) @Nullable String tributo,
+            @RequestParam(required = false) @Nullable Integer ejercicio,
+            @RequestParam(required = false) @Nullable String resultado,
+            ParametrosDePaginacion parametros) {
+
+        Paginacion paginacion = parametros.aPaginacion(ORDEN_POR_OMISION);
+
+        Long contribuyenteId = null;
+        String codigo = vacioAnulo(codContribuyente);
+        if (codigo != null) {
+            contribuyenteId =
+                    consulta.contribuyentePorCodigo(codigo)
+                            .orElseThrow(
+                                    () ->
+                                            new ProblemaDeNegocio(
+                                                    CodigoDeError.NO_ENCONTRADO,
+                                                    "No hay ningun contribuyente con el codigo '"
+                                                            + codigo
+                                                            + "'"))
+                            .id();
+        }
+
+        CriterioDePrescripciones criterio =
+                new CriterioDePrescripciones(
+                        contribuyenteId,
+                        vacioAnulo(tributo),
+                        ejercicioFiltradoDe(ejercicio),
+                        resultadoDe(resultado));
+
+        return RespuestaPaginada.de(
+                consulta.buscar(criterio, paginacion), PrescripcionEnListaResource::de);
     }
 
     @PostMapping("/prescripcion")
@@ -227,6 +304,39 @@ public class PrescripcionController {
 
     private static @Nullable String vacioAnulo(@Nullable String texto) {
         return (texto == null || texto.isBlank()) ? null : texto.strip();
+    }
+
+    /**
+     * El ejercicio del filtro, validado por {@link Ejercicio} antes de acotar nada.
+     *
+     * <p>Un ano fuera del rango del dominio devolveria la relacion vacia, y eso se lee como «no hay
+     * ninguna declaracion de ese ano» cuando lo que pasa es que ese ano no existe para el sistema.
+     */
+    private static @Nullable Integer ejercicioFiltradoDe(@Nullable Integer valor) {
+        if (valor == null) {
+            return null;
+        }
+        try {
+            return new Ejercicio(valor).valor();
+        } catch (IllegalArgumentException invalido) {
+            throw new ProblemaDeNegocio(CodigoDeError.VALIDACION, mensajeDe(invalido));
+        }
+    }
+
+    private static @Nullable ResultadoDeLaSolicitud resultadoDe(@Nullable String texto) {
+        String valor = vacioAnulo(texto);
+        if (valor == null) {
+            return null;
+        }
+        try {
+            return ResultadoDeLaSolicitud.valueOf(valor.toUpperCase(Locale.ROOT));
+        } catch (IllegalArgumentException desconocido) {
+            throw new ProblemaDeNegocio(
+                    CodigoDeError.VALIDACION,
+                    "Resultado de solicitud desconocido: '"
+                            + texto
+                            + "'. Se admite PROCEDE, PROCEDE_EN_PARTE o NO_PROCEDE");
+        }
     }
 
     private static String mensajeDe(RuntimeException excepcion) {

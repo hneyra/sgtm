@@ -2937,6 +2937,58 @@ const OPERACIONES_ADICIONALES = {
         ' que concedió cada uno. Se cobra en caja de tasas antes, con su propio concepto del TUPA.',
     },
   ],
+  // `prescripcion` declara «POST /coactiva/prescripcion» —el acto que la declara—;
+  // #674 le añade la LECTURA por la que quien audita ve qué deuda quedó sin acción
+  // de cobro. Misma ruta, otro verbo, como `permisos_de_grupo` sobre la suya.
+  prescripcion: [
+    {
+      operationId: 'prescripciones_declaradas',
+      metodo: 'get',
+      titulo: 'Prescripciones declaradas',
+      paginacion: true,
+      parametros: [
+        {
+          nombre: 'codContribuyente',
+          descripcion:
+            'Código del contribuyente. Un código que no está en el padrón es 404 nombrándolo,' +
+            ' no una relación vacía.',
+        },
+        { nombre: 'tributo', descripcion: 'Tributo sobre el que se declaró' },
+        {
+          nombre: 'ejercicio',
+          descripcion:
+            'Acota a las declaraciones que RESOLVIERON ese ejercicio, hayan prescrito o no:' +
+            ' cuáles prescribieron lo dice `ejerciciosPrescritos` de cada fila.',
+        },
+        {
+          nombre: 'resultado',
+          descripcion: 'PROCEDE, PROCEDE_EN_PARTE o NO_PROCEDE; otro valor es 422',
+        },
+      ],
+      descripcion: literal(`
+        La relación de declaraciones de prescripción: **qué deuda quedó sin acción de
+        cobro** (#674, RF-094).
+
+        **La deuda sigue ahí, y eso es la decisión, no un defecto.** Lo que prescribe es
+        la *acción* para exigir el pago —art. 43 del TUO del Código Tributario—, no la
+        obligación: el libro conserva sus asientos, la deuda sigue siendo cartera
+        pendiente y sigue contando como emisión del ejercicio en el panel de recaudación.
+        Deja de contar cuando la administración la **da de baja** con RF-044, cuya
+        primera causal se llama «PRESCRIPCIÓN DECLARADA» —participio: presupone esta
+        declaración, que es su sustento y no la baja misma—.
+
+        Por eso existe esta lectura: si la deuda inexigible no se puede *ver* en ninguna
+        parte, quien audita la cartera no sabe qué parte de ella ya no se puede exigir, y
+        quien registra la baja no tiene dónde encontrar el acto que la sustenta.
+
+        **Ninguna cifra de dinero**, y no por descuido: la prescripción no extingue un
+        importe. \`ejerciciosPrescritos\` es la lista de los que de verdad prescribieron
+        —una solicitud pide un rango y se resuelve año por año, así que «procede en
+        parte» es el caso corriente— y con el contribuyente y el tributo identifica la
+        obligación alcanzada.
+      `),
+    },
+  ],
   // `ciiu` declara «GET /licencias/ciiu» como su endpoint —el catálogo—; RF-112
   // exige que sea extensible por el usuario, y extenderlo necesita su verbo.
   ciiu: [
