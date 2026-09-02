@@ -83,6 +83,13 @@ tasks.test {
         .file(rootProject.file("../docs/50-api/formas-de-la-api.json"))
         .withPathSensitivity(PathSensitivity.RELATIVE)
 
+    // Y para el censo de respuestas (#732), por lo mismo: lo compara
+    // `RespuestasDeLaApiTest` contra lo que los controladores pueden contestar, y sin
+    // declararlo aqui una edicion a mano dejaria la tarea UP-TO-DATE y pasaria en verde.
+    inputs
+        .file(rootProject.file("../docs/50-api/respuestas-de-la-api.json"))
+        .withPathSensitivity(PathSensitivity.RELATIVE)
+
     // Y lo mismo para las pruebas de TODOS los modulos, que `AsercionesQueNoPuedenFallarTest`
     // lee del disco (#724). Es el unico escaner que recorre `src/test`, y esas fuentes no estan
     // en el classpath de este modulo —solo lo estan las de `src/main`, por las dependencias—,
@@ -98,8 +105,8 @@ tasks.test {
     // Gradle no propaga las propiedades de sistema del build al proceso de prueba
     // (lo mismo que hace `sgtm.pruebas-postgres` con las suyas). Sin esto,
     // `-Dsgtm.formas.regenerar=true` no llega y el archivo no se puede regenerar.
-    providers.systemProperty("sgtm.formas.regenerar").orNull?.let {
-        systemProperty("sgtm.formas.regenerar", it)
+    for (propiedad in listOf("sgtm.formas.regenerar", "sgtm.respuestas.regenerar")) {
+        providers.systemProperty(propiedad).orNull?.let { systemProperty(propiedad, it) }
     }
 }
 
