@@ -39,6 +39,28 @@ configurado no llega el correo; el fallback está en [`../README.md`](../README.
 | `usuarios[].correo` | A esta dirección llega el enlace de `UPDATE_PASSWORD`. |
 | `usuarios[].administrador` | `true` en **exactamente uno**. Es el que `ImplantarMunicipalidad` toma como primer administrador; `datos-de-implantacion.sh` lo deriva de aquí para que la cuenta no pueda divergir entre Keycloak y la fila de la base. |
 
+## La otra mitad: la fila de `usuario` (#572)
+
+Este archivo crea **la cuenta**, y una persona del SGTM son **dos mitades**: esta cuenta y su fila
+en la tabla `usuario`, que es donde viven sus permisos (ADR-0005). Las dos tienen dueños distintos
+y conviene tenerlo delante al añadir a alguien:
+
+| Mitad | Quién la crea |
+|---|---|
+| Cuenta en Keycloak | **este archivo**, aplicado por `reconciliar-identidades.sh` |
+| Fila de `usuario` | `ImplantarMunicipalidad`, **sólo para el `administrador: true`**; para el resto, `POST /api/v1/seguridad/usuarios` desde la pantalla «Nuevo usuario» |
+
+**Declarar aquí a alguien no le crea su fila**, y hasta que exista esa fila autentica y el guardia
+le niega todo — el síntoma es indistinguible de un permiso mal configurado. Y al revés: **dar de
+alta la fila por pantalla no crea la cuenta**, y hasta que se declare aquí esa persona figura en
+los listados y no puede entrar. El razonamiento entero, con lo que se midió para decidirlo, está en
+[`ADR-0012` §5](../../../docs/30-arquitectura/adr/ADR-0012-usuarios-y-grupos-declarativos.md).
+
+Así que el alta de un usuario que no sea el administrador son **dos pasos**, en cualquier orden:
+añadir su entrada a `usuarios[]` de este archivo (y desplegar, para que el Job la reconcilie) y
+darle de alta la fila desde la pantalla. La cuenta tiene que ser **la misma** en los dos sitios:
+es lo único que las une.
+
 ## Idempotente
 
 `reconciliar-identidades.sh` crea lo que falta y actualiza atributos, correo y nombre de lo que ya
