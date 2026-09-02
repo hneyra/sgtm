@@ -42,6 +42,24 @@ import pe.gob.sgtm.web.ProblemaDeNegocio;
  *
  * <p>Un alta no tiene ese limite: incorporar deuda que no estaba es exactamente para lo que existe.
  *
+ * <h2>Lo que si tiene el alta: no se puede hacer dos veces (#588)</h2>
+ *
+ * <p>Y hasta #588 tampoco lo tenia. Sin ese limite y sin ninguna otra guarda, reenviar el mismo
+ * intento tras un tiempo de espera agotado dejaba <b>dos cargos identicos</b> sobre la misma
+ * obligacion, con {@code 201} las dos veces. No se ve en ninguna cifra —la deuda existe y el
+ * importe es correcto— y solo aparece cuando alguien paga y el saldo no queda en cero.
+ *
+ * <p>Lo garantiza {@code asiento_alta_unica_uq} (V75) y no ningun {@code if} de aqui: la clave es
+ * la obligacion mas el {@code documentoOrigen} que la sustenta mas el {@code concepto}, de modo que
+ * un rango de cuotas sigue produciendo {@code n} asientos, un desglose sigue produciendo hasta
+ * cuatro, y dos actos con distinto sustento siguen siendo dos actos. El choque llega como {@link
+ * pe.gob.sgtm.cuentacorriente.dominio.AsientoRepository.AltaYaAsentada}, que el borde contesta como
+ * {@code 409}.
+ *
+ * <p>Se escribe todo o nada, como con cualquier otra parte de este acto: el {@code @Transactional}
+ * de {@link #registrar} deshace las cuotas que si entraron, asi que un alta de «cuotas 1 a 4» cuya
+ * tercera cuota choca no deja media alta asentada.
+ *
  * <h2>El formato impreso se emite al registrar, no al pedirlo</h2>
  *
  * <p>La nota de abono o de cargo se emite en la misma transaccion, con {@code EmitirDocumento}

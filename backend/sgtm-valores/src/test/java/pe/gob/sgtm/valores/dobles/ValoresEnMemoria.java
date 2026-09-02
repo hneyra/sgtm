@@ -136,6 +136,16 @@ public final class ValoresEnMemoria implements ValorRepository {
         return Pagina.de(filas, paginacion, filas.size());
     }
 
+    /** Cuenta lo mismo que {@link #consultar} filtra, reusandolo: aqui no hay dos criterios. */
+    @Override
+    public long contar(CriterioDeConsultaDeValores criterio) {
+        return consultar(
+                        criterio,
+                        new Paginacion(
+                                0, Integer.MAX_VALUE, "numero", Paginacion.Direccion.ASCENDENTE))
+                .totalElementos();
+    }
+
     @Override
     public List<Valor> cobrablesDe(long contribuyenteId, String tributo, Ejercicio ejercicio) {
         List<Valor> encontrados = new ArrayList<>();

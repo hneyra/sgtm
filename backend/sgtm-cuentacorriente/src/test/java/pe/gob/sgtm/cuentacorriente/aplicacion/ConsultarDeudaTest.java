@@ -138,7 +138,7 @@ class ConsultarDeudaTest {
         long titular = idDe(codigo);
 
         cargar(titular, "PREDIAL", 2026, 0, null, Dinero.de(1000), Fase.ORDINARIA);
-        cargar(titular, "ARBITRIOS", 2026, 3, null, Dinero.de(200), Fase.ORDINARIA);
+        cargar(titular, "ARBITRIO", 2026, 3, null, Dinero.de(200), Fase.ORDINARIA);
 
         Pagina<ObligacionConDeuda> pagina =
                 consultar(codigo, LocalDate.of(2026, 6, 1), null, 0, 20);
@@ -148,7 +148,7 @@ class ConsultarDeudaTest {
                 .extracting(ObligacionConDeuda::tributo, o -> o.deuda().insoluto())
                 .containsExactlyInAnyOrder(
                         org.assertj.core.groups.Tuple.tuple("PREDIAL", Dinero.de(1000)),
-                        org.assertj.core.groups.Tuple.tuple("ARBITRIOS", Dinero.de(200)));
+                        org.assertj.core.groups.Tuple.tuple("ARBITRIO", Dinero.de(200)));
     }
 
     @Test
@@ -158,8 +158,8 @@ class ConsultarDeudaTest {
         String codigo = crearContribuyenteConCodigo("D-0002", "80400002");
         long titular = idDe(codigo);
 
-        cargar(titular, "ARBITRIOS", 2026, 3, null, Dinero.de(100), Fase.ORDINARIA);
-        cargar(titular, "ARBITRIOS", 2026, 7, null, Dinero.de(150), Fase.ORDINARIA);
+        cargar(titular, "ARBITRIO", 2026, 3, null, Dinero.de(100), Fase.ORDINARIA);
+        cargar(titular, "ARBITRIO", 2026, 7, null, Dinero.de(150), Fase.ORDINARIA);
 
         Pagina<ObligacionConDeuda> pagina =
                 consultar(codigo, LocalDate.of(2026, 6, 1), null, 0, 20);
@@ -180,14 +180,14 @@ class ConsultarDeudaTest {
         long titular = idDe(codigo);
 
         cargar(titular, "PREDIAL", 2026, 0, null, Dinero.de(500), Fase.ORDINARIA);
-        cargar(titular, "ARBITRIOS", 2027, 0, null, Dinero.de(300), Fase.COACTIVA);
+        cargar(titular, "ARBITRIO", 2027, 0, null, Dinero.de(300), Fase.COACTIVA);
 
         Pagina<ObligacionConDeuda> pagina =
                 consultar(codigo, LocalDate.of(2026, 6, 1), Fase.COACTIVA, 0, 20);
 
         assertThat(pagina.contenido())
                 .singleElement()
-                .satisfies(fila -> assertThat(fila.tributo()).isEqualTo("ARBITRIOS"));
+                .satisfies(fila -> assertThat(fila.tributo()).isEqualTo("ARBITRIO"));
     }
 
     @Test
@@ -199,7 +199,7 @@ class ConsultarDeudaTest {
         // Solo hay particiones para 2026 y 2027 (V2): la tercera obligacion distinta se
         // consigue variando el tributo, no el ejercicio.
         cargar(titular, "PREDIAL", 2026, 0, null, Dinero.de(100), Fase.ORDINARIA);
-        cargar(titular, "ARBITRIOS", 2026, 0, null, Dinero.de(100), Fase.ORDINARIA);
+        cargar(titular, "ARBITRIO", 2026, 0, null, Dinero.de(100), Fase.ORDINARIA);
         cargar(titular, "PREDIAL", 2027, 0, null, Dinero.de(100), Fase.ORDINARIA);
 
         Pagina<ObligacionConDeuda> primera =
@@ -235,8 +235,8 @@ class ConsultarDeudaTest {
         // Dos periodos de la misma obligacion (se agregan en una fila) y una obligacion
         // distinta en otra fase, para probar las dos cosas que porContribuyente ya prueba
         // por separado: el neteo por obligacion, y que no filtra fase.
-        cargar(titular, "ARBITRIOS", 2026, 3, null, Dinero.de(100), Fase.ORDINARIA);
-        cargar(titular, "ARBITRIOS", 2026, 7, null, Dinero.de(150), Fase.ORDINARIA);
+        cargar(titular, "ARBITRIO", 2026, 3, null, Dinero.de(100), Fase.ORDINARIA);
+        cargar(titular, "ARBITRIO", 2026, 7, null, Dinero.de(150), Fase.ORDINARIA);
         cargar(titular, "PREDIAL", 2027, 0, null, Dinero.de(300), Fase.COACTIVA);
 
         List<ObligacionConDeuda> todas =
@@ -247,7 +247,7 @@ class ConsultarDeudaTest {
                 .hasSize(2);
         ObligacionConDeuda arbitrios =
                 todas.stream()
-                        .filter(o -> "ARBITRIOS".equals(o.tributo()))
+                        .filter(o -> "ARBITRIO".equals(o.tributo()))
                         .findFirst()
                         .orElseThrow();
         assertThat(arbitrios.periodoDesde()).isEqualTo(3);

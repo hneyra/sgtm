@@ -14,6 +14,7 @@ import pe.gob.sgtm.auditoria.RegistroDeAuditoria;
 import pe.gob.sgtm.contribuyentes.DirectorioDeContribuyentes;
 import pe.gob.sgtm.contribuyentes.ResumenDeContribuyente;
 import pe.gob.sgtm.cuentacorriente.GeneradorDeCargos;
+import pe.gob.sgtm.cuentacorriente.TributoDelLibro;
 import pe.gob.sgtm.dominio.AreaM2;
 import pe.gob.sgtm.dominio.Dinero;
 import pe.gob.sgtm.dominio.Ejercicio;
@@ -80,7 +81,7 @@ public class RegistrarAnuncio {
      * 'ANUNCIOS'}—, no uno nuevo: la deuda por publicidad tiene un solo nombre en todo el sistema o
      * la consulta de deuda del contribuyente la parte en dos.
      */
-    public static final String TRIBUTO = "ANUNCIOS";
+    public static final String TRIBUTO = TributoDelLibro.ANUNCIOS.texto();
 
     private static final String TABLA_AUDITADA = "anuncio";
 

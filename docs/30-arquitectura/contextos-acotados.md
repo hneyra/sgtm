@@ -122,6 +122,16 @@ El **libro de asientos**: cargos y abonos por contribuyente, tributo, periodo y 
 **No existe «la deuda»**: existe `deudaActualizadaA(fecha)`.
 *Módulo Gradle:* `sgtm-cuentacorriente`.
 
+**El vocabulario de tributos del libro es API pública de este módulo** desde
+[#553](https://github.com/hneyra/sgtm/issues/553): `cuentacorriente.TributoDelLibro`, en el
+paquete raíz junto a `GeneradorDeCargos` y `ConsultaDeDeudaPublica`. No es una excepción a la
+regla 2 de §4 —el libro sigue sin conocer a nadie—, es lo contrario: los siete contextos que
+asientan declaraban cada uno su propio literal, y dos grafías del mismo tributo son **dos
+obligaciones distintas** porque `ClaveDeSaldo` compara ese texto por igualdad exacta. Un
+vocabulario que no se puede importar no es «un solo sitio»; en `.dominio` no serviría, porque
+ningún módulo importa ese subpaquete y hacerlo pondría a Spring Modulith en rojo, que es lo que
+el javadoc de `GeneradorDeCargos` explica de `Fase` y `Concepto`.
+
 ### 3.8 `tesoreria`
 Caja tributaria y de tasas, recibos, anulación del día, convenios de fraccionamiento con su
 preconvenio y su quiebre, cierre de caja y recaudación por área y partida presupuestal.

@@ -111,6 +111,13 @@ public class PanelDeRecaudacion {
                 ejercicio,
                 aLaFecha,
                 leidoEn,
+                // Lo emitido del ejercicio, como campo (#549). La misma cifra sigue dentro de la
+                // nota del KPI de avance —el texto es para leer—, y `elCampoDiceLoMismoQueLaNota`
+                // compara las dos: mientras salgan del mismo `cargado.total()` no pueden divergir.
+                cargado.total(),
+                // La fecha con la que el libro contesto, no la del panel. Hoy son la misma por
+                // construccion; declararla asi es lo que impide que dejen de serlo en silencio.
+                cargado.aLaFecha(),
                 indicadores(ejercicio, recaudado, cargado, pendiente, hoy, aLaFecha),
                 List.of(
                         porTributo(ejercicio, recaudado, cargado, pendiente, aLaFecha),
@@ -256,6 +263,11 @@ public class PanelDeRecaudacion {
                             detalleDelTributo(suCargado, pendienteDe),
                             FormatoDeCifra.importe(cobrado),
                             cobrado,
+                            // Las dos cifras que el detalle ya decia con palabras, ahora tambien
+                            // sin redactar (#549). Salen de las mismas variables que redactan el
+                            // texto: no hay una segunda suma que pueda divergir de la primera.
+                            suCargado,
+                            pendienteDe,
                             AvanceDeCobranza.de(cobrado, suCargado),
                             aLaFecha));
         }
@@ -308,6 +320,12 @@ public class PanelDeRecaudacion {
                             FormatoDeCifra.cantidad(abonos.getOrDefault(mes, 0L)) + " abonos",
                             FormatoDeCifra.importe(delMes),
                             delMes,
+                            // Un mes no tiene cargado ni pendiente propios: lo cargado es del
+                            // ejercicio entero y la cartera no se reparte por mes de cobro. Van
+                            // NULOS y no en cero, porque un cero aqui afirmaria que ese mes cargo
+                            // cero (#549, el precedente de `avanceConocido`).
+                            null,
+                            null,
                             AvanceDeCobranza.de(delMes, cargado.total()),
                             aLaFecha));
         }

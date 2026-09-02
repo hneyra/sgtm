@@ -117,6 +117,20 @@ import tools.jackson.databind.json.JsonMapper;
  * conjunto se ve.
  */
 /*
+ * #633 — Y el TERCER estado, el que se escapo de #540 y de #547.
+ *
+ * <p>Los dos anteriores sembraron «no hay conjunto sellado» y «al conjunto le falta la llave». Hay
+ * un tercero que ninguno de los dos ejercita: un conjunto que SI observa puntos de redondeo y no el
+ * que el calculo atraviesa. `LectorDeParametrosSellados` devuelve las politicas que hay, y quien
+ * pide la del punto que falta se lleva `PoliticasDeRedondeo.PuntoSinPolitica` —que hasta #633 no
+ * capturaba ningun `catch` de todo el backend, asi que salia como 500 con identificador de
+ * incidencia—.
+ *
+ * <p>La trampa de este escenario es que el que uno siembra por instinto —«sin ninguna fila
+ * REDONDEO»— NO lo ejercita: eso es `SinPuntosObservados`, traducida desde #547, y la prueba pasaria
+ * en verde con el defecto dentro. Hace falta >= 1 punto observado y que no sea el que se pide.
+ */
+/*
  * #606 — Y el reenvio del mismo intento, tambien de HTTP a PostgreSQL.
  *
  * <p>Se prueba aqui y no con dobles porque lo que hay que demostrar es que la garantia esta en la
@@ -146,7 +160,7 @@ class ConveniosFronteraTest {
     private static final Clock RELOJ =
             Clock.fixed(HOY.atStartOfDay(ZoneOffset.UTC).toInstant(), ZoneOffset.UTC);
 
-    /** Los siete estados del conjunto sellado, uno por ejercicio. Ver el javadoc de la clase. */
+    /** Los ocho estados del conjunto sellado, uno por ejercicio. Ver el javadoc de la clase. */
     private static final int COMPLETO = 2026;
 
     private static final int SIN_SELLAR = 2027;
@@ -155,6 +169,18 @@ class ConveniosFronteraTest {
     private static final int MEDIA_POLITICA = 2030;
     private static final int ESCALA_CON_DECIMALES = 2031;
     private static final int MODO_DESCONOCIDO = 2032;
+
+    /**
+     * El octavo (#633): el conjunto observa un punto de redondeo, y <b>no el de la cuota</b>.
+     *
+     * <p>Es el estado que se escapo de #547 y de #540, y no por descuido: los dos sembraron «no hay
+     * conjunto» y «al conjunto le falta la llave», y con ninguno de los dos se llega a preguntar
+     * por un punto —{@link #SIN_REDONDEO} ni siquiera pasa de {@code SinPuntosObservados}—. Aqui el
+     * conjunto esta sellado, tiene su interes, su maximo de cuotas y una fila {@code
+     * REDONDEO:IMPUESTO_POR_TRAMO}, de modo que las politicas se leen enteras y quien revienta es
+     * {@code politicas.en(CUOTA)}.
+     */
+    private static final int SIN_EL_PUNTO_DE_LA_CUOTA = 2033;
 
     private static final String CODIGO = "C-547-01";
 
@@ -419,6 +445,64 @@ class ConveniosFronteraTest {
                 .doesNotContain("incidencia");
     }
 
+    // -------------------------------------------- #633: el punto que el conjunto no observo
+
+    @Test
+    @DisplayName("#633 — un conjunto que observa puntos y no el de la cuota es 422, no 500")
+    void sinElPuntoDeLaCuotaEs422() throws Exception {
+        MvcResult resultado = fraccionar(SIN_EL_PUNTO_DE_LA_CUOTA, true);
+
+        assertThat(resultado.getResponse().getStatus())
+                .as(
+                        "D-03c abierta no es un servidor roto: es una campana de observacion que"
+                                + " todavia no llego a este punto")
+                .isEqualTo(422);
+        String cuerpo = resultado.getResponse().getContentAsString();
+        assertThat(cuerpo)
+                .as("«falta publicar» solo sirve si dice QUE fila hay que publicar")
+                .contains("VALIDACION")
+                .contains("REDONDEO:CUOTA")
+                .contains("2033");
+        assertThat(cuerpo)
+                .as("y dice los que SI estan: quien va a publicar necesita saber que hay")
+                .contains("IMPUESTO_POR_TRAMO");
+        assertThat(cuerpo)
+                .as("un 500 traeria identificador de incidencia; esto no es una incidencia")
+                .doesNotContain("incidencia");
+        assertThat(cuerpo)
+                .as("y no filtra el esquema: ni tabla, ni restriccion, ni SQL (RNF-033)")
+                .doesNotContain("parametro_tributario")
+                .doesNotContain("conjunto_parametros")
+                .doesNotContain("SELECT");
+    }
+
+    @Test
+    @DisplayName("#633 — tambien al registrar de verdad, que es el otro «try» del mismo endpoint")
+    void sinElPuntoDeLaCuotaTambienAlRegistrar() throws Exception {
+        MvcResult resultado = fraccionar(SIN_EL_PUNTO_DE_LA_CUOTA, false);
+
+        assertThat(resultado.getResponse().getStatus())
+                .as("simular y registrar son dos bloques distintos: traducir uno deja la mitad")
+                .isEqualTo(422);
+        assertThat(resultado.getResponse().getContentAsString())
+                .contains("REDONDEO:CUOTA")
+                .doesNotContain("incidencia");
+    }
+
+    @Test
+    @DisplayName("#633 — el miembro nombra la fila, como sus cuatro hermanas de redondeo")
+    void sinElPuntoDeLaCuotaElMiembroNombraLaFila() throws Exception {
+        MvcResult resultado = fraccionar(SIN_EL_PUNTO_DE_LA_CUOTA, true);
+
+        assertThat(resultado.getResponse().getStatus()).isEqualTo(422);
+        assertThat(resultado.getResponse().getContentAsString())
+                .as(
+                        "sin el miembro, «hay que publicar una fila» seria indistinguible de"
+                                + " «corrige el formulario», que es el defecto que #604 cerro")
+                .contains(
+                        "\"parametroQueFalta\":{\"ejercicio\":2033,\"llave\":\"REDONDEO:CUOTA\"}");
+    }
+
     // ---------------------------------------------------------------- el registro del servidor
 
     @Test
@@ -434,6 +518,8 @@ class ConveniosFronteraTest {
             fraccionar(SIN_SELLAR, true);
             fraccionar(SIN_INTERES, true);
             fraccionar(SIN_REDONDEO, true);
+            fraccionar(SIN_EL_PUNTO_DE_LA_CUOTA, true);
+            fraccionar(SIN_EL_PUNTO_DE_LA_CUOTA, false);
         } finally {
             registro.detachAppender(anotados);
         }
@@ -800,6 +886,14 @@ class ConveniosFronteraTest {
         sellar(MEDIA_POLITICA, interes, cuotas, redondeo("2", null));
         sellar(ESCALA_CON_DECIMALES, interes, cuotas, redondeo("2.5", "HALF_UP"));
         sellar(MODO_DESCONOCIDO, interes, cuotas, redondeo("2", "HACIA_ARRIBA"));
+        // #633: con puntos observados —uno— y sin el de la cuota. Un conjunto sin ninguna fila
+        // REDONDEO seria `SIN_REDONDEO`, que ya estaba traducido desde #547: la prueba pasaria en
+        // verde con el defecto dentro.
+        sellar(
+                SIN_EL_PUNTO_DE_LA_CUOTA,
+                interes,
+                cuotas,
+                redondeoDe(PuntoDeRedondeo.IMPUESTO_POR_TRAMO, "2", RoundingMode.HALF_UP.name()));
     }
 
     private static long redondeoBueno() throws SQLException {
@@ -807,8 +901,17 @@ class ConveniosFronteraTest {
     }
 
     private static long redondeo(String escala, @Nullable String modo) throws SQLException {
-        return parametro(
-                PoliticasDeRedondeoSelladas.TIPO, PuntoDeRedondeo.CUOTA.name(), escala, modo);
+        return redondeoDe(PuntoDeRedondeo.CUOTA, escala, modo);
+    }
+
+    /**
+     * La fila {@code REDONDEO:‹punto›}. El punto es argumento desde #633: hasta entonces todas las
+     * filas eran de {@link PuntoDeRedondeo#CUOTA}, y con eso el escenario del punto que falta no se
+     * podia sembrar —observar un punto y que no sea el que se pide es justo la diferencia—.
+     */
+    private static long redondeoDe(PuntoDeRedondeo punto, String escala, @Nullable String modo)
+            throws SQLException {
+        return parametro(PoliticasDeRedondeoSelladas.TIPO, punto.name(), escala, modo);
     }
 
     /** Una fila de {@code parametro_tributario}, escrita por el rol que las carga. */

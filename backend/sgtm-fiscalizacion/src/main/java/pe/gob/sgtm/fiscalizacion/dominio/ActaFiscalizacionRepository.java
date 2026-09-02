@@ -14,6 +14,18 @@ public interface ActaFiscalizacionRepository {
     java.util.Optional<ActaFiscalizacion> findById(long id);
 
     /**
+     * La grilla de actas, paginada (#599).
+     *
+     * <p>El total del sobre cuenta <b>todas</b> las actas que el criterio deja pasar y no las de la
+     * pagina: la etapa «Inspeccionados» del embudo del programa se llena con ese numero, y contarlo
+     * sobre la pagina daria «20 inspeccionados» en todo programa que pase de veinte actas. Es el
+     * defecto que #25 midio en el resumen de la consulta unificada y #545 en la deteccion de
+     * omisos.
+     */
+    pe.gob.sgtm.compartido.Pagina<ActaFiscalizacion> consultar(
+            CriterioDeActas criterio, pe.gob.sgtm.compartido.Paginacion paginacion);
+
+    /**
      * La próxima versión de un acta para esta <b>unidad</b> dentro de este programa: 1 si nunca se
      * la visitó, o la mayor existente más uno. Es lo que permite refiscalizar sin borrar la visita
      * anterior ({@code acta_fisc_version_uq}).

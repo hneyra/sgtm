@@ -7,7 +7,6 @@ import java.time.LocalDate;
 import java.time.format.DateTimeParseException;
 import java.util.ArrayList;
 import java.util.List;
-import java.util.Locale;
 import org.jspecify.annotations.Nullable;
 import org.springframework.dao.DataAccessException;
 import org.springframework.stereotype.Service;
@@ -16,6 +15,7 @@ import pe.gob.sgtm.carga.InformeDeImportacion.FilaRechazada;
 import pe.gob.sgtm.carga.LectorDeFilasCsv;
 import pe.gob.sgtm.carga.LectorDeFilasCsv.FilaCsv;
 import pe.gob.sgtm.cuentacorriente.GeneradorDeCargos;
+import pe.gob.sgtm.cuentacorriente.TributoDelLibro;
 import pe.gob.sgtm.dominio.Dinero;
 import pe.gob.sgtm.dominio.Ejercicio;
 import pe.gob.sgtm.dominio.Observacion;
@@ -151,7 +151,11 @@ public class ImportarDeudaDeDemostracion {
                             + " placa, monto, fechaValor, documentoOrigen, referenciaExterna");
         }
         String codigoContribuyente = exigir(campos, 0, "codigoContribuyente");
-        String tributo = exigir(campos, 1, "tributo").toUpperCase(Locale.ROOT);
+        // #553: el vocabulario se comprueba AQUI y no al asentar, para que la fila se rechace
+        // con su numero de linea. `toUpperCase` solo era una normalizacion, y con ella el
+        // archivo sembraba `ARBITRIOS` donde el sistema escribe `ARBITRIO`: la deuda entraba,
+        // se cobraba y caia al lado de la que deberia ser la misma obligacion.
+        String tributo = TributoDelLibro.de(exigir(campos, 1, "tributo")).texto();
         Ejercicio ejercicio = ejercicio(campos.get(2));
         Integer periodo = periodo(opcional(campos, 3));
         String codigoPredial = opcional(campos, 4);

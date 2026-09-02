@@ -170,7 +170,7 @@ class ConstanciaDeNoAdeudoTest {
     void deudaEnCoactivaNiega() {
         String codigo = crearContribuyenteConCodigo("K-0003", "80500003");
         long titular = idDe(codigo);
-        cargar(titular, "ARBITRIOS", 2026, 3, Dinero.de(150), Fase.COACTIVA);
+        cargar(titular, "ARBITRIO", 2026, 3, Dinero.de(150), Fase.COACTIVA);
 
         ConstanciaDeNoAdeudo constancia =
                 consulta.constanciaDeNoAdeudo(codigo, LocalDate.of(2026, 6, 1));

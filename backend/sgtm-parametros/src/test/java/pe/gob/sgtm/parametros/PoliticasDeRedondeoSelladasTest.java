@@ -239,6 +239,74 @@ class PoliticasDeRedondeoSelladasTest {
                 .isEqualTo(new PoliticaDeRedondeo(0, RoundingMode.DOWN));
     }
 
+    // -------------------------------------------------- #633: el punto que el conjunto no observo
+
+    @Test
+    @DisplayName("#633 — pedir el punto por `en` dice de QUE ejercicio es la fila que falta")
+    void elPuntoQueFaltaDiceSuEjercicio() {
+        ParametrosSellados conjunto =
+                conjunto()
+                        .numero(
+                                PoliticasDeRedondeoSelladas.TIPO,
+                                PuntoDeRedondeo.IMPUESTO_POR_TRAMO.name(),
+                                ValorNormativo.de("2"))
+                        .texto(
+                                PoliticasDeRedondeoSelladas.TIPO,
+                                PuntoDeRedondeo.IMPUESTO_POR_TRAMO.name(),
+                                "HALF_UP")
+                        .construir();
+
+        assertThatThrownBy(() -> PoliticasDeRedondeoSelladas.en(conjunto, PuntoDeRedondeo.CUOTA))
+                .as(
+                        "`PuntoSinPolitica` es dominio puro y solo puede nombrar el punto; quien"
+                                + " sabe el ejercicio es quien acaba de leer el conjunto")
+                .isInstanceOfSatisfying(
+                        PoliticasDeRedondeoSelladas.PuntoSinObservar.class,
+                        falta -> {
+                            assertThat(falta.ejercicio()).isEqualTo(EJERCICIO);
+                            assertThat(falta.llave()).contains("REDONDEO:CUOTA");
+                        })
+                .hasMessageContaining("2026")
+                .hasMessageContaining("REDONDEO:CUOTA")
+                .as("y conserva los que SI estan: es la mitad del trabajo de quien va a publicar")
+                .hasMessageContaining("IMPUESTO_POR_TRAMO")
+                .hasCauseInstanceOf(PoliticasDeRedondeo.PuntoSinPolitica.class);
+    }
+
+    @Test
+    @DisplayName("#633 — un conjunto sin ningun punto sigue siendo la OTRA falta, no esta")
+    void sinNingunPuntoSigueSiendoLaOtraFalta() {
+        ParametrosSellados sinRedondeo =
+                conjunto().numero("UIT", null, ValorNormativo.de("1")).construir();
+
+        assertThatThrownBy(() -> PoliticasDeRedondeoSelladas.en(sinRedondeo, PuntoDeRedondeo.CUOTA))
+                .as(
+                        "son dos estados distintos y se publican distinto: aqui falta el bloque"
+                                + " entero y nadie sabe cual de los trece puntos queria el que"
+                                + " llamo; en `PuntoSinObservar` falta uno y se sabe cual")
+                .isInstanceOf(PoliticasDeRedondeoSelladas.SinPuntosObservados.class);
+    }
+
+    @Test
+    @DisplayName("#633 — CONTRASTE: si el punto esta, `en` devuelve su politica y no lanza nada")
+    void siElPuntoEstaNoLanzaNada() {
+        assertThat(
+                        PoliticasDeRedondeoSelladas.en(
+                                politicasSelladasDeCuota("2", "HALF_UP"), PuntoDeRedondeo.CUOTA))
+                .as("una traduccion que se dispara siempre no traduce, rompe")
+                .isEqualTo(new PoliticaDeRedondeo(2, RoundingMode.HALF_UP));
+    }
+
+    private static ParametrosSellados politicasSelladasDeCuota(String escala, String modo) {
+        return conjunto()
+                .numero(
+                        PoliticasDeRedondeoSelladas.TIPO,
+                        PuntoDeRedondeo.CUOTA.name(),
+                        ValorNormativo.de(escala))
+                .texto(PoliticasDeRedondeoSelladas.TIPO, PuntoDeRedondeo.CUOTA.name(), modo)
+                .construir();
+    }
+
     private static PoliticasDeRedondeo politicasDeCuota(String escala, String modo) {
         return PoliticasDeRedondeoSelladas.de(
                 conjunto()

@@ -40,6 +40,15 @@ import pe.gob.sgtm.dominio.ValorNormativo;
  * punto— pero el calculo reventaria despues, en el primer {@code en(punto)}, lejos de la causa. Y
  * mientras D-03c siga abierta la causa es siempre la misma: <b>todavia no se ha observado ningun
  * punto</b>. Se dice ahi, una vez, en vez de trece veces disfrazado.
+ *
+ * <h2>Y el punto que falta cuando SI hay otros</h2>
+ *
+ * <p>Ese es el tercer estado, y no lo cubre lo anterior: un conjunto que observa algunos puntos y
+ * no el que un calculo concreto atraviesa. Lo dice {@link PoliticasDeRedondeo#en}, que es su razon
+ * de ser, y lo dice desde el dominio puro —que no sabe de que ejercicio salieron las politicas—.
+ * Para que la respuesta pueda decir <b>donde</b> publicar la fila que falta, quien resuelve el
+ * punto lo pide por {@link #en(ParametrosSellados, PuntoDeRedondeo)} y no sobre las politicas ya
+ * leidas (#633).
  */
 public final class PoliticasDeRedondeoSelladas {
 
@@ -83,6 +92,33 @@ public final class PoliticasDeRedondeoSelladas {
             throw new SinPuntosObservados(sellados);
         }
         return constructor.construir();
+    }
+
+    /**
+     * La politica del punto que el calculo necesita, leida del conjunto sellado (#633).
+     *
+     * <p>Es {@link #de(ParametrosSellados)} seguido de {@link PoliticasDeRedondeo#en}, y existe por
+     * una sola razon: <b>el fallo de «ese punto no lo observo nadie» tiene que decir donde
+     * publicarlo</b>. {@link PoliticasDeRedondeo} es dominio puro —no sabe de que ejercicio
+     * salieron sus politicas, y no tiene por que saberlo—, asi que su {@code PuntoSinPolitica}
+     * nombra el punto y nada mas; quien si lo sabe es quien acaba de leer el conjunto, y es aqui.
+     *
+     * <p>Con eso, esa ausencia entra en el mismo contrato que sus cuatro hermanas ({@link
+     * ParametroSinPublicar}) y sale con el mismo miembro {@code parametroQueFalta} del cuerpo
+     * (#604): sin el, un 422 que nadie puede arreglar desde la pantalla seria indistinguible de uno
+     * que si —«corrige el formulario» dicho de una fila que hay que publicar—.
+     *
+     * @throws PuntoSinObservar si el conjunto observa puntos pero no <b>este</b>
+     * @throws SinPuntosObservados si el conjunto no observa ninguno
+     */
+    public static PoliticaDeRedondeo en(ParametrosSellados sellados, PuntoDeRedondeo punto) {
+        Objects.requireNonNull(punto, "Resolver una politica de redondeo exige su punto");
+        PoliticasDeRedondeo politicas = de(sellados);
+        try {
+            return politicas.en(punto);
+        } catch (PoliticasDeRedondeo.PuntoSinPolitica sinObservar) {
+            throw new PuntoSinObservar(sellados.ejercicio(), punto, sinObservar);
+        }
     }
 
     private static int escala(Ejercicio ejercicio, PuntoDeRedondeo punto, ValorNormativo valor) {
@@ -253,6 +289,63 @@ public final class PoliticasDeRedondeoSelladas {
         @Override
         public Optional<String> llave() {
             return Optional.of(TIPO);
+        }
+    }
+
+    /**
+     * El conjunto sellado observa puntos de redondeo, pero <b>no el que este calculo atraviesa</b>.
+     *
+     * <p>Es el tercer estado, y el que se escapo de #540 y de #547: no es «no hay conjunto» ni «al
+     * conjunto le falta la llave del interes», es un conjunto que <b>si</b> tiene filas {@code
+     * REDONDEO:‹punto›} y no la del punto que se pide. {@link PoliticasDeRedondeo} lo dice —esa es
+     * su razon de ser, D-03c— y lo dice como {@code PuntoSinPolitica}, que es dominio puro y no
+     * sabe de que ejercicio salieron las politicas; hasta #633 nadie la traducia, asi que salia
+     * como {@code 500 ERROR_INTERNO} con identificador de incidencia.
+     *
+     * <p>Su llave es {@code REDONDEO:‹punto›} y no el {@code TIPO} solo, al reves que {@link
+     * SinPuntosObservados}: aqui <b>si</b> se sabe cual falta —lo pidio el calculo—, y publicar el
+     * bloque entero no es lo que hay que hacer.
+     *
+     * <p>El mensaje conserva el de {@code PuntoSinPolitica} entero, con los puntos que si estan:
+     * saber cuales hay es la mitad del trabajo de quien va a publicar el que falta.
+     */
+    public static final class PuntoSinObservar extends RuntimeException
+            implements ParametroSinPublicar {
+
+        @java.io.Serial private static final long serialVersionUID = 1L;
+
+        // El aviso [serial] no aplica: `Ejercicio` es un record del dominio que no
+        // implementa Serializable, y una excepcion de negocio nunca se serializa —se
+        // lanza, se traduce a problem+json y muere ahi (ManejadorDeErrores)—.
+        @SuppressWarnings("serial")
+        private final Ejercicio ejercicio;
+
+        private final PuntoDeRedondeo punto;
+
+        PuntoSinObservar(
+                Ejercicio ejercicio,
+                PuntoDeRedondeo punto,
+                PoliticasDeRedondeo.PuntoSinPolitica causa) {
+            super(
+                    "El conjunto sellado del ejercicio "
+                            + ejercicio
+                            + " no tiene la fila "
+                            + llaveDe(punto)
+                            + ". "
+                            + causa.getMessage(),
+                    causa);
+            this.ejercicio = ejercicio;
+            this.punto = punto;
+        }
+
+        @Override
+        public Ejercicio ejercicio() {
+            return ejercicio;
+        }
+
+        @Override
+        public Optional<String> llave() {
+            return Optional.of(llaveDe(punto));
         }
     }
 

@@ -2,6 +2,7 @@ package pe.gob.sgtm.sanciones.aplicacion;
 
 import java.util.Objects;
 import pe.gob.sgtm.cuentacorriente.SeleccionDeObligacion;
+import pe.gob.sgtm.cuentacorriente.TributoDelLibro;
 import pe.gob.sgtm.dominio.Ejercicio;
 import pe.gob.sgtm.sanciones.dominio.Familia;
 import pe.gob.sgtm.sanciones.dominio.Papeleta;
@@ -26,10 +27,10 @@ import pe.gob.sgtm.sanciones.dominio.Papeleta;
 final class ObligacionDeLaPapeleta {
 
     /** El tributo con el que se asienta una multa de tránsito. */
-    static final String TRIBUTO_TRANSITO = "MULTA_TRANSITO";
+    static final String TRIBUTO_TRANSITO = TributoDelLibro.MULTA_TRANSITO.texto();
 
     /** El tributo con el que se asienta una multa administrativa. */
-    static final String TRIBUTO_ADMINISTRATIVA = "MULTA_ADMINISTRATIVA";
+    static final String TRIBUTO_ADMINISTRATIVA = TributoDelLibro.MULTA_ADMINISTRATIVA.texto();
 
     private ObligacionDeLaPapeleta() {}
 
