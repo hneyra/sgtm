@@ -1172,6 +1172,12 @@ jobs:
     name: Detección de deriva en prod
     runs-on: ubuntu-latest
     if: github.event_name == 'schedule'
+    # El mismo tope que los dos trabajos de despliegue, y por el mismo motivo (issue
+    # #252, y el `observabilidad-alertas` que corrió 40 minutos el 2026-08-23). Desde
+    # #675 este trabajo hace además un `port-forward` contra el clúster, que es
+    # exactamente la clase de paso que no termina: sin tope, el límite real serían los
+    # 360 minutos de la plataforma, todas las noches.
+    timeout-minutes: 15
 
     steps:
       - uses: actions/checkout@v4
