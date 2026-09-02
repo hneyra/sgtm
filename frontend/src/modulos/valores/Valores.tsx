@@ -24,6 +24,7 @@ import {
   MODALIDADES,
   RESULTADOS,
   declararPrescripcion,
+  listarPrescripciones,
   emitirValor,
   generarValoresMasivos,
   listarValores,
@@ -623,6 +624,16 @@ export default function Valores({ dest, onDest }: PantallaProps) {
     (s) => consultarValores({ codContribuyente: codDePrescripcion, estado: 'PRESCRITO' }, { tamano: 20 }, s),
     [codDePrescripcion],
     dest === 'prescripcion' && codDePrescripcion !== '',
+  );
+
+  /* Las solicitudes ya declaradas (#674). Se pide SIN exigir contribuyente: la
+     pregunta de quien audita es «qué hay declarado prescrito», no «qué le
+     declaré a esta persona», y acotarla al código tecleado dejaría la lectura
+     inalcanzable justo para esa pregunta. Con código puesto, acota. */
+  const declaradas = useRecurso(
+    (s) => listarPrescripciones(codDePrescripcion === '' ? {} : { codContribuyente: codDePrescripcion }, { tamano: 20 }, s),
+    [codDePrescripcion],
+    dest === 'prescripcion',
   );
 
   /* ── Emisión individual: qué se marcó ─────────────────────── */
@@ -1797,11 +1808,63 @@ export default function Valores({ dest, onDest }: PantallaProps) {
               </Seccion>
             )}
 
+            {/* Lo que #674 publicó, y es la contrapartida de su decisión: una deuda
+                cuya acción de cobro prescribió SIGUE siendo cartera pendiente y
+                emisión del ejercicio, y la declaración no escribe un solo asiento
+                en el libro. Sin esta lista, la deuda inexigible no se vería en
+                ninguna parte y esa decisión sería indistinguible de un descuido. */}
+            <Seccion
+              titulo="Solicitudes declaradas"
+              meta={declaradas.datos ? `${declaradas.datos.totalElementos}` : ''}
+              pie={
+                'Sin código, las de toda la municipalidad; con código, las de ese contribuyente. «Ejercicios prescritos» es la lista y no ' +
+                'un sí o un no: una solicitud pide un rango y el cómputo se resuelve año por año, así que lo corriente es que los ' +
+                'primeros hayan prescrito y los últimos sigan siendo exigibles. Ninguna cifra de dinero: la prescripción no extingue un ' +
+                'importe, deja sin acción su cobro (art. 43 del TUO).'
+              }
+            >
+              <Lectura lectura={declaradas} ruta="GET /api/v1/coactiva/prescripcion" acceso="prescripcion">
+                <TablaDeTextos
+                  cols={[
+                    ['Contribuyente', 0],
+                    ['Tributo', 0],
+                    ['Rango pedido', 0],
+                    ['Presentada', 0],
+                    ['Plazo', 0],
+                    ['Resultado', 0],
+                    ['Ejercicios prescritos', 0],
+                    ['Resolución', 0],
+                  ]}
+                  /* Las dos ausencias son distintas y decir la del padrón entero
+                     con un código puesto es afirmar que la municipalidad no tiene
+                     ninguna, que aquí es falso en cuanto alguien filtra. */
+                  vacio={
+                    codDePrescripcion === ''
+                      ? 'Ninguna: en esta municipalidad no se ha declarado ninguna prescripción.'
+                      : 'Ninguna para «' + codDePrescripcion + '». Otras personas de esta municipalidad sí pueden tener alguna: borra el código para verlas todas.'
+                  }
+                  filas={(declaradas.datos?.contenido ?? []).map((p) => [
+                    /* El código nulo es la solicitud cuyo identificador el padrón ya
+                       no resuelve, y sale igual porque es la que hay que revisar. */
+                    p.contribuyente ?? (p.codContribuyente ?? 'Fuera del padrón'),
+                    p.tributo,
+                    `${p.ejercicioDesde} – ${p.ejercicioHasta}`,
+                    p.fechaDePresentacion,
+                    p.plazo,
+                    p.resultado,
+                    p.ejerciciosPrescritos.length === 0 ? 'Ninguno' : p.ejerciciosPrescritos.join(', '),
+                    p.nDeResolucion ?? SIN_DATO,
+                  ])}
+                />
+              </Lectura>
+            </Seccion>
+
             <Aviso tono="neutro" titulo="Lo que el prototipo daba por hecho y aquí no está">
-              La lista de «deuda con prescripción cumplida» que traía el artboard —tres contribuyentes con su conteo y su importe—{' '}
-              <strong>no la publica ninguna lectura</strong>: no hay un endpoint que diga «qué ha prescrito ya». Lo que hay es esta
-              declaración, que se pide por contribuyente y rango, y el cómputo que el servidor devuelve. Y «Origen de la declaración»,
-              «Nº de expediente» y «Fecha de resolución» no viajan: el cuerpo que el servidor acepta no los tiene.
+              La lista de «deuda con prescripción cumplida» que traía el artboard llevaba <strong>un importe por contribuyente</strong>, y
+              eso sigue sin existir y no por falta de lectura: la prescripción <strong>no extingue una cifra</strong>, deja sin acción su
+              cobro, así que una columna de dinero ahí afirmaría que la obligación desapareció. Lo que sí hay desde #674 es la tabla de
+              arriba, con los ejercicios que prescribieron de cada solicitud. Y «Origen de la declaración», «Nº de expediente» y «Fecha de
+              resolución» siguen sin viajar: el cuerpo que el servidor acepta no los tiene.
             </Aviso>
           </div>
         )}
