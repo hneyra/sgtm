@@ -1,5 +1,6 @@
 package pe.gob.sgtm.catastro.infraestructura;
 
+import java.math.BigDecimal;
 import java.sql.ResultSet;
 import java.sql.SQLException;
 import java.time.LocalDate;
@@ -13,6 +14,7 @@ import java.util.Optional;
 import org.jspecify.annotations.Nullable;
 import org.springframework.jdbc.core.simple.JdbcClient;
 import org.springframework.stereotype.Repository;
+import pe.gob.sgtm.catastro.dominio.AcotacionDelPlano;
 import pe.gob.sgtm.catastro.dominio.CatastroRepository;
 import pe.gob.sgtm.catastro.dominio.CondicionDeTitularidad;
 import pe.gob.sgtm.catastro.dominio.EstadoPredio;
@@ -22,12 +24,14 @@ import pe.gob.sgtm.catastro.dominio.Inquilino;
 import pe.gob.sgtm.catastro.dominio.LoteDelPlano;
 import pe.gob.sgtm.catastro.dominio.Manzana;
 import pe.gob.sgtm.catastro.dominio.ManzanaConConteos;
+import pe.gob.sgtm.catastro.dominio.MarcoDeLoLevantado;
 import pe.gob.sgtm.catastro.dominio.Predio;
 import pe.gob.sgtm.catastro.dominio.PredioDelCatastro;
 import pe.gob.sgtm.catastro.dominio.Sector;
 import pe.gob.sgtm.catastro.dominio.SectorConConteos;
 import pe.gob.sgtm.catastro.dominio.TipoPredio;
 import pe.gob.sgtm.catastro.dominio.Titularidad;
+import pe.gob.sgtm.compartido.MarcoGeografico;
 import pe.gob.sgtm.compartido.Pagina;
 import pe.gob.sgtm.compartido.Paginacion;
 import pe.gob.sgtm.dominio.CodigoReferenciaCatastral;
@@ -581,7 +585,7 @@ public class CatastroRepositoryJdbc extends RepositorioJdbc implements CatastroR
                                 + PLANO_DESDE
                                 + " WHERE"
                                 + EN_EL_MARCO
-                                + condicionesDeFiltro(filtro)
+                                + condicionesDeFiltro(filtro.acotacion())
                                 + " LIMIT :tope")
                 .params(parametrosDelPlano(filtro))
                 .param("tope", tope)
@@ -596,7 +600,7 @@ public class CatastroRepositoryJdbc extends RepositorioJdbc implements CatastroR
                                 + PLANO_DESDE
                                 + " WHERE"
                                 + EN_EL_MARCO
-                                + condicionesDeFiltro(filtro))
+                                + condicionesDeFiltro(filtro.acotacion()))
                 .params(parametrosDelPlano(filtro))
                 .query(Long.class)
                 .optional()
@@ -617,37 +621,113 @@ public class CatastroRepositoryJdbc extends RepositorioJdbc implements CatastroR
                         "SELECT count(*)"
                                 + PLANO_DESDE
                                 + " WHERE p.geometria IS NULL"
-                                + condicionesDeFiltro(filtro))
-                .params(parametrosDeFiltro(filtro))
+                                + condicionesDeFiltro(filtro.acotacion()))
+                .params(parametrosDeFiltro(filtro.acotacion()))
                 .query(Long.class)
                 .optional()
                 .orElse(0L);
     }
 
-    private static String condicionesDeFiltro(FiltroDelPlano filtro) {
+    /**
+     * El marco de lo levantado: un agregado sobre las cuatro columnas de {@code V65} (#612).
+     *
+     * <p><b>Los mismos filtros y el mismo {@code FROM} que el plano</b>, derivados del mismo {@link
+     * AcotacionDelPlano} y por el mismo metodo. Es lo que impide que el marco se calcule sobre un
+     * conjunto de predios y el plano dibuje otro: sobre un plano sin base cartografica, un encuadre
+     * que no contiene lo que se dibuja <b>no se ve</b>.
+     *
+     * <p>{@code min(marco_oeste)} y no {@code ST_Extent(geometria)} porque las cuatro columnas son
+     * las que el motor ya deriva y mantiene junto a cada fila —y las unicas que llegan al indice
+     * bajo RLS, que es el hallazgo de V65—; y porque {@code ST_Extent} devuelve un {@code box2d}
+     * que habria que volver a analizar como texto.
+     *
+     * <p>El {@code count(*)} va en la misma consulta y no aparte: dice cuantos lotes componen el
+     * marco, y sobre todo separa las dos ausencias —«no hay ni un lote levantado» de «lo levantado
+     * no encuadra»—, que se contestan igual y se arreglan distinto.
+     */
+    @Override
+    public MarcoDeLoLevantado marcoDeLoLevantado(AcotacionDelPlano acotacion) {
+        return jdbc().sql(
+                        "SELECT min(p.marco_oeste) AS oeste, min(p.marco_sur) AS sur,"
+                                + " max(p.marco_este) AS este, max(p.marco_norte) AS norte,"
+                                + " count(*) AS lotes"
+                                + PLANO_DESDE
+                                + " WHERE p.geometria IS NOT NULL"
+                                + condicionesDeFiltro(acotacion))
+                .params(parametrosDeFiltro(acotacion))
+                .query(CatastroRepositoryJdbc::mapearMarcoDeLoLevantado)
+                .optional()
+                .orElse(MarcoDeLoLevantado.NINGUNO);
+    }
+
+    /**
+     * Las cuatro coordenadas, o la ausencia dicha.
+     *
+     * <p>Aqui es donde {@code double precision} vuelve a {@code BigDecimal}: la columna es de coma
+     * flotante a proposito —{@code float8le} es <i>leakproof</i> y {@code numeric_le} no, V65— y
+     * {@code double} esta prohibido en Java (regla 1). Se lee con {@code getBigDecimal}, que le
+     * pide al driver la conversion en vez de escribirla aqui.
+     *
+     * <p>Un agregado sin filas devuelve <b>una</b> fila con los cuatro nulos y {@code count = 0}:
+     * es el estado de hoy —ni un poligono cargado— y sale como {@link MarcoDeLoLevantado#NINGUNO}.
+     *
+     * <p>Y un rectangulo degenerado —todo lo levantado sobre el mismo meridiano o el mismo
+     * paralelo, que PostGIS acepta: medido, {@code ST_GeogFromText} admite un {@code MULTIPOLYGON}
+     * de vertices colineales— sale como «hay lotes y no hay marco». No se ensancha con un margen
+     * inventado ni se deja reventar el constructor de {@link MarcoGeografico}: el primero seria
+     * publicar coordenadas que ningun dato respalda, y el segundo un 500 sobre un padron que el
+     * sistema acepto.
+     *
+     * <p>Y el <b>degenerado es lo unico</b> que puede llegar a ese {@code catch}, medido: la otra
+     * cosa que {@link MarcoGeografico} rechaza es una coordenada fuera de rango, y {@code
+     * geography} no puede tener ninguna —PostGIS las <i>coerciona</i> al insertar: un poligono
+     * escrito en la longitud 200 entra como −160, avisando «Coordinate values were coerced into
+     * range»—.
+     */
+    private static MarcoDeLoLevantado mapearMarcoDeLoLevantado(ResultSet fila, int numeroDeFila)
+            throws SQLException {
+        long lotes = fila.getLong("lotes");
+        if (lotes == 0) {
+            return MarcoDeLoLevantado.NINGUNO;
+        }
+        BigDecimal oeste = fila.getBigDecimal("oeste");
+        BigDecimal sur = fila.getBigDecimal("sur");
+        BigDecimal este = fila.getBigDecimal("este");
+        BigDecimal norte = fila.getBigDecimal("norte");
+        if (oeste == null || sur == null || este == null || norte == null) {
+            return new MarcoDeLoLevantado(null, lotes);
+        }
+        try {
+            return new MarcoDeLoLevantado(new MarcoGeografico(oeste, sur, este, norte), lotes);
+        } catch (IllegalArgumentException degenerado) {
+            return new MarcoDeLoLevantado(null, lotes);
+        }
+    }
+
+    private static String condicionesDeFiltro(AcotacionDelPlano acotacion) {
         StringBuilder condiciones = new StringBuilder();
-        if (filtro.codigoDeSector() != null) {
+        if (acotacion.codigoDeSector() != null) {
             condiciones.append(" AND s.codigo = :sector");
         }
-        if (filtro.codigoDeManzana() != null) {
+        if (acotacion.codigoDeManzana() != null) {
             condiciones.append(" AND m.codigo = :manzana");
         }
         return condiciones.toString();
     }
 
-    private static Map<String, Object> parametrosDeFiltro(FiltroDelPlano filtro) {
+    private static Map<String, Object> parametrosDeFiltro(AcotacionDelPlano acotacion) {
         Map<String, Object> parametros = new HashMap<>();
-        if (filtro.codigoDeSector() != null) {
-            parametros.put("sector", filtro.codigoDeSector());
+        if (acotacion.codigoDeSector() != null) {
+            parametros.put("sector", acotacion.codigoDeSector());
         }
-        if (filtro.codigoDeManzana() != null) {
-            parametros.put("manzana", filtro.codigoDeManzana());
+        if (acotacion.codigoDeManzana() != null) {
+            parametros.put("manzana", acotacion.codigoDeManzana());
         }
         return parametros;
     }
 
     private static Map<String, Object> parametrosDelPlano(FiltroDelPlano filtro) {
-        Map<String, Object> parametros = parametrosDeFiltro(filtro);
+        Map<String, Object> parametros = parametrosDeFiltro(filtro.acotacion());
         parametros.put("oeste", filtro.marco().oeste());
         parametros.put("sur", filtro.marco().sur());
         parametros.put("este", filtro.marco().este());
