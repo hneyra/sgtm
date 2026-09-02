@@ -2286,6 +2286,89 @@ describe("la demostracion: la auditoria se pone roja con un guion no ejecutable"
   });
 });
 
+
+// ─────────────────────────────────────────────────────────────────────────────
+// #558 · la restauracion verificada, escrita por quien la verifica
+// ─────────────────────────────────────────────────────────────────────────────
+
+describe("#558 · la restauracion verificada queda escrita", () => {
+  const simulacro = () =>
+    readFileSync(join(raizDelRepositorio(), "infra/respaldo/contra-cluster.sh"), "utf8");
+
+  /**
+   * La SENTENCIA, no el archivo. Medido: buscar `WHERE resultado = 'EXITOSO'` en el
+   * guion entero pasa en verde con el filtro quitado del SQL, porque la misma cadena
+   * esta en el comentario que lo explica —el modo de fallo exacto que #426 encontro en
+   * `leerPatron` de `actos-inalcanzables.test.ts`—. Se acota entre `UPDATE respaldo` y su
+   * `RETURNING`, que es lo que de verdad se ejecuta.
+   */
+  const sentencia = () => {
+    const guion = simulacro();
+    const desde = guion.indexOf("UPDATE respaldo");
+    const hasta = guion.indexOf("RETURNING id;", desde);
+    expect(desde, "el guion ya no lleva el UPDATE de la restauracion verificada").toBeGreaterThan(
+      -1,
+    );
+    expect(hasta, "el UPDATE de la restauracion verificada no devuelve la fila que marco")
+      .toBeGreaterThan(desde);
+    return guion.slice(desde, hasta);
+  };
+
+  const migracion = () =>
+    readFileSync(
+      join(
+        raizDelRepositorio(),
+        "backend/sgtm-esquema/src/main/resources/db/migration/V78__restauracion_verificada.sql",
+      ),
+      "utf8",
+    );
+
+  it("el simulacro contra el cluster deja la fila: es el unico que restaura de verdad", () => {
+    // `respaldo` tenia lectura y tenia quien escribiera si la copia se TOMO -el CronJob-,
+    // y nadie que escribiera si se pudo RESTAURAR. Sin esta sentencia, la columna que la
+    // pantalla existe para enseñar nace nula para siempre.
+    expect(sentencia()).toContain("ultima_restauracion_verificada");
+    expect(sentencia()).toContain("ultima_restauracion_verificada_por");
+  });
+
+  it("y las dos columnas son las que declara V78: no se copian, se contrastan", () => {
+    // Un renombrado en la migracion sin tocar el guion deja el UPDATE apuntando a una
+    // columna que ya no existe, y eso solo se veria ejecutando el simulacro contra `stg`
+    // -que no corre en CI-. Precedente: #192 con `UnidadDePlazo`.
+    for (const columna of ["ultima_restauracion_verificada", "ultima_restauracion_verificada_por"]) {
+      expect(migracion()).toContain(`ADD COLUMN ${columna}`);
+      expect(sentencia()).toContain(columna);
+    }
+  });
+
+  it("marca solo una copia EXITOSA: la base rechaza cualquier otra (V78)", () => {
+    // `respaldo_verificacion_exitosa_ck` rechaza con 23514 marcar una FALLIDA o una
+    // EN_CURSO, asi que sin este `WHERE` la sentencia puede morir DESPUES de un simulacro
+    // correcto y dejar el ensayo sin constancia.
+    expect(sentencia()).toContain("WHERE resultado = 'EXITOSO'");
+    expect(migracion()).toContain("respaldo_verificacion_exitosa_ck");
+  });
+
+  it("como sgtm_owner, que es el unico rol que la politica de escritura nombra (V8)", () => {
+    const guion = simulacro();
+    const bloque = guion.slice(
+      guion.indexOf("Dejando constancia"),
+      guion.indexOf("RETURNING id;"),
+    );
+    expect(bloque).toContain("--username=sgtm_owner");
+    expect(bloque).not.toContain("--username=postgres");
+  });
+
+  it("y despues de comprobar lo restaurado, nunca antes", () => {
+    const guion = simulacro();
+    // Marcar la copia antes de las comprobaciones seria afirmar la verificacion de un
+    // ensayo que todavia podia fallar.
+    expect(guion.indexOf("UPDATE respaldo")).toBeGreaterThan(
+      guion.indexOf("promovido, y admite escrituras"),
+    );
+  });
+});
+
 function valoresDelIngreso(ms: Manifiesto[]): string {
   return (buscar(ms, "HelmChartConfig", "traefik") as { spec: { valuesContent: string } }).spec
     .valuesContent;
