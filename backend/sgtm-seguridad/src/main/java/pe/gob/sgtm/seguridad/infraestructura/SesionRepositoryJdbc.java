@@ -157,7 +157,11 @@ public class SesionRepositoryJdbc extends RepositorioJdbc implements SesionRepos
     @Override
     public Pagina<Respaldo> respaldos(Paginacion paginacion) {
         return paginar(
-                "SELECT id, inicio, fin, resultado, destino, tamano_bytes, detalle FROM respaldo",
+                """
+                SELECT id, inicio, fin, resultado, destino, tamano_bytes, detalle,
+                       ultima_restauracion_verificada, ultima_restauracion_verificada_por
+                  FROM respaldo
+                """,
                 "SELECT count(*) FROM respaldo",
                 Map.of(),
                 paginacion,
@@ -206,7 +210,9 @@ public class SesionRepositoryJdbc extends RepositorioJdbc implements SesionRepos
                 fila.getString("resultado"),
                 fila.getString("destino"),
                 sinTamano ? null : tamano,
-                fila.getString("detalle"));
+                fila.getString("detalle"),
+                instante(fila, "ultima_restauracion_verificada"),
+                fila.getString("ultima_restauracion_verificada_por"));
     }
 
     private static @Nullable Instant instante(ResultSet fila, String columna) throws SQLException {

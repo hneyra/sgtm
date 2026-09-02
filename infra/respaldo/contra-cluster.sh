@@ -45,7 +45,7 @@ ensayar_contra_cluster() {
         || { echo "FALLO: no se alcanza el namespace $NAMESPACE. ¿KUBECONFIG y el tunel SSH estan listos?" >&2; exit 1; }
 
     local pod claveSuper claveOwner walgVersion walgSha256 walgPrefix awsEndpoint awsRegion
-    local tBueno codigoBueno codigoMalo inicioDelReloj finDelReloj segundos estado
+    local tBueno codigoBueno codigoMalo inicioDelReloj finDelReloj segundos estado marcadas
 
     pod=$(kubectl get pod -n "$NAMESPACE" -l app="$DEPLOYMENT" -o jsonpath='{.items[0].metadata.name}')
     [ -n "$pod" ] || { echo "FALLO: no hay un pod de postgres en marcha en $NAMESPACE." >&2; exit 1; }
@@ -281,6 +281,56 @@ VALUES
 COMMIT;
 SQL
     echo "  promovido, y admite escrituras: es un sistema, no una copia"
+
+    # ─────────────────────────────────────────────────────────────────────
+    # La restauracion queda VERIFICADA en la fila de la copia que se restauro
+    # (issue #558, RF-126, RNF-079)
+    #
+    # «Una copia sin restauracion probada no es una copia», y hasta aqui nadie
+    # lo escribia en ninguna parte: `respaldo` sabia si la copia se TOMO -lo
+    # escribe el CronJob de `componentes/Respaldo.ts`- y no si alguna vez se
+    # pudo RESTAURAR. Este guion es el unico proceso que lo sabe, porque es el
+    # unico que restaura una copia real y comprueba lo restaurado; por eso la
+    # fila la deja aqui y no el CronJob, y por eso la deja DESPUES de las
+    # comprobaciones del paso 8: marcarla antes seria afirmar la verificacion
+    # de un ensayo que todavia podia fallar.
+    #
+    # Cual copia: se restauro `LATEST` -el ultimo respaldo base-, o sea la
+    # ultima fila EXITOSA del registro. El `WHERE resultado = 'EXITOSO'` no es
+    # decorativo: `respaldo_verificacion_exitosa_ck` (V78) rechaza marcar una
+    # FALLIDA o una EN_CURSO, asi que sin el la sentencia podria morir con un
+    # 23514 despues de un simulacro correcto.
+    #
+    # El modo LOCAL no escribe aqui, y no es un olvido: levanta su propio motor
+    # efimero con su propia tabla de ensayo, asi que lo que verifica es el
+    # PROCEDIMIENTO y no ninguna copia registrada -marcar una fila desde ahi
+    # diria que se restauro una copia del cluster que nadie toco-.
+    #
+    # Como sgtm_owner: `respaldo_escritura` (V8) nombra solo a ese rol, y
+    # `sgtm_app` no tiene INSERT ni UPDATE a proposito (ARQ-03 §4).
+    # ─────────────────────────────────────────────────────────────────────
+    echo
+    echo "· Dejando constancia de la restauracion verificada en la tabla respaldo (RF-126)"
+    marcadas=$(kubectl exec -n "$NAMESPACE" "$pod" -c postgres -- env PGPASSWORD="$claveOwner" \
+        psql --username=sgtm_owner --dbname=sgtm --tuples-only --no-align -v ON_ERROR_STOP=1 <<SQL
+UPDATE respaldo
+   SET ultima_restauracion_verificada     = now(),
+       ultima_restauracion_verificada_por = 'simulacro-de-restauracion.sh --contra-cluster ($AMBIENTE)'
+ WHERE id = (SELECT id FROM respaldo WHERE resultado = 'EXITOSO' ORDER BY inicio DESC LIMIT 1)
+RETURNING id;
+SQL
+)
+    if [ -n "$marcadas" ]; then
+        echo "  copia #$marcadas marcada como restauracion verificada"
+    else
+        # No es un fallo del simulacro: la restauracion funciono. Lo que falta es la
+        # fila, y eso pasa cuando el CronJob todavia no ha corrido nunca contra este
+        # ambiente. Se dice en vez de callarlo, porque la pantalla de RF-126 seguira
+        # diciendo «ninguna copia registrada» y conviene saber por que.
+        echo "  AVISO: no hay ninguna copia EXITOSA registrada que marcar." >&2
+        echo "         La restauracion se verifico igual; lo que falta es que el CronJob" >&2
+        echo "         de respaldo haya escrito su fila (RF-126)." >&2
+    fi
 
     echo
     echo "─────────────────────────────────────────────────────────────────────"
