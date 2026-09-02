@@ -30,6 +30,9 @@ yarn sin-red    # las mismas CON LA RED CORTADA: ninguna puede enseñar una cifr
 yarn errores    # el catálogo de errores contra el del backend, la puerta contra
                 # respuestas fabricadas, y las pantallas ante un 405 y un 500
 yarn paleta     # la paleta de comandos se opera sólo con el teclado
+yarn impedimentos  # los 65 destinos otra vez, mirando lo que la pantalla NO hace:
+                # ningún botón apagado puede estar mudo, ni decir un relleno
+                # («no disponible»), ni prometer una fecha que nadie sostiene
 yarn vocabularios  # los desplegables, contra el enumerado del backend
 yarn ficha-catastral  # los 123 campos de la ficha del predio: cada uno dice de qué
                 # lectura sale y por qué clave del cuerpo viaja, o por qué no viaja;

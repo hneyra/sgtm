@@ -2,7 +2,7 @@ import { useEffect, useMemo, useRef, useState, type CSSProperties, type ReactNod
 import { Shell, type EntradaDePaleta } from '../../shell/Shell';
 import type { PantallaProps } from '../../App';
 import { Icono } from '../../ds/Icono';
-import { Aviso, Insignia, type Tono } from '../../ds/componentes';
+import { Aviso, Insignia, Paginador, type Tono } from '../../ds/componentes';
 import { usarPreferencias } from '../../shell/preferencias';
 import { ErrorDeApi, claveDeIdempotencia, fijarToken } from '../../api/cliente';
 import { cuentaActual, hayPuerta } from '../../api/sesion';
@@ -198,63 +198,6 @@ const cabeceras = (defs: readonly ColDef[]) =>
   ));
 const estiloDeCelda = (j: number, defs: readonly ColDef[]): CSSProperties =>
   j === 0 ? TD1 : defs[j] && defs[j][1] ? TDN : TD;
-
-/**
- * El pie de paginación de una tabla, el mismo que ya tienen Catastro, Sanciones,
- * Tránsito, Fiscalización y Coactiva. Las tres cifras salen del sobre **tal
- * cual** —`pagina`, `totalPaginas` y `hayMas`— y ninguna se deriva: dividir
- * `totalElementos` entre el tamaño pedido sería componer aquí una cuenta que ya
- * hizo el servidor, y las dos dejarían de coincidir el día que el backend acote
- * la página por otro motivo. Medido contra `GET /tesoreria/convenios`: el sobre
- * publica las tres, así que el «n de N» se lee, no se calcula.
- *
- * Con una sola página no se dibuja, y esa guarda es la mitad del asunto: un
- * «Siguiente» sobre tres filas promete una página que no existe. «Anterior» se
- * apaga en la primera y «Siguiente» cuando el sobre dice que no hay más —nunca
- * comparando `pagina + 1` con `totalPaginas`, que es la misma cuenta derivada
- * por otro camino—.
- *
- * No hace falta apagarlos mientras la siguiente viaja: `useRecurso` vacía
- * `datos` en cuanto la pregunta cambia, así que durante la espera no hay pie que
- * pulsar ni filas viejas debajo del número nuevo.
- */
-function Paginas({
-  pagina,
-  totalPaginas,
-  hayMas,
-  ir,
-}: {
-  pagina: number;
-  totalPaginas: number;
-  hayMas: boolean;
-  ir: (n: number) => void;
-}) {
-  if (totalPaginas <= 1) return null;
-  const atras = pagina === 0;
-  return (
-    <div style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '10px 16px', borderTop: '1px solid var(--line)' }}>
-      <button
-        onClick={() => ir(Math.max(0, pagina - 1))}
-        disabled={atras}
-        className="hov-linea"
-        style={{ ...BOTON_LINEA, opacity: atras ? 0.45 : 1, cursor: atras ? 'not-allowed' : 'pointer' }}
-      >
-        Anterior
-      </button>
-      <span style={{ fontFamily: 'var(--font-mono)', fontSize: 12, color: 'var(--ink-3)' }}>
-        {pagina + 1} de {totalPaginas}
-      </span>
-      <button
-        onClick={() => ir(pagina + 1)}
-        disabled={!hayMas}
-        className="hov-linea"
-        style={{ ...BOTON_LINEA, opacity: hayMas ? 1 : 0.45, cursor: hayMas ? 'pointer' : 'not-allowed' }}
-      >
-        Siguiente
-      </button>
-    </div>
-  );
-}
 
 /** El tono de un estado. */
 function tono(texto: string): Tono {
@@ -2148,7 +2091,7 @@ export default function Tesoreria({ dest, onDest }: PantallaProps) {
               </div>
             )}
             {convenios.datos !== null && (
-              <Paginas
+              <Paginador
                 pagina={convenios.datos.pagina}
                 totalPaginas={convenios.datos.totalPaginas}
                 hayMas={convenios.datos.hayMas}
@@ -2499,7 +2442,7 @@ export default function Tesoreria({ dest, onDest }: PantallaProps) {
             </div>
           )}
           {recibos.datos !== null && (
-            <Paginas
+            <Paginador
               pagina={recibos.datos.pagina}
               totalPaginas={recibos.datos.totalPaginas}
               hayMas={recibos.datos.hayMas}

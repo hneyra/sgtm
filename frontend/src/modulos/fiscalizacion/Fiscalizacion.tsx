@@ -17,7 +17,7 @@ import { useRecurso, useRebote } from '../../api/useRecurso';
 import { FalloDeLectura } from '../../api/Fallo';
 import type { ErrorDeApi, RespuestaPaginada } from '../../api/cliente';
 import { ICO } from '../../ds/iconos';
-import { Aviso, Insignia, type Tono } from '../../ds/componentes';
+import { Aviso, Insignia, Paginador, PasoAtras, type Tono } from '../../ds/componentes';
 import { moduloDe } from '../../shell/modulos';
 import { usarPreferencias } from '../../shell/preferencias';
 import {
@@ -430,52 +430,6 @@ const BOTON_APAGADO: CSSProperties = {
   opacity: 0.5,
   cursor: 'not-allowed',
 };
-
-/** La paginacion de la tabla de deteccion. */
-function Paginas({
-  pagina,
-  totalPaginas,
-  hayMas,
-  ir,
-}: {
-  pagina: number;
-  totalPaginas: number;
-  hayMas: boolean;
-  ir: (n: number) => void;
-}) {
-  if (totalPaginas <= 1) return null;
-  const linea: CSSProperties = { border: '1px solid var(--line-2)', borderRadius: 6, padding: '7px 14px', background: 'var(--bg-card)', fontSize: 12.5 };
-  /* No hace falta apagarlos mientras la siguiente viaja —y en Catacaos viaja
-     8,5 s (#561)—: `useRecurso` vacia `datos` en cuanto la pregunta cambia, asi
-     que durante la espera no hay paginador que pulsar ni filas viejas debajo
-     del numero nuevo. Medido: a 0,5 / 1,5 / 3 / 5 s de pulsar «Siguiente» la
-     tabla tiene 0 filas y el pie dice «Consultando el padron…». */
-  const atras = pagina === 0;
-  const alante = hayMas;
-  return (
-    <div style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '10px 16px', borderTop: '1px solid var(--line)' }}>
-      <button
-        onClick={() => ir(Math.max(0, pagina - 1))}
-        disabled={atras}
-        className="hov-linea"
-        style={{ ...linea, opacity: atras ? 0.45 : 1, cursor: atras ? 'not-allowed' : 'pointer' }}
-      >
-        Anterior
-      </button>
-      <span style={{ fontFamily: 'var(--font-mono)', fontSize: 12, color: 'var(--ink-3)' }}>
-        Página {pagina + 1} de {totalPaginas}
-      </span>
-      <button
-        onClick={() => ir(pagina + 1)}
-        disabled={!alante}
-        className="hov-linea"
-        style={{ ...linea, opacity: alante ? 1 : 0.45, cursor: alante ? 'pointer' : 'not-allowed' }}
-      >
-        Siguiente
-      </button>
-    </div>
-  );
-}
 
 /**
  * Lo que la tabla de deteccion dice de si misma: cuantas filas hay y de cuantas.
@@ -1436,7 +1390,7 @@ export default function Fiscalizacion({ dest, onDest }: PantallaProps) {
                 <EstadoDeLaDeteccion cargando={omisos.cargando} filas={filasDeOmisos.length} pagina={paginaDeOmisos} />
               )}
               {detTab === 0 && paginaDeOmisos !== null && (
-                <Paginas pagina={paginaDeOmisos.pagina} totalPaginas={paginaDeOmisos.totalPaginas} hayMas={paginaDeOmisos.hayMas} ir={setPaginaDet} />
+                <Paginador pagina={paginaDeOmisos.pagina} totalPaginas={paginaDeOmisos.totalPaginas} hayMas={paginaDeOmisos.hayMas} ir={setPaginaDet} />
               )}
               {detTab === 1 && (
                 <div style={{ padding: '11px 16px', borderTop: '1px solid var(--line)' }}>
@@ -1715,7 +1669,7 @@ export default function Fiscalizacion({ dest, onDest }: PantallaProps) {
                   ) : null}
 
                   {muestra.datos !== null && (
-                    <Paginas pagina={muestra.datos.pagina} totalPaginas={muestra.datos.totalPaginas} hayMas={muestra.datos.hayMas} ir={setPaginaMuestra} />
+                    <Paginador pagina={muestra.datos.pagina} totalPaginas={muestra.datos.totalPaginas} hayMas={muestra.datos.hayMas} ir={setPaginaMuestra} />
                   )}
 
                   <p style={{ ...PIE, borderTop: '1px solid var(--line)' }}>
@@ -1932,26 +1886,11 @@ export default function Fiscalizacion({ dest, onDest }: PantallaProps) {
             )}
 
             <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>
-              <button
-                onClick={() => setPaso(Math.max(pasoIdx - 1, 0))}
-                aria-disabled={pasoIdx === 0}
-                className="hov-linea"
-                style={{
-                  display: 'flex',
-                  alignItems: 'center',
-                  gap: 7,
-                  border: '1px solid var(--line-2)',
-                  borderRadius: 6,
-                  padding: grande ? '13px 20px' : '10px 18px',
-                  background: 'var(--bg-card)',
-                  fontSize: 13,
-                  cursor: 'pointer',
-                  opacity: pasoIdx === 0 ? 0.5 : 1,
-                }}
-              >
-                <Icono d={ICO.flechaIzq} tam={14} grosor={1.8} />
-                Anterior
-              </button>
+              <PasoAtras
+                paso={pasoIdx}
+                atras={() => setPaso(pasoIdx - 1)}
+                style={grande ? { padding: '13px 20px' } : undefined}
+              />
               <p style={{ margin: 0, flex: 1, minWidth: 170, fontSize: 12, color: 'var(--ink-3)', textWrap: 'pretty' }}>
                 {pasoIdx >= PASOS_ACTA.length - 1
                   ? 'Cerrar el acta es el punto sin retorno del procedimiento.'
@@ -2123,7 +2062,7 @@ export default function Fiscalizacion({ dest, onDest }: PantallaProps) {
                 ) : null}
 
                 {resultados.datos !== null && (
-                  <Paginas pagina={resultados.datos.pagina} totalPaginas={resultados.datos.totalPaginas} hayMas={resultados.datos.hayMas} ir={setPaginaRes} />
+                  <Paginador pagina={resultados.datos.pagina} totalPaginas={resultados.datos.totalPaginas} hayMas={resultados.datos.hayMas} ir={setPaginaRes} />
                 )}
 
                 <p style={{ ...PIE, borderTop: '1px solid var(--line)' }}>
@@ -2293,7 +2232,7 @@ export default function Fiscalizacion({ dest, onDest }: PantallaProps) {
                 ) : null}
 
                 {historico.datos !== null && (
-                  <Paginas pagina={historico.datos.pagina} totalPaginas={historico.datos.totalPaginas} hayMas={historico.datos.hayMas} ir={setPaginaHist} />
+                  <Paginador pagina={historico.datos.pagina} totalPaginas={historico.datos.totalPaginas} hayMas={historico.datos.hayMas} ir={setPaginaHist} />
                 )}
 
                 <p style={PIE}>

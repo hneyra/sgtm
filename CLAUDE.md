@@ -369,11 +369,12 @@ yarn build                        # tipos y compilacion
 yarn mirar                        # los 65 destinos en Chromium: ni un error de consola, ni un <main> vacio
 yarn sin-red                      # los 65 CON LA RED CORTADA: ninguno puede ensenar una cifra
 yarn paleta                       # la paleta se opera solo con el teclado
+yarn impedimentos                 # ningun boton apagado esta mudo: los 65 destinos, y el motivo de cada acto que no se puede
 yarn vocabularios                 # los desplegables coinciden con el enumerado del backend, en las dos direcciones
 yarn errores                      # el catalogo de errores, la puerta y las pantallas: «Reintentar» solo donde puede cambiar algo
 yarn flujos                       # opera los botones contra el backend real; NO esta en CI (necesita token)
 
-# `mirar`, `sin-red`, `paleta` y `errores` van contra `yarn preview`, sin backend. `flujos` y `mirar`
+# `mirar`, `sin-red`, `paleta`, `impedimentos` y `errores` van contra `yarn preview`, sin backend. `flujos` y `mirar`
 # necesitan SGTM_TOKEN, y cualquier 401 invalida la corrida: un token caducado a mitad del
 # recorrido dejaba este arnes en verde sin haber mirado nada.
 ```

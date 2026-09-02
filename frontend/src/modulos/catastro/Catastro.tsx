@@ -55,7 +55,7 @@ import { ErrorDeApi, fijarToken } from '../../api/cliente';
 import { FalloDeLectura } from '../../api/Fallo';
 import { Descargas } from '../../api/descarga';
 import { hayPuerta } from '../../api/sesion';
-import { Aviso } from '../../ds/componentes';
+import { Aviso, Paginador, PasoAtras } from '../../ds/componentes';
 import {
   CAPAS,
   DEFECTOS_DE_FICHA_NUEVA,
@@ -3032,29 +3032,12 @@ export default function Catastro({ dest, onDest }: PantallaProps) {
                   </table>
                 </div>
 
-                {padron.datos.totalPaginas > 1 && (
-                  <div style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '10px 16px', borderTop: '1px solid var(--line)' }}>
-                    <button
-                      onClick={() => setPagina((n) => Math.max(0, n - 1))}
-                      disabled={pagina === 0}
-                      className="hov-linea"
-                      style={{ ...BOTON_LINEA, opacity: pagina === 0 ? 0.45 : 1, cursor: pagina === 0 ? 'not-allowed' : 'pointer' }}
-                    >
-                      Anterior
-                    </button>
-                    <span style={{ fontFamily: 'var(--font-mono)', fontSize: 12, color: 'var(--ink-3)' }}>
-                      {padron.datos.pagina + 1} de {padron.datos.totalPaginas}
-                    </span>
-                    <button
-                      onClick={() => setPagina((n) => n + 1)}
-                      disabled={!padron.datos.hayMas}
-                      className="hov-linea"
-                      style={{ ...BOTON_LINEA, opacity: padron.datos.hayMas ? 1 : 0.45, cursor: padron.datos.hayMas ? 'pointer' : 'not-allowed' }}
-                    >
-                      Siguiente
-                    </button>
-                  </div>
-                )}
+                <Paginador
+                  pagina={padron.datos.pagina}
+                  totalPaginas={padron.datos.totalPaginas}
+                  hayMas={padron.datos.hayMas}
+                  ir={setPagina}
+                />
 
                 {/* Por qué no hay columna de titular, dicho donde se echa en falta:
                     publicarlo en la fila convertiría «quien puede listar predios» en
@@ -3875,26 +3858,7 @@ export default function Catastro({ dest, onDest }: PantallaProps) {
 
                 {modo === 'pasos' && (
                   <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>
-                    <button
-                      onClick={() => setPaso(Math.max(paso - 1, 0))}
-                      aria-disabled={paso === 0}
-                      className="hov-linea"
-                      style={{
-                        display: 'flex',
-                        alignItems: 'center',
-                        gap: 7,
-                        border: '1px solid var(--line-2)',
-                        borderRadius: 6,
-                        padding: '10px 18px',
-                        background: 'var(--bg-card)',
-                        fontSize: 13,
-                        cursor: 'pointer',
-                        opacity: paso === 0 ? 0.5 : 1,
-                      }}
-                    >
-                      <Icono d={ICO.flechaIzq} tam={14} grosor={1.8} />
-                      Anterior
-                    </button>
+                    <PasoAtras paso={paso} atras={() => setPaso(paso - 1)} />
                     <p style={{ margin: 0, flex: 1, minWidth: 160, fontSize: 12, color: 'var(--ink-3)', textWrap: 'pretty' }}>
                       {/* «El borrador se guarda al avanzar: si se corta la sesión, lo
                           escrito no se pierde» — no se guarda en ninguna parte:
@@ -4521,29 +4485,15 @@ export default function Catastro({ dest, onDest }: PantallaProps) {
                                   </span>
                                 ))}
                               </div>
-                              {(manzanas.datos?.totalPaginas ?? 1) > 1 && (
-                                <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginTop: 9 }}>
-                                  <button
-                                    onClick={() => setPaginaDeManzanas((n) => Math.max(n - 1, 0))}
-                                    disabled={paginaDeManzanas === 0}
-                                    className="hov-linea"
-                                    style={{ ...BOTON_LINEA, padding: '4px 10px', fontSize: 11.5, opacity: paginaDeManzanas === 0 ? 0.45 : 1, cursor: paginaDeManzanas === 0 ? 'not-allowed' : 'pointer' }}
-                                  >
-                                    Anterior
-                                  </button>
-                                  <span style={{ fontFamily: 'var(--font-mono)', fontSize: 11, color: 'var(--ink-3)' }}>
-                                    {paginaDeManzanas + 1} de {manzanas.datos?.totalPaginas ?? 1} ·{' '}
-                                    {(manzanas.datos?.totalElementos ?? 0).toLocaleString('es-PE')} manzanas
-                                  </span>
-                                  <button
-                                    onClick={() => setPaginaDeManzanas((n) => n + 1)}
-                                    disabled={!(manzanas.datos?.hayMas ?? false)}
-                                    className="hov-linea"
-                                    style={{ ...BOTON_LINEA, padding: '4px 10px', fontSize: 11.5, opacity: (manzanas.datos?.hayMas ?? false) ? 1 : 0.45, cursor: (manzanas.datos?.hayMas ?? false) ? 'pointer' : 'not-allowed' }}
-                                  >
-                                    Siguiente
-                                  </button>
-                                </div>
+                              {manzanas.datos != null && (
+                                <Paginador
+                                  pagina={manzanas.datos.pagina}
+                                  totalPaginas={manzanas.datos.totalPaginas}
+                                  hayMas={manzanas.datos.hayMas}
+                                  ir={setPaginaDeManzanas}
+                                  detalle={`${manzanas.datos.totalElementos.toLocaleString('es-PE')} manzanas`}
+                                  style={{ padding: 0, borderTop: 'none', marginTop: 9 }}
+                                />
                               )}
                             </>
                           )}
@@ -4601,28 +4551,14 @@ export default function Catastro({ dest, onDest }: PantallaProps) {
                     </table>
                   </div>
                 )}
-                {(vias.datos?.totalPaginas ?? 0) > 1 && (
-                  <div style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '10px 14px', borderTop: '1px solid var(--line)' }}>
-                    <button
-                      onClick={() => setPaginaVias((n) => Math.max(0, n - 1))}
-                      disabled={paginaVias === 0}
-                      className="hov-linea"
-                      style={{ ...BOTON_LINEA, opacity: paginaVias === 0 ? 0.45 : 1, cursor: paginaVias === 0 ? 'not-allowed' : 'pointer' }}
-                    >
-                      Anterior
-                    </button>
-                    <span style={{ fontFamily: 'var(--font-mono)', fontSize: 12, color: 'var(--ink-3)' }}>
-                      {(vias.datos?.pagina ?? 0) + 1} de {vias.datos?.totalPaginas}
-                    </span>
-                    <button
-                      onClick={() => setPaginaVias((n) => n + 1)}
-                      disabled={!vias.datos?.hayMas}
-                      className="hov-linea"
-                      style={{ ...BOTON_LINEA, opacity: vias.datos?.hayMas ? 1 : 0.45, cursor: vias.datos?.hayMas ? 'pointer' : 'not-allowed' }}
-                    >
-                      Siguiente
-                    </button>
-                  </div>
+                {vias.datos != null && (
+                  <Paginador
+                    pagina={vias.datos.pagina}
+                    totalPaginas={vias.datos.totalPaginas}
+                    hayMas={vias.datos.hayMas}
+                    ir={setPaginaVias}
+                    style={{ padding: '10px 14px' }}
+                  />
                 )}
                 <p style={{ ...PIE, padding: '11px 14px' }}>
                   El catálogo es del ubigeo entero y no de un sector: una vía no pertenece a un sector en el modelo, así que esta tabla no

@@ -3,7 +3,7 @@ import { Shell, type Contexto, type EntradaDePaleta } from '../../shell/Shell';
 import type { PantallaProps } from '../../App';
 import { Icono } from '../../ds/Icono';
 import { ICO } from '../../ds/iconos';
-import { Insignia, type Tono } from '../../ds/componentes';
+import { Insignia, Paginador, type Tono } from '../../ds/componentes';
 import { moduloDe } from '../../shell/modulos';
 import { miles, usarPreferencias } from '../../shell/preferencias';
 import {
@@ -499,44 +499,6 @@ function Vacio({ titulo, children }: { titulo: string; children: ReactNode }) {
         {children}
       </p>
     </section>
-  );
-}
-
-/** La paginación de una tabla. */
-function Paginas({
-  pagina,
-  totalPaginas,
-  hayMas,
-  ir,
-}: {
-  pagina: number;
-  totalPaginas: number;
-  hayMas: boolean;
-  ir: (n: number) => void;
-}) {
-  if (totalPaginas <= 1) return null;
-  return (
-    <div style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '10px 16px', borderTop: '1px solid var(--line)' }}>
-      <button
-        onClick={() => ir(Math.max(0, pagina - 1))}
-        disabled={pagina === 0}
-        className="hov-linea"
-        style={{ ...BOTON_LINEA, opacity: pagina === 0 ? 0.45 : 1, cursor: pagina === 0 ? 'not-allowed' : 'pointer' }}
-      >
-        Anterior
-      </button>
-      <span style={{ fontFamily: 'var(--font-mono)', fontSize: 12, color: 'var(--ink-3)' }}>
-        {pagina + 1} de {totalPaginas}
-      </span>
-      <button
-        onClick={() => ir(pagina + 1)}
-        disabled={!hayMas}
-        className="hov-linea"
-        style={{ ...BOTON_LINEA, opacity: hayMas ? 1 : 0.45, cursor: hayMas ? 'pointer' : 'not-allowed' }}
-      >
-        Siguiente
-      </button>
-    </div>
   );
 }
 
@@ -1268,7 +1230,7 @@ export default function Transito({ dest, onDest }: PantallaProps) {
                         />
                       </table>
                     </div>
-                    <Paginas pagina={p.pagina} totalPaginas={p.totalPaginas} hayMas={p.hayMas} ir={setPagina} />
+                    <Paginador pagina={p.pagina} totalPaginas={p.totalPaginas} hayMas={p.hayMas} ir={setPagina} />
                     <p style={{ ...PIE, borderTop: '1px solid var(--line)' }}>
                       Los dos importes son los del acta, congelados el día de la infracción. Lo que se cobra hoy lleva el interés del
                       libro y no sale en esta lectura. El código de la infracción y el nombre del conductor tampoco: esta operación no los
@@ -1481,7 +1443,7 @@ export default function Transito({ dest, onDest }: PantallaProps) {
                           />
                         </table>
                       </div>
-                      <Paginas pagina={p.pagina} totalPaginas={p.totalPaginas} hayMas={p.hayMas} ir={setPaginaInt} />
+                      <Paginador pagina={p.pagina} totalPaginas={p.totalPaginas} hayMas={p.hayMas} ir={setPaginaInt} />
                       <p style={{ ...PIE, borderTop: '1px solid var(--line)' }}>
                         Los días están contados al {p.contenido[0].calculadoA}. La custodia acumulada no sale como columna: sería
                         multiplicar la tasa por los días en la pantalla, y una cifra de dinero no se compone aquí.
@@ -1751,7 +1713,7 @@ export default function Transito({ dest, onDest }: PantallaProps) {
                           />
                         </table>
                       </div>
-                      <Paginas pagina={p.pagina} totalPaginas={p.totalPaginas} hayMas={p.hayMas} ir={setPaginaCod} />
+                      <Paginador pagina={p.pagina} totalPaginas={p.totalPaginas} hayMas={p.hayMas} ir={setPaginaCod} />
                       <p style={{ ...PIE, borderTop: '1px solid var(--line)' }}>
                         El «% UIT» es el porcentaje de la unidad impositiva, no la multa. La multa en soles es ese porcentaje por la UIT
                         del ejercicio, y la UIT sale del conjunto de parámetros sellado: por eso no hay columna de importe.

@@ -3,7 +3,7 @@ import { Shell, type Contexto, type EntradaDePaleta } from '../../shell/Shell';
 import type { PantallaProps } from '../../App';
 import { Icono } from '../../ds/Icono';
 import { ICO } from '../../ds/iconos';
-import { Insignia, type Tono } from '../../ds/componentes';
+import { Insignia, Paginador, type Tono } from '../../ds/componentes';
 import { moduloDe } from '../../shell/modulos';
 import { miles, usarPreferencias } from '../../shell/preferencias';
 import {
@@ -139,15 +139,6 @@ const ENTRADILLA: CSSProperties = {
   lineHeight: 1.6,
   color: 'var(--ink-2)',
   maxWidth: '70ch',
-};
-const BOTON_LINEA: CSSProperties = {
-  border: '1px solid var(--line-2)',
-  borderRadius: 6,
-  padding: '6px 12px',
-  background: 'var(--bg-elev)',
-  fontSize: 12,
-  color: 'var(--ink-2)',
-  cursor: 'pointer',
 };
 
 const SIN_DATO = '—';
@@ -397,23 +388,6 @@ function Vacio({ titulo, children }: { titulo: string; children: ReactNode }) {
       <p style={{ margin: 0, fontFamily: 'var(--font-serif)', fontSize: 16, fontWeight: 600 }}>{titulo}</p>
       <p style={{ margin: 0, maxWidth: '56ch', fontSize: 13, lineHeight: 1.55, color: 'var(--ink-3)', textAlign: 'center', textWrap: 'pretty' }}>{children}</p>
     </section>
-  );
-}
-
-function Paginas({ pagina, totalPaginas, hayMas, ir }: { pagina: number; totalPaginas: number; hayMas: boolean; ir: (n: number) => void }) {
-  if (totalPaginas <= 1) return null;
-  return (
-    <div style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '10px 16px', borderTop: '1px solid var(--line)' }}>
-      <button onClick={() => ir(Math.max(0, pagina - 1))} disabled={pagina === 0} className="hov-linea" style={{ ...BOTON_LINEA, opacity: pagina === 0 ? 0.45 : 1, cursor: pagina === 0 ? 'not-allowed' : 'pointer' }}>
-        Anterior
-      </button>
-      <span style={{ fontFamily: 'var(--font-mono)', fontSize: 12, color: 'var(--ink-3)' }}>
-        {pagina + 1} de {totalPaginas}
-      </span>
-      <button onClick={() => ir(pagina + 1)} disabled={!hayMas} className="hov-linea" style={{ ...BOTON_LINEA, opacity: hayMas ? 1 : 0.45, cursor: hayMas ? 'pointer' : 'not-allowed' }}>
-        Siguiente
-      </button>
-    </div>
   );
 }
 
@@ -942,7 +916,7 @@ export default function Sanciones({ dest, onDest }: PantallaProps) {
                         </tbody>
                       </table>
                     </div>
-                    <Paginas pagina={p.pagina} totalPaginas={p.totalPaginas} hayMas={p.hayMas} ir={setPagina} />
+                    <Paginador pagina={p.pagina} totalPaginas={p.totalPaginas} hayMas={p.hayMas} ir={setPagina} />
                     <p style={{ ...PIE, borderTop: '1px solid var(--line)' }}>
                       La multa es la del acta, al {p.contenido[0].actualizadoA}, y la fase se resolvió al {p.contenido[0].faseAlDia}. Las
                       dos fechas viajan con su cifra y no se dan por «hoy».
@@ -1210,7 +1184,7 @@ export default function Sanciones({ dest, onDest }: PantallaProps) {
                           </tbody>
                         </table>
                       </div>
-                      <Paginas pagina={p.pagina} totalPaginas={p.totalPaginas} hayMas={p.hayMas} ir={setPaginaCuis} />
+                      <Paginador pagina={p.pagina} totalPaginas={p.totalPaginas} hayMas={p.hayMas} ir={setPaginaCuis} />
                       <p style={{ ...PIE, borderTop: '1px solid var(--line)' }}>
                         No hay columna de multa en soles: sería el porcentaje por la UIT del ejercicio, y la UIT sale del conjunto de
                         parámetros sellado. Multiplicarla aquí con una UIT escrita a mano es lo que la regla 5 prohíbe.

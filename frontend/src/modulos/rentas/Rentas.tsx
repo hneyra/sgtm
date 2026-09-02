@@ -52,7 +52,7 @@ import { FalloDeLectura, explicacionDelFallo } from '../../api/Fallo';
 import { useRebote, useRecurso } from '../../api/useRecurso';
 import { Icono } from '../../ds/Icono';
 import { ICO } from '../../ds/iconos';
-import { Aviso, Insignia, type Tono } from '../../ds/componentes';
+import { Aviso, Insignia, Paginador, PasoAtras, type Tono } from '../../ds/componentes';
 import { moduloDe } from '../../shell/modulos';
 import { soles, usarPreferencias } from '../../shell/preferencias';
 import {
@@ -974,7 +974,6 @@ function TablaLeida<T>({
   vacia,
   sinPreguntar,
   cuenta,
-  pagina,
   irAPagina,
 }: {
   tabla: TablaDef;
@@ -986,7 +985,9 @@ function TablaLeida<T>({
   sinPreguntar: string;
   /** Cómo se cuenta lo que trajo: «3 predios», «1 vehículo». */
   cuenta: (n: number) => string;
-  pagina: number;
+  /* El numero de pagina NO entra por aqui: el pie lo lee del sobre, que es
+     quien lo publica. Pasarlo ademas seria tenerlo en dos sitios, y el dia que
+     uno se adelantara al otro la tabla diria una pagina y el pie otra. */
   irAPagina: (n: number) => void;
 }) {
   const filas = (estado.datos?.contenido ?? []).map(fila);
@@ -1043,28 +1044,13 @@ function TablaLeida<T>({
           rejilla enseñaría 50: el recuento y lo que se ve discreparían sin que
           nada lo dijera, que es la forma silenciosa del mismo defecto que esta
           sección acaba de dejar atrás. */}
-      {(estado.datos?.totalPaginas ?? 0) > 1 && (
-        <div style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '10px 16px', borderTop: '1px solid var(--line)' }}>
-          <button
-            onClick={() => irAPagina(Math.max(0, pagina - 1))}
-            disabled={pagina === 0}
-            className="hov-linea"
-            style={{ ...BOTON_DE_TABLA, opacity: pagina === 0 ? 0.45 : 1, cursor: pagina === 0 ? 'not-allowed' : 'pointer' }}
-          >
-            Anterior
-          </button>
-          <span style={{ fontFamily: 'var(--font-mono)', fontSize: 12, color: 'var(--ink-3)' }}>
-            {(estado.datos?.pagina ?? 0) + 1} de {estado.datos?.totalPaginas}
-          </span>
-          <button
-            onClick={() => irAPagina(pagina + 1)}
-            disabled={estado.datos?.hayMas !== true}
-            className="hov-linea"
-            style={{ ...BOTON_DE_TABLA, opacity: estado.datos?.hayMas === true ? 1 : 0.45, cursor: estado.datos?.hayMas === true ? 'pointer' : 'not-allowed' }}
-          >
-            Siguiente
-          </button>
-        </div>
+      {estado.datos !== null && (
+        <Paginador
+          pagina={estado.datos.pagina}
+          totalPaginas={estado.datos.totalPaginas}
+          hayMas={estado.datos.hayMas}
+          ir={irAPagina}
+        />
       )}
       {tabla.nota !== undefined && <p style={PIE}>{tabla.nota}</p>}
     </div>
@@ -3063,28 +3049,13 @@ export default function Rentas({ dest, onDest }: PantallaProps) {
                     </tbody>
                   </table>
                 </div>
-                {(padron.datos?.totalPaginas ?? 0) > 1 && (
-                  <div style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '10px 16px', borderTop: '1px solid var(--line)' }}>
-                    <button
-                      onClick={() => setPaginaPadron((n) => Math.max(0, n - 1))}
-                      disabled={paginaPadron === 0}
-                      className="hov-linea"
-                      style={{ ...BOTON_DE_TABLA, opacity: paginaPadron === 0 ? 0.45 : 1, cursor: paginaPadron === 0 ? 'not-allowed' : 'pointer' }}
-                    >
-                      Anterior
-                    </button>
-                    <span style={{ fontFamily: 'var(--font-mono)', fontSize: 12, color: 'var(--ink-3)' }}>
-                      {(padron.datos?.pagina ?? 0) + 1} de {padron.datos?.totalPaginas}
-                    </span>
-                    <button
-                      onClick={() => setPaginaPadron((n) => n + 1)}
-                      disabled={!padron.datos?.hayMas}
-                      className="hov-linea"
-                      style={{ ...BOTON_DE_TABLA, opacity: padron.datos?.hayMas ? 1 : 0.45, cursor: padron.datos?.hayMas ? 'pointer' : 'not-allowed' }}
-                    >
-                      Siguiente
-                    </button>
-                  </div>
+                {padron.datos !== null && (
+                  <Paginador
+                    pagina={padron.datos.pagina}
+                    totalPaginas={padron.datos.totalPaginas}
+                    hayMas={padron.datos.hayMas}
+                    ir={setPaginaPadron}
+                  />
                 )}
                 {/* Por que faltan tres columnas del artboard, dicho donde se
                     echan en falta. */}
@@ -3278,7 +3249,6 @@ export default function Rentas({ dest, onDest }: PantallaProps) {
                                 <TablaLeida
                                   tabla={bl.tabla}
                                   estado={prediosDelContribuyente}
-                                  pagina={paginaDePredios}
                                   irAPagina={setPaginaDePredios}
                                   cuenta={(n) => `${n} ${n === 1 ? 'predio' : 'predios'}`}
                                   vacia="Este contribuyente está en el padrón y no tiene ningún predio inscrito a su nombre."
@@ -3299,7 +3269,6 @@ export default function Rentas({ dest, onDest }: PantallaProps) {
                                 <TablaLeida
                                   tabla={bl.tabla}
                                   estado={vehiculosDelContribuyente}
-                                  pagina={paginaDeVehiculos}
                                   irAPagina={setPaginaDeVehiculos}
                                   cuenta={(n) => `${n} ${n === 1 ? 'vehículo' : 'vehículos'}`}
                                   vacia="Este contribuyente está en el padrón y no tiene ningún vehículo a su nombre."
@@ -3319,7 +3288,6 @@ export default function Rentas({ dest, onDest }: PantallaProps) {
                                 <TablaLeida
                                   tabla={bl.tabla}
                                   estado={beneficios}
-                                  pagina={paginaDeBeneficios}
                                   irAPagina={setPaginaDeBeneficios}
                                   cuenta={(n) => `${n} ${n === 1 ? 'beneficio' : 'beneficios'}`}
                                   vacia="Este contribuyente no tiene ningún beneficio ni exoneración registrado."
@@ -3929,15 +3897,7 @@ export default function Rentas({ dest, onDest }: PantallaProps) {
               </p>
             )}
             <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>
-              <button
-                onClick={() => setTrPaso(Math.max(paso - 1, 0))}
-                aria-disabled={paso === 0}
-                className="hov-linea"
-                style={{ ...BOTON_SECUNDARIO, display: 'flex', alignItems: 'center', gap: 7, opacity: paso === 0 ? 0.5 : 1 }}
-              >
-                <Icono d={ICO.flechaIzq} tam={14} grosor={1.8} />
-                Anterior
-              </button>
+              <PasoAtras paso={paso} atras={() => setTrPaso(paso - 1)} />
               {paso >= trDef.pasos.length - 1 ? (
                 <label style={{ flex: 1, minWidth: 220 }}>
                   <span style={{ display: 'block', fontSize: 11, fontWeight: 500, color: 'var(--ink-3)', marginBottom: 4 }}>

@@ -24,7 +24,7 @@ import {
   type Privilegio,
 } from '../../api/seguridad';
 import { FalloDeLectura } from '../../api/Fallo';
-import { Aviso } from '../../ds/componentes';
+import { Aviso, Paginador } from '../../ds/componentes';
 import { ErrorDeApi } from '../../api/cliente';
 import { enElProveedorDeIdentidad } from '../../api/sesion';
 import { useRebote, useRecurso } from '../../api/useRecurso';
@@ -1645,28 +1645,13 @@ export default function Seguridad({ dest, onDest }: PantallaProps) {
               {/* La bitácora del ejercicio son miles de filas y la página son 20.
                   Sin estos dos botones sólo se podía ver una página de 74, y el
                   pie decía «20 de 1 481» como si eso fuera todo. */}
-              {auditoria.datos !== null && auditoria.datos.totalPaginas > 1 && (
-                <div style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '10px 16px', borderTop: '1px solid var(--line)' }}>
-                  <button
-                    onClick={() => setPaginaAud((n) => Math.max(0, n - 1))}
-                    disabled={paginaAud === 0}
-                    className="hov-linea"
-                    style={{ ...BOTON_LINEA, opacity: paginaAud === 0 ? 0.45 : 1, cursor: paginaAud === 0 ? 'not-allowed' : 'pointer' }}
-                  >
-                    Anterior
-                  </button>
-                  <span style={{ fontFamily: 'var(--font-mono)', fontSize: 12, color: 'var(--ink-3)' }}>
-                    {auditoria.datos.pagina + 1} de {auditoria.datos.totalPaginas.toLocaleString('es-PE')}
-                  </span>
-                  <button
-                    onClick={() => setPaginaAud((n) => n + 1)}
-                    disabled={!auditoria.datos.hayMas}
-                    className="hov-linea"
-                    style={{ ...BOTON_LINEA, opacity: auditoria.datos.hayMas ? 1 : 0.45, cursor: auditoria.datos.hayMas ? 'pointer' : 'not-allowed' }}
-                  >
-                    Siguiente
-                  </button>
-                </div>
+              {auditoria.datos !== null && (
+                <Paginador
+                  pagina={auditoria.datos.pagina}
+                  totalPaginas={auditoria.datos.totalPaginas}
+                  hayMas={auditoria.datos.hayMas}
+                  ir={setPaginaAud}
+                />
               )}
 
               <p style={{ margin: 0, padding: '11px 16px', borderTop: '1px solid var(--line)', background: 'var(--bg-elev)', fontSize: 12, lineHeight: 1.5, color: 'var(--ink-3)', textWrap: 'pretty' }}>
