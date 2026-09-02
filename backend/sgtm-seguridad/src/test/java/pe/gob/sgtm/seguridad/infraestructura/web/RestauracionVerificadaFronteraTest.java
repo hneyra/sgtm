@@ -81,9 +81,9 @@ import tools.jackson.databind.json.JsonMapper;
  * <p>Por eso la rotura de aislamiento de costumbre —conectar el pool como superusuario— <b>no
  * muerde aqui</b>, igual que en {@code MunicipalidadDeLaSesionFronteraTest} (#555) y por un motivo
  * estructural parecido. Lo que si se mide, y es lo que el AC 1 protege de verdad, es que la fila
- * <b>no lleve ni un dato de una municipalidad</b>: {@link #laFilaNoLlevaNingunDatoDeMunicipalidad()}
- * lo comprueba contra el catalogo de PostgreSQL, y {@link #lasDosMunicipalidadesVenLaMismaCopia()}
- * fija que las dos leen la misma y por que.
+ * <b>no lleve ni un dato de una municipalidad</b>: {@link
+ * #laFilaNoLlevaNingunDatoDeMunicipalidad()} lo comprueba contra el catalogo de PostgreSQL, y
+ * {@link #lasDosMunicipalidadesVenLaMismaCopia()} fija que las dos leen la misma y por que.
  *
  * <p>La conexion es la de {@code sgtm_app} de todas formas —es la que corre en produccion—, con el
  * centinela {@link #seConectaComoSgtmApp()} delante: escrita con {@code sgtm_owner} una prueba de
@@ -98,11 +98,11 @@ import tools.jackson.databind.json.JsonMapper;
  * <h2>Y aqui la transaccion NO la sostiene ninguna de estas pruebas: medido</h2>
  *
  * <p>Quitarle el {@code @Transactional(readOnly = true)} a {@code AdministrarSesion.respaldos} deja
- * las quince <b>en verde</b>. No es un descuido de la prueba: es que la politica de {@code respaldo}
- * es {@code FOR SELECT USING (true)} y <b>no lee {@code current_setting}</b>, asi que sin {@code SET
- * LOCAL} la consulta funciona igual. Es el reverso exacto de #486 —donde la lectura revienta con
- * «unrecognized configuration parameter»— y la unica lectura del sistema donde esa rotura no dice
- * nada, precisamente porque no hay tenant que fijar.
+ * las quince <b>en verde</b>. No es un descuido de la prueba: es que la politica de {@code
+ * respaldo} es {@code FOR SELECT USING (true)} y <b>no lee {@code current_setting}</b>, asi que sin
+ * {@code SET LOCAL} la consulta funciona igual. Es el reverso exacto de #486 —donde la lectura
+ * revienta con «unrecognized configuration parameter»— y la unica lectura del sistema donde esa
+ * rotura no dice nada, precisamente porque no hay tenant que fijar.
  *
  * <p>Lo que si se puede sujetar, y es lo que aporta la anotacion aqui, es que la lectura <b>no
  * pueda escribir</b>: {@link #laLecturaEsDeSoloLectura()} lo lee de la propia anotacion, porque
@@ -147,8 +147,7 @@ class RestauracionVerificadaFronteraTest {
 
         comprobador = new ComprobadorQueConcede();
         mvc =
-                MockMvcBuilders.standaloneSetup(
-                                new SesionController(administrar, null, null, null))
+                MockMvcBuilders.standaloneSetup(new SesionController(administrar, null, null, null))
                         .addInterceptors(
                                 new GuardiaDeAcceso(comprobador, RELOJ), new GuardiaDeParametros())
                         .setControllerAdvice(new ManejadorDeErrores())
@@ -216,7 +215,7 @@ class RestauracionVerificadaFronteraTest {
         assertThat(cuerpo)
                 .as(
                         "la lectura volvia vacia porque nadie inserta en el entorno local; en"
-                            + " produccion la escribe el CronJob de infra/componentes/Respaldo.ts")
+                                + " produccion la escribe el CronJob de infra/componentes/Respaldo.ts")
                 .contains("\"totalElementos\":1")
                 .contains("\"resultado\":\"EXITOSO\"")
                 .contains("\"destino\":\"s3://sgtm-stg/base\"");
@@ -242,9 +241,9 @@ class RestauracionVerificadaFronteraTest {
         assertThat(desdeB)
                 .as(
                         "el AC 1 pide que B no vea ninguna de A, y eso seria falso: el mismo motor"
-                            + " sirve a las dos, asi que la copia que protege a A protege a B."
-                            + " Aislarla dejaria a las dos pantallas diciendo «no hay ninguna"
-                            + " copia» sobre un padron que si esta respaldado")
+                                + " sirve a las dos, asi que la copia que protege a A protege a B."
+                                + " Aislarla dejaria a las dos pantallas diciendo «no hay ninguna"
+                                + " copia» sobre un padron que si esta respaldado")
                 .isEqualTo(desdeA);
     }
 
@@ -261,8 +260,8 @@ class RestauracionVerificadaFronteraTest {
         assertThat(columnas)
                 .as(
                         "publicar la misma fila a las dos municipalidades solo es correcto mientras"
-                            + " la fila no diga nada de ninguna: si algun dia lleva un dato"
-                            + " municipal, esta lectura pasa a ser una fuga y hay que rehacerla")
+                                + " la fila no diga nada de ninguna: si algun dia lleva un dato"
+                                + " municipal, esta lectura pasa a ser una fuga y hay que rehacerla")
                 .doesNotContain("municipalidad_id")
                 .contains("ultima_restauracion_verificada", "ultima_restauracion_verificada_por");
     }
@@ -324,7 +323,7 @@ class RestauracionVerificadaFronteraTest {
                         () ->
                                 jdbc.sql(
                                                 "INSERT INTO respaldo (inicio, resultado, destino)"
-                                                    + " VALUES (now(), 'EXITOSO', 'inventado')")
+                                                        + " VALUES (now(), 'EXITOSO', 'inventado')")
                                         .update())
                 .as(
                         "un boton «respaldar ahora» detras de un endpoint exigiria privilegios que"
@@ -384,7 +383,7 @@ class RestauracionVerificadaFronteraTest {
         assertThat(
                         jdbc.sql(
                                         "SELECT count(*) FROM respaldo"
-                                            + " WHERE ultima_restauracion_verificada IS NOT NULL")
+                                                + " WHERE ultima_restauracion_verificada IS NOT NULL")
                                 .query(Long.class)
                                 .single())
                 .as("ninguna copia queda marcada por algo que no la restauro")
@@ -397,15 +396,15 @@ class RestauracionVerificadaFronteraTest {
         assertThat(
                         jdbc.sql(
                                         "SELECT has_table_privilege(:rol, 'respaldo', 'INSERT')"
-                                            + " OR has_table_privilege(:rol, 'respaldo', 'UPDATE')"
-                                            + " OR has_table_privilege(:rol, 'respaldo', 'DELETE')")
+                                                + " OR has_table_privilege(:rol, 'respaldo', 'UPDATE')"
+                                                + " OR has_table_privilege(:rol, 'respaldo', 'DELETE')")
                                 .param("rol", BaseDeDatosDePrueba.APP)
                                 .query(Boolean.class)
                                 .single())
                 .as(
                         "RLS y GRANT son dos guardas independientes y las dos dan 42501, asi que el"
-                            + " sintoma no distingue cual actuo: devolverle el GRANT dejaria las dos"
-                            + " pruebas de arriba en verde (#435)")
+                                + " sintoma no distingue cual actuo: devolverle el GRANT dejaria las dos"
+                                + " pruebas de arriba en verde (#435)")
                 .isFalse();
         assertThat(
                         jdbc.sql("SELECT has_table_privilege(:rol, 'respaldo', 'SELECT')")
@@ -439,8 +438,8 @@ class RestauracionVerificadaFronteraTest {
                                         QUIEN_VERIFICA))
                 .as(
                         "afirmar que se restauro una copia que no llego a tomarse entera es la"
-                            + " clase de dato plausible y equivocado que esta pantalla existe para"
-                            + " no tener")
+                                + " clase de dato plausible y equivocado que esta pantalla existe para"
+                                + " no tener")
                 .hasMessageContaining("respaldo_verificacion_exitosa_ck");
     }
 
@@ -533,13 +532,13 @@ class RestauracionVerificadaFronteraTest {
         assertThat(anotacion)
                 .as(
                         "quitarla no pone NINGUNA de las otras catorce en rojo —la politica de"
-                            + " respaldo no lee current_setting, asi que la consulta funciona sin"
-                            + " SET LOCAL (el reverso de #486)—, y por eso hace falta leerla")
+                                + " respaldo no lee current_setting, asi que la consulta funciona sin"
+                                + " SET LOCAL (el reverso de #486)—, y por eso hace falta leerla")
                 .isNotNull();
         assertThat(anotacion.readOnly())
                 .as(
                         "es la mitad de la separacion de ARQ-03 §4 que vive en la aplicacion: la"
-                            + " otra la pone el GRANT, y las dos tienen que decir lo mismo")
+                                + " otra la pone el GRANT, y las dos tienen que decir lo mismo")
                 .isTrue();
     }
 
@@ -580,10 +579,10 @@ class RestauracionVerificadaFronteraTest {
                 PreparedStatement sentencia =
                         owner.prepareStatement(
                                 "INSERT INTO respaldo (inicio, fin, resultado, destino,"
-                                    + " ultima_restauracion_verificada,"
-                                    + " ultima_restauracion_verificada_por)"
-                                    + " VALUES (?::timestamptz, ?::timestamptz, ?, ?,"
-                                    + " ?::timestamptz, ?) RETURNING id")) {
+                                        + " ultima_restauracion_verificada,"
+                                        + " ultima_restauracion_verificada_por)"
+                                        + " VALUES (?::timestamptz, ?::timestamptz, ?, ?,"
+                                        + " ?::timestamptz, ?) RETURNING id")) {
             sentencia.setString(1, inicio);
             sentencia.setString(2, fin);
             sentencia.setString(3, resultado);
