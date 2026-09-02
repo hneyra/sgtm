@@ -1097,7 +1097,7 @@ class CostasYFraccionamientoJdbcTest {
             String expediente = expedienteDe(titular, "FRAC-3");
             enCoactiva(titular);
             // Y ademas una deuda ORDINARIA del mismo obligado, que la pantalla podria marcar.
-            asentarCargo(titular, "ARBITRIOS", Dinero.de("120.00"), Fase.ORDINARIA);
+            asentarCargo(titular, "ARBITRIO", Dinero.de("120.00"), Fase.ORDINARIA);
 
             assertThatThrownBy(
                             () ->
@@ -1109,19 +1109,19 @@ class CostasYFraccionamientoJdbcTest {
                                                                     "PREDIAL", EJERCICIO, null,
                                                                     null),
                                                             new SeleccionDeObligacion(
-                                                                    "ARBITRIOS",
+                                                                    "ARBITRIO",
                                                                     EJERCICIO,
                                                                     null,
                                                                     null))),
                                             PORQUE))
                     .isInstanceOf(FraccionarEnCoactiva.DeudaAjenaAlProcedimiento.class)
-                    .hasMessageContaining("ARBITRIOS")
+                    .hasMessageContaining("ARBITRIO")
                     .hasMessageContaining("ORDINARIA");
 
             assertThat(faseDe(titular, "PREDIAL"))
                     .as("y no se acogio nada: la comprobacion va sobre la simulacion")
                     .isEqualTo(Fase.COACTIVA);
-            assertThat(faseDe(titular, "ARBITRIOS")).isEqualTo(Fase.ORDINARIA);
+            assertThat(faseDe(titular, "ARBITRIO")).isEqualTo(Fase.ORDINARIA);
         }
 
         @Test

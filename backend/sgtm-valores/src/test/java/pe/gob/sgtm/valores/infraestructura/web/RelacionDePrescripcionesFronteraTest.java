@@ -124,7 +124,7 @@ class RelacionDePrescripcionesFronteraTest {
                 crearPrescripcion(
                         municipalidadA,
                         perez,
-                        "ARBITRIOS",
+                        "ARBITRIO",
                         2019,
                         2019,
                         conjuntoA,
@@ -247,7 +247,7 @@ class RelacionDePrescripcionesFronteraTest {
     @Test
     @DisplayName("«tributo» acota")
     void elTributoAcota() throws Exception {
-        String json = pedir("/api/v1/coactiva/prescripcion", "tributo", "ARBITRIOS");
+        String json = pedir("/api/v1/coactiva/prescripcion", "tributo", "ARBITRIO");
 
         assertThat(json).contains("\"totalElementos\":1").contains("\"id\":" + noProcede);
         assertThat(json).doesNotContain("\"id\":" + enParte);
