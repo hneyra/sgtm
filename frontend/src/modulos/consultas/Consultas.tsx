@@ -271,6 +271,11 @@ function Fallo({
               onReintentar();
             }}
             disabled={tokenPegado.trim() === ''}
+            /* Un boton apagado no recibe el foco, asi que su `title` no lo lee un
+               lector de pantalla — pero SI se ve al pasar el raton, y sin el este
+               es un callejon: quien lo pulsa no sabe que le falta pegar el token.
+               Solo aparece sin sesion, que es como corre el arnes y como corre CI. */
+            title={tokenPegado.trim() === '' ? 'Pega antes un token del emisor en la caja de al lado' : undefined}
             style={{
               border: 0,
               borderRadius: 6,
