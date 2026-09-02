@@ -24,11 +24,19 @@ import pe.gob.sgtm.dominio.AreaM2;
  * en pantalla sería la que nadie recalculó (el reparto de {@code V41} §2, {@code V33} y {@code
  * V32}).
  *
+ * <p><b>Y admite el predio sin titular</b> (#586). {@code contribuyenteId} nulo no es un dato que
+ * falte: es el predio que nadie reclama —el 34,5 % del padrón de Catacaos—, que desde #545 la
+ * detección enseña y hasta #586 la muestra apartaba en silencio. Estar en la muestra no le cobra
+ * nada a nadie: es la lista de trabajo de la visita, y la visita es justamente lo que resuelve
+ * quién ocupa. El acta que se levante después lo sigue exigiendo, y quien fiscaliza lo nombra al
+ * volver.
+ *
  * @param id nulo mientras no se ha guardado; lo asigna la base
  * @param programaId el programa que lo sorteó
  * @param predioId el predio, que es lo que el acta necesita
  * @param codigoReferenciaCatastral el código del predio, copiado
- * @param contribuyenteId su titular a la fecha del sorteo, que es el otro identificador del acta
+ * @param contribuyenteId su titular principal a la fecha del sorteo, o nulo si el predio no tiene
+ *     ninguno vigente
  * @param condicion lo que la detección concluyó ese día
  * @param areaCatastral la superficie que el catastro tiene inscrita
  * @param areaDeclarada la que sustenta la declaración jurada del ejercicio
@@ -40,7 +48,7 @@ public record MuestraDelPrograma(
         long programaId,
         long predioId,
         String codigoReferenciaCatastral,
-        long contribuyenteId,
+        @Nullable Long contribuyenteId,
         CondicionFiscalizada condicion,
         @Nullable AreaM2 areaCatastral,
         @Nullable AreaM2 areaDeclarada,
@@ -58,10 +66,22 @@ public record MuestraDelPrograma(
         if (predioId < 1) {
             throw new IllegalArgumentException("La fila de la muestra necesita su predio");
         }
-        if (contribuyenteId < 1) {
+        if (contribuyenteId != null && contribuyenteId < 1) {
             throw new IllegalArgumentException(
-                    "Una fila de la muestra sin titular no se sortea: no hay a quien visitar");
+                    "El titular de la fila de la muestra es un identificador del padron, y '"
+                            + contribuyenteId
+                            + "' no lo es: sin titular vigente la columna va NULA (#586)");
         }
+    }
+
+    /**
+     * Si el predio no tenía titular vigente el día del sorteo.
+     *
+     * <p>Es lo que la grilla dice y lo que quien visita necesita saber antes de salir: aquí no hay
+     * a quién preguntar por la declaración, hay que averiguar quién ocupa.
+     */
+    public boolean sinTitular() {
+        return contribuyenteId == null;
     }
 
     /**
@@ -69,10 +89,13 @@ public record MuestraDelPrograma(
      * lleva sale de {@link FilaDeOmisos}, que es la única fuente de la condición en el sistema.
      *
      * <p>De los titulares de la fila toma <b>el principal</b> —el de mayor porcentaje—, porque
-     * {@code programa_muestra.contribuyente_id} es una columna sola (V60) y visitar es visitar a
-     * alguien; es la misma elección que {@code TitularPrincipalRepository} hace para cobrar el
-     * arbitrio. Un predio <b>sin titular vigente</b> no llega hasta aquí: {@code GenerarMuestra} lo
-     * aparta antes, y por qué está escrito allí.
+     * {@code programa_muestra.contribuyente_id} es una columna sola (V60) y notificar es notificar
+     * a alguien; es la misma elección que {@code TitularPrincipalRepository} hace para cobrar el
+     * arbitrio.
+     *
+     * <p>Y un predio <b>sin titular vigente</b> sí llega hasta aquí desde #586: entra con la
+     * columna nula. Inventarle un titular para poder imputar es lo que esta detección existe para
+     * no hacer, y apartarlo era esconder al candidato de primer orden.
      */
     public static MuestraDelPrograma sorteada(
             long programaId, FilaDeOmisos fila, LocalDate fechaSorteo) {
@@ -81,12 +104,7 @@ public record MuestraDelPrograma(
                 programaId,
                 fila.predioId(),
                 fila.codigoReferenciaCatastral(),
-                fila.titularPrincipal()
-                        .orElseThrow(
-                                () ->
-                                        new IllegalArgumentException(
-                                                "Una fila de la muestra sin titular no se sortea:"
-                                                        + " no hay a quien visitar")),
+                fila.titularPrincipal().isPresent() ? fila.titularPrincipal().getAsLong() : null,
                 fila.condicion(),
                 fila.areaCatastral(),
                 fila.areaDeclarada(),

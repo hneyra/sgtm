@@ -176,6 +176,79 @@ class MuestraDelProgramaRepositoryJdbcTest {
     }
 
     @Nested
+    @DisplayName("#586 — El predio sin titular entra, y entra NULO")
+    class SinTitular {
+
+        @Test
+        @DisplayName("una fila sin titular se guarda y vuelve con la columna NULA, no con un cero")
+        void unaFilaSinTitularVuelveNula() {
+            TenantContext.fijar(new MunicipalidadId(municipalidadA));
+            long predioId = crearPredio(municipalidadA, "M-0007");
+            long programaId = crearPrograma(municipalidadA, "PM-0007");
+
+            transaccion.execute(
+                    estado ->
+                            repositorio.insertar(
+                                    List.of(fila(programaId, predioId, null, "M-0007")),
+                                    OBSERVACION,
+                                    REGISTRO));
+
+            Pagina<MuestraDelPrograma> leidas =
+                    transaccion.execute(
+                            estado -> repositorio.delPrograma(programaId, null, PRIMERA));
+
+            assertThat(leidas.contenido()).hasSize(1);
+            assertThat(leidas.contenido().get(0).contribuyenteId())
+                    .as(
+                            "con getLong el NULL vuelve como 0, un titular que no existe en ningun"
+                                    + " padron e indistinguible de uno que si (#188 con getInt)")
+                    .isNull();
+            assertThat(leidas.contenido().get(0).sinTitular()).isTrue();
+        }
+
+        @Test
+        @DisplayName("y el NOT NULL que V60 le puso ya no la para: se mide por SQL directo")
+        void laBaseYaNoRechazaElNulo() throws SQLException {
+            long predioId = crearPredio(municipalidadA, "M-0008");
+            long programaId = crearPrograma(municipalidadA, "PM-0008");
+
+            // Por SQL directo y no por el caso de uso: lo que se mide aqui es la guarda de la
+            // BASE, aparte de la de Java. Devolviendo el NOT NULL en V73 esto vuelve a dar 23502
+            // y ninguna otra prueba del archivo se entera (la leccion de #188 y #435).
+            try (Connection app = base.conexion(BaseDeDatosDePrueba.APP)) {
+                ContextoDeTenant.fijar(app, municipalidadA);
+                try (PreparedStatement sentencia =
+                        app.prepareStatement(sqlDeInsercionCruda(programaId, predioId, null))) {
+                    assertThat(sentencia.executeUpdate()).isEqualTo(1);
+                }
+                app.commit();
+            }
+        }
+
+        @Test
+        @DisplayName("pero un contribuyente que no existe se sigue rechazando: la foranea sirve")
+        void laForaneaSigueSirviendo() throws SQLException {
+            long predioId = crearPredio(municipalidadA, "M-0009");
+            long programaId = crearPrograma(municipalidadA, "PM-0009");
+
+            // MATCH SIMPLE —el de PostgreSQL por omision— se da por satisfecho en cuanto UNA
+            // columna de la foranea es nula, asi que el nulo pasa. Lo que no pasa es un
+            // identificador inventado, y eso hay que medirlo: es lo unico que separa «no hay
+            // titular» de «hay uno y es de otra municipalidad».
+            try (Connection app = base.conexion(BaseDeDatosDePrueba.APP)) {
+                ContextoDeTenant.fijar(app, municipalidadA);
+                assertThatThrownBy(
+                                () ->
+                                        app.prepareStatement(
+                                                        sqlDeInsercionCruda(
+                                                                programaId, predioId, 999999L))
+                                                .executeUpdate())
+                        .hasMessageContaining("programa_muestra_contribuyente_fk");
+            }
+        }
+    }
+
+    @Nested
     @DisplayName("La exclusion de #481")
     class Exclusion {
 
@@ -311,7 +384,10 @@ class MuestraDelProgramaRepositoryJdbcTest {
     // ------------------------------------------------------------------
 
     private static MuestraDelPrograma fila(
-            long programaId, long predioId, long titular, String sufijo) {
+            long programaId,
+            long predioId,
+            @org.jspecify.annotations.Nullable Long titular,
+            String sufijo) {
         return new MuestraDelPrograma(
                 null,
                 programaId,
@@ -323,6 +399,24 @@ class MuestraDelProgramaRepositoryJdbcTest {
                 AreaM2.de("120.00"),
                 "01",
                 SORTEO);
+    }
+
+    /**
+     * El {@code INSERT} escrito a mano, para medir lo que la BASE acepta al margen de lo que Java
+     * comprueba. {@code contribuyente} nulo se escribe como {@code NULL} literal.
+     */
+    private static String sqlDeInsercionCruda(
+            long programaId, long predioId, @org.jspecify.annotations.Nullable Long contribuyente) {
+        return "INSERT INTO programa_muestra (municipalidad_id, programa_id, predio_id,"
+                + " cod_ref_catastral, contribuyente_id, condicion, fecha_sorteo, observacion,"
+                + " usuario_registro, fecha_registro)"
+                + " SELECT municipalidad_id, "
+                + programaId
+                + ", id, codigo_ref_catastral, "
+                + (contribuyente == null ? "NULL" : contribuyente)
+                + ", 'OMISO', DATE '2026-03-15', 'siembra cruda', 'siembra', now()"
+                + " FROM predio WHERE id = "
+                + predioId;
     }
 
     private static long crearMunicipalidad(String ubigeo, String nombre) throws SQLException {

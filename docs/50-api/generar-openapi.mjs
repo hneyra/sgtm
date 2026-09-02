@@ -2475,7 +2475,11 @@ const OPERACIONES_ADICIONALES = {
         ' seleccionados» de la pantalla y también de donde el acta de inspección resuelve sus tres' +
         ' identificadores —programa, contribuyente y predio—, que su catálogo dibuja de solo' +
         ' lectura. La columna «Estado» se DERIVA de si el predio ya tiene acta en el programa: no' +
-        ' es una columna de la fila, porque guardarla dejaría dos verdades sobre lo mismo.',
+        ' es una columna de la fila, porque guardarla dejaría dos verdades sobre lo mismo. Los' +
+        ' tres campos del titular —contribuyenteId, codContribuyente y titular— salen NULOS en el' +
+        ' predio sin titularidad vigente: es el predio que nadie reclama, el candidato de primer' +
+        ' orden, y desde #586 la muestra lo admite en vez de apartarlo. Quien lo visite averigua' +
+        ' quién lo ocupa y nombra al contribuyente al levantar el acta.',
     },
     {
       operationId: 'fisc_programa_generar_muestra',
@@ -2495,7 +2499,12 @@ const OPERACIONES_ADICIONALES = {
         ' un predio que otro programa abierto ya se llevó ni uno ya fiscalizado en el ejercicio,' +
         ' así que la muestra depende del orden: el primer programa que se genere se lleva los' +
         ' predios. Responde 409 si el programa ya la sorteó — una muestra es un acto y no se' +
-        ' regenera, porque hay actas levantadas sobre ella.',
+        ' regenera, porque hay actas levantadas sobre ella. La respuesta dice sobre qué padrón se' +
+        ' sorteó y no sólo cuántos entraron: detectados, predios, sinTitular —cuántos de los' +
+        ' sorteados no tienen titular vigente— y los excluidos POR MOTIVO, de modo que detectados' +
+        ' = predios + excluidosPorOtroPrograma + excluidosPorActaDelEjercicio. Un número suelto no' +
+        ' distinguiría «otro programa se lo llevó» de «ya se fiscalizó», que se arreglan de' +
+        ' maneras distintas (#586).',
     },
   ],
   // «Resultados y determinaciones» declara «GET /fiscalizacion/resultados» como
