@@ -6,14 +6,17 @@ import {
   listarOmisos,
   listarProgramas,
   listarMuestra,
+  listarActas,
   listarResultados,
   listarHistorico,
   leerEstadoDeCuenta,
   leerResolucion,
   descargarResolucion,
   type OrdenDeOmisos,
+  type OrdenDeActas,
   type ProgramaDeFiscalizacion,
   type FilaDeMuestra,
+  type ActaDeFiscalizacion,
   type ResolucionDeDeterminacion,
 } from '../../api/fiscalizacion';
 import { useRecurso, useRebote } from '../../api/useRecurso';
@@ -776,7 +779,10 @@ export default function Fiscalizacion({ dest, onDest }: PantallaProps) {
   const programas = useRecurso(
     (senal) => listarProgramas({ nDePrograma: buscaPrograma || undefined }, { pagina: 0, tamano: TAMANO_DE_PAGINA }, senal),
     [buscaPrograma],
-    dest === 'programas' || dest === 'panel',
+    /* Tambien en `actas`, y no para dibujarlos: son el desplegable del unico
+       filtro que ese listado tiene, y de paso lo que traduce el `programaId`
+       interno de cada acta al codigo que se lee en el papel. */
+    dest === 'programas' || dest === 'panel' || dest === 'actas',
   );
   const listaDeProgramas: ProgramaDeFiscalizacion[] = programas.datos?.contenido ?? [];
 
@@ -792,6 +798,45 @@ export default function Fiscalizacion({ dest, onDest }: PantallaProps) {
     (senal) => listarMuestra(programaActivo?.id ?? 0, { pagina: paginaMuestra, tamano: TAMANO_DE_PAGINA }, senal),
     [programaActivo?.id, paginaMuestra],
     (dest === 'programas' || dest === 'panel') && programaActivo !== null,
+  );
+
+  /* ── Las actas levantadas, contra `GET /fiscalizacion/actas` (#599) ── */
+  /**
+   * El filtro del listado: el programa, por su ID interno y vacio para todas.
+   *
+   * No es `programaActivo`, que es el de la derecha del panel y nace en el
+   * primero de la lista: aqui «ninguno elegido» significa **todas las actas de
+   * la municipalidad**, que es la respuesta util cuando lo que se busca es un
+   * acta y no se recuerda de que programa salio.
+   */
+  const [programaActas, setProgramaActas] = useState('');
+  const [paginaActas, setPaginaActas] = useState(0);
+  /** Igual que en la deteccion: nace `null`, y `null` no es «por id, ascendente». */
+  const [ordenActas, setOrdenActas] = useState<{ campo: OrdenDeActas; sentido: 'ASCENDENTE' | 'DESCENDENTE' } | null>(null);
+  const alternarOrdenActas = (campo: OrdenDeActas) =>
+    setOrdenActas((s) =>
+      s !== null && s.campo === campo
+        ? { campo, sentido: s.sentido === 'ASCENDENTE' ? 'DESCENDENTE' : 'ASCENDENTE' }
+        : { campo, sentido: 'ASCENDENTE' },
+    );
+  useEffect(() => setPaginaActas(0), [programaActas, ordenActas]);
+
+  const actas = useRecurso(
+    (senal) =>
+      listarActas(
+        { programa: programaActas || undefined },
+        {
+          pagina: paginaActas,
+          tamano: TAMANO_DE_PAGINA,
+          /* Los dos salen del MISMO estado y viajan juntos, por lo mismo que en
+             la deteccion: `direccion` sin `ordenarPor` no ordena nada. */
+          ordenarPor: ordenActas?.campo,
+          direccion: ordenActas?.sentido,
+        },
+        senal,
+      ),
+    [programaActas, paginaActas, ordenActas],
+    dest === 'actas',
   );
 
   /* ── Resultados, contra `GET /fiscalizacion/resultados` (#49) ── */
@@ -816,6 +861,31 @@ export default function Fiscalizacion({ dest, onDest }: PantallaProps) {
       listarResultados({ programa: String(programaActivo?.id ?? 0), estado: 'NOTIFICADA' }, { pagina: 0, tamano: 1 }, senal),
     [programaActivo?.id],
     dest === 'panel' && programaActivo !== null,
+  );
+  /**
+   * «Inspeccionados» del embudo, que hasta #599 no tenia de donde salir.
+   *
+   * Es el `totalElementos` del listado de actas acotado al programa, y **no una
+   * suma**: `MuestraResource.visitado` viaja fila a fila, asi que contarlo aqui
+   * daria las visitadas de la pagina que se trajo y no las del programa
+   * (RNF-083). Por eso se pide con `tamano: 1` —de esta lectura solo se lee el
+   * total del sobre, igual que en las dos de resultados de arriba—.
+   */
+  const inspeccionadas = useRecurso(
+    (senal) => listarActas({ programa: String(programaActivo?.id ?? 0) }, { pagina: 0, tamano: 1 }, senal),
+    [programaActivo?.id],
+    dest === 'panel' && programaActivo !== null,
+  );
+
+  /**
+   * Cuantas actas hay levantadas en la municipalidad, para la franja de
+   * resultados. Sin filtro: esa franja no acota por programa, igual que la
+   * grilla de liquidaciones que tiene debajo.
+   */
+  const actasLevantadas = useRecurso(
+    (senal) => listarActas({}, { pagina: 0, tamano: 1 }, senal),
+    [],
+    dest === 'resultados' && resTab === 0,
   );
 
   /* ── El estado de cuenta de un contribuyente (RF-056) ────────── */
@@ -1010,8 +1080,17 @@ export default function Fiscalizacion({ dest, onDest }: PantallaProps) {
               codigo: String(DEFECTOS.predio),
               titular: 'MEDINA MEDINA, RUFINA (SUC.)',
               ubic: 'CALLE SANTA ROSA 116 · programa PF-2026-014 · riesgo alto',
-              estado: sucio ? 'Borrador sin guardar' : 'Borrador guardado 10:52',
-              estadoColor: sucio ? 'var(--warn-fg)' : 'var(--ok-fg)',
+              /* Decia «Borrador guardado 10:52» EN VERDE, que es un acuse de
+                 exito de algo que no ha pasado nunca: nada de esta pantalla se
+                 guarda en ningun sitio —el propio boton «Guardar borrador»
+                 esta apagado dos secciones mas abajo diciendo exactamente
+                 eso—, y la hora salia de la captura del artboard. Con el aviso
+                 de #599 al lado la contradiccion queda a la vista, asi que la
+                 insignia pasa a decir lo que hay: hay algo escrito y no esta
+                 guardado, o no hay nada escrito y el acta no esta registrada.
+                 Ni verde, ni hora. */
+              estado: sucio ? 'Borrador sin guardar' : 'Acta sin registrar',
+              estadoColor: sucio ? 'var(--warn-fg)' : 'var(--ink-3)',
             }
           : undefined
       }
@@ -1077,7 +1156,12 @@ export default function Fiscalizacion({ dest, onDest }: PantallaProps) {
                 <Icono d={ICO.flechaDer} tam={14} grosor={1.8} style={FLECHA} />
               </button>
 
-              {etapasDelEmbudo(muestra.datos?.totalElementos ?? null, liquidadas.datos?.totalElementos ?? null, notificadas.datos?.totalElementos ?? null).map(
+              {etapasDelEmbudo(
+                muestra.datos?.totalElementos ?? null,
+                inspeccionadas.datos?.totalElementos ?? null,
+                liquidadas.datos?.totalElementos ?? null,
+                notificadas.datos?.totalElementos ?? null,
+              ).map(
                 (e, i) => (
                   <button
                     key={e.etapa}
@@ -1138,11 +1222,15 @@ export default function Fiscalizacion({ dest, onDest }: PantallaProps) {
               <div style={{ padding: '11px 16px' }}>
                 <Aviso tono="warn" titulo="El embudo se lee a trozos, y hay que decir cuáles">
                   {/* #505: «el embudo pide nueve cifras y el contrato publica
-                      dos». Aqui se leen tres —el tamaño de la muestra y los dos
-                      totales de resultados— y las demas se dicen «—». */}
-                  «Inspeccionados» no lo cuenta ninguna operación: la muestra publica <code>visitado</code> fila a fila y nadie publica su
-                  recuento. «Detectados» tampoco se trae: sería repetir una consulta que en el padrón real tarda 8,5 s (#561). Lo que sí se
-                  lee es el tamaño de la muestra y los dos totales de resultados, cada uno de su propia consulta. Issues #505 y #546.
+                      dos». Con #599 son cuatro las que se leen —la muestra, las
+                      actas y los dos totales de resultados—, y las cuatro
+                      etapas del embudo quedan cubiertas. Lo que sigue fuera es
+                      «Detectados», que no es una etapa sino la cabecera. */}
+                  Las cuatro etapas son cuatro consultas distintas, cada una leída del total de su sobre y ninguna compuesta aquí.
+                  «Inspeccionados» cuenta <strong>actas</strong> del programa, que desde <code>V76</code> se pueden listar (#599): no es lo
+                  mismo que «predios visitados» —la muestra publica <code>visitado</code> fila a fila y sigue sin recuento—, y un predio
+                  revisitado tiene dos actas, así que la barra puede pasar del 100 %. «Detectados» no se trae: sería repetir una consulta
+                  que en el padrón real tarda 8,5 s (#561). Issues #505, #546 y #599.
                 </Aviso>
               </div>
             </section>
@@ -1729,6 +1817,135 @@ export default function Fiscalizacion({ dest, onDest }: PantallaProps) {
         {/* ══════════ ACTA DE INSPECCIÓN ══════════ */}
         {esActa && (
           <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
+            {/* ── Las actas ya levantadas (#599) ──
+                Hasta V76 un acta se registraba y no se podía volver a leer: el
+                único sitio donde asomaba era `MuestraResource.visitado`, que
+                dice SI un predio de la muestra tiene acta y nada más. Va
+                delante del formulario porque es lo que hay de verdad; el
+                formulario de abajo sigue sin poder mandarse, y eso lo dice él.
+
+                No se dibuja en «Levantar acta» —el destino `acta` del
+                lanzador—: allí lo que se pide es un acta nueva, y una lista de
+                las anteriores no es lo que se ha ido a buscar. */}
+            {dest === 'actas' && (
+              <section style={TARJETA}>
+                <div style={{ ...CABECERA, flexWrap: 'wrap' }}>
+                  <h2 style={H2}>Actas levantadas</h2>
+                  {/* El ÚNICO filtro que la operación tiene, y por eso es el
+                      único que se dibuja: `?estado=`, `?hallazgo=`,
+                      `?contribuyente=` y `?predio=` contestan los cuatro 422
+                      «Se admiten: direccion, ordenarPor, pagina, programa,
+                      tamano» (medido). Un filtro que se teclea y no acota es
+                      peor que no tenerlo (#322, #398, #431). */}
+                  <label style={{ display: 'flex', alignItems: 'center', gap: 7, fontSize: 12, color: 'var(--ink-3)' }}>
+                    Programa
+                    <select
+                      value={programaActas}
+                      onChange={(e) => setProgramaActas(e.target.value)}
+                      style={{ border: '1px solid var(--line-2)', borderRadius: 6, padding: '6px 9px', background: 'var(--bg-card)', fontSize: 12.5 }}
+                    >
+                      {/* «Todas» manda el filtro VACÍO, que es no mandarlo: el
+                          valor viaja como el id interno del programa, y una
+                          palabra ahí sería un 422 —`?programa=PF-2026-014` da
+                          «El programa se identifica por su numero interno»—. */}
+                      <option value="">Todos</option>
+                      {listaDeProgramas.map((prog) => (
+                        <option key={prog.id} value={String(prog.id)}>
+                          {prog.codigo}
+                        </option>
+                      ))}
+                    </select>
+                  </label>
+                  <span style={META}>
+                    {actas.datos === null ? SIN_DATO : `${actas.datos.contenido.length} de ${actas.datos.totalElementos}`}
+                  </span>
+                </div>
+
+                {actas.error !== null && (
+                  <div style={{ padding: '12px 16px' }}>
+                    {/* El acceso que se nombra es `fisc_predial`, que es el que
+                        `ActasController` exige primero; la lectura la comparte
+                        con `fisc_vehicular` —`oTambien`— para que un perfil de
+                        fiscalización vehicular no acabe registrando actas que
+                        no puede volver a ver. */}
+                    <FalloDeLectura error={actas.error} que="las actas de inspección" acceso="fisc_predial" alReintentar={actas.reintentar} />
+                  </div>
+                )}
+
+                <div style={{ overflowX: 'auto' }}>
+                  <table style={{ width: '100%', borderCollapse: 'collapse', minWidth: 1180 }}>
+                    <thead>
+                      <tr>
+                        <Cabeceras cols={COLUMNAS_DE_ACTAS} orden={{ activo: ordenActas, alternar: alternarOrdenActas }} />
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {(actas.datos?.contenido ?? []).map((a) => (
+                        <tr key={a.id} className="hov-elev" style={{ borderTop: '1px solid var(--line)' }}>
+                          <td style={TDN}>{a.id}</td>
+                          <td style={TD1}>{a.fechaVisita}</td>
+                          <td style={TD}>{codigoDelPrograma(listaDeProgramas, a.programaId)}</td>
+                          <td style={TD}>{unidadDelActa(a)}</td>
+                          <td style={TD}>{a.fiscalizador}</td>
+                          <td style={{ padding: '11px 14px' }}>
+                            {/* La columna admite nulos y el nulo NO es
+                                «conforme»: `RegistrarActaFiscalizacion` rechaza
+                                desde #481 el acta sin hallazgo, pero no se puede
+                                afirmar que no haya históricas sin él, así que la
+                                celda dice que no lo trae. */}
+                            {a.hallazgo === null ? (
+                              SIN_DATO
+                            ) : (
+                              <Insignia tono={tonoDelHallazgo(a.hallazgo)}>{etiquetaDelHallazgo(a.hallazgo)}</Insignia>
+                            )}
+                          </td>
+                          <td style={TDN}>{areaEnMetros(a.areaHallada)}</td>
+                          {/* Lo que #599 construyó. Nulo es «no se anotó», que
+                              NO es «coincide con lo declarado»: por eso «—» y no
+                              el uso de la ficha, que sería afirmar que la visita
+                              lo comprobó. En un acta vehicular es nulo siempre y
+                              por construcción: un vehículo no tiene uso
+                              declarado contra el que contrastar. */}
+                          <td style={TD}>{a.usoHallado ?? SIN_DATO}</td>
+                          <td style={{ ...TD, whiteSpace: 'normal', minWidth: 200 }}>{a.detalle ?? SIN_DATO}</td>
+                          <td style={TDN}>{a.version}</td>
+                          <td style={{ padding: '11px 14px' }}>
+                            <Insignia tono={tonoDelEstadoDelActa(a.estado)}>{etiquetaDelEstadoDelActa(a.estado)}</Insignia>
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+
+                {actas.cargando ? (
+                  <p style={{ ...PIE, borderTop: '1px solid var(--line)' }}>Consultando las actas…</p>
+                ) : actas.error === null && (actas.datos?.contenido.length ?? 0) === 0 ? (
+                  <div style={{ padding: '11px 16px', borderTop: '1px solid var(--line)' }}>
+                    <Aviso tono="neutro" titulo="Ninguna acta">
+                      {programaActas === ''
+                        ? 'Todavía no se ha levantado ninguna acta en esta municipalidad.'
+                        : 'Ese programa no tiene ninguna acta levantada.'}{' '}
+                      Un acta se registra con <code>POST /fiscalizacion/predial/actas</code> o <code>POST /fiscalizacion/vehicular</code>, y
+                      el formulario de abajo todavía no puede mandarlas.
+                    </Aviso>
+                  </div>
+                ) : null}
+
+                {actas.datos !== null && (
+                  <Paginador pagina={actas.datos.pagina} totalPaginas={actas.datos.totalPaginas} hayMas={actas.datos.hayMas} ir={setPaginaActas} />
+                )}
+
+                <p style={{ ...PIE, borderTop: '1px solid var(--line)' }}>
+                  «Nº interno», «Programa» y «Unidad» son identificadores de fila, no el número del acta ni el código predial:{' '}
+                  <code>ActaFiscalizacionResource</code> no publica ninguno de los tres —el código del programa se resuelve con la lista de
+                  arriba, y si no está en ella se queda el número—. «Uso hallado» en «{SIN_DATO}» significa que la visita no lo anotó, no
+                  que coincida con lo declarado. Y filtrar por estado, contribuyente o predio no se puede: la operación admite el programa y
+                  nada más. Issue #599.
+                </p>
+              </section>
+            )}
+
             <div style={{ display: 'flex', alignItems: 'center', gap: 12, flexWrap: 'wrap' }}>
               <p style={{ margin: 0, flex: 1, minWidth: 220, fontFamily: 'var(--font-serif)', fontSize: 17, lineHeight: 1.6, color: 'var(--ink-2)', textWrap: 'pretty' }}>
                 El acta se levanta en el predio, con una tablet y a veces de pie. Cuatro pasos, uno por pantalla, y cada uno se guarda al
@@ -1929,6 +2146,26 @@ export default function Fiscalizacion({ dest, onDest }: PantallaProps) {
               </section>
             )}
 
+            {/* Lo que le falta al acta para poder mandarse, escrito y no sólo
+                en el `title` de un botón apagado: un botón deshabilitado no
+                recibe el foco, así que su `title` no lo lee un lector de
+                pantalla (RNF-082). Y las tres cifras están medidas, no
+                supuestas. */}
+            <Aviso tono="warn" titulo="Esta acta todavía no se puede mandar, y ya no es por el hallazgo">
+              <code>POST /fiscalizacion/predial/actas</code> admite <strong>diez</strong> campos desde <code>V76</code> —el décimo es{' '}
+              <code>usoHallado</code>, que es lo que #599 construyó— y esta pantalla dibuja veintitrés controles y siete filas de contraste.
+              De esos diez, <strong>tres son identificadores internos</strong> —<code>programaId</code>, <code>contribuyenteId</code> y{' '}
+              <code>predioId</code>— y el formulario dibuja en su lugar el código del programa, el nombre del contribuyente y el código
+              predial, que no son lo mismo y que además llegan de la maqueta.
+              <br />
+              <br />
+              El desplegable «Hallazgo principal» ofrece seis rótulos y <strong>los seis contestan 422</strong> «Hallazgo desconocido»,
+              medido uno a uno contra el backend: el enumerado publica <code>CONFORME</code>, <code>OMISO</code>,{' '}
+              <code>SUBVALUADOR</code>, <code>USO_DISTINTO</code> y <code>NO_UBICADO</code>, y ninguno coincide letra por letra con ninguno
+              de los seis. No se traduce ninguno —parecerse no es serlo (#427, #546)—, así que lo que se elija aquí no viajaría aunque
+              hubiera dónde mandarlo. Lo que <code>V76</code> desbloqueó es la lectura de arriba, no esta escritura.
+            </Aviso>
+
             <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>
               <PasoAtras
                 paso={pasoIdx}
@@ -1944,11 +2181,12 @@ export default function Fiscalizacion({ dest, onDest }: PantallaProps) {
                   ninguna parte, que es el acto deshonesto de esta revision en
                   su forma mas barata: un aviso de exito sin nada detras. Y aqui
                   no basta con implementarlo, porque el acta entera no se puede
-                  mandar todavia (#546): un borrador de algo que no tiene a
-                  donde ir es papel guardado que nadie va a recoger. */}
+                  mandar todavia: un borrador de algo que no tiene a donde ir es
+                  papel guardado que nadie va a recoger. El motivo entero esta
+                  en el aviso de arriba, que si lo lee un lector de pantalla. */}
               <button
                 disabled
-                title="El acta todavía no se puede enviar, así que no hay borrador que guardar: la operación de registro pide nueve campos y esta pantalla dibuja veintitrés (#546)."
+                title="El acta todavía no se puede enviar, así que no hay borrador que guardar: la operación de registro pide diez campos —tres de ellos identificadores internos— y esta pantalla dibuja veintitrés (#546, #599)."
                 style={{ border: '1px solid var(--line-2)', borderRadius: 6, padding: grande ? '13px 20px' : '10px 18px', background: 'var(--bg-card)', fontSize: 13, cursor: 'not-allowed', opacity: 0.5 }}
               >
                 Guardar borrador
@@ -2015,15 +2253,17 @@ export default function Fiscalizacion({ dest, onDest }: PantallaProps) {
               <>
                 <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit,minmax(160px,1fr))', gap: 0, background: 'var(--bg-card)', border: '1px solid var(--line)', borderRadius: 10, overflow: 'hidden' }}>
                   {/* De las cuatro cifras del artboard —96 actas cerradas, 61
-                      con diferencia, S/ 214,882.40 y 63.5 % de efectividad—
-                      solo UNA se puede leer: cuantas liquidaciones devuelve la
-                      consulta. Las actas no las cuenta ningun endpoint (#546),
-                      el importe es D-02a —`LiquidacionResource` no lleva ni un
-                      `Dinero` (#198)— y la efectividad es un cociente que nadie
-                      publica ni define. Las tres salen «—» con su motivo. */}
+                      con diferencia, S/ 214,882.40 y 63.5 % de efectividad— ya
+                      se pueden leer DOS: las liquidaciones que devuelve la
+                      consulta y, desde #599, las actas que devuelve la suya.
+                      Lo que sigue sin poder darse es el recorte «cerradas» —el
+                      listado de actas no acota por estado—, el importe (D-02a:
+                      `LiquidacionResource` no lleva ni un `Dinero`, #198) y la
+                      efectividad, que es un cociente que nadie publica ni
+                      define. Los tres salen «—» con su motivo. */}
                   {[
                     ['Liquidaciones', resultados.datos === null ? SIN_DATO : String(resultados.datos.totalElementos), 0],
-                    ['Actas cerradas', SIN_DATO, 0],
+                    ['Actas levantadas', actasLevantadas.datos === null ? SIN_DATO : String(actasLevantadas.datos.totalElementos), 0],
                     ['Deuda determinada', SIN_DATO, 0],
                     ['Efectividad', SIN_DATO, 1],
                   ].map((t) => (
@@ -2033,10 +2273,13 @@ export default function Fiscalizacion({ dest, onDest }: PantallaProps) {
                     </div>
                   ))}
                 </div>
-                <Aviso tono="warn" titulo="Tres de las cuatro cifras no se pueden dar">
-                  «Actas cerradas» no la cuenta ninguna operación: no hay lectura de actas (#546). «Deuda determinada» y «Efectividad»
-                  esperan a <strong>D-02a</strong>: la liquidación viaja sin un solo importe —insoluto omitido y multa llegan en blanco a
-                  propósito—, y un cero ahí se lee como «no debe nada» (#198).
+                <Aviso tono="warn" titulo="Dos de las cuatro cifras no se pueden dar, y una cambió de rótulo">
+                  El rótulo del artboard era «Actas cerradas» y lo que se puede contar son las <strong>levantadas</strong>: desde #599 hay
+                  listado de actas, pero su único filtro es el programa —<code>?estado=ABIERTA</code> contesta «Se admiten: direccion,
+                  ordenarPor, pagina, programa, tamano», medido—, así que el recorte por estado no se puede pedir y contar la página traída
+                  daría el número de la página. «Deuda determinada» y «Efectividad» esperan a <strong>D-02a</strong>: la liquidación viaja
+                  sin un solo importe —insoluto omitido y multa llegan en blanco a propósito—, y un cero ahí se lee como «no debe nada»
+                  (#198).
                 </Aviso>
               </>
             )}
@@ -2669,7 +2912,7 @@ export default function Fiscalizacion({ dest, onDest }: PantallaProps) {
             </button>
             <button
               disabled
-              title="El acta todavía no se puede enviar, así que no hay borrador que guardar (#546)."
+              title="El acta todavía no se puede enviar, así que no hay borrador que guardar (#546, #599)."
               style={{ border: 0, borderRadius: 6, padding: '10px 22px', background: 'var(--accent)', color: '#fff', fontSize: 13.5, fontWeight: 500, cursor: 'not-allowed', opacity: 0.5 }}
             >
               Guardar borrador
@@ -2902,6 +3145,138 @@ function tonoDelEstadoDeLiquidacion(valor: string): Tono {
 }
 
 /**
+ * Los CINCO valores de `Hallazgo`, letra por letra, y por que no son los de
+ * `CONDICIONES` aunque hoy se escriban igual.
+ *
+ * El backend lo dice de si mismo: son «los mismos nombres y no el mismo
+ * concepto». `Hallazgo` es lo que una PERSONA anota en el acta;
+ * `CondicionFiscalizada` es lo que el sistema DERIVA comparando lo declarado
+ * con lo hallado. Uno puede equivocarse y el otro no —un acta puede decir
+ * CONFORME sobre un predio cuya area hallada supera la declarada, y la
+ * liquidacion lo clasificara SUBVALUADOR igual—. Reusar aqui `CONDICIONES`
+ * ahorraria cinco lineas y ataria dos vocabularios distintos: renombrar el
+ * rotulo de una condicion cambiaria en silencio lo que dice un acta.
+ *
+ * `USO_DISTINTO` es el quinto, y llego con #599: hasta `V76` el acta guardaba
+ * el area y ninguna columna de uso, asi que ese valor habria sido un hallazgo
+ * que el acta no podia sustentar.
+ *
+ * **Ninguno de los seis rotulos del desplegable del manual es uno de estos.**
+ * Medido contra el `POST` del acta predial, los seis contestan 422 «Hallazgo
+ * desconocido»; ver `ActaDeFiscalizacion` en la fachada. Al leer se dibuja el
+ * valor del enumerado con su etiqueta, y uno que no conozcamos sale tal cual.
+ */
+const HALLAZGOS: { valor: string; etiqueta: string; tono: Tono }[] = [
+  { valor: 'CONFORME', etiqueta: 'Conforme', tono: 'ok' },
+  { valor: 'OMISO', etiqueta: 'Omiso', tono: 'bad' },
+  { valor: 'SUBVALUADOR', etiqueta: 'Subvaluador', tono: 'warn' },
+  { valor: 'USO_DISTINTO', etiqueta: 'Uso distinto', tono: 'warn' },
+  { valor: 'NO_UBICADO', etiqueta: 'No ubicado', tono: 'neutro' },
+];
+
+function etiquetaDelHallazgo(valor: string): string {
+  return HALLAZGOS.find((h) => h.valor === valor)?.etiqueta ?? valor;
+}
+
+function tonoDelHallazgo(valor: string): Tono {
+  return HALLAZGOS.find((h) => h.valor === valor)?.tono ?? 'neutro';
+}
+
+/**
+ * Los CINCO estados de `EstadoDeActa`. No son los de la liquidacion aunque
+ * cuatro nombres se repitan: un acta pasa a `RELIQUIDADA` y una liquidacion a
+ * `NOTIFICADA`, y ninguno de los dos enumerados tiene el valor del otro.
+ */
+const ESTADOS_DE_ACTA: { valor: string; etiqueta: string; tono: Tono }[] = [
+  { valor: 'ABIERTA', etiqueta: 'Abierta', tono: 'neutro' },
+  { valor: 'LIQUIDADA', etiqueta: 'Liquidada', tono: 'warn' },
+  { valor: 'RELIQUIDADA', etiqueta: 'Reliquidada', tono: 'warn' },
+  { valor: 'TRANSFERIDA', etiqueta: 'Transferida', tono: 'ok' },
+  { valor: 'ANULADA', etiqueta: 'Anulada', tono: 'bad' },
+];
+
+function etiquetaDelEstadoDelActa(valor: string): string {
+  return ESTADOS_DE_ACTA.find((e) => e.valor === valor)?.etiqueta ?? valor;
+}
+
+function tonoDelEstadoDelActa(valor: string): Tono {
+  return ESTADOS_DE_ACTA.find((e) => e.valor === valor)?.tono ?? 'neutro';
+}
+
+/**
+ * Las once columnas del listado de actas, y cuales de ellas se dejan ordenar.
+ *
+ * Las cinco con `orden` son exactamente las cinco que `OrdenDeActas` declara
+ * —las cinco que el backend admite, medidas—, y `columnasQueOfrecenTodo` no
+ * deja que sean menos: ampliar la lista blanca del backend sin darle cabecera a
+ * la columna que ensena ese dato **no compila**.
+ *
+ * <h2>«Nº interno» no es el numero del acta, y se dice</h2>
+ *
+ * El manual rotula esa caja «Nº de acta» y escribe `ACT-2026-00418`.
+ * `ActaFiscalizacionResource` no publica ningun numero de ese estilo: publica
+ * `id`, que es el identificador de la FILA. Se dibuja como lo que es —igual que
+ * la hoja de la resolucion hace con `predioId`— porque cambiarlo por un codigo
+ * que la respuesta no trae seria afirmar un dato que nadie leyo, y dejarlo sin
+ * columna quitaria el unico orden estable que la lista tiene.
+ *
+ * <h2>Lo que no tiene columna, y por que</h2>
+ *
+ * `contribuyenteId` y `fichaId` son identificadores internos que no llevan a
+ * ninguna parte desde aqui: el padron de Rentas busca por CODIGO municipal y
+ * esta respuesta no lo trae, asi que una columna «Contribuyente 1» no serviria
+ * para encontrar a nadie. `vehiculoId` no es una columna sino la otra mitad de
+ * «Unidad»: cual de las dos familias es el acta lo dice cual de `predioId` y
+ * `vehiculoId` viene con valor.
+ */
+const COLUMNAS_DE_ACTAS: readonly ColumnaDeTabla<OrdenDeActas>[] = columnasQueOfrecenTodo<OrdenDeActas>()([
+  { rotulo: 'Nº interno', numerica: 1, orden: 'id' },
+  { rotulo: 'Fecha de visita', numerica: 0, orden: 'fechaVisita' },
+  { rotulo: 'Programa', numerica: 0 },
+  { rotulo: 'Unidad', numerica: 0 },
+  { rotulo: 'Fiscalizador', numerica: 0 },
+  { rotulo: 'Hallazgo', numerica: 0, orden: 'hallazgo' },
+  /* Numerica y con la unidad en la cabecera, por lo mismo que en omisos y en la
+     muestra (#546): `AreaM2` ya no trae « m2» dentro. */
+  { rotulo: 'Área hallada m²', numerica: 1 },
+  { rotulo: 'Uso hallado', numerica: 0 },
+  { rotulo: 'Detalle', numerica: 0 },
+  { rotulo: 'Versión', numerica: 1, orden: 'version' },
+  { rotulo: 'Estado', numerica: 0, orden: 'estado' },
+]);
+
+
+/**
+ * El codigo del programa del que salio el acta, si esta en la lista traida.
+ *
+ * `ActaFiscalizacionResource` publica `programaId`, que es el identificador de
+ * la fila; el codigo que se lee en el papel —`PF-593-01`— lo publica
+ * `ProgramaResource`, y esa lista la trae la misma pantalla para el desplegable
+ * del filtro. Se cruzan por id exacto, asi que no hay forma de escribir el
+ * codigo equivocado; lo que si puede pasar es que el programa no este en la
+ * pagina traida, y entonces se queda el numero dicho como lo que es. Inventarle
+ * un codigo, o dejar la celda en blanco, seria peor que enseñar el numero.
+ */
+function codigoDelPrograma(programas: ProgramaDeFiscalizacion[], id: number): string {
+  return programas.find((p) => p.id === id)?.codigo ?? 'Programa ' + String(id);
+}
+
+/**
+ * Cual es la unidad fiscalizada del acta, dicha como lo que el recurso trae.
+ *
+ * Son identificadores de FILA —no el codigo de referencia catastral ni la
+ * placa—, asi que se rotulan «Predio 2» y «Vehículo 7» y no se disfrazan de un
+ * codigo que esta respuesta no publica. Las dos nulas a la vez no deberian
+ * darse —`acta_fiscalizacion` exige una u otra—, y si se dieran la celda lo
+ * dice en vez de quedarse en blanco: un blanco se lee como «se cargo y no hay».
+ */
+function unidadDelActa(acta: ActaDeFiscalizacion): string {
+  if (acta.predioId !== null) return 'Predio ' + String(acta.predioId);
+  if (acta.vehiculoId !== null) return 'Vehículo ' + String(acta.vehiculoId);
+  return SIN_DATO + ' sin unidad';
+}
+
+/**
  * Las cuatro etapas del embudo, con la cifra que cada una PUEDE leer.
  *
  * El artboard traia 96 / 84 / 61 / 38 sobre una base de 96, y ninguna de las
@@ -2915,6 +3290,7 @@ function tonoDelEstadoDeLiquidacion(valor: string): Tono {
  */
 function etapasDelEmbudo(
   muestra: number | null,
+  inspeccionadas: number | null,
   liquidadas: number | null,
   notificadas: number | null,
 ): { etapa: string; detalle: string; valor: number | null; parte: number | null; dest: string }[] {
@@ -2923,11 +3299,18 @@ function etapasDelEmbudo(
   return [
     { etapa: 'Programados', detalle: 'Predios sorteados en la muestra', valor: muestra, parte: proporcion(muestra), dest: 'programas' },
     {
+      /* La que faltaba, y desde #599 sale de una lectura: el total del sobre de
+         `GET /fiscalizacion/actas?programa=‹id›`. Sigue sin haber recuento de
+         «visitados» —`visitado` viaja fila a fila en la muestra—, y esto no es
+         lo mismo aunque hoy se parezca: cuenta ACTAS, y un predio revisitado
+         tiene dos, asi que puede pasar de los programados. Por eso la barra
+         puede llegar a mas del 100 %, y es lo que hay que enseñar en vez de
+         recortarla. */
       etapa: 'Inspeccionados',
-      detalle: 'Nadie publica su recuento: «visitado» viaja fila a fila',
-      valor: null,
-      parte: null,
-      dest: 'programas',
+      detalle: 'Actas levantadas en este programa',
+      valor: inspeccionadas,
+      parte: proporcion(inspeccionadas),
+      dest: 'actas',
     },
     { etapa: 'Con liquidación', detalle: 'Actas del programa que llegaron a liquidarse', valor: liquidadas, parte: proporcion(liquidadas), dest: 'resultados' },
     { etapa: 'Notificadas', detalle: 'Las mismas, con estado NOTIFICADA', valor: notificadas, parte: proporcion(notificadas), dest: 'resultados' },

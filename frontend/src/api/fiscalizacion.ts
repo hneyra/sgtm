@@ -277,6 +277,171 @@ export function listarMuestra(
   });
 }
 
+/* ══════════ Las actas de inspeccion (#599) ══════════
+ *
+ * `GET /fiscalizacion/actas` no existia hasta #599, y no por descuido: #546
+ * midio que **lo que le faltaba al modulo no era una lectura sino una columna**.
+ * El acta se registraba —`POST /fiscalizacion/predial/actas`— y no se podia
+ * volver a leer; publicar el listado antes habria enseñado la misma foto
+ * incompleta, porque el cuerpo del `POST` tenia nueve campos contra los
+ * veintitres controles y las siete filas de contraste que la pantalla del
+ * manual dibuja. `V76` añadio `uso_hallado`, que es el sexto de esos siete
+ * contrastes y el segundo de los dos hallazgos que la fiscalizacion predial
+ * persigue —el otro es el area—, y con el la lectura deja de mentir por
+ * omision.
+ */
+
+/**
+ * `ActaFiscalizacionResource`: un acta de inspeccion levantada en campo.
+ *
+ * <h2>Lo que la fila NO trae, y por que la pantalla lo dice en vez de rellenarlo</h2>
+ *
+ * `programaId`, `contribuyenteId`, `predioId`, `vehiculoId` y `fichaId` son
+ * identificadores INTERNOS de fila: ni el codigo del programa (`PF-593-01`), ni
+ * el codigo municipal del contribuyente, ni el codigo de referencia catastral
+ * del predio. Se dibujan como lo que son —igual que `ResolucionDeDeterminacion`
+ * ya hace con `predioId`— y no se cambian por un codigo que esta respuesta no
+ * trae. El unico que se puede resolver sin inventar nada es el programa, y
+ * porque `GET /fiscalizacion/programas` lo publica al lado en la misma
+ * pantalla: si el programa no esta en la pagina traida, se queda el numero.
+ *
+ * `areaHallada` llega en METROS CUADRADOS y **sin la unidad dentro** (#546),
+ * igual que en omisos, en la muestra y en la liquidacion: `"260.00"`, no
+ * `"260.00 m2"`. La unidad la pone la cabecera de la columna.
+ *
+ * <h2>`usoHallado` nulo NO es «coincide con el declarado»</h2>
+ *
+ * Es «no se anoto», y el propio recurso lo dice de si mismo. Son dos cosas
+ * distintas y la celda no las puede mezclar: un acta conforme afirma que se
+ * miro y coincidia, y una sin uso anotado no afirma nada sobre el uso. Solo un
+ * acta PREDIAL puede llevarlo —un vehiculo no tiene uso declarado contra el que
+ * contrastar—, asi que en las vehiculares es nulo siempre y por construccion.
+ *
+ * <h2>`hallazgo` son CINCO valores, y ninguno es un rotulo del manual</h2>
+ *
+ * `Hallazgo` declara `CONFORME`, `OMISO`, `SUBVALUADOR`, `USO_DISTINTO` y
+ * `NO_UBICADO`. El desplegable «Hallazgo principal» del manual ofrece seis
+ * rotulos y **ninguno de los seis coincide letra por letra con ninguno de los
+ * cinco**, ni siquiera el que #599 hizo posible. Medido, mandando cada rotulo
+ * al `POST` del acta predial:
+ *
+ * ```
+ * SIN OBSERVACIONES          → 422 «Hallazgo desconocido: 'SIN OBSERVACIONES'»
+ * AMPLIACION NO DECLARADA    → 422 «Hallazgo desconocido: …»
+ * USO DISTINTO AL DECLARADO  → 422 «Hallazgo desconocido: …»
+ * OMISO A LA DECLARACION     → 422 «Hallazgo desconocido: …»
+ * PREDIO SUBVALUADO          → 422 «Hallazgo desconocido: …»
+ * PREDIO INEXISTENTE         → 422 «Hallazgo desconocido: …»
+ * ```
+ *
+ * Asi que **no se traduce ninguno** —el criterio de #427 al negarse a leer
+ * «ACTIVA» como `VIGENTE` y el de #546 con este mismo desplegable—: al leer se
+ * dibuja el valor del enumerado con su etiqueta, y al escribir no se puede
+ * escribir todavia por otros motivos, que estan en la pantalla.
+ *
+ * `estado` es `ABIERTA` | `LIQUIDADA` | `RELIQUIDADA` | `TRANSFERIDA` |
+ * `ANULADA` (`EstadoDeActa`).
+ */
+export type ActaDeFiscalizacion = {
+  id: number;
+  programaId: number;
+  version: number;
+  contribuyenteId: number;
+  predioId: number | null;
+  vehiculoId: number | null;
+  fichaId: number | null;
+  fechaVisita: string;
+  fiscalizador: string;
+  hallazgo: string | null;
+  areaHallada: string | null;
+  usoHallado: string | null;
+  detalle: string | null;
+  estado: string;
+};
+
+/**
+ * Lo unico que el listado de actas deja acotar: el programa, por su ID interno.
+ *
+ * Es UNO, y esta medido —el guardia de parametros de #539 contesta 422
+ * nombrando lo que admite—:
+ *
+ * ```
+ * ?estado=ABIERTA        → 422 «Se admiten: direccion, ordenarPor, pagina, programa, tamano»
+ * ?hallazgo=SUBVALUADOR  → 422 (el mismo)
+ * ?contribuyente=1       → 422 (el mismo)
+ * ?predio=1              → 422 (el mismo)
+ * ```
+ *
+ * De modo que «actas cerradas», «actas de esta persona» y «actas con este
+ * hallazgo» no son preguntas que se puedan hacer hoy, y la pantalla lo dice en
+ * vez de recomponerlas contando la pagina que se trajo: contar la pagina da el
+ * numero de la pagina, no el del padron (RNF-083).
+ *
+ * Y el valor va como **numero**, no como el codigo del programa:
+ *
+ * ```
+ * ?programa=1            → 200, las actas de ese programa
+ * ?programa=999          → 200 con la lista VACIA, no 404
+ * ?programa=PF-2026-014  → 422 «El programa se identifica por su numero interno»
+ * ```
+ *
+ * El 200 vacio del programa inexistente es lo contrario de lo que hace
+ * `listarMuestra`, que desde #546 contesta 404. No se disimula: aqui el filtro
+ * sale de una lista que la propia pantalla acaba de traer, asi que un id que no
+ * existe no es un caso que quien atiende pueda producir tecleando.
+ */
+export type FiltroDeActas = { programa?: string };
+
+/**
+ * Los CINCO campos por los que el listado de actas se deja ordenar, medidos.
+ *
+ * Se pregunta, no se deriva del recurso: `ordenarPor` viaja en el contrato como
+ * `{ type: string }` sin `enum` y la lista blanca vive en `OrdenSeguro`, que no
+ * cruza la frontera (#312, #546). Medido contra el backend de hoy:
+ *
+ * ```
+ * ordenarPor=id           → 200      ordenarPor=programaId      → 422
+ * ordenarPor=fechaVisita  → 200      ordenarPor=fiscalizador    → 422
+ * ordenarPor=version      → 200      ordenarPor=contribuyenteId → 422
+ * ordenarPor=hallazgo     → 200      ordenarPor=predioId        → 422
+ * ordenarPor=estado       → 200      ordenarPor=areaHallada     → 422
+ *                                    ordenarPor=usoHallado      → 422
+ *                                    ordenarPor=detalle         → 422
+ *                                    ordenarPor=fichaId         → 422
+ * ```
+ *
+ * El 422 es `ORDEN_NO_ADMITIDO` y nombra lo pedido. La forma `snake_case`
+ * —`fecha_visita`— tambien contesta 200 porque `OrdenSeguro` admite la columna
+ * cruda; **no se usa**: aqui se pide con el nombre que la fila publica, que es
+ * el unico que un lector de esta pantalla puede ver.
+ *
+ * Escribirlos como tipo y no como cadena suelta es lo que hace que una cabecera
+ * no pueda ofrecer un orden que el backend rechaza: `orden: 'fiscalizador'` en
+ * una columna **no compila**, en vez de contestar 422 en ventanilla y llevarse
+ * la tabla entera por delante.
+ */
+export type OrdenDeActas = 'id' | 'fechaVisita' | 'version' | 'hallazgo' | 'estado';
+
+/** La paginacion del listado de actas, con `ordenarPor` acotado a lo que admite. */
+export type PaginacionDeActas = Omit<Paginacion, 'ordenarPor'> & { ordenarPor?: OrdenDeActas };
+
+/**
+ * Las actas levantadas, prediales y vehiculares en una sola lista.
+ *
+ * Son una sola porque comparten tabla, ciclo de vida y recurso (V4): cual es
+ * cual lo dice cual de `predioId` y `vehiculoId` trae valor. Y el permiso lo
+ * comparten las dos pantallas que escriben actas —`fisc_predial` y
+ * `fisc_vehicular`—, para que un perfil de fiscalizacion vehicular no acabe
+ * registrando actas que no puede volver a ver.
+ */
+export function listarActas(
+  filtro: FiltroDeActas,
+  paginacion: PaginacionDeActas,
+  senal?: AbortSignal,
+): Promise<RespuestaPaginada<ActaDeFiscalizacion>> {
+  return solicitar('/fiscalizacion/actas', { parametros: { ...filtro, ...paginacion }, senal });
+}
+
 /**
  * `LiquidacionResource`. **Ninguna cifra de dinero**, y por eso ningun `Dinero`
  * en el DTO: base declarada, base hallada, insoluto omitido y multa son D-02a y
