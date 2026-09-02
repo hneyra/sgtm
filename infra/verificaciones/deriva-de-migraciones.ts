@@ -23,9 +23,10 @@ import { invariantesDe } from "./stacks";
  * 2026-08-29 sin moverse. El tercer numero no lo comparaba nadie.
  *
  * Y la deriva no se ve por ningun otro sitio, porque **el Job de migracion lleva la
- * version en el nombre** (`sufijoDeVersion()`, `componentes/Migracion.ts`): con la misma
- * version declarada, `pulumi up` no modifica ningun Job, no crea otro, y sale en verde
- * —«76 unchanged» en el ultimo `up` de prod—. Comprobado sin desplegar:
+ * version en el nombre** (`sufijoDeVersion()`, `componentes/Migracion.ts`). Una version
+ * NUEVA no modifica el Job que hay: **crea otro**. Y con la misma version declarada no
+ * hay ninguno que crear, asi que `pulumi up` sale en verde sin tocar nada —«76 unchanged»
+ * en el ultimo `up` de prod—. Comprobado sin desplegar:
  *
  *     yarn --silent manifiestos --ambiente stg | grep migracion
  *     # "name": "sgtm-stg-migracion-5fc02f3a4493"   <- el que ya existe, Complete
