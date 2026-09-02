@@ -7,7 +7,9 @@
 #      Ahí viven las invariantes de `config.ts`, la auditoría de los manifiestos y los
 #      criterios de aceptación de la fase B, así que quitar un valor obligatorio, subir
 #      el plazo de archivado del WAL o dejar una sonda con el `timeoutSeconds` por
-#      omisión se pone rojo aquí, en un PR de cualquiera.
+#      omisión se pone rojo aquí, en un PR de cualquiera. Desde #675 vive aquí también
+#      la **deriva de migraciones**: que la versión que cada ambiente declara traiga las
+#      migraciones que `origin/main` declara. Necesita `fetch-depth: 0`.
 #   1b. `motor` — levanta un PostgreSQL con **los guiones de inicialización que el
 #      manifiesto monta** y ejecuta contra él `verificarAislamiento` (issue #149). Es la
 #      única forma de afirmar que el aislamiento sigue en pie: leerlo del manifiesto no
@@ -49,7 +51,13 @@
 #      ADR-0011 §6: «prod, con aprobación manual explícita; nunca automático».
 #   5. `deteccion-de-deriva` — a diario, `pulumi preview --expect-no-changes` contra
 #      `prod`. Si el clúster se apartó del estado declarado —alguien corrió un
-#      `kubectl apply` a mano, la lección de `../iaac`—, el trabajo se pone rojo.
+#      `kubectl apply` a mano, la lección de `../iaac`—, el trabajo se pone rojo. Y
+#      desde #675, **también `verificar-el-ambiente.sh --ambiente prod`**: el `preview`
+#      compara el clúster con lo declarado y sale verde con la base varias migraciones
+#      por detrás, porque el Job de migración lleva la versión en el nombre y no hay
+#      diferencia que ver. La base sólo la mide ese guion, y hasta #675 corría
+#      únicamente dentro de `aplicar-prod`, un trabajo que llevaba desde el 2026-08-29
+#      sin ejecutarse.
 #
 # Los tres últimos necesitan **el túnel SSH al API de k3s** (INF-01 §1.4): el servidor
 # no se publica a internet, así que el proveedor de Kubernetes solo lo alcanza a través
@@ -74,7 +82,18 @@ on:
       # Los manifiestos MONTAN estos dos archivos en vez de copiarlos (issue #149), así
       # que un cambio ahí cambia lo que se despliega aunque `infra/` no se toque.
       - 'backend/sgtm-esquema/src/main/resources/db/roles/**'
+      # Las migraciones, desde #675. Faltaban, y es lo que dejaba crecer la deriva EN
+      # SILENCIO: una migracion nueva no tocaba ninguna de estas rutas, asi que este
+      # flujo **no corria** al integrarla —ni `verificar`, que es donde vive la guarda de
+      # `deriva-de-migraciones.test.ts`, ni `aplicar-stg`, que es quien despliega—. El
+      # 2026-09-02 el hueco medido eran trece migraciones (`V58`…`V71`): `stg` corria 48
+      # de las 61 que `main` declaraba, y ninguna corrida se habia puesto roja por ello.
+      - 'backend/sgtm-esquema/src/main/resources/db/migration/**'
       - 'despliegue/inicializacion-del-motor/**'
+      # `aplicar-stg` y `aplicar-prod` lo ejecutan antes de `pulumi up`: `crear-roles.sql`
+      # solo corre con el volumen vacio, asi que una extension anadida despues no llega
+      # sola y la migracion que la usa se cae (ADR-0021).
+      - 'despliegue/crear-extensiones.sh'
       - 'despliegue/identidad/realm-sgtm.json'
       # Lo demas que `Identidad.ts` monta o deriva: el realm del ciudadano, el guion de
       # identidades y las dos fuentes versionadas de personas. Faltaban, y es la leccion
@@ -111,6 +130,15 @@ jobs:
 
     steps:
       - uses: actions/checkout@v4
+        with:
+          # Historial completo, desde #675: `deriva-de-migraciones.test.ts` cuenta las
+          # migraciones que trae el `sha` que `applicationBootstrapVersion` declara y las
+          # que declara `origin/main`, y las dos se cuentan en el arbol de git de ESE
+          # commit —nunca en el de trabajo, que seria otra version—. Con el checkout
+          # superficial ninguno de los dos esta, y la prueba **no concluye** en vez de
+          # dar un numero plausible y equivocado: es la misma cautela que
+          # `verificar-el-ambiente.sh` escribio primero.
+          fetch-depth: 0
 
       - uses: actions/setup-node@v4
         with:
@@ -907,6 +935,36 @@ jobs:
         working-directory: infra
         run: ./secretos/bootstrap-secretos.sh --ambiente stg
 
+      # ANTES de `pulumi up`, y por el mismo motivo que el paso de los secretos: el Job
+      # de migracion que `up` va a crear corre DENTRO de este mismo paso, y `V61` empieza
+      # con `ADD COLUMN geometria geography(...)`. Sin la extension, el Job falla con
+      # «type "geography" does not exist» y no lo puede arreglar el migrador: `postgis`
+      # no es *trusted*, asi que crearla exige superusuario y `sgtm_owner` a proposito no
+      # lo es (ADR-0021).
+      #
+      # `crear-roles.sql` la crea bien, pero corre UNA sola vez, desde
+      # `/docker-entrypoint-initdb.d`, con el volumen vacio: en un clúster que ya existe
+      # no vuelve a ejecutarse nunca. Es el mismo hueco que #435 encontro con el `LOGIN`
+      # de `rol_carga_parametros`, y CI no lo ve porque CI siempre parte de un volumen
+      # vacio.
+      #
+      # **Y estaba costando el despliegue entero.** Desde el 2026-08-30, `aplicar-stg`
+      # salia rojo en «MAL extension postgis: NO esta», y como `aplicar-prod` tiene
+      # `needs: aplicar-stg`, produccion llevaba desde el 2026-08-29 sin desplegarse.
+      #
+      # El guion es idempotente y solo anade. La condicion es para el primer despliegue:
+      # sin motor todavia no hay a quien pedirselo, y ahi si lo hara `crear-roles.sql`.
+      - name: Las extensiones que crear-roles.sql declara, en un motor que ya existe (ADR-0021)
+        if: steps.credenciales.outputs.hay == 'si'
+        run: |
+          if kubectl -n sgtm-stg get deployment sgtm-stg-postgres >/dev/null 2>&1; then
+            despliegue/crear-extensiones.sh --ambiente stg
+          else
+            echo "Todavia no hay motor en sgtm-stg: el volumen nace vacio y las crea"
+            echo "crear-roles.sql desde /docker-entrypoint-initdb.d, que es el camino"
+            echo "que CI ejercita en cada PR."
+          fi
+
       - name: Configurar los secretos de infraestructura del stack (ADR-0011 §3)
         if: steps.credenciales.outputs.hay == 'si'
         working-directory: infra
@@ -1049,6 +1107,20 @@ jobs:
         working-directory: infra
         run: ./secretos/bootstrap-secretos.sh --ambiente prod
 
+      # El mismo paso que `aplicar-stg`, y por el mismo motivo (ADR-0021): el Job de
+      # migracion que `pulumi up` crea corre dentro de ese mismo paso, y `V61` no puede
+      # crear `postgis` por su cuenta —no es *trusted* y `sgtm_owner` no es superusuario—.
+      # `crear-roles.sql` solo corre con el volumen vacio, y el de `prod` es de antes de
+      # que la extension se declarara (2026-08-30), asi que aqui no llega sola.
+      - name: Las extensiones que crear-roles.sql declara, en un motor que ya existe (ADR-0021)
+        run: |
+          if kubectl -n sgtm-prod get deployment sgtm-prod-postgres >/dev/null 2>&1; then
+            despliegue/crear-extensiones.sh --ambiente prod
+          else
+            echo "Todavia no hay motor en sgtm-prod: el volumen nace vacio y las crea"
+            echo "crear-roles.sql desde /docker-entrypoint-initdb.d."
+          fi
+
       - name: Configurar los secretos de infraestructura del stack (ADR-0011 §3)
         working-directory: infra
         env:
@@ -1103,6 +1175,11 @@ jobs:
 
     steps:
       - uses: actions/checkout@v4
+        with:
+          # Historial completo: el paso «prod, comprobado contra si mismo» de abajo
+          # cuenta las migraciones que trae el `sha` declarado, y sin el commit en el clon
+          # el guion **no concluye** en vez de contar las del arbol de trabajo (#434).
+          fetch-depth: 0
 
       - uses: actions/setup-node@v4
         with:
@@ -1150,6 +1227,20 @@ jobs:
           ssh -o StrictHostKeyChecking=accept-new -o UserKnownHostsFile=~/.ssh/known_hosts \
               -i ~/.ssh/despliegue -f -N -L 6443:localhost:6443 "$VPS_USER@$VPS_HOST"
 
+      # `verificar-el-ambiente.sh` habla con el API por `kubectl` suelto, no por el
+      # proveedor de Pulumi: sin esto, `kubectl` no encuentra ningun kubeconfig y cae al
+      # `http://localhost:8080` heredado, que nadie escucha. Es el mismo
+      # `secrets.KUBECONFIG` que el paso de mas abajo le pasa a Pulumi.
+      - name: Escribir el kubeconfig para kubectl
+        if: steps.credenciales.outputs.hay == 'si'
+        env:
+          KUBECONFIG_VALUE: ${{ secrets.KUBECONFIG }}
+        run: |
+          install -m 700 -d ~/.kube
+          install -m 600 /dev/null ~/.kube/config-ci
+          echo "$KUBECONFIG_VALUE" > ~/.kube/config-ci
+          echo "KUBECONFIG=$HOME/.kube/config-ci" >> "$GITHUB_ENV"
+
       - name: Instalar el CLI de Pulumi
         if: steps.credenciales.outputs.hay == 'si'
         run: |
@@ -1192,3 +1283,33 @@ jobs:
         run: pulumi preview --stack prod --expect-no-changes --diff --non-interactive
         env:
           PULUMI_ACCESS_TOKEN: ${{ secrets.PULUMI_ACCESS_TOKEN }}
+
+      # **Prod, comprobado contra si mismo TODOS LOS DIAS, no solo cuando alguien
+      # despliega** (issue #675).
+      #
+      # `pulumi preview --expect-no-changes` de arriba compara el clúster con el estado
+      # DECLARADO, y por eso sale en verde con la base varias migraciones por detras: el
+      # Job de migracion lleva la version en el nombre, existe desde el ultimo despliegue
+      # y nadie lo ha tocado, asi que no hay ninguna diferencia que ver. Lo que mide la
+      # base es este guion, y hasta hoy solo corria dentro de `aplicar-prod` — un trabajo
+      # que **no se ejecuta desde el 2026-08-29**, porque tiene `needs: aplicar-stg` y
+      # `aplicar-stg` estaba rojo. Resultado medido: `verificar-el-ambiente.sh --ambiente
+      # prod` no se habia ejecutado NUNCA, porque su paso se anadio despues del ultimo
+      # `up` de produccion que salio en verde.
+      #
+      # Sin token: los dos ultimos peldanos de la escalera de identidad y la deuda con su
+      # fecha quedan sin comprobar, y el propio guion lo dice. Lo que si mide sin token es
+      # lo que este issue necesita: cuantas migraciones tiene la base frente a las que
+      # trae la version declarada.
+      #
+      # `!cancelled()` y no el `if` de siempre: este paso va DESPUES del `preview`, y un
+      # `preview` rojo —deriva de verdad— no puede llevarse por delante la unica medida
+      # diaria del esquema. Son dos comprobaciones distintas y cada una tiene que poder
+      # decir lo suyo.
+      - name: prod, comprobado contra si mismo (#434, #675)
+        if: ${{ !cancelled() && steps.credenciales.outputs.hay == 'si' }}
+        run: infra/verificaciones/ambiente/verificar-el-ambiente.sh --ambiente prod
+
+      - name: Qué quedó a medias, si algo falló
+        if: failure() && steps.credenciales.outputs.hay == 'si'
+        run: .github/diagnostico-del-namespace.sh sgtm-prod
