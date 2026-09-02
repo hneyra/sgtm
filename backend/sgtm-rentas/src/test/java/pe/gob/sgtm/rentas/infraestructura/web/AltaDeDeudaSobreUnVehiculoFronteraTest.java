@@ -461,11 +461,15 @@ class AltaDeDeudaSobreUnVehiculoFronteraTest {
                                 post("/api/v1/rentas/deuda/bajas")
                                         .contentType(MediaType.APPLICATION_JSON)
                                         .content(
-                                                cuerpoDelAlta(AJENO, vehiculo, "RES-2026-6359")
-                                                        .replace(
-                                                                "\"observacion\"",
-                                                                "\"deudaDeTitularAnterior\":true,"
-                                                                        + "\"observacion\"")))
+                                                conCausal(
+                                                        cuerpoDelAlta(
+                                                                        AJENO,
+                                                                        vehiculo,
+                                                                        "RES-2026-6359")
+                                                                .replace(
+                                                                        "\"observacion\"",
+                                                                        "\"deudaDeTitularAnterior\":true,"
+                                                                                + "\"observacion\""))))
                         .andReturn();
 
         assertThat(baja.getResponse().getStatus())
@@ -486,7 +490,10 @@ class AltaDeDeudaSobreUnVehiculoFronteraTest {
                 mvc.perform(
                                 post("/api/v1/rentas/deuda/bajas")
                                         .contentType(MediaType.APPLICATION_JSON)
-                                        .content(cuerpoDelAlta(AJENO, vehiculo, "RES-2026-6355")))
+                                        .content(
+                                                conCausal(
+                                                        cuerpoDelAlta(
+                                                                AJENO, vehiculo, "RES-2026-6355"))))
                         .andReturn();
 
         assertThat(resultado.getResponse().getStatus())
@@ -524,12 +531,16 @@ class AltaDeDeudaSobreUnVehiculoFronteraTest {
                                 post("/api/v1/rentas/deuda/bajas")
                                         .contentType(MediaType.APPLICATION_JSON)
                                         .content(
-                                                cuerpoDelAlta(AJENO, vehiculo, "RES-2026-6362")
-                                                        .replace(
-                                                                "\"observacion\"",
-                                                                "\"repartir\":true,"
-                                                                        + "\"deudaDeTitularAnterior\":true,"
-                                                                        + "\"observacion\"")))
+                                                conCausal(
+                                                        cuerpoDelAlta(
+                                                                        AJENO,
+                                                                        vehiculo,
+                                                                        "RES-2026-6362")
+                                                                .replace(
+                                                                        "\"observacion\"",
+                                                                        "\"repartir\":true,"
+                                                                                + "\"deudaDeTitularAnterior\":true,"
+                                                                                + "\"observacion\""))))
                         .andReturn();
 
         assertThat(baja.getResponse().getStatus())
@@ -595,11 +606,14 @@ class AltaDeDeudaSobreUnVehiculoFronteraTest {
                                 post("/api/v1/rentas/deuda/bajas")
                                         .contentType(MediaType.APPLICATION_JSON)
                                         .content(
-                                                cuerpoConUnidad(
-                                                        "\"vehiculoId\":" + COLGADO_VEHICULO + ",",
-                                                        AJENO,
-                                                        5,
-                                                        "RES-2026-6604")))
+                                                conCausal(
+                                                        cuerpoConUnidad(
+                                                                "\"vehiculoId\":"
+                                                                        + COLGADO_VEHICULO
+                                                                        + ",",
+                                                                AJENO,
+                                                                5,
+                                                                "RES-2026-6604"))))
                         .andReturn();
 
         assertThat(resultado.getResponse().getStatus())
@@ -621,11 +635,14 @@ class AltaDeDeudaSobreUnVehiculoFronteraTest {
                                 post("/api/v1/rentas/deuda/bajas")
                                         .contentType(MediaType.APPLICATION_JSON)
                                         .content(
-                                                cuerpoConUnidad(
-                                                        "\"predioId\":" + COLGADO_PREDIO + ",",
-                                                        AJENO,
-                                                        4,
-                                                        "RES-2026-6606")))
+                                                conCausal(
+                                                        cuerpoConUnidad(
+                                                                "\"predioId\":"
+                                                                        + COLGADO_PREDIO
+                                                                        + ",",
+                                                                AJENO,
+                                                                4,
+                                                                "RES-2026-6606"))))
                         .andReturn();
 
         assertThat(resultado.getResponse().getStatus())
@@ -641,7 +658,10 @@ class AltaDeDeudaSobreUnVehiculoFronteraTest {
                 mvc.perform(
                                 post("/api/v1/rentas/deuda/bajas")
                                         .contentType(MediaType.APPLICATION_JSON)
-                                        .content(cuerpoDelAlta(AJENO, vehiculo, "RES-2026-6607")))
+                                        .content(
+                                                conCausal(
+                                                        cuerpoDelAlta(
+                                                                AJENO, vehiculo, "RES-2026-6607"))))
                         .andReturn();
 
         assertThat(resultado.getResponse().getStatus())
@@ -993,5 +1013,17 @@ class AltaDeDeudaSobreUnVehiculoFronteraTest {
         public java.util.Optional<String> domicilioFiscalDe(long contribuyenteId, LocalDate fecha) {
             return java.util.Optional.empty();
         }
+    }
+
+    /**
+     * El mismo cuerpo, con la causal que toda baja declara desde #684.
+     *
+     * <p>La causal es el sustento juridico del acto y tiene campo propio: hasta entonces viajaba
+     * dentro del texto de la observacion y el libro no sabia por que se dio de baja. El alta no la
+     * lleva —el desplegable «Causal» es el de la baja—, y por eso se anade aqui y no en el cuerpo
+     * comun.
+     */
+    private static String conCausal(String cuerpo) {
+        return cuerpo.replace("\"observacion\"", "\"causal\":\"ERROR_MATERIAL\",\"observacion\"");
     }
 }

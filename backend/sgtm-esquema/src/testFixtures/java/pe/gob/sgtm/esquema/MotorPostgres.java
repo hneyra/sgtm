@@ -29,6 +29,49 @@ public final class MotorPostgres implements AutoCloseable {
      */
     private static final String IMAGEN_POR_OMISION = "postgis/postgis:16-3.4-alpine";
 
+    /**
+     * La codificacion que la base de prueba declara, sea cual sea la del anfitrion.
+     *
+     * <p>{@code CREATE DATABASE} a secas hereda la de {@code template1}, y esa la fija {@code
+     * initdb} con el <i>locale</i> del entorno: basta que quien creo el cluster no tuviera {@code
+     * LANG} puesto para que quede en {@code SQL_ASCII} sin que nada lo diga (#706, de once
+     * clusteres locales tres estaban asi).
+     *
+     * <p>Y entonces el sintoma no se parece a su causa: {@code ViaRepositoryJdbc} (#565) cierra el
+     * rango de prefijo con {@code chr(1114111)} —el ultimo punto de codigo de Unicode—, en {@code
+     * SQL_ASCII} ese caracter no existe, y lo que se ve son cinco pruebas de {@code
+     * BusquedaDelCatalogoVialTest} en rojo diciendo «requested character too large for encoding».
+     */
+    private static final String CODIFICACION = "UTF8";
+
+    /**
+     * La intercalacion y el tipo de caracter de la base de prueba.
+     *
+     * <p><b>Las dos mitades de esta cadena no valen lo mismo, y se midio cual es la que decide.</b>
+     *
+     * <p>La <i>intercalacion</i> —el orden— es orden de byte tanto en {@code C} como en {@code
+     * C.UTF-8}: {@code 'a' < 'B'} da falso en las dos. Y los indices de prefijo se declaran {@code
+     * text_pattern_ops} (V14, V66), que ordena por byte pase lo que pase, asi que las pruebas de
+     * plan (#313, #536, #561, #565) no dependen de esta eleccion.
+     *
+     * <p>Quien decide es el <b>tipo de caracter</b>. Con {@code LC_CTYPE 'C'} sobre una base UTF-8,
+     * {@code lower} y {@code upper} solo conocen el ASCII: medido, {@code lower('CAÑETE')} devuelve
+     * {@code 'caÑete'} y {@code upper('ñ')} devuelve {@code 'ñ'}. Eso rompe el filtro por uso de
+     * {@code FichaCatastralRepositoryJdbc}, que compara {@code upper(translate(f.uso, …))} contra
+     * lo que la pantalla manda ya en mayusculas —y que deja la {@code ñ} sin plegar a proposito,
+     * para que «AÑO» y «ANO» no sean la misma palabra—: un uso con {@code ñ} («DISEÑO», «CAMPIÑA»)
+     * deja de encontrarse y la respuesta son cero filas, que se lee como «no hay ninguna ficha
+     * asi».
+     *
+     * <p>Por eso se declara una que si conoce el UTF-8, y por eso <b>no hay repliegue a {@code
+     * C}</b> cuando falta: replegarse cambiaria un fallo ruidoso por ese silencio.
+     *
+     * <p>Y por eso lo sujeta {@code CodificacionDeLaBaseDePruebaTest} y no el banco de pruebas:
+     * medido, con {@code INTERCALACION = "C"} las <b>417</b> pruebas de catastro pasan en verde
+     * —las cuatro de plan de #565 incluidas—, asi que hoy nadie mas notaria el cambio.
+     */
+    private static final String INTERCALACION = "C.UTF-8";
+
     private final PostgreSQLContainer<?> contenedor;
     private final String url;
     private final String usuarioAdmin;
@@ -44,7 +87,30 @@ public final class MotorPostgres implements AutoCloseable {
         this.claveAdmin = clave;
     }
 
+    /**
+     * El motor, comprobado.
+     *
+     * <p>La comprobacion vale para los <b>dos</b> caminos y no solo para el externo: la imagen
+     * tambien se puede cambiar con {@code sgtm.pruebas.postgres.imagen}, y una que no fuera UTF-8
+     * traeria el mismo defecto por la otra puerta.
+     *
+     * <p>Si falla, el motor se cierra antes de relanzar: {@code BaseDeDatosDePrueba.provisionar}
+     * solo puede cerrar lo que ya tiene en la mano, y aqui todavia no lo tiene, asi que sin esto
+     * quedaria el contenedor levantado o la base creada.
+     */
+    @SuppressWarnings("checkstyle:IllegalCatch")
     public static MotorPostgres iniciar() {
+        MotorPostgres motor = resolver();
+        try {
+            motor.exigirCodificacionUtf8();
+            return motor;
+        } catch (RuntimeException e) {
+            motor.close();
+            throw e;
+        }
+    }
+
+    private static MotorPostgres resolver() {
         String urlExterna = ajuste("sgtm.pruebas.postgres.url");
         if (urlExterna != null && !urlExterna.isBlank()) {
             return conMotorExterno(
@@ -122,12 +188,7 @@ public final class MotorPostgres implements AutoCloseable {
      */
     private static MotorPostgres conMotorExterno(String urlBase, String usuario, String clave) {
         String nombre = "sgtm_prueba_" + UUID.randomUUID().toString().substring(0, 8);
-        ejecutar(
-                urlBase,
-                "CREATE DATABASE " + nombre,
-                "No se pudo crear la base de prueba " + nombre,
-                usuario,
-                clave);
+        crearBase(urlBase, nombre, usuario, clave);
         MotorPostgres motor =
                 new MotorPostgres(null, reemplazarBaseDeDatos(urlBase, nombre), usuario, clave);
         motor.urlDeMantenimiento = urlBase;
@@ -145,6 +206,124 @@ public final class MotorPostgres implements AutoCloseable {
             throw new IllegalArgumentException("URL JDBC sin nombre de base: " + url);
         }
         return sinParametros.substring(0, ultimaBarra + 1) + nombre + parametros;
+    }
+
+    /**
+     * Crea la base declarando su codificacion, y explica el fallo cuando el anfitrion no la da.
+     *
+     * <p>{@code TEMPLATE template0} no es un adorno, y se midio: sin el, sobre un cluster {@code
+     * SQL_ASCII} la sentencia se rechaza con «new encoding (UTF8) is incompatible with the encoding
+     * of the template database (SQL_ASCII)». Desde {@code template1} PostgreSQL solo deja copiar la
+     * codificacion que esa plantilla ya tiene, que es justo la que aqui NO se quiere heredar;
+     * {@code template0} esta vacia y admite que se le declare otra.
+     *
+     * <p>El fallo que queda posible es que la intercalacion declarada no exista en el sistema
+     * —medido: {@code en_US.UTF-8} no esta en esta maquina y {@code CREATE DATABASE} la rechaza—, y
+     * ahi el mensaje de PostgreSQL habla de {@code LC_COLLATE} sin decir contra que cluster se
+     * estaba probando. Por eso se envuelve nombrando lo que el anfitrion tiene y lo que hay que
+     * hacer.
+     */
+    private static void crearBase(String urlBase, String nombre, String usuario, String clave) {
+        String sentencia = sentenciaDeCreacion(nombre);
+        try (java.sql.Connection conexion =
+                        java.sql.DriverManager.getConnection(urlBase, usuario, clave);
+                java.sql.Statement statement = conexion.createStatement()) {
+            statement.execute(sentencia);
+        } catch (java.sql.SQLException e) {
+            throw new IllegalStateException(
+                    "No se pudo crear la base de prueba "
+                            + nombre
+                            + " declarando "
+                            + CODIFICACION
+                            + " / "
+                            + INTERCALACION
+                            + ". El anfitrion tiene "
+                            + comoEstaLaPlantilla(urlBase, usuario, clave)
+                            + ", y la base de prueba no la hereda a proposito (#706). Si lo que"
+                            + " falta es la intercalacion, hay que instalarla en el sistema"
+                            + " (en Debian, locale-gen); replegarse a C no vale, porque con ese"
+                            + " tipo de caracter lower y upper dejan de conocer la enye",
+                    e);
+        }
+    }
+
+    /**
+     * La sentencia que crea la base de prueba, con las tres cosas que declara.
+     *
+     * <p>Es un metodo y no texto en linea para que {@code CodificacionDeLaBaseDePruebaTest} pueda
+     * leer <b>esta</b> sentencia y no una copia suya. La comprobacion de que la base resultante es
+     * UTF-8 solo puede fallar contra un anfitrion que no lo sea, asi que en un cluster UTF-8 —el de
+     * CI— pasaria en verde diga lo que diga la sentencia; lo que si se puede comprobar en cualquier
+     * maquina es que la sentencia siga declarando lo que #706 midio.
+     */
+    static String sentenciaDeCreacion(String nombre) {
+        return "CREATE DATABASE "
+                + nombre
+                + " TEMPLATE template0 ENCODING '"
+                + CODIFICACION
+                + "' LC_COLLATE '"
+                + INTERCALACION
+                + "' LC_CTYPE '"
+                + INTERCALACION
+                + "'";
+    }
+
+    /**
+     * Exige que la base contra la que se va a probar sea UTF-8, y lo dice cuando no lo es.
+     *
+     * <p>Es lo que separa un mensaje que se arregla en un minuto de cinco rojos en {@code
+     * BusquedaDelCatalogoVialTest} hablando de Unicode (#706). Muerde, y esta medido: sobre un
+     * cluster {@code SQL_ASCII}, quitandole a {@code crearBase} la declaracion los 417 casos del
+     * modulo de catastro caen en 30 clases con ESTE mensaje; quitando ademas esta guarda —el estado
+     * anterior a #706— quedan 5 rojos, todos en {@code BusquedaDelCatalogoVialTest} y todos
+     * diciendo «requested character too large for encoding: 1114111», con los otros 412 en verde.
+     *
+     * <p>Treinta rojos claros por cinco confusos es el cambio que se quiso: <b>no</b> se puede
+     * evitar que sean pruebas de catastro las que se pongan rojas, porque el motor lo resuelve cada
+     * modulo en su propio {@code @BeforeAll}; lo que se puede es que digan cual es la causa.
+     *
+     * <p>Comprueba <b>solo la codificacion</b>. La intercalacion no se exige porque la del
+     * contenedor de CI no se ha medido, y una comprobacion que afirma lo que no se ha medido pone
+     * en rojo el camino bueno.
+     */
+    private void exigirCodificacionUtf8() {
+        String codificacion = unaCadena(url, "SHOW server_encoding", usuarioAdmin, claveAdmin);
+        if (!CODIFICACION.equalsIgnoreCase(codificacion)) {
+            throw new IllegalStateException(
+                    "La base de prueba quedo en "
+                            + codificacion
+                            + " y las pruebas necesitan "
+                            + CODIFICACION
+                            + ": en SQL_ASCII no existe chr(1114111), con el que #565 cierra el"
+                            + " rango de prefijo del catalogo vial. Si el motor lo levanta"
+                            + " Testcontainers, la imagen de sgtm.pruebas.postgres.imagen no es"
+                            + " UTF-8; si es externo, la base se creo sin declarar su codificacion"
+                            + " (#706)");
+        }
+    }
+
+    /** El primer valor de la primera fila, o {@code "desconocida"} si no se puede consultar. */
+    private static String unaCadena(String url, String consulta, String usuario, String clave) {
+        try (java.sql.Connection conexion =
+                        java.sql.DriverManager.getConnection(url, usuario, clave);
+                java.sql.Statement statement = conexion.createStatement();
+                java.sql.ResultSet filas = statement.executeQuery(consulta)) {
+            return filas.next() ? filas.getString(1) : "desconocida";
+        } catch (java.sql.SQLException e) {
+            return "desconocida";
+        }
+    }
+
+    /**
+     * Como esta {@code template1} en el anfitrion, para poder nombrarlo en el mensaje del fallo.
+     */
+    private static String comoEstaLaPlantilla(String url, String usuario, String clave) {
+        return unaCadena(
+                url,
+                "SELECT pg_encoding_to_char(encoding) || ' / ' || datcollate"
+                        + " FROM pg_database WHERE datname = 'template1'",
+                usuario,
+                clave);
     }
 
     private void ejecutar(String url, String sentencia, String mensaje) {

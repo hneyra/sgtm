@@ -453,6 +453,34 @@ public class CatastroRepositoryJdbc extends RepositorioJdbc implements CatastroR
                 .optional();
     }
 
+    /**
+     * Si el predio tiene alguna cuota abierta: las que {@code titularidad_no_excede_trg} suma
+     * (#690).
+     *
+     * <p>Se llama asi y no {@code CUOTAS_ABIERTAS} porque el escaner de la regla 5 vigila los
+     * nombres que <b>empiezan</b> por una palabra de valor normativo —{@code CUOTAS} es una, desde
+     * #35— y esta constante lleva digitos dentro por ser SQL. El anclaje al principio del
+     * identificador es deliberado (#437: ensancharlo daba ocho falsos positivos), asi que lo que se
+     * mueve es el nombre, no la regla.
+     */
+    private static final String HAY_CUOTA_ABIERTA =
+            "SELECT 1 FROM titularidad tx"
+                    + " WHERE tx.municipalidad_id = p.municipalidad_id"
+                    + " AND tx.predio_id = p.id AND tx.vigencia_hasta IS NULL";
+
+    /**
+     * Lo que suman, o {@code NULL} si no hay ninguna.
+     *
+     * <p>Ese nulo es lo que hace que los tres valores <b>partan el padron</b> sin solaparse: {@code
+     * COMPLETA} compara la suma con 100 y un nulo no es igual a 100 —ni distinto—, asi que el
+     * predio sin cuotas se cae de las dos comparaciones y solo lo recoge {@code SIN_TITULAR}.
+     * {@code INCOMPLETA} exige ademas que haya alguna, para no quedarse con el mismo caso.
+     */
+    private static final String SUMA_DE_CUOTAS =
+            "SELECT sum(tx.porcentaje) FROM titularidad tx"
+                    + " WHERE tx.municipalidad_id = p.municipalidad_id"
+                    + " AND tx.predio_id = p.id AND tx.vigencia_hasta IS NULL";
+
     @Override
     public Pagina<PredioDelCatastro> predios(FiltroDePredios filtro, Paginacion paginacion) {
         List<String> condiciones = new ArrayList<>();
@@ -488,6 +516,24 @@ public class CatastroRepositoryJdbc extends RepositorioJdbc implements CatastroR
                             + "EXISTS (SELECT 1 FROM ficha_catastral fx"
                             + " WHERE fx.municipalidad_id = p.municipalidad_id"
                             + " AND fx.predio_id = p.id)");
+        }
+
+        if (filtro.titularidad() != null) {
+            // Se suman las cuotas ABIERTAS —`vigencia_hasta IS NULL`— y no «las vigentes a una
+            // fecha», porque es exactamente lo que suma `titularidad_no_excede_trg` (V1) para
+            // comprobar que no se pase de 100. Dos miradas distintas darian predios que el censo
+            // llama incompletos y la base considera correctos, y nadie sabria cual manda (#690).
+            condiciones.add(
+                    switch (filtro.titularidad()) {
+                        case SIN_TITULAR -> "NOT EXISTS (" + HAY_CUOTA_ABIERTA + ")";
+                        case INCOMPLETA ->
+                                "EXISTS ("
+                                        + HAY_CUOTA_ABIERTA
+                                        + ") AND ("
+                                        + SUMA_DE_CUOTAS
+                                        + ") <> 100";
+                        default -> "(" + SUMA_DE_CUOTAS + ") = 100";
+                    });
         }
 
         String donde = condiciones.isEmpty() ? "" : " WHERE " + String.join(" AND ", condiciones);

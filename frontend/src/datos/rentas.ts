@@ -1320,10 +1320,14 @@ export const CAMPOS_DE_LA_BAJA: CampoDef[] = [
        defiende el acto ante una auditoria. */
     v: '',
     o: ['', 'PRESCRIPCIÓN DECLARADA', 'RESOLUCIÓN QUE DEJA SIN EFECTO', 'ERROR MATERIAL', 'COMPENSACIÓN', 'DEUDA DE COBRANZA DUDOSA', 'CONDONACIÓN POR ORDENANZA'],
-    /* `PeticionDeMovimiento` no tiene campo para la causal, asi que se copia a la
-       observacion, que es donde queda auditada (RNF-052). Dejarla suelta seria un
-       desplegable que se elige y no llega: el defecto de #331. */
-    ayuda: 'El cuerpo del backend no tiene campo propio para la causal: se antepone a la observación, que es donde queda auditada. Sin elegirla no se puede dar de baja',
+    /* Desde #684 la causal tiene CAMPO PROPIO en `PeticionDeMovimiento`, con
+       vocabulario cerrado y su `CHECK`. Hasta entonces se anteponia al texto de
+       la observacion —que es del usuario, regla 10— y el libro no sabia por que
+       se habia dado de baja: `acto` (V68) dice QUE se hizo y nada decia POR QUE,
+       asi que RF-045 no podia contestar «ensename las bajas por prescripcion» y
+       «PRESCRIPCION DECLARADA», «prescripción declarada» y «prescrita s/ Res.
+       123-2026» eran la misma causal en tres cadenas distintas. */
+    ayuda: 'Es el sustento jurídico de la baja y viaja en su propio campo: el libro guarda por qué se dio de baja, y la consulta de altas y bajas puede filtrar por ella. No sustituye a la observación. Sin elegirla no se puede dar de baja',
   },
   { k: 'numRes', l: 'Nº de resolución', t: 'text', ayuda: 'Es el sustento documental de la baja: sin él no se registra' },
   {
@@ -1339,7 +1343,6 @@ export const CAMPOS_DE_LA_BAJA: CampoDef[] = [
   { k: 'autorizado', l: 'Autorizado por', t: 'ro', ayuda: 'Ninguna lectura publica quién autoriza: va en la resolución' },
   { k: 'motivoBaja', l: 'Motivo', t: 'area', ancho: true, ayuda: 'No viaja: el motivo que se audita es la observación del acto' },
 ];
-
 /* Las cuatro filas de muestra de la baja se han ido, y no por limpieza: eran la
    deuda de otra persona con una casilla al lado, y marcarlas extinguia —o lo
    habria hecho— una cuota que nadie miro. La deuda que se puede dar de baja se

@@ -14,6 +14,12 @@ import pe.gob.sgtm.web.ImporteActualizado;
  *
  * <p>No lleva {@code municipalidadId} ni {@code contribuyenteId}: el primero sale del token (regla
  * 2) y el segundo no hace falta —el estado de cuenta ya esta acotado al {@code codigo} de la ruta—.
+ *
+ * <p>{@code causal} se publica desde #684, y no por completitud: la relacion de altas y bajas
+ * (RF-045) puede filtrar por ella, y un filtro cuya columna no se ve deja a quien audita eligiendo
+ * «prescripcion» sin poder comprobar en la fila que lo es —dos verdades sobre la misma fila, que es
+ * lo que #397 midio con el «Estado» de la infraccion administrativa—. Nulo es «esta fila no la
+ * declaro»: un alta, un cobro, o una baja anterior a V77.
  */
 public record AsientoResource(
         long id,
@@ -30,7 +36,8 @@ public record AsientoResource(
         String documentoOrigen,
         @Nullable Long asientoReversadoId,
         @Nullable String usuarioId,
-        @Nullable String motivo) {
+        @Nullable String motivo,
+        @Nullable String causal) {
 
     public static AsientoResource de(Asiento asiento) {
         return new AsientoResource(
@@ -48,6 +55,7 @@ public record AsientoResource(
                 asiento.documentoOrigen(),
                 asiento.asientoReversadoId(),
                 asiento.usuarioId(),
-                asiento.motivo());
+                asiento.motivo(),
+                asiento.causal() == null ? null : asiento.causal().name());
     }
 }

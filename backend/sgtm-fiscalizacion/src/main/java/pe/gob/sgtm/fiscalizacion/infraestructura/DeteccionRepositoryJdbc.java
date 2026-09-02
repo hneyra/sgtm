@@ -116,13 +116,14 @@ public class DeteccionRepositoryJdbc extends RepositorioJdbc implements Deteccio
      * filtro puede prescindir de ellos sin contar otra cosa: el {@code LATERAL} lleva {@code LIMIT
      * 1} y entra con {@code ON true} —o sea exactamente una fila por predio, con nulos si no hay
      * declaración—, y {@code fd} entra por la clave primaria de {@code ficha_catastral}, o sea a lo
-     * sumo una. El que sí podría multiplicar —{@code f}— se queda en {@link #DESDE_EL_PADRON}:
-     * {@code ficha_vigente_uq} es <b>parcial</b> ({@code WHERE vigencia_hasta IS NULL}), así que
-     * impide dos versiones <b>abiertas</b> y nada más; una abierta y una cerrada pueden cubrir la
-     * misma fecha, y entonces la página devuelve dos filas de ese predio. El camino de escritura no
-     * las produce —{@code ActualizarFichaCatastral} cierra la anterior el día antes de abrir la
-     * nueva—, pero un padrón migrado sí puede traerlas, y el conteo tiene que decir lo que la
-     * grilla enseña sea cual sea el dato. Eso lo fija una prueba con esa siembra exacta.
+     * sumo una. El que <b>podía</b> multiplicar —{@code f}— se queda en {@link #DESDE_EL_PADRON}, y
+     * conviene decir por qué ya no es el mismo motivo: cuando esto se escribió (#561), {@code
+     * ficha_vigente_uq} era <b>parcial</b> ({@code WHERE vigencia_hasta IS NULL}), así que una
+     * versión abierta y una cerrada podían cubrir la misma fecha y la página devolvía dos filas de
+     * ese predio. Ese hallazgo abrió #669, y desde {@code V72} la restricción {@code
+     * ficha_vigencias_no_se_pisan} lo impide: el dato ya no puede existir. El {@code JOIN} se queda
+     * igualmente porque quitarlo es un cambio de plan que nadie ha medido y su coste es cero —el
+     * planificador lo elimina solo, que es justo lo que no puede hacer con el {@code LATERAL}—.
      */
     private static final String Y_SU_DECLARACION =
             """

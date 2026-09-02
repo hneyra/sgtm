@@ -2608,9 +2608,11 @@ export default function Seguridad({ dest, onDest }: PantallaProps) {
               )}
 
               {/* Las copias, contra `POST /seguridad/respaldos`. El artboard traía
-                  cuatro filas con tamaños y una columna «Restauración probada»
-                  que `RespaldoResource` no publica: no hay tal campo, así que la
-                  columna no está y el aviso de «hace 94 días» tampoco. */}
+                  cuatro filas inventadas y un «La última restauración verificada
+                  es de hace 94 días» que no salía de ninguna parte. Desde #558 el
+                  recurso SÍ publica esa columna, y la celda dice el instante o
+                  «Nunca» —que es lo que significa el nulo—, nunca una cifra
+                  derivada: «hace N días» se lee como una medición. */}
               {enCopias && (
                 <div style={{ borderTop: '1px solid var(--line)' }}>
                   {respaldos.error !== null && (
@@ -2629,10 +2631,10 @@ export default function Seguridad({ dest, onDest }: PantallaProps) {
                   )}
                   {respaldos.datos !== null && respaldos.datos.contenido.length > 0 && (
                     <div style={{ overflowX: 'auto' }}>
-                      <table style={{ width: '100%', borderCollapse: 'collapse', minWidth: 700 }}>
+                      <table style={{ width: '100%', borderCollapse: 'collapse', minWidth: 860 }}>
                         <thead>
                           <tr>
-                            {(['Inicio', 'Fin', 'Resultado', 'Destino', 'Tamaño'] as const).map((c, j) => (
+                            {(['Inicio', 'Fin', 'Resultado', 'Destino', 'Tamaño', 'Restauración verificada'] as const).map((c, j) => (
                               <th key={c} style={j === 4 ? THN : TH}>
                                 {c}
                               </th>
@@ -2649,6 +2651,17 @@ export default function Seguridad({ dest, onDest }: PantallaProps) {
                               </td>
                               <td style={TD}>{r.destino}</td>
                               <td style={TDN}>{r.tamanoBytes === null ? SIN_DATO : enGigabytes(r.tamanoBytes)}</td>
+                              <td style={TD}>
+                                {r.ultimaRestauracionVerificada === null ? (
+                                  <span title="Esta copia no se ha restaurado nunca para comprobar que se puede restaurar (RNF-079). No es un fallo de la copia: es que nadie lo ha probado.">
+                                    Nunca
+                                  </span>
+                                ) : (
+                                  <span title={r.ultimaRestauracionVerificadaPor ?? ''}>
+                                    {r.ultimaRestauracionVerificada.replace('T', ' ').slice(0, 16)}
+                                  </span>
+                                )}
+                              </td>
                             </tr>
                           ))}
                         </tbody>

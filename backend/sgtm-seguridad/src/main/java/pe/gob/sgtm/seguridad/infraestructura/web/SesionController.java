@@ -365,6 +365,19 @@ public class SesionController {
         }
     }
 
+    /**
+     * Una copia de seguridad, con lo unico que de verdad contesta la pregunta de la pantalla.
+     *
+     * <p>{@code ultimaRestauracionVerificada} es el instante en que se comprobo, restaurandola de
+     * verdad, que esta copia se puede restaurar (RNF-079, #558), y {@code
+     * ultimaRestauracionVerificadaPor} dice que proceso lo comprobo. <b>Los dos son nulos mientras
+     * nadie la haya probado</b>, que es el estado de casi todas: un cero o un {@code false} aqui se
+     * leerian como una medicion y llevarian a no auditar una copia que no se restauro nunca.
+     *
+     * <p>No se publica ningun derivado —ni «hace N dias», ni «probada si/no»—: la fecha de hoy no
+     * la pone el servidor en una cifra que despues se lee sin ella (regla 9), y un booleano
+     * perderia el unico dato con el que se decide si la comprobacion sigue valiendo.
+     */
     public record RespaldoResource(
             long id,
             Instant inicio,
@@ -372,7 +385,9 @@ public class SesionController {
             String resultado,
             String destino,
             @Nullable Long tamanoBytes,
-            @Nullable String detalle) {
+            @Nullable String detalle,
+            @Nullable Instant ultimaRestauracionVerificada,
+            @Nullable String ultimaRestauracionVerificadaPor) {
 
         static RespaldoResource de(Respaldo respaldo) {
             return new RespaldoResource(
@@ -382,7 +397,9 @@ public class SesionController {
                     respaldo.resultado(),
                     respaldo.destino(),
                     respaldo.tamanoBytes(),
-                    respaldo.detalle());
+                    respaldo.detalle(),
+                    respaldo.ultimaRestauracionVerificada(),
+                    respaldo.ultimaRestauracionVerificadaPor());
         }
     }
 }

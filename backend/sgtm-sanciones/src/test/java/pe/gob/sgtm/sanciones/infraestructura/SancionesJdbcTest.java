@@ -48,6 +48,7 @@ import pe.gob.sgtm.compartido.Paginacion;
 import pe.gob.sgtm.compartido.TenantContext;
 import pe.gob.sgtm.contribuyentes.DirectorioDeContribuyentes;
 import pe.gob.sgtm.contribuyentes.ResumenDeContribuyente;
+import pe.gob.sgtm.cuentacorriente.CausalDeBaja;
 import pe.gob.sgtm.cuentacorriente.ConsultaDeDeudaPublica;
 import pe.gob.sgtm.cuentacorriente.ExtincionDeDeuda;
 import pe.gob.sgtm.cuentacorriente.GeneradorDeCargos;
@@ -422,6 +423,16 @@ class SancionesJdbcTest {
             assertThat(motivoDelUltimoAbono(papeleta))
                     .as("el motivo del asiento es la observacion de quien resolvio (regla 10)")
                     .isEqualTo(PORQUE.texto());
+
+            // Y la otra mitad de la misma fila (#684): el motivo es el RELATO de quien firma
+            // y la causal es el SUSTENTO del acto, que aqui lo decide este caso de uso y no
+            // quien atiende. Sin esta asercion nada sujeta cual de las seis se declara: una
+            // resolucion que deja la multa sin efecto se asentaria como PRESCRIPCION_DECLARADA
+            // —o como ERROR_MATERIAL— y la relacion de RF-045 la contaria bajo otra causal,
+            // con el importe y el papel correctos.
+            assertThat(causalDelUltimoAbono(papeleta))
+                    .as("la causal de la baja la declara el acto que la produce, no el operador")
+                    .isEqualTo(CausalDeBaja.RESOLUCION_QUE_DEJA_SIN_EFECTO.name());
         }
 
         @Test
@@ -1267,6 +1278,19 @@ class SancionesJdbcTest {
                 () ->
                         jdbc.sql(
                                         "SELECT motivo FROM cuenta_corriente_asiento"
+                                                + " WHERE contribuyente_id = :contribuyente"
+                                                + "   AND tipo = 'ABONO' ORDER BY id DESC LIMIT 1")
+                                .param("contribuyente", papeleta.obligadoId())
+                                .query(String.class)
+                                .single());
+    }
+
+    /** La causal de la ultima baja asentada contra el obligado de la papeleta (#684). */
+    private static String causalDelUltimoAbono(Papeleta papeleta) {
+        return enTransaccion(
+                () ->
+                        jdbc.sql(
+                                        "SELECT causal FROM cuenta_corriente_asiento"
                                                 + " WHERE contribuyente_id = :contribuyente"
                                                 + "   AND tipo = 'ABONO' ORDER BY id DESC LIMIT 1")
                                 .param("contribuyente", papeleta.obligadoId())

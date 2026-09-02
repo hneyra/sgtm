@@ -31,6 +31,7 @@ import pe.gob.sgtm.auditoria.OrigenContext;
 import pe.gob.sgtm.compartido.Pagina;
 import pe.gob.sgtm.compartido.Paginacion;
 import pe.gob.sgtm.compartido.TenantContext;
+import pe.gob.sgtm.cuentacorriente.CausalDeBaja;
 import pe.gob.sgtm.cuentacorriente.aplicacion.RegistrarAsiento;
 import pe.gob.sgtm.cuentacorriente.dominio.ActoDelLibro;
 import pe.gob.sgtm.cuentacorriente.dominio.Asiento;
@@ -437,7 +438,10 @@ class AltasBajasSonActosJdbcTest {
                         Fase.ORDINARIA,
                         DIA_DEL_ACTO,
                         documento,
-                        null);
+                        null,
+                        // Toda baja declara su causal desde #684; un alta no la lleva. Lo que
+                        // esta prueba mide es el ACTO, y la causal es del acto de dar de baja.
+                        sentido == SentidoDelMovimiento.BAJA ? CausalDeBaja.ERROR_MATERIAL : null);
         for (Asiento asiento : movimiento.enAsientos()) {
             registrar.asentar(asiento, Observacion.de("Acto de la prueba de #640: " + sentido));
         }

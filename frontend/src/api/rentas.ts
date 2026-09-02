@@ -634,6 +634,25 @@ export type PeticionDeMovimientoDeDeuda = {
   fechaValor?: string;
   documentoOrigen?: string;
   referenciaExterna?: string;
+  /**
+   * **Sólo en la BAJA, y ahí es obligatoria** (#684): por qué se da de baja la
+   * deuda, con vocabulario cerrado.
+   *
+   * Hasta #684 el cuerpo no tenía campo para ella, así que la pantalla la
+   * anteponía al texto de la observación —«PRESCRIPCIÓN DECLARADA. Deshace el
+   * alta…»— y el libro no sabía por qué se dio de baja: `acto` (V68) dice
+   * **qué** se hizo y nada decía **por qué**. Ahora es una columna con su
+   * `CHECK`, y la consulta de altas y bajas puede filtrar por ella.
+   *
+   * Los seis valores **no son los rótulos del desplegable**: el rótulo lleva
+   * tilde y espacios y el valor no, así que se traduce con `CAUSAL_DE_BAJA_DEL_BACKEND`
+   * —una entrada por rótulo—, nunca quitando tildes con una función. Un valor
+   * que no sea uno de los seis es 422 nombrando lo admitido.
+   *
+   * En el ALTA **no viaja**: su pantalla no dibuja ningún desplegable de causal
+   * —lo que sustenta un alta es su documento de origen— y el backend la rechaza.
+   */
+  causal?: string;
 };
 
 /**
@@ -673,6 +692,40 @@ export function altaDeDeuda(peticion: PeticionDeMovimientoDeDeuda): Promise<Movi
 }
 
 /**
+ * El rótulo del desplegable «Causal», traducido al nombre que el backend admite
+ * (`CausalDeBaja`, #684).
+ *
+ * **Una entrada por rótulo, y nunca una función normalizadora.** Quitar tildes y
+ * cambiar espacios por guiones bajos daría hoy el mismo resultado y convertiría
+ * mañana cualquier texto parecido en un valor «traducido»: es el precedente
+ * literal de `TipoTransferencia` (#542), y lo que se clasifica aquí es el
+ * sustento jurídico de un acto que extingue deuda del municipio.
+ *
+ * La cadena vacía no está: sin causal elegida la primaria está apagada desde
+ * #636, así que no hay nada que traducir.
+ */
+export const CAUSAL_DE_BAJA_DEL_BACKEND: Readonly<Record<string, string>> = {
+  'PRESCRIPCIÓN DECLARADA': 'PRESCRIPCION_DECLARADA',
+  'RESOLUCIÓN QUE DEJA SIN EFECTO': 'RESOLUCION_QUE_DEJA_SIN_EFECTO',
+  'ERROR MATERIAL': 'ERROR_MATERIAL',
+  'COMPENSACIÓN': 'COMPENSACION',
+  'DEUDA DE COBRANZA DUDOSA': 'DEUDA_DE_COBRANZA_DUDOSA',
+  'CONDONACIÓN POR ORDENANZA': 'CONDONACION_POR_ORDENANZA',
+};
+
+/**
+ * El rótulo del desplegable «Causal», traducido al vocabulario del backend.
+ *
+ * Devuelve `null` cuando el rótulo no está en la tabla —y con el desplegable
+ * vacío, que es como nace desde #636—, y quien llama tiene que pararse: sin
+ * causal el servidor contesta 422, y mandar el rótulo tal cual da un 422 que
+ * nombra un valor que quien atiende acaba de elegir de una lista.
+ */
+export function causalDeBajaDelBackend(rotulo: string): string | null {
+  return CAUSAL_DE_BAJA_DEL_BACKEND[rotulo.trim()] ?? null;
+}
+
+/**
  * La baja. Devuelve lo mismo que el alta —`MovimientoDeDeudaResource`—, y desde
  * #598 hay que **leerlo**: con `repartir` el reparto entre cuotas lo decide el
  * servidor, asi que cuantas obligaciones se movieron y por cuanto no se puede
@@ -681,7 +734,6 @@ export function altaDeDeuda(peticion: PeticionDeMovimientoDeDeuda): Promise<Movi
 export function bajaDeDeuda(peticion: PeticionDeMovimientoDeDeuda): Promise<MovimientoRegistrado> {
   return solicitar('/rentas/deuda/bajas', { metodo: 'POST', cuerpo: peticion });
 }
-
 
 /* ══════════ Indicadores y corrida ══════════ */
 

@@ -3,6 +3,7 @@ package pe.gob.sgtm.cuentacorriente.dominio;
 import java.util.Locale;
 import java.util.Objects;
 import org.jspecify.annotations.Nullable;
+import pe.gob.sgtm.cuentacorriente.CausalDeBaja;
 import pe.gob.sgtm.dominio.Ejercicio;
 
 /**
@@ -22,16 +23,35 @@ import pe.gob.sgtm.dominio.Ejercicio;
  * acto y no se pueden reparar, asi que una baja de antes de esa migracion no sale. Ver {@code
  * AsientoRepositoryJdbc#altasYBajas} para por que no se acota por fecha en su lugar.
  *
+ * <p><b>Y desde #684 se puede preguntar por la causal</b>, que es la pregunta de quien audita como
+ * se extingue deuda del municipio: «ensename las bajas por prescripcion». Antes no habia forma —la
+ * causal viajaba dentro del texto de la observacion— y la unica salida era leerlas a ojo. Lo mismo
+ * que con el acto: las bajas anteriores a V77 tienen la causal en nulo y al filtrar por una
+ * concreta no aparecen; sin filtro salen todas.
+ *
  * @param codigoContribuyente el titular; es lo que teclea quien atiende
  * @param ejercicio filtro opcional de año
  * @param tributo filtro opcional de tributo
  * @param sentido filtro opcional de «Alta / Baja»; {@code null} trae los dos
+ * @param causal filtro opcional por la causal de la baja (#684); {@code null} trae todas. Acota
+ *     solo bajas, porque un alta no tiene causal — y deja fuera las bajas anteriores a V77, que la
+ *     tienen en nulo y no se pueden reparar
  */
 public record CriterioDeAltasBajas(
         String codigoContribuyente,
         @Nullable Ejercicio ejercicio,
         @Nullable String tributo,
-        @Nullable SentidoDelMovimiento sentido) {
+        @Nullable SentidoDelMovimiento sentido,
+        @Nullable CausalDeBaja causal) {
+
+    /** La forma anterior a #684, sin filtro de causal: trae todas. */
+    public CriterioDeAltasBajas(
+            String codigoContribuyente,
+            @Nullable Ejercicio ejercicio,
+            @Nullable String tributo,
+            @Nullable SentidoDelMovimiento sentido) {
+        this(codigoContribuyente, ejercicio, tributo, sentido, null);
+    }
 
     public CriterioDeAltasBajas {
         Objects.requireNonNull(codigoContribuyente, "Las altas y bajas son de un contribuyente");

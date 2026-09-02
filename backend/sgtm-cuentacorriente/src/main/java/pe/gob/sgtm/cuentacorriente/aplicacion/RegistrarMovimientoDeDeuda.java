@@ -351,7 +351,13 @@ public class RegistrarMovimientoDeDeuda {
                             movimiento.fase(),
                             movimiento.fechaValor(),
                             movimiento.documentoOrigen(),
-                            movimiento.referenciaExterna()));
+                            movimiento.referenciaExterna(),
+                            // La causal se copia en cada parte del reparto (#684): es del ACTO
+                            // —una sola baja, con un solo sustento juridico— y no de la cuota.
+                            // Perderla aqui no dejaria la fila sin causal: `MovimientoDeDeuda`
+                            // no se deja construir sin ella cuando el sentido es BAJA, y este
+                            // es el camino que la pantalla usa siempre (`repartir: true`).
+                            movimiento.causal()));
         }
 
         sinRepartir("insoluto", insoluto, movimiento.insoluto());

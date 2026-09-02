@@ -269,10 +269,11 @@ está verificada.
 | `V56__determinacion_detalle_valuo_exonerado.sql` | El detalle por predio dice también qué parte del autovalúo **no** está afecta, para que la ponderación se reconstruya (#395) |
 | `V57__depreciacion_por_uso_de_la_edificacion.sql` | La tabla de depreciación son **cuatro** tablas, una por uso de la edificación: `uso` entra en la clave y «más de 50 años» entra sin tope (H-15, #188) |
 | `V65__marco_del_predio.sql` | El rectángulo envolvente del lote, en cuatro columnas generadas, y su índice: es lo único que llega al índice bajo RLS, porque el operador espacial no es *leakproof* (ver §0, hallazgo 5; #536) |
+| `V77__causal_de_la_baja.sql` | La causal de la baja de deuda como columna con vocabulario cerrado: hasta entonces viajaba **dentro de la observación** y el libro sabía *qué* se hizo (`acto`, `V68`) y no *por qué* (#684) |
 | `V75__idempotencia_del_alta_de_deuda.sql` | `asiento_alta_unica_uq`: un alta de deuda por obligación, documento de sustento y concepto. Índice único **parcial** sobre `acto = 'ALTA_DEUDA'` —la columna que `V68` estrenó—, con `COALESCE` en las tres columnas nulables y `ejercicio` dentro por ser la clave de partición (#588) |
 
 La numeración salta —no hay `V36`, `V38`, `V40`, `V42`, `V44`, `V46`, `V48`, `V50` ni `V52`— y no
-es un error: hoy, con `V75`, hay **63** migraciones, y la lista viva es el propio directorio
+es un error: hoy, con `V77`, hay **64** migraciones, y la lista viva es el propio directorio
 `backend/sgtm-esquema/src/main/resources/db/migration/`.
 
 Los roles se crean **antes**, con `db/roles/crear-roles.sql`, que no es una migración: las
@@ -385,6 +386,19 @@ fraccionamiento— y `fase` —ordinaria, valor, coactiva, convenio—.
   contextos: no hay clave foránea a propósito (ARQ-01 §4 regla 2).
 - `acto` (`V68`, #601) dice **por qué** existe la fila cuando el libro lo sabe: `ALTA_DEUDA` o
   `BAJA_DEUDA`. Nulo no es «se ignora», es «no nació de un alta ni de una baja».
+- `causal` (`V77`, #684) dice **por qué se dio de baja**: las seis del desplegable de RF-044, letra
+  por letra salvo la tilde y el espacio. Hasta entonces viajaba dentro de la observación —texto
+  libre de quien atiende—, así que RF-045 no podía contestar «enséñame las bajas por prescripción»
+  y «PRESCRIPCION DECLARADA», «prescripción declarada» y «prescrita s/ Res. 123-2026» eran la misma
+  causal en tres cadenas distintas. Son **dos cosas y siguen siéndolo**: la causal es el sustento
+  jurídico del acto y `motivo` es la observación del usuario (regla 10). Tres `CHECK`: el
+  vocabulario y «sólo una baja tiene causal» van **validados** —la columna nace y todas las filas
+  existentes quedan en nulo—, y «toda baja nueva declara la suya» va **`NOT VALID`**, porque una
+  instalación en marcha ya tiene bajas escritas por `V68` y un `ALTER TABLE` validado fallaría con
+  «is violated by some row» dejándola sin migrar (la lección de `V64`). Esas filas viejas **no se
+  pueden reparar** —el libro no admite `UPDATE` (`V7`, regla 4) y el migrador no puede reescribir
+  una tabla con `FORCE ROW LEVEL SECURITY` (§0, hallazgo 4)—: siguen saliendo en la relación sin
+  filtro y desaparecen al filtrar por una causal concreta.
 - **Un alta de deuda no se puede registrar dos veces** (`asiento_alta_unica_uq`, `V75`, #588). La
   clave es la obligación —las mismas seis columnas de `saldo_uq`— más `documento_origen` y
   `concepto`, y el índice es parcial sobre `acto = 'ALTA_DEUDA' AND asiento_reversado_id IS NULL`.

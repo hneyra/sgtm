@@ -97,6 +97,45 @@ class DeterminarPredialTest {
     }
 
     @Test
+    @DisplayName("#690 — se determina igual sobre una titularidad incompleta, y se DICE")
+    void laTitularidadIncompletaSeDetermina() {
+        // El caso de Catacaos: el contribuyente tiene el 60 % y nadie tiene el 40 % restante.
+        predios.conTitularidadIncompleta(
+                11L, "10001", "AV. GRAU 100", Porcentaje.de("60"), Porcentaje.de("60"));
+
+        DeterminacionPredialCalculada calculada = determinar(declarado(11L, "100000.00"), null);
+
+        PredioEnLaBase enLaBase = calculada.predios().get(0);
+        assertThat(enLaBase.baseImponiblePredio())
+                .as(
+                        "se determina igual: la cifra es correcta PARA LO REGISTRADO, y no"
+                                + " determinar dejaria sin emitir a un tercio del padron")
+                .isEqualTo(Dinero.de("60000.00"));
+        assertThat(enLaBase.titularidadCompleta())
+                .as(
+                        "y sale dicho: una base ponderada por una titularidad que no cubre el"
+                                + " predio no se distingue de una correcta si nada la acompaña —"
+                                + " quien la lee ve «60 %» y entiende que ese es el porcentaje del"
+                                + " contribuyente, no que nadie tiene el otro 40 %")
+                .isFalse();
+        assertThat(enLaBase.porcentajeRegistradoDelPredio()).isEqualTo(Porcentaje.de("60"));
+    }
+
+    @Test
+    @DisplayName("#690 — y el predio con dueño completo no dice nada, que es el contraste")
+    void elPredioCompletoNoDiceNada() {
+        predios.con(11L, "10001", "AV. GRAU 100", Porcentaje.de("50"));
+
+        PredioEnLaBase enLaBase = determinar(declarado(11L, "100000.00"), null).predios().get(0);
+
+        assertThat(enLaBase.titularidadCompleta())
+                .as(
+                        "tener el 50 % de un predio con dueño completo es lo corriente: si esto"
+                                + " tambien avisara, el aviso no distinguiria nada")
+                .isTrue();
+    }
+
+    @Test
     @DisplayName("#659 — lo que cuesta al centimo determinar 2026 con la UIT de otro año")
     void loQueCuestaLaUitEquivocada() {
         // El caso que #659 midio contra el compose: un solo predio, 85 000,00 al 100 %.
@@ -455,7 +494,21 @@ class DeterminarPredialTest {
         private final List<PredioDelContribuyente> suyos = new ArrayList<>();
 
         void con(long predioId, String codigo, String direccion, Porcentaje cuota) {
+            // Sin decir otra cosa, el predio tiene dueño completo: la cuota del contribuyente ES
+            // todo lo registrado.
             suyos.add(new PredioDelContribuyente(predioId, codigo, "URBANO", direccion, cuota));
+        }
+
+        /** Un predio cuyas cuotas NO cubren el predio entero (#690). */
+        void conTitularidadIncompleta(
+                long predioId,
+                String codigo,
+                String direccion,
+                Porcentaje cuota,
+                Porcentaje registrado) {
+            suyos.add(
+                    new PredioDelContribuyente(
+                            predioId, codigo, "URBANO", direccion, cuota, registrado));
         }
 
         @Override

@@ -13,6 +13,7 @@ import pe.gob.sgtm.auditoria.Operacion;
 import pe.gob.sgtm.auditoria.RegistroDeAuditoria;
 import pe.gob.sgtm.contribuyentes.DirectorioDeContribuyentes;
 import pe.gob.sgtm.contribuyentes.ResumenDeContribuyente;
+import pe.gob.sgtm.cuentacorriente.CausalDeBaja;
 import pe.gob.sgtm.cuentacorriente.ConsultaDeDeudaPublica;
 import pe.gob.sgtm.cuentacorriente.ExtincionDeDeuda;
 import pe.gob.sgtm.cuentacorriente.MovimientoAsentado;
@@ -247,6 +248,12 @@ public class ResolverConResolucionDeGerencia {
                             peticion.fecha(),
                             "RESOLUCION " + registrada.numero(),
                             ObligacionDeLaPapeleta.referenciaDe(papeleta),
+                            // La causal la declara quien dicta la resolucion, que es quien
+                            // acaba de comprobar `dejaLaMultaSinEfecto()` en la linea de
+                            // arriba (#684). Es una de las seis del desplegable de RF-044, y
+                            // no una traduccion aproximada: la resolucion de gerencia que
+                            // deja la multa sin efecto ES «RESOLUCIÓN QUE DEJA SIN EFECTO».
+                            CausalDeBaja.RESOLUCION_QUE_DEJA_SIN_EFECTO,
                             observacion);
         }
 

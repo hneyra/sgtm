@@ -388,10 +388,11 @@ class AltaDeDeudaPorRangoFronteraTest {
                                 post("/api/v1/rentas/deuda/bajas")
                                         .contentType(MediaType.APPLICATION_JSON)
                                         .content(
-                                                cuerpo(
-                                                        codigo,
-                                                        "\"cuotaDesde\":1,\"cuotaHasta\":4,",
-                                                        "RES-2026-1013")))
+                                                conCausal(
+                                                        cuerpo(
+                                                                codigo,
+                                                                "\"cuotaDesde\":1,\"cuotaHasta\":4,",
+                                                                "RES-2026-1013"))))
                         .andReturn();
 
         assertThat(resultado.getResponse().getStatus())
@@ -439,7 +440,10 @@ class AltaDeDeudaPorRangoFronteraTest {
                 mvc.perform(
                                 post("/api/v1/rentas/deuda/bajas")
                                         .contentType(MediaType.APPLICATION_JSON)
-                                        .content(cuerpoDelAno(codigo, "2023", "RES-2026-1102")))
+                                        .content(
+                                                conCausal(
+                                                        cuerpoDelAno(
+                                                                codigo, "2023", "RES-2026-1102"))))
                         .andReturn();
 
         assertThat(resultado.getResponse().getStatus())
@@ -597,12 +601,14 @@ class AltaDeDeudaPorRangoFronteraTest {
                                 post("/api/v1/rentas/deuda/bajas")
                                         .contentType(MediaType.APPLICATION_JSON)
                                         .content(
-                                                cuerpoDeBaja(
-                                                                codigo,
-                                                                "\"cuota\":0,",
-                                                                "444.90",
-                                                                "RES-2026-1204")
-                                                        .replace(",\"repartir\":true", "")))
+                                                conCausal(
+                                                        cuerpoDeBaja(
+                                                                        codigo,
+                                                                        "\"cuota\":0,",
+                                                                        "444.90",
+                                                                        "RES-2026-1204")
+                                                                .replace(
+                                                                        ",\"repartir\":true", ""))))
                         .andReturn();
 
         assertThat(resultado.getResponse().getStatus()).isEqualTo(422);
@@ -626,12 +632,14 @@ class AltaDeDeudaPorRangoFronteraTest {
                                 post("/api/v1/rentas/deuda/bajas")
                                         .contentType(MediaType.APPLICATION_JSON)
                                         .content(
-                                                cuerpoDeBaja(
-                                                                codigo,
-                                                                "\"cuotaDesde\":1,\"cuotaHasta\":3,",
-                                                                "444.90",
-                                                                "RES-2026-1206")
-                                                        .replace(",\"repartir\":true", "")))
+                                                conCausal(
+                                                        cuerpoDeBaja(
+                                                                        codigo,
+                                                                        "\"cuotaDesde\":1,\"cuotaHasta\":3,",
+                                                                        "444.90",
+                                                                        "RES-2026-1206")
+                                                                .replace(
+                                                                        ",\"repartir\":true", ""))))
                         .andReturn();
 
         assertThat(resultado.getResponse().getStatus())
@@ -672,11 +680,12 @@ class AltaDeDeudaPorRangoFronteraTest {
                                 post("/api/v1/rentas/deuda/bajas")
                                         .contentType(MediaType.APPLICATION_JSON)
                                         .content(
-                                                cuerpoDeBaja(
-                                                        codigo,
-                                                        "\"cuotaDesde\":2,\"cuotaHasta\":3,",
-                                                        "296.60",
-                                                        "RES-2026-1210")))
+                                                conCausal(
+                                                        cuerpoDeBaja(
+                                                                codigo,
+                                                                "\"cuotaDesde\":2,\"cuotaHasta\":3,",
+                                                                "296.60",
+                                                                "RES-2026-1210"))))
                         .andReturn();
 
         assertThat(resultado.getResponse().getStatus())
@@ -755,12 +764,13 @@ class AltaDeDeudaPorRangoFronteraTest {
                             post("/api/v1/rentas/deuda/bajas")
                                     .contentType(MediaType.APPLICATION_JSON)
                                     .content(
-                                            conImporte(
-                                                    cuerpo(
-                                                            codigo,
-                                                            "\"cuota\":" + cuota + ",",
-                                                            documento + "-B" + cuota),
-                                                    "50.00")))
+                                            conCausal(
+                                                    conImporte(
+                                                            cuerpo(
+                                                                    codigo,
+                                                                    "\"cuota\":" + cuota + ",",
+                                                                    documento + "-B" + cuota),
+                                                            "50.00"))))
                     .andReturn();
         }
     }
@@ -783,7 +793,7 @@ class AltaDeDeudaPorRangoFronteraTest {
         return mvc.perform(
                         post("/api/v1/rentas/deuda/bajas")
                                 .contentType(MediaType.APPLICATION_JSON)
-                                .content(cuerpoDeBaja(codigo, "", insoluto, documento)))
+                                .content(conCausal(cuerpoDeBaja(codigo, "", insoluto, documento))))
                 .andReturn();
     }
 
@@ -952,4 +962,16 @@ class AltaDeDeudaPorRangoFronteraTest {
                     return TitularidadDeLaUnidad.fueraDelPadron();
                 }
             };
+
+    /**
+     * El mismo cuerpo, con la causal que toda baja declara desde #684.
+     *
+     * <p>La causal es el sustento juridico del acto y tiene campo propio: hasta entonces viajaba
+     * dentro del texto de la observacion y el libro no sabia por que se dio de baja. El alta no la
+     * lleva —el desplegable «Causal» es el de la baja—, y por eso se anade aqui y no en el cuerpo
+     * comun.
+     */
+    private static String conCausal(String cuerpo) {
+        return cuerpo.replace("\"observacion\"", "\"causal\":\"ERROR_MATERIAL\",\"observacion\"");
+    }
 }

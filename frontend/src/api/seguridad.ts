@@ -774,9 +774,13 @@ export function registrarUsuario(
 /**
  * Una copia de seguridad registrada. Es `RespaldoResource`.
  *
- * **No publica ninguna fecha de restauracion probada**, que es la unica columna
- * que el artboard consideraba interesante. La pantalla lo dice en vez de
- * inventarla.
+ * `ultimaRestauracionVerificada` es la columna que esta pantalla existe para
+ * enseñar (#558): una copia sin restauracion probada no es una copia (RNF-079).
+ * **Nulo significa «nunca se probo»**, no «hoy» y no «no hace falta»: lo escribe
+ * el simulacro de restauracion cuando restaura de verdad, y hasta entonces no
+ * hay nada que decir. Por eso la celda lleva el guion largo y su motivo, y no un
+ * cero ni un «no» —el artboard ponia ahi «hace 94 dias», que se lee como una
+ * medicion y llevaria a auditar lo que no toca—.
  */
 export type Respaldo = {
   id: number;
@@ -786,6 +790,8 @@ export type Respaldo = {
   destino: string;
   tamanoBytes: number | null;
   detalle: string | null;
+  ultimaRestauracionVerificada: string | null;
+  ultimaRestauracionVerificadaPor: string | null;
 };
 
 /**

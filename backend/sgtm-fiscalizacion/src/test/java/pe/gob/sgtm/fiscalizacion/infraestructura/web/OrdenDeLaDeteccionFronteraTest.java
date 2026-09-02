@@ -550,7 +550,12 @@ class OrdenDeLaDeteccionFronteraTest {
                         predioId,
                         fila.areaDeclarada(),
                         LocalDate.of(2020, 12, 31));
-        crearFicha(municipalidadId, predioId, fila.areaVigente(), null);
+        // Desde 2021: la version vigente empieza cuando la declarada deja de regir. Abrirla en
+        // 2020 como la cerrada dejaba las dos cubriendo todo ese ano —el padron imposible que
+        // `ficha_vigencias_no_se_pisan` (V72, #669) rechaza— y la deteccion veria el predio dos
+        // veces.
+        crearFichaDesde(
+                municipalidadId, predioId, fila.areaVigente(), LocalDate.of(2021, 1, 1), null);
         crearDeclaracion(municipalidadId, predioId, titular, declarada);
     }
 
@@ -618,18 +623,28 @@ class OrdenDeLaDeteccionFronteraTest {
 
     private static long crearFicha(
             long municipalidadId, long predioId, String area, @Nullable LocalDate hasta) {
+        return crearFichaDesde(municipalidadId, predioId, area, LocalDate.of(2020, 1, 1), hasta);
+    }
+
+    private static long crearFichaDesde(
+            long municipalidadId,
+            long predioId,
+            String area,
+            LocalDate desde,
+            @Nullable LocalDate hasta) {
         return comoApp(
                 municipalidadId,
                 "INSERT INTO ficha_catastral (municipalidad_id, predio_id, tipo, version,"
                         + " area_terreno, uso, vigencia_desde, vigencia_hasta, origen,"
                         + " documento_origen, observacion, usuario_registro)"
-                        + " VALUES (?, ?, 'UNICA', ?, ?, 'CASA_HABITACION', DATE '2020-01-01', ?,"
+                        + " VALUES (?, ?, 'UNICA', ?, ?, 'CASA_HABITACION', ?, ?,"
                         + " 'MIGRACION', 'DOC-PRUEBA', 'Siembra de la prueba', 'siembra')"
                         + " RETURNING id",
                 municipalidadId,
                 predioId,
                 SIGUIENTE_VERSION.getAndIncrement(),
                 new BigDecimal(area),
+                desde,
                 hasta);
     }
 

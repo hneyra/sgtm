@@ -6,6 +6,7 @@ import java.util.List;
 import org.jspecify.annotations.Nullable;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import pe.gob.sgtm.cuentacorriente.CausalDeBaja;
 import pe.gob.sgtm.cuentacorriente.DeudaAcogida;
 import pe.gob.sgtm.cuentacorriente.ExtincionDeDeuda;
 import pe.gob.sgtm.cuentacorriente.MovimientoAsentado;
@@ -49,6 +50,17 @@ import pe.gob.sgtm.dominio.PoliticaDeRedondeo;
  * —el denominador de todas las barras del panel— y, lo peor, se publicaba como <b>recaudacion</b>:
  * el abono de una extincion es un {@code ABONO} de concepto {@code INSOLUTO}, columna a columna el
  * mismo asiento que el de una cobranza.
+ *
+ * <h2>Y con su causal, declarada por quien llama (#684)</h2>
+ *
+ * <p>La causal —el sustento juridico de la baja— viaja en la firma del puerto y <b>no se deduce
+ * aqui</b>. Hoy el unico camino es la resolucion de gerencia que deja la multa sin efecto, y quien
+ * llama acaba de comprobarlo ({@code dejaLaMultaSinEfecto()}), asi que deducirla saldria bien hoy y
+ * afirmaria manana lo que ya no es cierto — el defecto de adivinar, con la agravante de que lo
+ * adivinado es lo que defiende el acto ante una auditoria.
+ *
+ * <p>La causal <b>no</b> sustituye a la observacion, que sigue siendo obligatoria y sigue siendo
+ * del usuario (regla 10): una es el sustento del acto y la otra el relato de quien firma.
  *
  * <p>El acto es {@code BAJA_DEUDA} y <b>no uno propio</b>. Lo que se escribe aqui es una baja de
  * deuda: los mismos asientos, por las mismas causales que el desplegable de RF-044 ofrece
@@ -98,6 +110,7 @@ public class ExtincionDeDeudaCuentaCorriente implements ExtincionDeDeuda {
             LocalDate fecha,
             String documentoOrigen,
             @Nullable String referenciaExterna,
+            CausalDeBaja causal,
             Observacion observacion) {
 
         ClaveDeObligacion clave =
@@ -130,6 +143,7 @@ public class ExtincionDeDeudaCuentaCorriente implements ExtincionDeDeuda {
                         fecha,
                         documentoOrigen,
                         referenciaExterna,
+                        causal,
                         observacion);
                 escritos++;
             }
@@ -148,6 +162,7 @@ public class ExtincionDeDeudaCuentaCorriente implements ExtincionDeDeuda {
             LocalDate fecha,
             String documentoOrigen,
             @Nullable String referenciaExterna,
+            CausalDeBaja causal,
             Observacion observacion) {
         registrar.asentar(
                 Asiento.nuevoDelActo(
@@ -172,7 +187,12 @@ public class ExtincionDeDeudaCuentaCorriente implements ExtincionDeDeuda {
                         // —los mismos asientos, por las mismas causales que el desplegable de
                         // RF-044 ofrece— y lo unico que cambia es que oficina la tramita. Ver
                         // ActoDelLibro para la decision entera.
-                        ActoDelLibro.BAJA_DEUDA),
+                        ActoDelLibro.BAJA_DEUDA,
+                        false,
+                        // Y con su causal (#684), que declara quien llama. Sin ella, la via por
+                        // la que se extingue deuda con mas consecuencias seria la unica que el
+                        // filtro por causal de RF-045 no encuentra.
+                        causal),
                 observacion);
     }
 

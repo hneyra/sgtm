@@ -5,6 +5,7 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.Objects;
 import org.jspecify.annotations.Nullable;
+import pe.gob.sgtm.cuentacorriente.CausalDeBaja;
 import pe.gob.sgtm.cuentacorriente.TributoDelLibro;
 import pe.gob.sgtm.dominio.Dinero;
 
@@ -31,6 +32,8 @@ import pe.gob.sgtm.dominio.Dinero;
  * @param fechaValor la fecha con efecto tributario
  * @param documentoOrigen el sustento: la resolucion, el expediente o el informe que lo aprueba
  * @param referenciaExterna como entra la referencia de otro contexto, si la hay
+ * @param causal por que se da de baja, con vocabulario cerrado (#684). Obligatoria en una baja y
+ *     prohibida en un alta: ver el constructor
  */
 public record MovimientoDeDeuda(
         SentidoDelMovimiento sentido,
@@ -42,7 +45,39 @@ public record MovimientoDeDeuda(
         Fase fase,
         LocalDate fechaValor,
         String documentoOrigen,
-        @Nullable String referenciaExterna) {
+        @Nullable String referenciaExterna,
+        @Nullable CausalDeBaja causal) {
+
+    /**
+     * La forma anterior a #684, sin causal. <b>Sirve para un alta y no para una baja</b>: el
+     * constructor canonico rechaza una baja sin causal, asi que esta sobrecarga existe para los
+     * contextos que generan cargos por su cuenta —licencias, anuncios, tesoreria, coactiva— y que
+     * solo dan de alta.
+     */
+    public MovimientoDeDeuda(
+            SentidoDelMovimiento sentido,
+            ClaveDeSaldo clave,
+            Dinero insoluto,
+            Dinero reajuste,
+            Dinero interes,
+            Dinero gasto,
+            Fase fase,
+            LocalDate fechaValor,
+            String documentoOrigen,
+            @Nullable String referenciaExterna) {
+        this(
+                sentido,
+                clave,
+                insoluto,
+                reajuste,
+                interes,
+                gasto,
+                fase,
+                fechaValor,
+                documentoOrigen,
+                referenciaExterna,
+                null);
+    }
 
     public MovimientoDeDeuda {
         Objects.requireNonNull(sentido, "Un movimiento de deuda es un alta o una baja");
@@ -84,6 +119,22 @@ public record MovimientoDeDeuda(
             throw new IllegalArgumentException(
                     "Un movimiento de deuda sin ningun importe no mueve nada: al menos una de las"
                             + " cuatro partes tiene que traer cifra");
+        }
+        // La causal es del acto de dar de baja, y de ninguno mas (#684). Aqui SI se puede exigir
+        // en las dos direcciones —al reves que en `Asiento`, que ademas reconstruye las filas que
+        // vienen de la base—: esto es una PETICION, y una baja que no dice por que es la que este
+        // issue existe para impedir. Hasta #684 la causal viajaba dentro del texto de la
+        // observacion, que es del usuario (regla 10) y no se puede filtrar ni contar.
+        if (sentido == SentidoDelMovimiento.BAJA && causal == null) {
+            throw new IllegalArgumentException(
+                    "Una baja de deuda declara su causal: es el sustento juridico del acto y no"
+                            + " un comentario. Las que hay son "
+                            + CausalDeBaja.admitidas());
+        }
+        if (sentido == SentidoDelMovimiento.ALTA && causal != null) {
+            throw new IllegalArgumentException(
+                    "Un alta de deuda no tiene causal: el desplegable «Causal» es el de la baja,"
+                            + " y lo que sustenta el alta es su documento de origen");
         }
     }
 
@@ -130,7 +181,8 @@ public record MovimientoDeDeuda(
                             fase,
                             fechaValor,
                             documentoOrigen,
-                            referenciaExterna));
+                            referenciaExterna,
+                            causal));
         }
         return List.copyOf(unoPorCuota);
     }
@@ -218,6 +270,7 @@ public record MovimientoDeDeuda(
                         fechaValor,
                         documentoOrigen,
                         acto,
-                        unidadDeTitularAnterior));
+                        unidadDeTitularAnterior,
+                        causal));
     }
 }

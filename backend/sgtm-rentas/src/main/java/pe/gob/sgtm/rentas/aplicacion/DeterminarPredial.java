@@ -228,7 +228,11 @@ public class DeterminarPredial {
                             cuota,
                             declarado.autovaluo(),
                             exonerado,
-                            ponderado));
+                            ponderado,
+                            // Lo que suma la titularidad ENTERA del predio, no solo esta cuota
+                            // (#690): si es menor que 100, la base sale ponderada por un predio
+                            // que no tiene dueño completo, y eso hay que poder decirlo.
+                            predio.porcentajeRegistradoDelPredio()));
         }
         return List.copyOf(base);
     }

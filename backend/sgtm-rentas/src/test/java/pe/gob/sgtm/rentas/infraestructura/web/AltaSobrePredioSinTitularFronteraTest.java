@@ -395,12 +395,13 @@ class AltaSobrePredioSinTitularFronteraTest {
                                 post("/api/v1/rentas/deuda/bajas")
                                         .contentType(MediaType.APPLICATION_JSON)
                                         .content(
-                                                cuerpo(
-                                                        sinTitular,
-                                                        11,
-                                                        FECHA,
-                                                        "RES-680-BAJA",
-                                                        null)))
+                                                conCausal(
+                                                        cuerpo(
+                                                                sinTitular,
+                                                                11,
+                                                                FECHA,
+                                                                "RES-680-BAJA",
+                                                                null))))
                         .andReturn();
 
         assertThat(baja.getResponse().getStatus())
@@ -423,6 +424,16 @@ class AltaSobrePredioSinTitularFronteraTest {
                                 .contentType(MediaType.APPLICATION_JSON)
                                 .content(cuerpo(predioId, cuota, fechaValor, documento, declarado)))
                 .andReturn();
+    }
+
+    /**
+     * Le anade al cuerpo la causal, que desde #684 es obligatoria en la baja: la pantalla la
+     * declara con vocabulario cerrado en vez de anteponerla al texto de la observacion, asi que un
+     * cuerpo sin ella es 422 nombrando las seis que hay. Cual sea da igual aqui —lo que esta prueba
+     * mide es el predio sin titular, no el sustento del acto—.
+     */
+    private static String conCausal(String cuerpo) {
+        return cuerpo.replaceFirst("\\{", "{\"causal\":\"ERROR_MATERIAL\",");
     }
 
     private static String cuerpo(

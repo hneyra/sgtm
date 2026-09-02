@@ -20,6 +20,7 @@ import pe.gob.sgtm.catastro.aplicacion.InscribirFicha;
 import pe.gob.sgtm.catastro.dominio.EstadoPredio;
 import pe.gob.sgtm.catastro.dominio.FiltroDePredios;
 import pe.gob.sgtm.catastro.dominio.TipoPredio;
+import pe.gob.sgtm.catastro.dominio.TitularidadDelPredio;
 import pe.gob.sgtm.dominio.Observacion;
 import pe.gob.sgtm.web.Api;
 import pe.gob.sgtm.web.CodigoDeError;
@@ -102,11 +103,16 @@ public class PredioController {
             @RequestParam(required = false) @Nullable String codigoDeSector,
             @RequestParam(required = false) @Nullable String estado,
             @RequestParam(required = false) @Nullable String fichado,
+            @RequestParam(required = false) @Nullable String titularidad,
             ParametrosDePaginacion paginacion) {
 
         FiltroDePredios filtro =
                 new FiltroDePredios(
-                        codRefCatastral, codigoDeSector, estadoDe(estado), fichadoDe(fichado));
+                        codRefCatastral,
+                        codigoDeSector,
+                        estadoDe(estado),
+                        fichadoDe(fichado),
+                        titularidadDe(titularidad));
 
         return RespuestaPaginada.de(
                 consulta.buscar(filtro, paginacion.aPaginacion(ORDEN_POR_OMISION)),
@@ -267,6 +273,31 @@ public class PredioController {
      * {@code false}: con el, un {@code fichado=si} devolveria la cola de saneamiento entera cuando
      * lo que se pedia era lo contrario, sin un solo mensaje.
      */
+    /**
+     * El censo de saneamiento de titularidad (#690).
+     *
+     * <p>Se rechaza con 422 lo que no sea uno de los tres valores, en vez de ignorarlo: un filtro
+     * ignorado devuelve el padron entero, y quien lo pidio leeria esos 14 422 predios como «todos
+     * tienen la titularidad incompleta», que es la respuesta plausible y equivocada por la que
+     * {@code ConsultaController} rechaza {@code conciliadaConRentas}.
+     */
+    private static @Nullable TitularidadDelPredio titularidadDe(@Nullable String texto) {
+        if (texto == null || texto.isBlank()) {
+            return null;
+        }
+        String valor = texto.strip().toUpperCase(Locale.ROOT);
+        for (TitularidadDelPredio candidato : TitularidadDelPredio.values()) {
+            if (candidato.name().equals(valor)) {
+                return candidato;
+            }
+        }
+        throw new ProblemaDeNegocio(
+                CodigoDeError.VALIDACION,
+                "«titularidad» admite SIN_TITULAR, INCOMPLETA o COMPLETA, y llego '"
+                        + texto
+                        + "'. Sin filtro, el listado es el padron entero");
+    }
+
     private static @Nullable Boolean fichadoDe(@Nullable String texto) {
         if (texto == null || texto.isBlank()) {
             return null;

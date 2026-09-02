@@ -529,6 +529,27 @@ const DEL_BACKEND = {
       tras: 'ano',
       descripcion: 'Filtro «Tributo» de la pantalla, dentro de «Filtros del detalle»',
     },
+    // El filtro que #684 abrio, y que ninguna pantalla dibuja todavia: hasta V77
+    // la causal de una baja viajaba DENTRO de la observacion —texto libre de
+    // quien atiende— y no habia forma de preguntar «ensename las bajas por
+    // prescripcion», que es lo que hace quien audita como se extingue deuda del
+    // municipio. Va detras de «Alta / Baja» porque acota a las bajas.
+    {
+      nombre: 'causal',
+      ejemplo: 'PRESCRIPCION_DECLARADA',
+      tras: 'altaBaja',
+      esquema:
+        '{ type: string, enum: [PRESCRIPCION_DECLARADA, RESOLUCION_QUE_DEJA_SIN_EFECTO,' +
+        ' ERROR_MATERIAL, COMPENSACION, DEUDA_DE_COBRANZA_DUDOSA, CONDONACION_POR_ORDENANZA] }',
+      descripcion: bloque(`
+        Por que se dio de baja la deuda. El vocabulario es el del desplegable «Causal» de la
+        pantalla de baja de deuda, letra por letra salvo la tilde y el espacio, que ningun
+        identificador lleva; cualquier otra palabra se rechaza con 422 nombrando lo admitido en
+        vez de devolver la relacion entera bajo un filtro que no acota. Acota a las bajas —un
+        alta no tiene causal— y deja fuera las anteriores a la migracion que estampa la
+        columna, que la tienen vacia y no se pueden reparar.
+      `),
+    },
   ],
   // La granularidad de la fila, que es lo que decide si la fila se puede dar de
   // baja (#551).
@@ -2806,6 +2827,20 @@ const OPERACIONES_ADICIONALES = {
           descripcion:
             '`true` o `false`, y nada más —cualquier otro valor es 422, no un false silencioso—.' +
             ' Si falta, salen los dos',
+        },
+        {
+          nombre: 'titularidad',
+          ejemplo: 'SIN_TITULAR',
+          descripcion:
+            'El censo de saneamiento de titularidad (#690). `SIN_TITULAR` son los predios sin' +
+            ' ninguna cuota abierta —en Catacaos, 4 977 de 14 422—; `INCOMPLETA`, los que tienen' +
+            ' cuotas y no suman 100 % —otros 304—; `COMPLETA`, los que sí. Importa porque el %' +
+            ' de propiedad **pondera la base imponible** del predio (NEG-05 §1): uno cuyas cuotas' +
+            ' suman 0,349 % tributa por el 0,349 % de su valor, y ninguna cifra parece mal porque' +
+            ' la determinación sale correcta para lo registrado. Se suman las cuotas ABIERTAS,' +
+            ' que es lo mismo que suma el disparador que impide pasar de 100. Cualquier otro' +
+            ' valor es 422: un filtro ignorado devolvería el padrón entero y se leería como que' +
+            ' todo está incompleto',
         },
       ],
     },

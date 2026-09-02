@@ -347,7 +347,10 @@ class DeteccionDeOmisosJdbcTest {
             long declaroDeMas = sembrarPredio(sector, "C1d");
             long fichaGrande = sembrarFicha(declaroDeMas, "500.00");
             cerrarFicha(fichaGrande);
-            sembrarFicha(declaroDeMas, "200.00");
+            // Desde 2021: la version nueva empieza cuando la anterior deja de regir. Sembrarla
+            // desde 2020 como la cerrada dejaba las dos cubriendo todo 2020, que es el padron
+            // imposible que `ficha_vigencias_no_se_pisan` (V72, #669) rechaza.
+            sembrarFichaEntre(declaroDeMas, "200.00", DESDE_LA_SIGUIENTE, null);
             sembrarTitularidad(declaroDeMas, titular, "100.00");
             sembrarDeclaracion(declaroDeMas, titular, fichaGrande, false, "PRESENTADA");
             casos.add(
@@ -471,7 +474,7 @@ class DeteccionDeOmisosJdbcTest {
             long predioId = sembrarPredio(sector, "P3a");
             long vieja = sembrarFicha(predioId, "120.00");
             cerrarFicha(vieja);
-            long vigente = sembrarFicha(predioId, "300.00");
+            long vigente = sembrarFichaEntre(predioId, "300.00", DESDE_LA_SIGUIENTE, null);
             sembrarTitularidad(predioId, titular, "100.00");
             // La primera declaro la ficha pequena; la rectificatoria declaro la vigente.
             sembrarDeclaracion(
@@ -794,7 +797,7 @@ class DeteccionDeOmisosJdbcTest {
         long predioId = sembrarPredio(sector, sufijo, municipalidadA);
         long declarada = sembrarFicha(predioId, "120.00", municipalidadA);
         cerrarFicha(declarada);
-        sembrarFicha(predioId, "300.00", municipalidadA);
+        sembrarFichaEntre(predioId, "300.00", DESDE_LA_SIGUIENTE, null);
         sembrarTitularidad(predioId, titular, "100.00", municipalidadA);
         sembrarDeclaracion(predioId, titular, declarada, false, "PRESENTADA");
         return predioId;
@@ -873,6 +876,9 @@ class DeteccionDeOmisosJdbcTest {
                 desde,
                 hasta);
     }
+
+    /** El dia en que empieza la version que sigue a una cerrada por {@link #cerrarFicha}. */
+    private static final LocalDate DESDE_LA_SIGUIENTE = LocalDate.of(2021, 1, 1);
 
     private static void cerrarFicha(long fichaId) {
         conElOwner(
