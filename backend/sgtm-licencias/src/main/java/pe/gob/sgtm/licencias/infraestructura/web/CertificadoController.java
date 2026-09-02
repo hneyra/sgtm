@@ -33,6 +33,7 @@ import pe.gob.sgtm.licencias.dominio.CertificadoRepository;
 import pe.gob.sgtm.licencias.dominio.CriterioDeCertificados;
 import pe.gob.sgtm.licencias.dominio.ParametrosUrbanisticos;
 import pe.gob.sgtm.licencias.dominio.TipoDeCertificado;
+import pe.gob.sgtm.parametros.FaltaPublicar;
 import pe.gob.sgtm.parametros.LectorDeParametros;
 import pe.gob.sgtm.web.Api;
 import pe.gob.sgtm.web.CodigoDeError;
@@ -184,7 +185,11 @@ public class CertificadoController {
             // un dato de configuracion —el concepto del TUPA o los meses de vigencia—, y quien
             // opera tiene que enterarse de cual para poder pedirlo. `EjercicioSinSellar` —que no
             // haya NINGUN conjunto sellado— es el mismo caso y hasta #562 salia como 500.
-            throw new ProblemaDeNegocio(CodigoDeError.VALIDACION, mensajeDe(sinParametro));
+            // Falta publicar una cifra normativa, no un campo de la peticion: el 422 sale con
+            // el miembro `parametroQueFalta` (#604, #691). Sin el, la interfaz no puede decir UNA
+            // de las dos cosas —«corrige el formulario» o «hay que publicar una cifra»— y acaba
+            // enumerando las dos, que es peor que no decir nada.
+            throw FaltaPublicar.problema(sinParametro);
         } catch (CertificadoRepository.ClaveRepetida carrera) {
             throw new ProblemaDeNegocio(CodigoDeError.CONFLICTO, mensajeDe(carrera));
         } catch (CertificadoRepository.NumeroDuplicado repetido) {

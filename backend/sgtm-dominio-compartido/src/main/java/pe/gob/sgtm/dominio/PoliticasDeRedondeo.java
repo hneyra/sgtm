@@ -85,10 +85,19 @@ public final class PoliticasDeRedondeo {
      * <p>El mensaje nombra el punto y los que si estan, porque «falta una politica de redondeo» no
      * le sirve a quien tiene que ir a buscarla: lo que hace falta saber es <b>cual</b>, y eso es
      * una fila de la campana de observacion del SRTM del MEF.
+     *
+     * <p><b>Y el punto sale tambien por {@link #punto()}, no solo dentro del texto</b> (#691). Esta
+     * es la unica de las excepciones de «falta publicar» que no puede declarar {@code
+     * ParametroSinPublicar} —vive en el dominio puro y no sabe de que ejercicio salieron las
+     * politicas (regla 7)—, asi que quien si sabe el ejercicio compone con las dos mitades la llave
+     * {@code REDONDEO:‹punto›} que el cuerpo del 422 publica. Leerla del mensaje seria reaccionar
+     * al texto, que es exactamente lo que el discriminador existe para evitar.
      */
     public static final class PuntoSinPolitica extends RuntimeException {
 
         @java.io.Serial private static final long serialVersionUID = 1L;
+
+        private final PuntoDeRedondeo punto;
 
         PuntoSinPolitica(PuntoDeRedondeo punto, Set<PuntoDeRedondeo> parametrizados) {
             super(
@@ -99,6 +108,12 @@ public final class PoliticasDeRedondeo {
                             + ". No redondear tambien produce un importe, y ese importe seria"
                             + " plausible y equivocado: el punto se observa contra el SRTM del MEF"
                             + " y entra como parametro (D-03c)");
+            this.punto = punto;
+        }
+
+        /** El punto que nadie parametrizo, legible por programa y no solo dentro del mensaje. */
+        public PuntoDeRedondeo punto() {
+            return punto;
         }
     }
 

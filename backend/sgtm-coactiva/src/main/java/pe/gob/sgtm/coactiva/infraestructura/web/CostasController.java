@@ -28,6 +28,7 @@ import pe.gob.sgtm.compartido.Pagina;
 import pe.gob.sgtm.contribuyentes.DirectorioDeContribuyentes;
 import pe.gob.sgtm.contribuyentes.ResumenDeContribuyente;
 import pe.gob.sgtm.dominio.Observacion;
+import pe.gob.sgtm.parametros.FaltaPublicar;
 import pe.gob.sgtm.parametros.LectorDeParametros;
 import pe.gob.sgtm.web.Api;
 import pe.gob.sgtm.web.CodigoDeError;
@@ -150,12 +151,17 @@ public class CostasController {
             // actual del expediente o de sus actos.
             throw new ProblemaDeNegocio(CodigoDeError.CONFLICTO, mensajeDe(enConflicto));
         } catch (ArancelDeCostasParametrizado.ArancelSinParametrizar
-                | LectorDeParametros.EjercicioSinSellar
-                | LiquidarCostas.SinActosQueLiquidar
-                | LiquidarCostas.ActoAjeno
-                | IllegalArgumentException invalido) {
+                | LectorDeParametros.EjercicioSinSellar falta) {
             // `EjercicioSinSellar` no es un fallo del servidor: es que nadie ha sellado todavia el
             // conjunto del ejercicio de la liquidacion (D-02a). Ver la cabecera de la clase (#562).
+            // Falta publicar una cifra normativa, no un campo de la peticion: el 422 sale con
+            // el miembro `parametroQueFalta` (#604, #691). Sin el, la interfaz no puede decir UNA
+            // de las dos cosas —«corrige el formulario» o «hay que publicar una cifra»— y acaba
+            // enumerando las dos, que es peor que no decir nada.
+            throw FaltaPublicar.problema(falta);
+        } catch (LiquidarCostas.SinActosQueLiquidar
+                | LiquidarCostas.ActoAjeno
+                | IllegalArgumentException invalido) {
             throw new ProblemaDeNegocio(CodigoDeError.VALIDACION, mensajeDe(invalido));
         }
 

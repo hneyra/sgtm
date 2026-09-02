@@ -14,6 +14,7 @@ import pe.gob.sgtm.dominio.Dinero;
 import pe.gob.sgtm.dominio.Ejercicio;
 import pe.gob.sgtm.dominio.PoliticasDeRedondeo;
 import pe.gob.sgtm.parametros.LectorDeParametros;
+import pe.gob.sgtm.parametros.ParametroSinPublicar;
 import pe.gob.sgtm.parametros.ParametrosSellados;
 import pe.gob.sgtm.parametros.PoliticasDeRedondeoSelladas;
 import pe.gob.sgtm.rentas.dominio.predial.Tramo;
@@ -324,9 +325,16 @@ public class CuadroPredialParametrizado {
      * TRAMO_PREDIAL_LIMITE:2}. La capa web la traduce a 422 —la peticion esta bien y el sistema
      * tampoco esta roto: lo que falta es la ordenanza o la publicacion—.
      */
-    public static final class ParametroDelPredialAusente extends RuntimeException {
+    public static final class ParametroDelPredialAusente extends RuntimeException
+            implements ParametroSinPublicar {
 
         @java.io.Serial private static final long serialVersionUID = 1L;
+
+        // El aviso [serial] no aplica: `Ejercicio` es un record del dominio que no
+        // implementa Serializable, y una excepcion de negocio nunca se serializa —se
+        // lanza, se traduce a problem+json y muere ahi (ManejadorDeErrores)—.
+        @SuppressWarnings("serial")
+        private final Ejercicio ejercicio;
 
         private final String llave;
 
@@ -340,12 +348,19 @@ public class CuadroPredialParametrizado {
                             + consecuencia
                             + ", y una cifra inventada no se distingue de la correcta cuando llega"
                             + " al papel que se cobra (regla 5)");
+            this.ejercicio = ejercicio;
             this.llave = llave;
         }
 
+        @Override
+        public Ejercicio ejercicio() {
+            return ejercicio;
+        }
+
         /** La llave que falta, legible por programa y no solo por quien lee el mensaje. */
-        public String llave() {
-            return llave;
+        @Override
+        public Optional<String> llave() {
+            return Optional.of(llave);
         }
     }
 }

@@ -811,7 +811,7 @@ class LicenciaDeEdificacionJdbcTest {
                                                                             .DerechoSinParametrizar)
                                                                     fallo)
                                                             .llave())
-                                            .isEqualTo("TUPA:DERECHO_LICENCIA_EDIFICACION"));
+                                            .contains("TUPA:DERECHO_LICENCIA_EDIFICACION"));
         }
 
         @Test

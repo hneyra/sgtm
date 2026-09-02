@@ -178,6 +178,11 @@ class DescargosControllerTest {
 
         assertThat(resultado.getResponse().getStatus()).isEqualTo(422);
         assertThat(resultado.getResponse().getContentAsString()).contains("papeleta");
+        assertThat(resultado.getResponse().getContentAsString())
+                .as(
+                        "#691 — CONTRASTE: el mismo 422 sin el miembro. Esto lo arregla quien"
+                                + " atiende, diciendo de que papeleta es el descargo")
+                .doesNotContain("parametroQueFalta");
         assertThat(descargos.guardados).isEmpty();
     }
 
@@ -196,6 +201,9 @@ class DescargosControllerTest {
         assertThat(cuerpo)
                 .as("un 500 traeria identificador de incidencia; esto no es una incidencia")
                 .doesNotContain("incidencia");
+        assertThat(cuerpo)
+                .as("#691 — sin conjunto sellado no hay llave: viaja el ejercicio solo")
+                .contains("\"parametroQueFalta\":{\"ejercicio\":2026}");
         assertThat(descargos.guardados).isEmpty();
     }
 
@@ -213,6 +221,11 @@ class DescargosControllerTest {
         assertThat(resultado.getResponse().getContentAsString())
                 .contains("PLAZO:DESCARGO_PAPELETA")
                 .doesNotContain("incidencia");
+        assertThat(resultado.getResponse().getContentAsString())
+                .as("#691 — y la llave, legible por programa")
+                .contains(
+                        "\"parametroQueFalta\":{\"ejercicio\":2026,"
+                                + "\"llave\":\"PLAZO:DESCARGO_PAPELETA\"}");
         assertThat(descargos.guardados).isEmpty();
     }
 

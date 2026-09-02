@@ -9843,7 +9843,7 @@ components:
           type: object
           description: |
             **Solo** cuando el 422 se debe a una cifra normativa que no esta
-            publicada en el conjunto de parametros sellado (#604). Es el
+            publicada en el conjunto de parametros sellado (#604, #691). Es el
             discriminador que separa dos errores que hasta ahora salian con el
             mismo `codigo` y el mismo `mensaje` y piden acciones distintas:
 
@@ -9855,6 +9855,12 @@ components:
 
             La interfaz reacciona a la **presencia** del miembro, nunca al texto
             del mensaje: el texto se reescribe y el contrato no.
+
+            Vale en **toda** la API y no solo en las rutas de convenios: lo
+            publican los veinticinco puntos de traduccion de los ocho modulos
+            que leen el conjunto sellado, y una guarda del backend impide que
+            nazca uno sin el (#691). Por eso su **ausencia** significa algo en
+            cualquier operacion: ahi lo que falta es un campo de la peticion.
           required: [ejercicio]
           properties:
             ejercicio:

@@ -84,7 +84,7 @@ class RT001ValorDeTerrenoTest {
                 .satisfies(
                         fallo ->
                                 assertThat(((ParametrosSellados.ParametroAusente) fallo).llave())
-                                        .isEqualTo("ARANCEL:AV-NUEVA"));
+                                        .contains("ARANCEL:AV-NUEVA"));
     }
 
     @Test

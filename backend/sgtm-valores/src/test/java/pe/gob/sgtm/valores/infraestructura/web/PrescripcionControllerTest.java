@@ -205,6 +205,11 @@ class PrescripcionControllerTest {
         assertThat(resultado.getResponse().getStatus()).isEqualTo(422);
         assertThat(resultado.getResponse().getContentAsString())
                 .contains("PLAZO:PRESCRIPCION-DECLARACION_PRESENTADA");
+        assertThat(resultado.getResponse().getContentAsString())
+                .as("#691 — y la llave, legible por programa")
+                .contains(
+                        "\"parametroQueFalta\":{\"ejercicio\":2026,"
+                                + "\"llave\":\"PLAZO:PRESCRIPCION-DECLARACION_PRESENTADA\"}");
     }
 
     // ------------------------------------------------------- lo que falta publicar (#562)
@@ -223,6 +228,9 @@ class PrescripcionControllerTest {
                 .as("y no hay llave que nombrar: lo que falta es el conjunto entero")
                 .doesNotContain("PLAZO:")
                 .doesNotContain("incidencia");
+        assertThat(cuerpo)
+                .as("#691 — y el miembro lo dice igual: ejercicio, sin llave")
+                .contains("\"parametroQueFalta\":{\"ejercicio\":2026}");
         assertThat(prescripciones.porId(1L)).isEmpty();
     }
 

@@ -551,6 +551,13 @@ class EscrituraDeDeclaracionJuradaJdbcTest {
                             "quien recibe el 422 en ventanilla no puede hacer nada con «falta un"
                                     + " parametro»: la llave es lo unico accionable (regla 5)")
                     .contains("PLAZO:DECLARACION_JURADA");
+            assertThat(respuesta.getResponse().getContentAsString())
+                    .as(
+                            "#691 — y por programa: la interfaz reacciona a la presencia del"
+                                    + " miembro, nunca al texto del mensaje")
+                    .contains(
+                            "\"parametroQueFalta\":{\"ejercicio\":2033,"
+                                    + "\"llave\":\"PLAZO:DECLARACION_JURADA\"}");
         }
 
         @Test
