@@ -70,6 +70,12 @@ public final class TitularesDeMentira implements TitularesDelPredio {
         return List.copyOf(porPredio.getOrDefault(predioId, List.of()));
     }
 
+    /** Aqui esta en el padron exactamente el predio del que se declaro algun titular (#680). */
+    @Override
+    public boolean estaEnElPadron(long predioId) {
+        return porPredio.containsKey(predioId);
+    }
+
     @Override
     public Map<Long, List<TitularDelPredio>> deVarios(Collection<Long> predioIds, LocalDate fecha) {
         lecturasPorLote++;

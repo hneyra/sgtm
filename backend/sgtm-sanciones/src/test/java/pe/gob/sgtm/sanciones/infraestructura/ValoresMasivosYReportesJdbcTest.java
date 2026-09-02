@@ -454,7 +454,7 @@ class ValoresMasivosYReportesJdbcTest {
             String delMasivo = numerosEmitidosDe(corrida).get(0);
 
             long contribuyente = crearContribuyente("num4");
-            cargoSuelto(contribuyente, "ARBITRIOS", Dinero.de("100.00"));
+            cargoSuelto(contribuyente, "ARBITRIO", Dinero.de("100.00"));
             String individual =
                     enTransaccion(
                                     () ->
@@ -465,7 +465,7 @@ class ValoresMasivosYReportesJdbcTest {
                                                     List.of(
                                                             new pe.gob.sgtm.valores.dominio
                                                                     .SelectorDeObligacion(
-                                                                    "ARBITRIOS",
+                                                                    "ARBITRIO",
                                                                     new Ejercicio(2026),
                                                                     null,
                                                                     null)),

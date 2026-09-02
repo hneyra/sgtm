@@ -55,7 +55,7 @@ class FraccionarTest {
             new SeleccionDeObligacion("PREDIAL", EJERCICIO, null, null);
 
     private static final SeleccionDeObligacion ARBITRIOS =
-            new SeleccionDeObligacion("ARBITRIOS", EJERCICIO, null, null);
+            new SeleccionDeObligacion("ARBITRIO", EJERCICIO, null, null);
 
     private final ConveniosEnMemoria convenios = new ConveniosEnMemoria();
     private final MovimientosDeConvenioEnMemoria movimientos = new MovimientosDeConvenioEnMemoria();

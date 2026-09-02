@@ -349,6 +349,13 @@ class MovimientosDeDeudaControllerTest {
         }
 
         @Override
+        public List<String> tributosFueraDelVocabulario() {
+            // La deteccion de #553 lee el libro entero y se mide contra PostgreSQL, en
+            // VocabularioDeTributosJdbcTest: aqui no hay libro que recorrer.
+            throw new UnsupportedOperationException("El controlador no pide la deteccion");
+        }
+
+        @Override
         public List<Asiento> deTodosLosPeriodosDe(ClaveDeObligacion clave) {
             throw noLoUsa();
         }
