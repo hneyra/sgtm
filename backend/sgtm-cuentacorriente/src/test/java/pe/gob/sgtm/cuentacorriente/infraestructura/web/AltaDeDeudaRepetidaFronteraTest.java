@@ -757,17 +757,24 @@ class AltaDeDeudaRepetidaFronteraTest {
             new TitularesDeLaUnidad() {
 
                 @Override
-                public List<TitularDeLaUnidad> delPredio(long predioId, LocalDate fecha) {
+                public TitularidadDeLaUnidad delPredio(long predioId, LocalDate fecha) {
+                    // El predio de esta prueba SI esta en el padron —lo siembra ella—, asi que
+                    // «sin titular declarado» es `sinTitular()` y no `fueraDelPadron()` (#680):
+                    // son dos cosas distintas desde que el puerto las sabe distinguir, y decir
+                    // la segunda seria afirmar que el identificador no apunta a nada.
                     return titularDelPredio == 0
-                            ? List.of()
-                            : List.of(
-                                    new TitularDeLaUnidad(
-                                            titularDelPredio, "IDM-0008", "TITULAR, PRUEBA"));
+                            ? TitularidadDeLaUnidad.sinTitular()
+                            : TitularidadDeLaUnidad.de(
+                                    List.of(
+                                            new TitularDeLaUnidad(
+                                                    titularDelPredio,
+                                                    "IDM-0008",
+                                                    "TITULAR, PRUEBA")));
                 }
 
                 @Override
-                public List<TitularDeLaUnidad> delVehiculo(long vehiculoId, LocalDate fecha) {
-                    return List.of();
+                public TitularidadDeLaUnidad delVehiculo(long vehiculoId, LocalDate fecha) {
+                    return TitularidadDeLaUnidad.sinTitular();
                 }
             };
 }
