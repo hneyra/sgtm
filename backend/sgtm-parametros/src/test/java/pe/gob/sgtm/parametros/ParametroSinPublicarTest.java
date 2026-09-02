@@ -139,7 +139,27 @@ class ParametroSinPublicarTest {
     }
 
     @Test
-    @DisplayName("CONTRASTE: un conjunto bien parametrizado no lanza ninguna de las cuatro")
+    @DisplayName("#633 — el punto que el conjunto no observo: la fila que hay que publicar")
+    void elPuntoSinObservarNombraSuFila() {
+        assertThatThrownBy(
+                        () ->
+                                PoliticasDeRedondeoSelladas.en(
+                                        conCuota("2", RoundingMode.HALF_UP.name()),
+                                        PuntoDeRedondeo.IMPUESTO_POR_TRAMO))
+                .isInstanceOfSatisfying(
+                        PoliticasDeRedondeoSelladas.PuntoSinObservar.class,
+                        falta -> {
+                            assertThat(falta.ejercicio()).isEqualTo(EJERCICIO);
+                            assertThat(falta.llave())
+                                    .as(
+                                            "aqui SI se sabe cual falta —lo pidio el calculo—, asi"
+                                                    + " que la llave es la fila y no el TIPO solo")
+                                    .contains("REDONDEO:IMPUESTO_POR_TRAMO");
+                        });
+    }
+
+    @Test
+    @DisplayName("CONTRASTE: un conjunto bien parametrizado no lanza ninguna de las cinco")
     void unConjuntoBienParametrizadoNoLanzaNada() {
         assertThat(
                         PoliticasDeRedondeoSelladas.de(conCuota("2", RoundingMode.HALF_UP.name()))

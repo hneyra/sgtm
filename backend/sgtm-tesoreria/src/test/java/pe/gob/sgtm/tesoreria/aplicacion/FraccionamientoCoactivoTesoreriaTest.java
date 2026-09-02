@@ -66,6 +66,15 @@ class FraccionamientoCoactivoTesoreriaTest {
     /** El ejercicio sellado que no trae el interes de fraccionamiento. */
     private static final int SIN_INTERES = 2029;
 
+    /**
+     * El ejercicio sellado que observa un punto de redondeo, y no el de la cuota (#633).
+     *
+     * <p>#562 puso {@code PoliticasDeRedondeo.PuntoSinPolitica} en el {@code catch} de este puerto
+     * y <b>no la sembro</b>: el escenario que la produce no es {@link #SIN_REDONDEO} —ahi falla el
+     * lector, antes de preguntar por ningun punto— sino este.
+     */
+    private static final int SIN_EL_PUNTO_DE_LA_CUOTA = 2030;
+
     private static final SeleccionDeObligacion PREDIAL =
             new SeleccionDeObligacion("PREDIAL", SELLADO, null, null);
 
@@ -122,6 +131,32 @@ class FraccionamientoCoactivoTesoreriaTest {
     }
 
     @Test
+    @DisplayName("#633 — y con puntos observados pero sin el de la cuota, tambien")
+    void sinElPuntoDeLaCuotaTraduce() {
+        assertThatThrownBy(() -> puerto().simular(solicitud(SIN_EL_PUNTO_DE_LA_CUOTA)))
+                .as(
+                        "#562 puso el tipo en el catch y no lo sembro: el escenario no es «sin"
+                                + " ninguna fila REDONDEO» sino «sin la fila del punto que se pide»")
+                .isInstanceOf(FraccionamientoCoactivo.CondicionesSinPublicar.class)
+                .hasMessageContaining("REDONDEO:CUOTA")
+                .hasCauseInstanceOf(PoliticasDeRedondeoSelladas.PuntoSinObservar.class);
+    }
+
+    @Test
+    @DisplayName("#633 — y al registrar tambien: son dos caminos y los dos cruzan el limite")
+    void sinElPuntoDeLaCuotaTraduceTambienAlRegistrar() {
+        assertThatThrownBy(
+                        () ->
+                                puerto().registrar(
+                                                solicitud(SIN_EL_PUNTO_DE_LA_CUOTA),
+                                                null,
+                                                Observacion.de(
+                                                        "Fraccionamiento coactivo de la prueba")))
+                .isInstanceOf(FraccionamientoCoactivo.CondicionesSinPublicar.class)
+                .hasCauseInstanceOf(PoliticasDeRedondeoSelladas.PuntoSinObservar.class);
+    }
+
+    @Test
     @DisplayName("lo que NO es falta de una cifra sigue cruzando tal cual")
     void loQueNoEsFaltaDeCifraNoSeDisfraza() {
         AcogimientoDeMentira sinDeuda = new AcogimientoDeMentira();
@@ -163,10 +198,10 @@ class FraccionamientoCoactivoTesoreriaTest {
     }
 
     /**
-     * Un lector que sella 2026, no sella 2027, sella 2028 sin ningun punto de redondeo y sella 2029
-     * sin el interes de fraccionamiento.
+     * Un lector que sella 2026, no sella 2027, sella 2028 sin ningun punto de redondeo, sella 2029
+     * sin el interes de fraccionamiento y sella 2030 con un punto que no es el de la cuota (#633).
      *
-     * <p>Las cuatro situaciones son reales y se distinguen por el ejercicio, que es exactamente por
+     * <p>Las cinco situaciones son reales y se distinguen por el ejercicio, que es exactamente por
      * lo que {@link CondicionesParametrizadas} pregunta.
      */
     private static final class ParametrosDeLaPrueba implements LectorDeParametros {
@@ -182,7 +217,17 @@ class FraccionamientoCoactivoTesoreriaTest {
             }
             constructor.numero(
                     "CUOTAS_MAXIMAS_FRACCIONAMIENTO", "ORDINARIO", ValorNormativo.de("12"));
-            if (ejercicio.valor() != SIN_REDONDEO) {
+            if (ejercicio.valor() == SIN_EL_PUNTO_DE_LA_CUOTA) {
+                constructor
+                        .numero(
+                                PoliticasDeRedondeoSelladas.TIPO,
+                                PuntoDeRedondeo.IMPUESTO_POR_TRAMO.name(),
+                                ValorNormativo.de("2"))
+                        .texto(
+                                PoliticasDeRedondeoSelladas.TIPO,
+                                PuntoDeRedondeo.IMPUESTO_POR_TRAMO.name(),
+                                RoundingMode.HALF_UP.name());
+            } else if (ejercicio.valor() != SIN_REDONDEO) {
                 constructor
                         .numero(
                                 PoliticasDeRedondeoSelladas.TIPO,

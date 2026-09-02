@@ -43,6 +43,8 @@ import pe.gob.sgtm.esquema.BaseDeDatosDePrueba;
 import pe.gob.sgtm.esquema.ContextoDeTenant;
 import pe.gob.sgtm.persistencia.OrdenSeguro;
 import pe.gob.sgtm.plataforma.tenant.TenantTransactionManager;
+import pe.gob.sgtm.valores.ValoresSinNotificar;
+import pe.gob.sgtm.valores.aplicacion.ValoresSinNotificarValores;
 import pe.gob.sgtm.valores.dominio.CausalDePrescripcion;
 import pe.gob.sgtm.valores.dominio.ComputoDeEjercicio;
 import pe.gob.sgtm.valores.dominio.CriterioDeConsultaDeValores;
@@ -701,6 +703,94 @@ class NotificacionYPaseJdbcTest {
 
         private Paginacion unaPagina() {
             return new Paginacion(0, 200, "numero", Paginacion.Direccion.ASCENDENTE);
+        }
+    }
+
+    @Nested
+    @DisplayName("#549 — El frente de Valores: emitidos y sin notificar")
+    class ElFrenteDeValores {
+
+        /** El dia al que se mira la situacion. Posterior a la emision y a la diligencia. */
+        private static final LocalDate AL_CORTE = LocalDate.of(2026, 5, 20);
+
+        private final ValoresSinNotificar puerto = new ValoresSinNotificarValores(valores);
+
+        @Test
+        @DisplayName("AC 2.5 — emitir dos valores sube el recuento del frente en dos")
+        void emitirDosSubeElRecuentoEnDos() {
+            // Delta y no total: esta clase emite valores en muchas pruebas, y un total
+            // absoluto dependeria del orden de ejecucion (#397).
+            long antes = cuantosSinNotificar();
+
+            emitir("FR-0001", "OP-2026-FR0001");
+            emitir("FR-0002", "OP-2026-FR0002");
+
+            assertThat(cuantosSinNotificar()).isEqualTo(antes + 2);
+        }
+
+        @Test
+        @DisplayName("AC 2.4 — el recuento es el mismo total que la consulta de valores anuncia")
+        void elRecuentoEsElMismoTotalQueLaConsulta() {
+            emitir("FR-0003", "OP-2026-FR0003");
+
+            long deLaConsulta =
+                    enTransaccion(
+                                    () ->
+                                            valores.consultar(
+                                                    new CriterioDeConsultaDeValores(
+                                                            null,
+                                                            null,
+                                                            null,
+                                                            null,
+                                                            SituacionDelValor.EMITIDO,
+                                                            AL_CORTE),
+                                                    new Paginacion(
+                                                            0,
+                                                            1,
+                                                            "numero",
+                                                            Paginacion.Direccion.ASCENDENTE)))
+                            .totalElementos();
+
+            assertThat(cuantosSinNotificar())
+                    .as(
+                            "la condicion de «emitido» es una expresion sobre tres tablas, no una"
+                                    + " columna: dos copias divergirian y la del panel se lee"
+                                    + " primero")
+                    .isEqualTo(deLaConsulta);
+        }
+
+        @Test
+        @DisplayName("un valor ya notificado deja de estar en el frente")
+        void unValorYaNotificadoDejaDeEstar() {
+            Valor valor = emitir("FR-0004", "OP-2026-FR0004");
+            long conEl = cuantosSinNotificar();
+
+            enTransaccion(() -> notificaciones.insertar(notificada(valor.id(), "NOT-FR-0004", 1)));
+
+            assertThat(cuantosSinNotificar())
+                    .as("el frente son los que ESPERAN la diligencia, no los que ya la tienen")
+                    .isEqualTo(conEl - 1);
+        }
+
+        @Test
+        @DisplayName("y la fecha decide: antes de la diligencia ese mismo valor SI estaba")
+        void laFechaDecide() {
+            // La situacion de un valor se mira a una fecha (regla 9). El mismo valor
+            // notificado el 3 de abril estaba «emitido» el 1 de abril, y esta prueba es lo
+            // unico que impide que el frente se pida con «ahora» en vez de con la fecha de
+            // la peticion sin que ninguna cifra parezca mal.
+            Valor valor = emitir("FR-0005", "OP-2026-FR0005");
+            enTransaccion(() -> notificaciones.insertar(notificada(valor.id(), "NOT-FR-0005", 1)));
+
+            long antesDeLaDiligencia =
+                    enTransaccion(() -> puerto.cuantosA(DILIGENCIA.minusDays(1)));
+            long alCorte = cuantosSinNotificar();
+
+            assertThat(antesDeLaDiligencia).isGreaterThan(alCorte);
+        }
+
+        private long cuantosSinNotificar() {
+            return enTransaccion(() -> puerto.cuantosA(AL_CORTE));
         }
     }
 

@@ -113,6 +113,15 @@ class ConvenioControllerTest {
     /** El ejercicio sellado que no parametriza ningun punto de redondeo (D-03c). */
     private static final int SIN_REDONDEO = 2028;
 
+    /**
+     * El ejercicio sellado que SI observa un punto de redondeo, y no el de la cuota (#633).
+     *
+     * <p>No es {@link #SIN_REDONDEO} con otro nombre: alli no hay ninguna fila y quien falla es el
+     * lector, con {@code SinPuntosObservados}, que #547 ya traducia. Aqui las politicas se leen
+     * enteras y quien falla es {@code politicas.en(CUOTA)}.
+     */
+    private static final int SIN_EL_PUNTO_DE_LA_CUOTA = 2029;
+
     private static final String CODIGO = "C-0547";
 
     private static final SeleccionDeObligacion PREDIAL =
@@ -234,7 +243,51 @@ class ConvenioControllerTest {
     }
 
     @Test
-    @DisplayName("ninguna de las dos escribe un ERROR en el registro del servidor")
+    @DisplayName("#633 — y si observa puntos y no el de la cuota, tambien 422, no 500")
+    void reformularSinElPuntoDeLaCuotaEs422() throws Exception {
+        String numero = convenioVigente();
+
+        MvcResult resultado = reformular(numero, SIN_EL_PUNTO_DE_LA_CUOTA);
+
+        assertThat(resultado.getResponse().getStatus())
+                .as(
+                        "es el tercer estado: ni falta el conjunto ni falta el bloque entero de"
+                                + " REDONDEO; falta LA FILA del punto que el cronograma atraviesa")
+                .isEqualTo(422);
+        String cuerpo = resultado.getResponse().getContentAsString();
+        assertThat(cuerpo)
+                .contains("VALIDACION")
+                .contains("REDONDEO:CUOTA")
+                .contains("2029")
+                .as("y nombra los que si estan, que es la mitad del trabajo de quien publica")
+                .contains("IMPUESTO_POR_TRAMO");
+        assertThat(cuerpo)
+                .as("no es «no hay conjunto sellado»: ese se arregla de otra manera")
+                .doesNotContain("no tiene un conjunto de parametros sellado")
+                .doesNotContain("incidencia");
+        assertThat(convenios.registrados())
+                .as("y no queda medio acto: el convenio nuevo no se abrio")
+                .hasSize(1);
+    }
+
+    @Test
+    @DisplayName("#633 — el miembro nombra la fila, como sus hermanas de redondeo")
+    void reformularSinElPuntoDeLaCuotaTraeLaLlave() throws Exception {
+        String numero = convenioVigente();
+
+        MvcResult resultado = reformular(numero, SIN_EL_PUNTO_DE_LA_CUOTA);
+
+        assertThat(resultado.getResponse().getStatus()).isEqualTo(422);
+        assertThat(resultado.getResponse().getContentAsString())
+                .as(
+                        "aqui SI se sabe cual falta —lo pidio el cronograma—, asi que la llave es"
+                                + " la fila y no el TIPO solo como en SIN_REDONDEO")
+                .contains(
+                        "\"parametroQueFalta\":{\"ejercicio\":2029,\"llave\":\"REDONDEO:CUOTA\"}");
+    }
+
+    @Test
+    @DisplayName("ninguna de las tres escribe un ERROR en el registro del servidor")
     void loQueFaltaPublicarNoEnsuciaElRegistro() throws Exception {
         String numero = convenioVigente();
         ch.qos.logback.classic.Logger registro =
@@ -246,6 +299,7 @@ class ConvenioControllerTest {
         try {
             reformular(numero, SIN_SELLAR);
             reformular(numero, SIN_REDONDEO);
+            reformular(numero, SIN_EL_PUNTO_DE_LA_CUOTA);
         } finally {
             registro.detachAppender(anotados);
         }
@@ -484,9 +538,10 @@ class ConvenioControllerTest {
     // ---------------------------------------------------------------- dobles
 
     /**
-     * Un lector que sella 2026, no sella 2027 y sella 2028 sin ningun punto de redondeo.
+     * Un lector que sella 2026, no sella 2027, sella 2028 sin ningun punto de redondeo y sella 2029
+     * con un punto que no es el de la cuota (#633).
      *
-     * <p>Las tres situaciones son reales y se distinguen por el ejercicio, que es exactamente por
+     * <p>Las cuatro situaciones son reales y se distinguen por el ejercicio, que es exactamente por
      * lo que {@code CondicionesParametrizadas} pregunta.
      */
     private static final class ParametrosDeLaPrueba implements LectorDeParametros {
@@ -503,7 +558,19 @@ class ConvenioControllerTest {
                                     "CUOTAS_MAXIMAS_FRACCIONAMIENTO",
                                     "ORDINARIO",
                                     ValorNormativo.de("12"));
-            if (ejercicio.valor() != SIN_REDONDEO) {
+            if (ejercicio.valor() == SIN_EL_PUNTO_DE_LA_CUOTA) {
+                // Un punto observado, y no el que el cronograma pide: el conjunto NO cae en
+                // `SinPuntosObservados` y quien revienta es `politicas.en(CUOTA)` (#633).
+                constructor
+                        .numero(
+                                PoliticasDeRedondeoSelladas.TIPO,
+                                PuntoDeRedondeo.IMPUESTO_POR_TRAMO.name(),
+                                ValorNormativo.de("2"))
+                        .texto(
+                                PoliticasDeRedondeoSelladas.TIPO,
+                                PuntoDeRedondeo.IMPUESTO_POR_TRAMO.name(),
+                                RoundingMode.HALF_UP.name());
+            } else if (ejercicio.valor() != SIN_REDONDEO) {
                 constructor
                         .numero(
                                 PoliticasDeRedondeoSelladas.TIPO,

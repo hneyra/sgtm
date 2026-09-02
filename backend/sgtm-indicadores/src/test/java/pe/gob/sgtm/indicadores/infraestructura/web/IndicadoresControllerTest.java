@@ -12,10 +12,13 @@ import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.test.web.servlet.MvcResult;
 import org.springframework.test.web.servlet.request.MockMvcRequestBuilders;
 import org.springframework.test.web.servlet.setup.MockMvcBuilders;
+import pe.gob.sgtm.autorizacion.ComprobadorDeAcceso;
 import pe.gob.sgtm.dominio.Ejercicio;
+import pe.gob.sgtm.indicadores.aplicacion.ConsultaDeTrabajoParado;
 import pe.gob.sgtm.indicadores.aplicacion.PanelDeRecaudacion;
 import pe.gob.sgtm.indicadores.dobles.CajaDeMentira;
 import pe.gob.sgtm.indicadores.dobles.LibroDeMentira;
+import pe.gob.sgtm.indicadores.dobles.ModulosDeMentira;
 import pe.gob.sgtm.web.ConfiguracionDeJson;
 import pe.gob.sgtm.web.ManejadorDeErrores;
 import tools.jackson.databind.json.JsonMapper;
@@ -37,6 +40,23 @@ class IndicadoresControllerTest {
     private static final Instant AHORA = Instant.parse("2026-08-13T14:05:31Z");
     private static final Clock RELOJ = Clock.fixed(AHORA, ZoneOffset.UTC);
 
+    /**
+     * El otro colaborador del controlador, que estas pruebas no ejercitan.
+     *
+     * <p>El trabajo parado tiene su propia clase de pruebas ({@code TrabajoParadoControllerTest}),
+     * porque lo que hay que montar ahi es distinto: el guardia de acceso de verdad, para poder
+     * medir que un frente sin permiso no sale.
+     */
+    private static final ConsultaDeTrabajoParado SIN_TRABAJO_PARADO =
+            new ConsultaDeTrabajoParado(
+                    new ModulosDeMentira(),
+                    new ModulosDeMentira(),
+                    new ModulosDeMentira(),
+                    new ModulosDeMentira());
+
+    private static final ComprobadorDeAcceso NIEGA_TODO =
+            (usuario, acceso, privilegio, fecha) -> false;
+
     private final LibroDeMentira libro =
             new LibroDeMentira()
                     .conRecaudado("PREDIAL", new Ejercicio(2026), 3, "500.00", 4)
@@ -51,6 +71,8 @@ class IndicadoresControllerTest {
                                             libro,
                                             libro,
                                             new CajaDeMentira().con("310.00", "10.00")),
+                                    SIN_TRABAJO_PARADO,
+                                    NIEGA_TODO,
                                     RELOJ))
                     .setControllerAdvice(new ManejadorDeErrores())
                     .setMessageConverters(
@@ -124,6 +146,8 @@ class IndicadoresControllerTest {
                                 new IndicadoresController(
                                         new PanelDeRecaudacion(
                                                 sinCargos, sinCargos, new CajaDeMentira()),
+                                        SIN_TRABAJO_PARADO,
+                                        NIEGA_TODO,
                                         RELOJ))
                         .setControllerAdvice(new ManejadorDeErrores())
                         .setMessageConverters(
@@ -146,6 +170,45 @@ class IndicadoresControllerTest {
         assertThat(cuerpo).contains("\"pct\":0,\"avanceConocido\":false");
         assertThat(cuerpo).contains("\"sub\":\"sin cargos asentados en el ejercicio\"");
         assertThat(cuerpo).contains("\"value\":\"—\"");
+    }
+
+    @Test
+    @DisplayName("#549 — AC 1.1: lo cargado sale como campo propio, con su fecha")
+    void loCargadoSaleComoCampoPropio() throws Exception {
+        String cuerpo = panel("?ejercicio=2026");
+
+        // 1000 de PREDIAL y 400 de ARBITRIOS. Hasta #549 esta cifra existia y solo se
+        // podia leer sacandola de la frase «de S/ 1,400.00 cargados» del KPI de avance.
+        assertThat(cuerpo)
+                .contains("\"cargado\":{\"importe\":\"1400.00\",\"actualizadoA\":\"2026-08-13\"}");
+        assertThat(cuerpo)
+                .as("y la frase se queda: el texto es para leer, el campo para dibujar")
+                .contains("\"note\":\"de S/ 1,400.00 cargados\"");
+    }
+
+    @Test
+    @DisplayName("#549 — AC 1.3: cada fila de tributo publica su cargado y su pendiente")
+    void cadaFilaPublicaSuCargadoYSuPendiente() throws Exception {
+        String cuerpo = panel("?ejercicio=2026");
+
+        // La fila de PREDIAL: el texto que ya estaba y, al lado, las dos cifras sueltas.
+        assertThat(cuerpo).contains("\"sub\":\"cargado S/ 1,000.00 · pendiente S/ 200.00\"");
+        assertThat(cuerpo)
+                .contains(
+                        "\"cargado\":{\"importe\":\"1000.00\",\"actualizadoA\":\"2026-08-13\"},"
+                                + "\"pendiente\":{\"importe\":\"200.00\","
+                                + "\"actualizadoA\":\"2026-08-13\"}");
+    }
+
+    @Test
+    @DisplayName("#549 — AC 1.3: la fila de un mes las trae nulas, no en cero")
+    void laFilaDeUnMesLasTraeNulas() throws Exception {
+        String cuerpo = panel("?ejercicio=2026");
+
+        // Un mes no tiene cargado ni pendiente propios. Un cero ahi diria que ese mes
+        // cargo cero, que es lo contrario de «esta fila no habla de eso».
+        assertThat(cuerpo).contains("\"label\":\"Mes 3\"");
+        assertThat(cuerpo).contains("\"cargado\":null,\"pendiente\":null");
     }
 
     @Test

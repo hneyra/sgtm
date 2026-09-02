@@ -88,6 +88,7 @@ import pe.gob.sgtm.dominio.ResultadoDeNotificacion;
 import pe.gob.sgtm.esquema.BaseDeDatosDePrueba;
 import pe.gob.sgtm.esquema.ContextoDeTenant;
 import pe.gob.sgtm.plataforma.tenant.TenantTransactionManager;
+import pe.gob.sgtm.sanciones.PapeletasSinNotificar;
 import pe.gob.sgtm.sanciones.aplicacion.ConsultaDeLaCorridaDeValores;
 import pe.gob.sgtm.sanciones.aplicacion.ConsultaDeLaHojaDePapeleta;
 import pe.gob.sgtm.sanciones.aplicacion.ConsultaDePadronesDeSanciones;
@@ -97,6 +98,7 @@ import pe.gob.sgtm.sanciones.aplicacion.GenerarCorridaDeValores;
 import pe.gob.sgtm.sanciones.aplicacion.IniciarCorridaDeValores;
 import pe.gob.sgtm.sanciones.aplicacion.ModelosDeLosReportesDeSanciones;
 import pe.gob.sgtm.sanciones.aplicacion.NotificarResolucionDeGerencia;
+import pe.gob.sgtm.sanciones.aplicacion.PapeletasSinNotificarSanciones;
 import pe.gob.sgtm.sanciones.aplicacion.PlazosDeSancionesParametrizados;
 import pe.gob.sgtm.sanciones.aplicacion.ProcesarPapeletaDeLaCorrida;
 import pe.gob.sgtm.sanciones.aplicacion.RegistrarDescargo;
@@ -114,6 +116,7 @@ import pe.gob.sgtm.sanciones.dominio.ItemDeCorrida;
 import pe.gob.sgtm.sanciones.dominio.LineaDelResumen;
 import pe.gob.sgtm.sanciones.dominio.Papeleta;
 import pe.gob.sgtm.sanciones.dominio.PapeletaDelPadron;
+import pe.gob.sgtm.sanciones.dominio.RecuentoDelPadron;
 import pe.gob.sgtm.sanciones.dominio.ResumenDePapeletas;
 import pe.gob.sgtm.sanciones.dominio.SentidoDelFallo;
 import pe.gob.sgtm.sanciones.dominio.TipoDeRecurso;
@@ -198,6 +201,28 @@ class ValoresMasivosYReportesJdbcTest {
 
     private static JdbcClient jdbc;
     private static TenantTransactionManager gestor;
+
+    /**
+     * El criterio del frente de #549: las de transito vivas y sin valor emitido.
+     *
+     * <p>No es {@code estado = IMPUESTA}. Ningun codigo de produccion escribe {@code NOTIFICADA}
+     * —lo dice el censo de los usos del enumerado en {@code src/main}—, asi que contar por ese
+     * estado publicaria «sin notificar» sobre una poblacion que no lo distingue.
+     */
+    private static final CriterioDePadron SIN_VALOR_EMITIDO =
+            new CriterioDePadron(
+                    Familia.TRANSITO,
+                    null,
+                    null,
+                    null,
+                    null,
+                    null,
+                    null,
+                    null,
+                    null,
+                    Boolean.FALSE,
+                    true);
+
     private static TransactionTemplate transaccion;
 
     private static PapeletaRepositoryJdbc papeletas;
@@ -885,6 +910,82 @@ class ValoresMasivosYReportesJdbcTest {
                                         .mapToLong(LineaDelResumen::cantidad)
                                         .sum());
             }
+        }
+    }
+
+    // ==================================================================
+    //  #549 — El frente de Transito del trabajo parado
+    // ==================================================================
+
+    @Nested
+    @DisplayName("#549 — Papeletas impuestas y sin notificar: el frente de Transito")
+    class ElFrenteDeTransito {
+
+        @Test
+        @DisplayName("AC 2.5 — sembrar dos papeletas sube el recuento en dos, y la suma con ellas")
+        void sembrarDosSubeElRecuentoEnDos() {
+            // Se mide el DELTA y no el total, a proposito: esta clase siembra papeletas en
+            // muchas pruebas y un total absoluto dependeria del orden de ejecucion, que es
+            // el defecto que #397 midio. El delta dice lo mismo y no se puede pisar.
+            RecuentoDelPadron antes = contarElFrente();
+
+            Papeleta una = papeletaDeTransito("frente1");
+            Papeleta otra = papeletaDeTransito("frente2");
+
+            RecuentoDelPadron despues = contarElFrente();
+
+            assertThat(despues.cuantas()).isEqualTo(antes.cuantas() + 2);
+            assertThat(despues.importe())
+                    .as("y la suma sube con ellas: es la misma consulta la que cuenta y suma")
+                    .isEqualTo(antes.importe().mas(una.importeAPagar()).mas(otra.importeAPagar()));
+        }
+
+        @Test
+        @DisplayName("AC 2.4 — el recuento es el mismo total que la grilla del padron anuncia")
+        void elRecuentoEsElMismoTotalQueLaGrilla() {
+            papeletaDeTransito("frente3");
+
+            long delFrente = contarElFrente().cuantas();
+            long deLaGrilla =
+                    enTransaccion(
+                                    () ->
+                                            consultaDePadrones.papeletas(
+                                                    SIN_VALOR_EMITIDO,
+                                                    Paginacion.de(0, 1, "fechaInfraccion")))
+                            .totalElementos();
+
+            assertThat(delFrente)
+                    .as(
+                            "si «lo que falta emitir» significara aqui una cosa y en el padron"
+                                    + " otra, las dos cifras se contradirian y la del panel se lee"
+                                    + " primero")
+                    .isEqualTo(deLaGrilla);
+        }
+
+        @Test
+        @DisplayName("una papeleta con su resolucion ya emitida deja de estar en el frente")
+        void unaPapeletaConSuValorDejaDeEstar() {
+            Papeleta conValor = papeletaExigible("frente4");
+            RecuentoDelPadron antes = contarElFrente();
+
+            generar.generar(corridaDe(conValor).identificador());
+
+            assertThat(numerosDelPadron(SIN_VALOR_EMITIDO))
+                    .as("el frente son las que ESPERAN el acto, no las que ya lo tienen")
+                    .doesNotContain(conValor.numero());
+            assertThat(contarElFrente().cuantas())
+                    .as("y el recuento baja con ella")
+                    .isEqualTo(antes.cuantas() - 1);
+        }
+
+        private RecuentoDelPadron contarElFrente() {
+            // Por el PUERTO publico y no por el repositorio: lo que hay que sujetar no es
+            // solo el SQL, es el criterio con que este modulo contesta al panel —familia
+            // TRANSITO e IMPUESTA—, que es donde vive la decision.
+            PapeletasSinNotificar puerto = new PapeletasSinNotificarSanciones(padron);
+            PapeletasSinNotificar.PapeletasImpuestas impuestas =
+                    enTransaccion(puerto::sinNotificar);
+            return new RecuentoDelPadron(impuestas.cuantas(), impuestas.importe());
         }
     }
 

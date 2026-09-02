@@ -19,6 +19,7 @@ import pe.gob.sgtm.cuentacorriente.ObligacionPublica;
 import pe.gob.sgtm.dominio.Dinero;
 import pe.gob.sgtm.dominio.Ejercicio;
 import pe.gob.sgtm.dominio.Observacion;
+import pe.gob.sgtm.valores.dominio.CriterioDeConsultaDeValores;
 import pe.gob.sgtm.valores.dominio.CriterioDeValor;
 import pe.gob.sgtm.valores.dominio.EstadoDeItemMasivo;
 import pe.gob.sgtm.valores.dominio.EstadoDeValor;
@@ -203,6 +204,11 @@ class GenerarCorridaMasivaTest {
 
         private long siguienteId = 1;
         private final List<Valor> guardados = new ArrayList<>();
+
+        @Override
+        public long contar(CriterioDeConsultaDeValores criterio) {
+            throw new UnsupportedOperationException("Este doble no cuenta la grilla de consulta");
+        }
 
         @Override
         public Valor insertar(Valor valor, List<ValorDetalle> detalle) {
