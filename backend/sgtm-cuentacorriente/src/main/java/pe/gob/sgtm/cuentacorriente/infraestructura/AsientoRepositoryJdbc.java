@@ -834,9 +834,7 @@ public class AsientoRepositoryJdbc extends RepositorioJdbc implements AsientoRep
                         .param("motivo", asiento.motivo())
                         .param("acto", asiento.acto() == null ? null : asiento.acto().name())
                         .param("deTitularAnterior", asiento.unidadDeTitularAnterior())
-                        .param(
-                                "causal",
-                                asiento.causal() == null ? null : asiento.causal().name())
+                        .param("causal", asiento.causal() == null ? null : asiento.causal().name())
                         .query(Long.class)
                         .single();
 

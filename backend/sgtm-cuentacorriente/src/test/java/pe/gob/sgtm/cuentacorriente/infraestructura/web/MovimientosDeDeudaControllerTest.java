@@ -99,11 +99,12 @@ class MovimientosDeDeudaControllerTest {
                                         .param("tributo", "ARBITRIO")
                                         .param("ano", "2024")
                                         .contentType(MediaType.APPLICATION_JSON)
-                                        .content(conCausal(
-                                                "{\"cuota\":2,\"insoluto\":\"100.00\","
-                                                        + "\"fechaValor\":\"2026-03-16\","
-                                                        + "\"documentoOrigen\":\"RES-0001\","
-                                                        + "\"observacion\":\"Prescripcion declarada\"}")))
+                                        .content(
+                                                conCausal(
+                                                        "{\"cuota\":2,\"insoluto\":\"100.00\","
+                                                                + "\"fechaValor\":\"2026-03-16\","
+                                                                + "\"documentoOrigen\":\"RES-0001\","
+                                                                + "\"observacion\":\"Prescripcion declarada\"}")))
                         .andReturn();
 
         assertThat(resultado.getResponse().getStatus()).isEqualTo(201);
@@ -124,13 +125,14 @@ class MovimientosDeDeudaControllerTest {
                                         .param("tributo", "ARBITRIO")
                                         .param("ano", "2024")
                                         .contentType(MediaType.APPLICATION_JSON)
-                                        .content(conCausal(
-                                                "{\"codContribuyente\":\"C-0007\","
-                                                        + "\"tributo\":\"PREDIAL\",\"ano\":\"2025\","
-                                                        + "\"cuota\":1,\"insoluto\":\"100.00\","
-                                                        + "\"fechaValor\":\"2026-03-16\","
-                                                        + "\"documentoOrigen\":\"RES-0002\","
-                                                        + "\"observacion\":\"Prescripcion declarada\"}")))
+                                        .content(
+                                                conCausal(
+                                                        "{\"codContribuyente\":\"C-0007\","
+                                                                + "\"tributo\":\"PREDIAL\",\"ano\":\"2025\","
+                                                                + "\"cuota\":1,\"insoluto\":\"100.00\","
+                                                                + "\"fechaValor\":\"2026-03-16\","
+                                                                + "\"documentoOrigen\":\"RES-0002\","
+                                                                + "\"observacion\":\"Prescripcion declarada\"}")))
                         .andReturn();
 
         assertThat(resultado.getResponse().getStatus()).isEqualTo(201);
@@ -145,11 +147,12 @@ class MovimientosDeDeudaControllerTest {
                 mvc.perform(
                                 post("/api/v1/rentas/deuda/bajas")
                                         .contentType(MediaType.APPLICATION_JSON)
-                                        .content(conCausal(
-                                                "{\"cuota\":1,\"insoluto\":\"100.00\","
-                                                        + "\"fechaValor\":\"2026-03-16\","
-                                                        + "\"documentoOrigen\":\"RES-0003\","
-                                                        + "\"observacion\":\"Prescripcion declarada\"}")))
+                                        .content(
+                                                conCausal(
+                                                        "{\"cuota\":1,\"insoluto\":\"100.00\","
+                                                                + "\"fechaValor\":\"2026-03-16\","
+                                                                + "\"documentoOrigen\":\"RES-0003\","
+                                                                + "\"observacion\":\"Prescripcion declarada\"}")))
                         .andReturn();
 
         assertThat(resultado.getResponse().getStatus()).isEqualTo(422);
@@ -238,12 +241,13 @@ class MovimientosDeDeudaControllerTest {
                                         .param("tributo", "ARBITRIO")
                                         .param("ano", "2024")
                                         .contentType(MediaType.APPLICATION_JSON)
-                                        .content(conCausal(
-                                                "{\"cuotaDesde\":2,\"cuotaHasta\":3,"
-                                                        + "\"insoluto\":\"100.00\","
-                                                        + "\"fechaValor\":\"2026-03-16\","
-                                                        + "\"documentoOrigen\":\"RES-0005\","
-                                                        + "\"observacion\":\"Prescripcion declarada\"}")))
+                                        .content(
+                                                conCausal(
+                                                        "{\"cuotaDesde\":2,\"cuotaHasta\":3,"
+                                                                + "\"insoluto\":\"100.00\","
+                                                                + "\"fechaValor\":\"2026-03-16\","
+                                                                + "\"documentoOrigen\":\"RES-0005\","
+                                                                + "\"observacion\":\"Prescripcion declarada\"}")))
                         .andReturn();
 
         assertThat(resultado.getResponse().getStatus()).isEqualTo(201);
@@ -599,5 +603,4 @@ class MovimientosDeDeudaControllerTest {
     private static String conCausal(String cuerpo) {
         return cuerpo.replace("\"observacion\"", "\"causal\":\"ERROR_MATERIAL\",\"observacion\"");
     }
-
 }

@@ -161,8 +161,7 @@ class CausalDeLaBajaJdbcTest {
     void seConectaComoSgtmApp() {
         String usuario =
                 transaccion.execute(
-                        estado ->
-                                jdbc.sql("SELECT current_user").query(String.class).single());
+                        estado -> jdbc.sql("SELECT current_user").query(String.class).single());
         assertThat(usuario)
                 .as(
                         "con FORCE ROW LEVEL SECURITY el dueno tambien queda sujeto a la politica,"
@@ -259,8 +258,8 @@ class CausalDeLaBajaJdbcTest {
                             () ->
                                     new MovimientoDeDeuda(
                                             SentidoDelMovimiento.BAJA,
-                                            new ClaveDeSaldo(1L, "PREDIAL", EJERCICIO, 1, null,
-                                                    null),
+                                            new ClaveDeSaldo(
+                                                    1L, "PREDIAL", EJERCICIO, 1, null, null),
                                             Dinero.de("100.00"),
                                             Dinero.CERO,
                                             Dinero.CERO,
@@ -307,8 +306,7 @@ class CausalDeLaBajaJdbcTest {
             assertThat(relacion(codigo, CausalDeBaja.ERROR_MATERIAL))
                     .singleElement()
                     .satisfies(
-                            asiento ->
-                                    assertThat(asiento.monto()).isEqualTo(Dinero.de("50.00")));
+                            asiento -> assertThat(asiento.monto()).isEqualTo(Dinero.de("50.00")));
         }
 
         @Test
@@ -317,9 +315,9 @@ class CausalDeLaBajaJdbcTest {
             String codigo = nuevoCodigo();
             long titular = nuevoTitular(codigo);
 
-            darDeAlta(titular, "ARBITRIOS", "300.00");
-            darDeBaja(titular, "ARBITRIOS", "100.00", CausalDeBaja.PRESCRIPCION_DECLARADA, 1);
-            darDeBaja(titular, "ARBITRIOS", "50.00", CausalDeBaja.COMPENSACION, 2);
+            darDeAlta(titular, "ARBITRIO", "300.00");
+            darDeBaja(titular, "ARBITRIO", "100.00", CausalDeBaja.PRESCRIPCION_DECLARADA, 1);
+            darDeBaja(titular, "ARBITRIO", "50.00", CausalDeBaja.COMPENSACION, 2);
 
             assertThat(relacion(codigo, null))
                     .extracting(Asiento::causal)
@@ -333,12 +331,12 @@ class CausalDeLaBajaJdbcTest {
             String codigo = nuevoCodigo();
             long titular = nuevoTitular(codigo);
 
-            darDeAlta(titular, "SERENAZGO", "300.00");
-            darDeBaja(titular, "SERENAZGO", "40.00", CausalDeBaja.DEUDA_DE_COBRANZA_DUDOSA, 1);
+            darDeAlta(titular, "VEHICULAR", "300.00");
+            darDeBaja(titular, "VEHICULAR", "40.00", CausalDeBaja.DEUDA_DE_COBRANZA_DUDOSA, 1);
 
             assertThat(relacion(codigo, CausalDeBaja.DEUDA_DE_COBRANZA_DUDOSA))
                     .extracting(Asiento::documentoOrigen)
-                    .containsExactly("RES-BAJA-SERENAZGO");
+                    .containsExactly("RES-BAJA-VEHICULAR");
         }
 
         @Test
@@ -347,8 +345,8 @@ class CausalDeLaBajaJdbcTest {
             String codigo = nuevoCodigo();
             long titular = nuevoTitular(codigo);
 
-            darDeAlta(titular, "LIMPIEZA", "150.00");
-            darDeBaja(titular, "LIMPIEZA", "150.00", CausalDeBaja.CONDONACION_POR_ORDENANZA, 1);
+            darDeAlta(titular, "ANUNCIOS", "150.00");
+            darDeBaja(titular, "ANUNCIOS", "150.00", CausalDeBaja.CONDONACION_POR_ORDENANZA, 1);
 
             Asiento laBaja =
                     relacion(codigo, CausalDeBaja.CONDONACION_POR_ORDENANZA).stream()
@@ -367,7 +365,7 @@ class CausalDeLaBajaJdbcTest {
                             "la fila que DESHACE el acto tiene que salir con el: es el rastro de"
                                     + " que aquella condonacion se deshizo (regla 4)")
                     .extracting(Asiento::documentoOrigen)
-                    .containsExactlyInAnyOrder("RES-BAJA-LIMPIEZA", "RES-REVERSION");
+                    .containsExactlyInAnyOrder("RES-BAJA-ANUNCIOS", "RES-REVERSION");
         }
     }
 
@@ -378,6 +376,9 @@ class CausalDeLaBajaJdbcTest {
     @Nested
     @DisplayName("AC 3 — las bajas anteriores a V77 no se pueden reparar, y se dice")
     class LasAnterioresAV77 {
+
+        /** La clausula del CHECK que esta prueba retiro, para poder reponer LA MISMA. */
+        private @Nullable String definicionRetirada;
 
         @Test
         @DisplayName("una instalacion con historia migra igual, y validar el CHECK habria fallado")
@@ -391,8 +392,8 @@ class CausalDeLaBajaJdbcTest {
             // retirar el CHECK, escribirla y volver a ponerlo: que es literalmente lo que
             // pasa en una instalacion en marcha el dia que se aplica la migracion.
             retirarElCheckDeLaBaja();
-            insertarBaja(titular, "PARQUES", null);
-            darDeBaja(titular, "PARQUES", "20.00", CausalDeBaja.ERROR_MATERIAL, 2);
+            insertarBaja(titular, "JUEGOS", null);
+            darDeBaja(titular, "JUEGOS", "20.00", CausalDeBaja.ERROR_MATERIAL, 2);
 
             // Y aqui esta el motivo de que V77 lo declare NOT VALID: asi entra.
             volverAPonerElCheckDeLaBaja(false);
@@ -405,7 +406,8 @@ class CausalDeLaBajaJdbcTest {
                             "al filtrar por una causal concreta la vieja no aparece: NULL no es"
                                     + " ninguna de las seis, y no se puede reparar (V7, regla 4)")
                     .singleElement()
-                    .satisfies(asiento -> assertThat(asiento.monto()).isEqualTo(Dinero.de("20.00")));
+                    .satisfies(
+                            asiento -> assertThat(asiento.monto()).isEqualTo(Dinero.de("20.00")));
 
             // Y la otra mitad: validado habria dejado la instalacion SIN MIGRAR, que es lo
             // que V64 midio para el tipo de transferencia.
@@ -421,7 +423,7 @@ class CausalDeLaBajaJdbcTest {
             long titular = nuevoTitular(codigo);
 
             retirarElCheckDeLaBaja();
-            insertarBaja(titular, "SERENAZGO", null);
+            insertarBaja(titular, "VEHICULAR", null);
             volverAPonerElCheckDeLaBaja(false);
 
             Asiento laVieja = relacion(codigo, null).stream().findFirst().orElseThrow();
@@ -446,20 +448,67 @@ class CausalDeLaBajaJdbcTest {
                     .containsExactlyInAnyOrder("RES-VIEJA", "RES-REVERSION-VIEJA");
         }
 
+        /**
+         * Estas dos pruebas RETIRAN el CHECK para poder sembrar la baja sin causal que una
+         * instalacion en marcha ya tiene, y lo vuelven a poner. Si una de ellas revienta por el
+         * camino, el CHECK se queda fuera y las siguientes miden otra cosa sin decirlo —lo que
+         * ocurrio de verdad al mezclar V74, y el sintoma fue «constraint does not exist» en una
+         * prueba que no lo habia tocado—. Asi que se repone pase lo que pase.
+         */
+        @AfterEach
+        void reponerElCheck() throws SQLException {
+            if (definicionDelCheck() == null) {
+                volverAPonerElCheckDeLaBaja(false);
+            }
+        }
+
+        /**
+         * La definicion del CHECK **leida del catalogo**, no escrita aqui.
+         *
+         * <p>Y no es un adorno: la primera version de esta clase reponia el CHECK con su texto
+         * copiado a mano, y entonces mutar `V77` —quitarle la rama del `asiento_reversado_id`— daba
+         * CERO pruebas en rojo, porque la que reversa una baja vieja acababa midiendo el CHECK que
+         * la propia prueba escribia. Leyendolo de `pg_constraint` la prueba replica lo que la
+         * migracion declara, y esa mutacion vuelve a morder.
+         *
+         * @return la clausula {@code CHECK (...)} tal cual la declara la migracion aplicada, o
+         *     {@code null} si el CHECK no esta puesto.
+         */
+        private @Nullable String definicionDelCheck() throws SQLException {
+            try (Connection duenno = base.conexion(BaseDeDatosDePrueba.OWNER);
+                    PreparedStatement sentencia =
+                            duenno.prepareStatement(
+                                    "SELECT pg_get_constraintdef(oid) FROM pg_constraint"
+                                            + " WHERE conname = 'asiento_baja_con_causal_ck'")) {
+                try (ResultSet resultado = sentencia.executeQuery()) {
+                    return resultado.next() ? resultado.getString(1) : null;
+                }
+            }
+        }
+
         private void retirarElCheckDeLaBaja() throws SQLException {
+            definicionRetirada = definicionDelCheck();
+            assertThat(definicionRetirada)
+                    .as("el CHECK de V77 tiene que estar puesto antes de retirarlo")
+                    .isNotNull();
             ejecutarComoDueno(
                     "ALTER TABLE cuenta_corriente_asiento"
                             + " DROP CONSTRAINT asiento_baja_con_causal_ck");
         }
 
         private void volverAPonerElCheckDeLaBaja(boolean validado) throws SQLException {
+            String definicion = Objects.requireNonNull(definicionRetirada);
+            // `pg_get_constraintdef` devuelve «CHECK (...) NOT VALID»; el NOT VALID se
+            // recorta cuando la prueba quiere volver a ponerlo VALIDADO, que es lo que mide
+            // que la migracion no podia haberlo declarado asi.
+            String clausula =
+                    validado && definicion.endsWith(" NOT VALID")
+                            ? definicion.substring(0, definicion.length() - " NOT VALID".length())
+                            : definicion;
             ejecutarComoDueno(
                     "ALTER TABLE cuenta_corriente_asiento"
-                            + " ADD CONSTRAINT asiento_baja_con_causal_ck"
-                            + " CHECK (acto IS DISTINCT FROM 'BAJA_DEUDA'"
-                            + "        OR causal IS NOT NULL"
-                            + "        OR asiento_reversado_id IS NOT NULL)"
-                            + (validado ? "" : " NOT VALID"));
+                            + " ADD CONSTRAINT asiento_baja_con_causal_ck "
+                            + clausula);
         }
 
         private void validarElCheckDeLaBaja() throws SQLException {
@@ -483,8 +532,8 @@ class CausalDeLaBajaJdbcTest {
             String codigo = nuevoCodigo();
             long titular = nuevoTitular(codigo);
 
-            darDeAlta(titular, "PATRIMONIO", "300.00");
-            darDeBaja(titular, "PATRIMONIO", "80.00", CausalDeBaja.PRESCRIPCION_DECLARADA, 1);
+            darDeAlta(titular, "ALCABALA", "300.00");
+            darDeBaja(titular, "ALCABALA", "80.00", CausalDeBaja.PRESCRIPCION_DECLARADA, 1);
 
             assertThat(relacion(codigo, CausalDeBaja.PRESCRIPCION_DECLARADA))
                     .singleElement()
@@ -522,11 +571,11 @@ class CausalDeLaBajaJdbcTest {
             long deB = crearContribuyente(municipalidadB, codigo, "9292" + codigo.substring(3));
 
             TenantContext.fijar(new MunicipalidadId(municipalidadA));
-            darDeAlta(deA, "COMPENSABLE", "300.00");
-            darDeBaja(deA, "COMPENSABLE", "10.00", CausalDeBaja.COMPENSACION, 1);
+            darDeAlta(deA, "ESPECTACULOS", "300.00");
+            darDeBaja(deA, "ESPECTACULOS", "10.00", CausalDeBaja.COMPENSACION, 1);
             TenantContext.fijar(new MunicipalidadId(municipalidadB));
-            darDeAlta(deB, "COMPENSABLE", "300.00");
-            darDeBaja(deB, "COMPENSABLE", "20.00", CausalDeBaja.COMPENSACION, 1);
+            darDeAlta(deB, "ESPECTACULOS", "300.00");
+            darDeBaja(deB, "ESPECTACULOS", "20.00", CausalDeBaja.COMPENSACION, 1);
 
             TenantContext.fijar(new MunicipalidadId(municipalidadA));
             assertThat(relacion(codigo, CausalDeBaja.COMPENSACION))
@@ -557,7 +606,8 @@ class CausalDeLaBajaJdbcTest {
     //  Los actos, por el camino de verdad
     // ------------------------------------------------------------------
 
-    private static List<Asiento> relacion(String codigoContribuyente, @Nullable CausalDeBaja causal) {
+    private static List<Asiento> relacion(
+            String codigoContribuyente, @Nullable CausalDeBaja causal) {
         Pagina<Asiento> pagina =
                 transaccion.execute(
                         estado ->

@@ -390,8 +390,8 @@ public class MovimientosDeDeudaController {
      * <p>Es el <b>sustento juridico</b> de un acto que extingue deuda del municipio, y hasta #684
      * no tenia campo: la pantalla de RF-044 la anteponia al texto de la observacion —«PRESCRIPCIÓN
      * DECLARADA. Deshace el alta…»— porque este {@code record} declaraba diecinueve campos y
-     * ninguno era este. Dejarla opcional habria dejado la puerta por la que volveria a colarse
-     * ahi, con el mismo aspecto de siempre y sin nada que lo dijera.
+     * ninguno era este. Dejarla opcional habria dejado la puerta por la que volveria a colarse ahi,
+     * con el mismo aspecto de siempre y sin nada que lo dijera.
      *
      * <p>Exigirla no le quita nada a quien atiende: el desplegable «Causal» de esa pantalla nace
      * <b>vacio</b> desde #636 y su primaria esta apagada mientras no se elija una, asi que por la

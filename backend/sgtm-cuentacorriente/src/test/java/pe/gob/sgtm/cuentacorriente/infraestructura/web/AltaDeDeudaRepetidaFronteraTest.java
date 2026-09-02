@@ -456,7 +456,12 @@ class AltaDeDeudaRepetidaFronteraTest {
                 mvc.perform(
                                 post("/api/v1/rentas/deuda/bajas")
                                         .contentType(MediaType.APPLICATION_JSON)
-                                        .content(conCausal(cuerpo(codigo, "\"cuota\":6,", "RES-2026-2009"))))
+                                        .content(
+                                                conCausal(
+                                                        cuerpo(
+                                                                codigo,
+                                                                "\"cuota\":6,",
+                                                                "RES-2026-2009"))))
                         .andReturn();
 
         assertThat(baja.getResponse().getStatus())
@@ -782,5 +787,4 @@ class AltaDeDeudaRepetidaFronteraTest {
     private static String conCausal(String cuerpo) {
         return cuerpo.replace("\"observacion\"", "\"causal\":\"ERROR_MATERIAL\",\"observacion\"");
     }
-
 }

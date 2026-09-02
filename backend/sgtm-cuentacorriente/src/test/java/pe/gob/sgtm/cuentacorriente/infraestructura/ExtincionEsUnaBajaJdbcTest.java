@@ -33,8 +33,8 @@ import pe.gob.sgtm.auditoria.OrigenContext;
 import pe.gob.sgtm.compartido.Pagina;
 import pe.gob.sgtm.compartido.Paginacion;
 import pe.gob.sgtm.compartido.TenantContext;
-import pe.gob.sgtm.cuentacorriente.CausalDeBaja;
 import pe.gob.sgtm.cuentacorriente.CargadoEnElLibro;
+import pe.gob.sgtm.cuentacorriente.CausalDeBaja;
 import pe.gob.sgtm.cuentacorriente.ExtincionDeDeuda;
 import pe.gob.sgtm.cuentacorriente.MovimientoAsentado;
 import pe.gob.sgtm.cuentacorriente.ObligacionPublica;
@@ -345,12 +345,12 @@ class ExtincionEsUnaBajaJdbcTest {
                                 assertThat(asiento.causal())
                                         .as(
                                                 "y su causal, que la declara quien dicta la"
-                                                    + " resolucion —acaba de comprobar"
-                                                    + " dejaLaMultaSinEfecto()— y no la adivina"
-                                                    + " esta implementacion (#684). Sin ella, la"
-                                                    + " via por la que se extingue deuda con mas"
-                                                    + " consecuencias seria la unica que el filtro"
-                                                    + " por causal de RF-045 no encuentra")
+                                                        + " resolucion —acaba de comprobar"
+                                                        + " dejaLaMultaSinEfecto()— y no la adivina"
+                                                        + " esta implementacion (#684). Sin ella, la"
+                                                        + " via por la que se extingue deuda con mas"
+                                                        + " consecuencias seria la unica que el filtro"
+                                                        + " por causal de RF-045 no encuentra")
                                         .isEqualTo(CausalDeBaja.RESOLUCION_QUE_DEJA_SIN_EFECTO);
                             });
 
@@ -615,9 +615,7 @@ class ExtincionEsUnaBajaJdbcTest {
                         "RES-" + sentido + "-" + tributo,
                         null,
                         // Toda baja declara su causal desde #684; un alta no la lleva.
-                        sentido == SentidoDelMovimiento.BAJA
-                                ? CausalDeBaja.ERROR_MATERIAL
-                                : null);
+                        sentido == SentidoDelMovimiento.BAJA ? CausalDeBaja.ERROR_MATERIAL : null);
         transaccion.execute(
                 estado -> {
                     for (Asiento asiento : movimiento.enAsientos()) {

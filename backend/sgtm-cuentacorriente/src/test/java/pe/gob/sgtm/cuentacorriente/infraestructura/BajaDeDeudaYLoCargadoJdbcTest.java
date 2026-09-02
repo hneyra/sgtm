@@ -32,11 +32,11 @@ import pe.gob.sgtm.auditoria.OrigenContext;
 import pe.gob.sgtm.compartido.TenantContext;
 import pe.gob.sgtm.cuentacorriente.CargadoEnElLibro;
 import pe.gob.sgtm.cuentacorriente.CarteraPendiente;
+import pe.gob.sgtm.cuentacorriente.CausalDeBaja;
 import pe.gob.sgtm.cuentacorriente.RecaudadoEnElLibro;
 import pe.gob.sgtm.cuentacorriente.aplicacion.CarteraDelLibroCuentaCorriente;
 import pe.gob.sgtm.cuentacorriente.aplicacion.RecaudacionDelLibroCuentaCorriente;
 import pe.gob.sgtm.cuentacorriente.aplicacion.RegistrarAsiento;
-import pe.gob.sgtm.cuentacorriente.CausalDeBaja;
 import pe.gob.sgtm.cuentacorriente.dominio.ActoDelLibro;
 import pe.gob.sgtm.cuentacorriente.dominio.Asiento;
 import pe.gob.sgtm.cuentacorriente.dominio.ClaveDeSaldo;
@@ -477,9 +477,7 @@ class BajaDeDeudaYLoCargadoJdbcTest {
                         documento,
                         null,
                         // Toda baja declara su causal desde #684; un alta no la lleva.
-                        sentido == SentidoDelMovimiento.BAJA
-                                ? CausalDeBaja.ERROR_MATERIAL
-                                : null);
+                        sentido == SentidoDelMovimiento.BAJA ? CausalDeBaja.ERROR_MATERIAL : null);
         for (Asiento asiento : movimiento.enAsientos()) {
             registrar.asentar(asiento, Observacion.de("Acto de la prueba de #601: " + sentido));
         }

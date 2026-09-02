@@ -24,9 +24,9 @@ import pe.gob.sgtm.dominio.Ejercicio;
  * AsientoRepositoryJdbc#altasYBajas} para por que no se acota por fecha en su lugar.
  *
  * <p><b>Y desde #684 se puede preguntar por la causal</b>, que es la pregunta de quien audita como
- * se extingue deuda del municipio: «ensename las bajas por prescripcion». Antes no habia forma
- * —la causal viajaba dentro del texto de la observacion— y la unica salida era leerlas a ojo. Lo
- * mismo que con el acto: las bajas anteriores a V77 tienen la causal en nulo y al filtrar por una
+ * se extingue deuda del municipio: «ensename las bajas por prescripcion». Antes no habia forma —la
+ * causal viajaba dentro del texto de la observacion— y la unica salida era leerlas a ojo. Lo mismo
+ * que con el acto: las bajas anteriores a V77 tienen la causal en nulo y al filtrar por una
  * concreta no aparecen; sin filtro salen todas.
  *
  * @param codigoContribuyente el titular; es lo que teclea quien atiende

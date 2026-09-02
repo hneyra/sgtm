@@ -379,12 +379,13 @@ class DeudaPorPeriodoFronteraTest {
                 mvc.perform(
                                 post("/api/v1/rentas/deuda/bajas")
                                         .contentType(MediaType.APPLICATION_JSON)
-                                        .content(conCausal(
-                                                cuerpoDeBaja(
-                                                        codigo,
-                                                        1,
-                                                        DEL_GRUPO.toString(),
-                                                        "RES-2026-2102"))))
+                                        .content(
+                                                conCausal(
+                                                        cuerpoDeBaja(
+                                                                codigo,
+                                                                1,
+                                                                DEL_GRUPO.toString(),
+                                                                "RES-2026-2102"))))
                         .andReturn();
 
         assertThat(resultado.getResponse().getStatus())
@@ -786,5 +787,4 @@ class DeudaPorPeriodoFronteraTest {
     private static String conCausal(String cuerpo) {
         return cuerpo.replace("\"observacion\"", "\"causal\":\"ERROR_MATERIAL\",\"observacion\"");
     }
-
 }

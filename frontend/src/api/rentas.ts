@@ -670,12 +670,6 @@ export function altaDeDeuda(peticion: PeticionDeMovimientoDeDeuda): Promise<Movi
 }
 
 /**
- * La baja. Devuelve lo mismo que el alta —`MovimientoDeDeudaResource`—, y desde
- * #598 hay que **leerlo**: con `repartir` el reparto entre cuotas lo decide el
- * servidor, asi que cuantas obligaciones se movieron y por cuanto no se puede
- * saber desde el formulario. Solo lo dicen los asientos que volvieron.
- */
-/**
  * El rótulo del desplegable «Causal», traducido al nombre que el backend admite
  * (`CausalDeBaja`, #684).
  *
@@ -709,10 +703,15 @@ export function causalDeBajaDelBackend(rotulo: string): string | null {
   return CAUSAL_DE_BAJA_DEL_BACKEND[rotulo.trim()] ?? null;
 }
 
+/**
+ * La baja. Devuelve lo mismo que el alta —`MovimientoDeDeudaResource`—, y desde
+ * #598 hay que **leerlo**: con `repartir` el reparto entre cuotas lo decide el
+ * servidor, asi que cuantas obligaciones se movieron y por cuanto no se puede
+ * saber desde el formulario. Solo lo dicen los asientos que volvieron.
+ */
 export function bajaDeDeuda(peticion: PeticionDeMovimientoDeDeuda): Promise<MovimientoRegistrado> {
   return solicitar('/rentas/deuda/bajas', { metodo: 'POST', cuerpo: peticion });
 }
-
 
 /* ══════════ Indicadores y corrida ══════════ */
 

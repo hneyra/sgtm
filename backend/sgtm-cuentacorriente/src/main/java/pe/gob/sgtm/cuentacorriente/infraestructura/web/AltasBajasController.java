@@ -121,8 +121,8 @@ public class AltasBajasController {
      * <p>Vocabulario cerrado: lo que no es una de las seis se rechaza con 422 <b>nombrando lo
      * recibido y lo admitido</b>, no se ignora. Ignorarlo devolveria la relacion entera bajo el
      * filtro que quien audita cree haber aplicado —«todas las bajas» leidas como «las bajas por
-     * prescripcion»—, que es exactamente el defecto que #539 midio en {@code
-     * GET /rentas/contribuyentes} y #544 en la bitacora.
+     * prescripcion»—, que es exactamente el defecto que #539 midio en {@code GET
+     * /rentas/contribuyentes} y #544 en la bitacora.
      */
     private static @Nullable CausalDeBaja causalDe(@Nullable String texto) {
         if (texto == null || texto.isBlank()) {

@@ -149,7 +149,8 @@ class ControladoresDeLecturaTest {
     @Test
     @DisplayName("con @Transactional, el GET de altas y bajas funciona")
     void conProxyAltasBajasFunciona() {
-        var pagina = altasBajasConProxy.altasYBajas(CODIGO, null, null, null, null, null, paginacion());
+        var pagina =
+                altasBajasConProxy.altasYBajas(CODIGO, null, null, null, null, null, paginacion());
 
         assertThat(pagina.totalElementos()).isZero();
     }

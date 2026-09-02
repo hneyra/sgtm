@@ -387,11 +387,12 @@ class AltaDeDeudaPorRangoFronteraTest {
                 mvc.perform(
                                 post("/api/v1/rentas/deuda/bajas")
                                         .contentType(MediaType.APPLICATION_JSON)
-                                        .content(conCausal(
-                                                cuerpo(
-                                                        codigo,
-                                                        "\"cuotaDesde\":1,\"cuotaHasta\":4,",
-                                                        "RES-2026-1013"))))
+                                        .content(
+                                                conCausal(
+                                                        cuerpo(
+                                                                codigo,
+                                                                "\"cuotaDesde\":1,\"cuotaHasta\":4,",
+                                                                "RES-2026-1013"))))
                         .andReturn();
 
         assertThat(resultado.getResponse().getStatus())
@@ -439,7 +440,10 @@ class AltaDeDeudaPorRangoFronteraTest {
                 mvc.perform(
                                 post("/api/v1/rentas/deuda/bajas")
                                         .contentType(MediaType.APPLICATION_JSON)
-                                        .content(conCausal(cuerpoDelAno(codigo, "2023", "RES-2026-1102"))))
+                                        .content(
+                                                conCausal(
+                                                        cuerpoDelAno(
+                                                                codigo, "2023", "RES-2026-1102"))))
                         .andReturn();
 
         assertThat(resultado.getResponse().getStatus())
@@ -596,13 +600,15 @@ class AltaDeDeudaPorRangoFronteraTest {
                 mvc.perform(
                                 post("/api/v1/rentas/deuda/bajas")
                                         .contentType(MediaType.APPLICATION_JSON)
-                                        .content(conCausal(
-                                                cuerpoDeBaja(
-                                                                codigo,
-                                                                "\"cuota\":0,",
-                                                                "444.90",
-                                                                "RES-2026-1204")
-                                                        .replace(",\"repartir\":true", ""))))
+                                        .content(
+                                                conCausal(
+                                                        cuerpoDeBaja(
+                                                                        codigo,
+                                                                        "\"cuota\":0,",
+                                                                        "444.90",
+                                                                        "RES-2026-1204")
+                                                                .replace(
+                                                                        ",\"repartir\":true", ""))))
                         .andReturn();
 
         assertThat(resultado.getResponse().getStatus()).isEqualTo(422);
@@ -625,13 +631,15 @@ class AltaDeDeudaPorRangoFronteraTest {
                 mvc.perform(
                                 post("/api/v1/rentas/deuda/bajas")
                                         .contentType(MediaType.APPLICATION_JSON)
-                                        .content(conCausal(
-                                                cuerpoDeBaja(
-                                                                codigo,
-                                                                "\"cuotaDesde\":1,\"cuotaHasta\":3,",
-                                                                "444.90",
-                                                                "RES-2026-1206")
-                                                        .replace(",\"repartir\":true", ""))))
+                                        .content(
+                                                conCausal(
+                                                        cuerpoDeBaja(
+                                                                        codigo,
+                                                                        "\"cuotaDesde\":1,\"cuotaHasta\":3,",
+                                                                        "444.90",
+                                                                        "RES-2026-1206")
+                                                                .replace(
+                                                                        ",\"repartir\":true", ""))))
                         .andReturn();
 
         assertThat(resultado.getResponse().getStatus())
@@ -671,12 +679,13 @@ class AltaDeDeudaPorRangoFronteraTest {
                 mvc.perform(
                                 post("/api/v1/rentas/deuda/bajas")
                                         .contentType(MediaType.APPLICATION_JSON)
-                                        .content(conCausal(
-                                                cuerpoDeBaja(
-                                                        codigo,
-                                                        "\"cuotaDesde\":2,\"cuotaHasta\":3,",
-                                                        "296.60",
-                                                        "RES-2026-1210"))))
+                                        .content(
+                                                conCausal(
+                                                        cuerpoDeBaja(
+                                                                codigo,
+                                                                "\"cuotaDesde\":2,\"cuotaHasta\":3,",
+                                                                "296.60",
+                                                                "RES-2026-1210"))))
                         .andReturn();
 
         assertThat(resultado.getResponse().getStatus())
@@ -754,13 +763,14 @@ class AltaDeDeudaPorRangoFronteraTest {
             mvc.perform(
                             post("/api/v1/rentas/deuda/bajas")
                                     .contentType(MediaType.APPLICATION_JSON)
-                                    .content(conCausal(
-                                            conImporte(
-                                                    cuerpo(
-                                                            codigo,
-                                                            "\"cuota\":" + cuota + ",",
-                                                            documento + "-B" + cuota),
-                                                    "50.00"))))
+                                    .content(
+                                            conCausal(
+                                                    conImporte(
+                                                            cuerpo(
+                                                                    codigo,
+                                                                    "\"cuota\":" + cuota + ",",
+                                                                    documento + "-B" + cuota),
+                                                            "50.00"))))
                     .andReturn();
         }
     }
@@ -965,5 +975,4 @@ class AltaDeDeudaPorRangoFronteraTest {
     private static String conCausal(String cuerpo) {
         return cuerpo.replace("\"observacion\"", "\"causal\":\"ERROR_MATERIAL\",\"observacion\"");
     }
-
 }
