@@ -198,6 +198,17 @@ export type Hoja = {
   cierre: string;
   /** Lo que impide dibujar la hoja, cuando lo hay. */
   sinLectura?: string;
+  /**
+   * Cuando la hoja no se LEE sino que se EMITE: qué hace el acto.
+   *
+   * Las tres del carril que no tienen lectura no son la misma cosa, y hasta
+   * #589 se dibujaban igual. Las dos resoluciones de gerencia se dictan desde
+   * la papeleta y aquí no hay nada que ofrecer; la constancia libre **sí** se
+   * pide en ventanilla y su emisor es un `POST` que devuelve el archivo, así
+   * que lo que le faltaba era el formulario y no el conducto. Presente = la
+   * hoja dibuja el acto; ausente = dice por qué no hay nada.
+   */
+  emision?: string;
 };
 
 export const HOJAS: Hoja[] = [
@@ -219,7 +230,9 @@ export const HOJAS: Hoja[] = [
     crit: [],
     cierre: 'Se expide a solicitud del interesado. Si a la fecha verificada hay una sola papeleta pendiente, el servidor la niega y dice cuáles lo impiden.',
     sinLectura:
-      'Es una escritura, no una consulta: numera la constancia, exige la placa y la observación de quien la emite (regla 10), y si a la fecha verificada hay una sola papeleta pendiente la niega con 409 y la lista de las que lo impiden. Aquí no hay ni un campo para nada de eso: la hoja del carril no declara ninguno. Bajar el archivo sí se sabe —el emisor es un POST y `descargar()` los admite—, lo que falta es el formulario del acto. Lo que sí se ve, ya emitida, es en «Relación de constancias emitidas» (#589).',
+      'Aquí no hay hoja que leer, y no es una falta: el emisor es un POST y lo que devuelve es el archivo, no un JSON que se pueda dibujar. Lo que sí hay es el acto, debajo. Las ya emitidas se listan en «Relación de constancias emitidas», que es la lectura de esta misma familia.',
+    emision:
+      'Acredita que un vehículo no registra papeletas de tránsito pendientes de pago al día que se indique. El servidor comprueba el padrón a esa fecha y, si encuentra una sola, se niega y devuelve los números de las que lo impiden: no es un error de la petición, es la respuesta. Cuando no hay ninguna, numera la constancia, la asienta en la bitácora y entrega el papel en el formato elegido.',
   },
   {
     k: 'padron_constancias', g: 'Constancias', label: 'Relación de constancias emitidas',
