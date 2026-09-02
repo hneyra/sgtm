@@ -613,6 +613,16 @@
     ],
     "sinGeometria": "entero"
   },
+  "GET /catastro/predios/plano/marco": {
+    "marco": {
+      "oeste": "numero",
+      "sur": "numero",
+      "este": "numero",
+      "norte": "numero"
+    },
+    "lotes": "entero",
+    "notaDelMarco": "texto"
+  },
   "GET /catastro/predios/{predioId}/inquilinos": [
     {
       "inquilinoId": "entero",
@@ -978,6 +988,33 @@
             "arancelFuente": "texto"
           }
         ]
+      }
+    ],
+    "pagina": "entero",
+    "tamano": "entero",
+    "totalElementos": "entero",
+    "totalPaginas": "entero",
+    "hayMas": "booleano"
+  },
+  "GET /coactiva/prescripcion": {
+    "contenido": [
+      {
+        "id": "entero",
+        "codContribuyente": "texto",
+        "contribuyente": "texto",
+        "tributo": "texto",
+        "ejercicioDesde": "entero",
+        "ejercicioHasta": "entero",
+        "fechaDePresentacion": "texto",
+        "plazoAplicable": "texto",
+        "plazo": "texto",
+        "resultado": "texto",
+        "nDeResolucion": "texto",
+        "ejerciciosPrescritos": [
+          "entero"
+        ],
+        "usuario": "texto",
+        "observacion": "texto"
       }
     ],
     "pagina": "entero",
@@ -4700,7 +4737,12 @@
   },
   "POST /fiscalizacion/programas/{id}/muestra": {
     "programaId": "entero",
-    "predios": "entero"
+    "predios": "entero",
+    "sinTitular": "entero",
+    "detectados": "entero",
+    "excluidosPorOtroPrograma": "entero",
+    "excluidosPorActaDelEjercicio": "entero",
+    "fechaSorteo": "texto"
   },
   "POST /fiscalizacion/transferencias": {
     "numero": "texto",

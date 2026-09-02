@@ -104,11 +104,25 @@ export const panelesDeSistema = (ejercicio: string): PanelDeSistema[] => [
     /* El artboard dibujaba tres cajas de contraseña —actual, nueva y repetir—.
        `PUT /seguridad/usuarios/{id}/clave` recibe SOLO una observación: lo tecleado
        ahí no viajaba a ninguna parte y se quedaba en el estado de React. Se
-       retiran: no hay campo porque no hay a dónde mandarlo. */
-    campos: [{ k: 'cMotivo', l: 'Motivo del cambio', t: 'ro', ancho: true, v: '—', ayuda: 'Es lo único que la petición lleva: ninguna contraseña' }],
-    impedimento:
-      'La interfaz no sabe cuál de los usuarios del padrón eres: el endpoint pide el id del usuario y la ' +
-      'sesión sólo publica el mapa de permisos. Mientras tanto, la contraseña se cambia en el proveedor de identidad.',
+       retiran: no hay campo porque no hay a dónde mandarlo. Y no vuelven ahora
+       que la pantalla escribe de verdad — lo que cambió es que se sabe QUIÉN
+       eres (#559), no dónde vive la credencial. */
+    campos: [
+      {
+        k: 'cMotivo',
+        l: 'Motivo del cambio · obligatorio',
+        t: 'text',
+        ancho: true,
+        ph: 'Por qué cambias la contraseña',
+        ayuda: 'Es lo único que la petición lleva: ninguna contraseña. Sin él no se puede iniciar el cambio (RNF-052).',
+      },
+    ],
+    /* Sin impedimento estructural: `GET /seguridad/sesion` publica desde #559 el
+       `usuarioId` que este `PUT` pide, y lo publica para cualquier sesión válida.
+       Lo que puede impedir el acto es de ejecución —que esa lectura no haya
+       llegado, o que falte la observación— y lo calcula la pantalla, porque
+       depende de lo que se haya tecleado y no de lo que el backend publique. */
+    impedimento: '',
     pie: 'El backend no recibe ninguna contraseña: registra el acto y te manda al proveedor de identidad.',
     primaria: 'Cambiar la contraseña',
   },

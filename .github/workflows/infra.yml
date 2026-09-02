@@ -243,8 +243,15 @@ jobs:
       # con «extension "postgis" is not available», que no se parece a su causa. El
       # motor del manifiesto SI la trae —es `postgis/postgis`—; el de aqui es el nativo
       # del runner, y hay que completarlo a mano.
+      # `apt-get update` antes del install NO es ceremonia (#676): el indice de paquetes
+      # que la imagen del runner trae precocinado apunta a versiones EXACTAS, y el espejo
+      # retira la anterior en cuanto publica una revision nueva. Desde ese dia el install
+      # falla siempre —«404 Not Found» al bajar una dependencia— y muere antes de instalar
+      # nada. No es un parpadeo que se arregle reintentando: se arregla refrescando el indice.
       - name: PostGIS en el motor local del runner
-        run: sudo apt-get install -y -qq postgresql-16-postgis-3
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq postgresql-16-postgis-3
 
       - name: simulacro-de-restauracion.sh
         run: infra/respaldo/simulacro-de-restauracion.sh --ambiente stg

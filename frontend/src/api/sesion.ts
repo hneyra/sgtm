@@ -29,6 +29,23 @@ const AUTORIZACION = `${REALM}/protocol/openid-connect/auth`;
 const TOKEN = `${REALM}/protocol/openid-connect/token`;
 const FIN_DE_SESION = `${REALM}/protocol/openid-connect/logout`;
 
+/**
+ * Una ruta del proveedor de identidad, resuelta contra el emisor que esta
+ * interfaz ya usa para entrar.
+ *
+ * Lo que compone es la BASE, y nunca la ruta. La ruta la dice el servidor
+ * —`PUT /seguridad/usuarios/{id}/clave` contesta `/account/password`— y su
+ * javadoc explica por qué llega relativa: el emisor concreto es configuración
+ * del ambiente (ADR-0005), y horneado en el backend obligaría a recompilar para
+ * cambiar de proveedor. La base sale de la misma constante con la que se pide el
+ * token, así que las dos mitades no pueden acabar apuntando a servidores
+ * distintos — que es el defecto que este archivo ya evita con las tres rutas de
+ * arriba.
+ */
+export function enElProveedorDeIdentidad(ruta: string): string {
+  return REALM + ruta;
+}
+
 const VERIFICADOR = 'sgtm.pkce.verificador';
 const ESTADO = 'sgtm.pkce.estado';
 const DESTINO = 'sgtm.pkce.destino';

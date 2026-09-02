@@ -1,6 +1,8 @@
 package pe.gob.sgtm.valores.dominio;
 
 import java.util.Optional;
+import pe.gob.sgtm.compartido.Pagina;
+import pe.gob.sgtm.compartido.Paginacion;
 
 /**
  * Las declaraciones de prescripcion.
@@ -19,4 +21,13 @@ public interface PrescripcionRepository {
     Prescripcion insertar(Prescripcion prescripcion);
 
     Optional<Prescripcion> porId(long id);
+
+    /**
+     * La relacion de declaraciones que pide el criterio, paginada (#674, RF-094).
+     *
+     * <p>Devuelve {@link PrescripcionEnLista} y no {@link Prescripcion}: la fila de una relacion no
+     * lleva el computo entero de cada ejercicio ni los hechos alegados, que son dos consultas mas
+     * por fila y pertenecen a la resolucion, no al listado.
+     */
+    Pagina<PrescripcionEnLista> buscar(CriterioDePrescripciones criterio, Paginacion paginacion);
 }

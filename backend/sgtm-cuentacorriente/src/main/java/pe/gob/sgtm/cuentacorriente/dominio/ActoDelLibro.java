@@ -75,6 +75,22 @@ package pe.gob.sgtm.cuentacorriente.dominio;
  * donde olvidar uno, para una distincion que no cambia ninguna cifra. Y el {@code CHECK} de V68 ya
  * admite {@code BAJA_DEUDA}, asi que este cambio no necesita ninguna migracion.
  *
+ * <h2>Y la prescripcion declarada tampoco gana uno propio (#674)</h2>
+ *
+ * <p>#662 dejo dicho de pasada que la deuda prescrita «sigue contando como emision»; #674 lo
+ * convirtio en una decision tomada en vez de una consecuencia heredada de que {@code
+ * DeclararPrescripcion} no escribiera, y la confirmo: <b>sigue siendo cartera pendiente y emision
+ * del ejercicio hasta que la administracion la de de baja</b>. El razonamiento entero, con el art.
+ * 43 del TUO del Codigo Tributario delante, esta en el javadoc de {@code DeclararPrescripcion}; en
+ * una linea, lo que prescribe es la <b>accion de cobro</b> y este libro es el de la
+ * <b>obligacion</b>, asi que un asiento que la cancelara afirmaria algo falso.
+ *
+ * <p>Por eso tampoco hay un {@code PRESCRIPCION} aqui, y no solo por el coste de arriba: la baja
+ * que se registra <i>por</i> una prescripcion declarada <b>es</b> una baja de deuda, y su causal es
+ * el sustento del acto —viaja en el {@code motivo}, porque {@code
+ * MovimientosDeDeudaController.PeticionDeMovimiento} no tiene ningun campo para ella—, no una clase
+ * distinta de asiento.
+ *
  * <p>Lo que si es <b>otra pregunta</b> —y no se contesta con esta columna— es de que <i>origen</i>
  * viene el acto: si lo tecleo una persona en las dos pantallas de Rentas o lo produjo un
  * procedimiento. Es lo que el manual llama «Auto / Manual», y meterlo aqui seria hacer que una

@@ -1991,6 +1991,12 @@ class EscrituraDeFichasControllerTest {
         }
 
         @Override
+        public pe.gob.sgtm.catastro.dominio.MarcoDeLoLevantado marcoDeLoLevantado(
+                pe.gob.sgtm.catastro.dominio.AcotacionDelPlano acotacion) {
+            throw new UnsupportedOperationException("La escritura de fichas no dibuja planos");
+        }
+
+        @Override
         public Optional<String> geometriaDe(long predioId) {
             return Optional.empty();
         }

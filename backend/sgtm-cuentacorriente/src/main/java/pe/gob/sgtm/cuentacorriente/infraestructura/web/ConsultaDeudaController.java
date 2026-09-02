@@ -12,6 +12,7 @@ import pe.gob.sgtm.autorizacion.Privilegio;
 import pe.gob.sgtm.autorizacion.RequiereAcceso;
 import pe.gob.sgtm.compartido.Paginacion;
 import pe.gob.sgtm.cuentacorriente.aplicacion.ConsultarDeuda;
+import pe.gob.sgtm.cuentacorriente.dominio.Agregacion;
 import pe.gob.sgtm.cuentacorriente.dominio.CriterioDeDeudaPorContribuyente;
 import pe.gob.sgtm.cuentacorriente.dominio.Fase;
 import pe.gob.sgtm.web.Api;
@@ -31,6 +32,25 @@ import pe.gob.sgtm.web.RespuestaPaginada;
  * convenios de fraccionamiento todavia no existe (#25 depende de el solo para esa parte). Se acepta
  * el parametro para no romper la pantalla, no se aplica —el mismo patron que {@code situacion} en
  * {@code CuentaCorrienteController}—.
+ *
+ * <h2>{@code porPeriodo}: la fila que se puede dar de baja (#551)</h2>
+ *
+ * <p>Por omision cada fila es una <b>obligacion</b> con sus periodos agregados —{@code
+ * periodoDesde}/{@code periodoHasta} son el minimo y el maximo del grupo—, que es lo que la
+ * ventanilla necesita para cobrar: {@code POST /tesoreria/caja/cobranza} pide esa clave.
+ *
+ * <p>Pero {@code POST /rentas/deuda/bajas} extingue <b>una</b> cuota, y una fila que agrega cinco
+ * periodos no dice cuanto debe cada una: no hay ningun cuerpo que se pueda componer desde ella sin
+ * repartir el total en la pantalla, que es componer dinero en la interfaz (RNF-083) y ademas
+ * produciria {@code BajaMayorQueLaDeuda} en cuanto el reparto no coincidiera al centimo. Con {@code
+ * porPeriodo=true} cada fila <b>es</b> una cuota, con {@code periodoDesde == periodoHasta}, su
+ * propio desglose en cuatro partes y su {@code actualizadoA}: la forma del recurso no cambia, solo
+ * donde se corta.
+ *
+ * <p>Se admite {@code true} o {@code false} y <b>nada mas</b>: cualquier otra palabra es 422
+ * nombrando el parametro, por lo mismo que el {@code activa} del catalogo vial (#565). Un «si»
+ * tecleado que se leyera como «false» devolveria filas agregadas a quien pidio cuotas, y esa
+ * respuesta es indistinguible de la correcta hasta que alguien intenta dar una de baja.
  *
  * <h2>Y la caja tributaria lee de aqui: {@code caja_tributaria} tambien autoriza (#548)</h2>
  *
@@ -87,6 +107,7 @@ public class ConsultaDeudaController {
             @RequestParam(required = false) @Nullable String fechaDeCorte,
             @RequestParam(required = false) @Nullable String fase,
             @RequestParam(required = false) @Nullable String incluyeConvenios,
+            @RequestParam(required = false) @Nullable String porPeriodo,
             ParametrosDePaginacion parametros) {
 
         String codigo = exigirContribuyente(codContribuyente);
@@ -95,11 +116,38 @@ public class ConsultaDeudaController {
         }
 
         CriterioDeDeudaPorContribuyente criterio =
-                new CriterioDeDeudaPorContribuyente(codigo, fechaDe(fechaDeCorte), faseDe(fase));
+                new CriterioDeDeudaPorContribuyente(
+                        codigo, fechaDe(fechaDeCorte), faseDe(fase), agregacionDe(porPeriodo));
 
         return RespuestaPaginada.de(
                 consulta.porContribuyente(criterio, paginacionDe(parametros)),
                 ObligacionConDeudaResource::de);
+    }
+
+    /**
+     * Como se corta cada fila, dicho por la peticion y nunca adivinado (#551).
+     *
+     * <p>Ausente es {@link Agregacion#POR_OBLIGACION}, que es lo que esta operacion ha devuelto
+     * siempre. Lo que no se hace es leer cualquier texto como «false»: {@code porPeriodo=si} tiene
+     * que decirlo, porque una respuesta agregada a quien pidio cuotas se lee igual que la correcta.
+     */
+    private static Agregacion agregacionDe(@Nullable String texto) {
+        if (texto == null || texto.isBlank()) {
+            return Agregacion.POR_OBLIGACION;
+        }
+        String valor = texto.strip().toLowerCase(Locale.ROOT);
+        if ("true".equals(valor)) {
+            return Agregacion.POR_PERIODO;
+        }
+        if ("false".equals(valor)) {
+            return Agregacion.POR_OBLIGACION;
+        }
+        throw new ProblemaDeNegocio(
+                CodigoDeError.VALIDACION,
+                "El parametro «porPeriodo» admite «true» o «false»: '"
+                        + texto
+                        + "'. Con «true» cada fila es una cuota con su propio desglose; sin el,"
+                        + " cada fila es una obligacion con sus periodos agregados");
     }
 
     private static @Nullable Fase faseDe(@Nullable String texto) {

@@ -230,6 +230,12 @@ final class CatastroEnMemoria
     }
 
     @Override
+    public pe.gob.sgtm.catastro.dominio.MarcoDeLoLevantado marcoDeLoLevantado(
+            pe.gob.sgtm.catastro.dominio.AcotacionDelPlano acotacion) {
+        throw new UnsupportedOperationException("Esta carga no dibuja planos");
+    }
+
+    @Override
     public Optional<String> geometriaDe(long predioId) {
         return Optional.empty();
     }

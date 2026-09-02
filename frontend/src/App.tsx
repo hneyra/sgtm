@@ -4,6 +4,8 @@ import { MODULOS, moduloDe } from './shell/modulos';
 import { Icono } from './ds/Icono';
 import { ICO } from './ds/iconos';
 import { rotuloDeLaEntidad } from './api/sesion';
+import { municipalidadDeLaSesion } from './api/seguridad';
+import { useRecurso } from './api/useRecurso';
 
 /* Cada módulo llega en su propio trozo: el arranque no paga los doce. */
 const PANTALLAS: Record<string, React.LazyExoticComponent<React.ComponentType<PantallaProps>>> = {
@@ -48,6 +50,22 @@ export function App() {
     tema: 'claro',
     ejercicio: '2026',
   }));
+
+  /* El nombre de la municipalidad, del backend (#555).
+     `rotuloDeLaEntidad()` sigue siendo el valor de partida y el de reserva: sale
+     del claim del token, dice «Municipalidad n.º 1» y no puede mentir. Lo que se
+     gana aqui es el nombre de verdad —«Municipalidad Provincial de Sullana»—,
+     que es lo que se lee en la cabecera de los doce modulos y lo que sale
+     impreso en el membrete de cinco hojas.
+
+     Y conviene recordar de que se viene: la constante decia «Municipalidad
+     Distrital de Catacaos» para TODAS, y la municipalidad 1 es Sullana. Estaba
+     equivocada en las dos mitades, el tipo y el nombre. */
+  const laMunicipalidad = useRecurso((senal) => municipalidadDeLaSesion(senal), []);
+  useEffect(() => {
+    const nombre = laMunicipalidad.datos?.nombre;
+    if (nombre !== undefined && nombre !== '') setPref((p) => ({ ...p, entidad: nombre }));
+  }, [laMunicipalidad.datos]);
 
   useEffect(() => {
     const t = () => setRuta(leerRuta());

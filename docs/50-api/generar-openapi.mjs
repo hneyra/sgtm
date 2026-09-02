@@ -387,6 +387,15 @@ const DEL_BACKEND = {
       `),
     },
   ],
+  // La resolucion de determinacion sale en papel, como los otros quince
+  // documentos del contrato (#593, RF-132). Era el UNICO que no: es el valor que
+  // se notifica al contribuyente y el que arranca el plazo del art. 137 para
+  // reclamar, y su pantalla solo podia leerlo en JSON. `ResolucionController`
+  // parte la ruta con `params = "formato"`, como la ficha del contribuyente:
+  // sin el parametro, el JSON que la pantalla pinta; con el, el documento.
+  // No sale del prototipo —la pantalla dibuja «Descargar PDF» y no dice como
+  // viaja—, asi que se declara aqui.
+  resolucion_determinacion_fisc: [FORMATO_DE_REPORTE],
   // El estado de cuenta de fiscalizacion responde **a una fecha**: es la unica
   // cifra que publica y no existe «la deuda», existe la deuda actualizada a un
   // dia (regla 9, RNF-075). `OmisosController.estadoDeCuenta` lo lee desde #49 y
@@ -519,6 +528,37 @@ const DEL_BACKEND = {
       ejemplo: '',
       tras: 'ano',
       descripcion: 'Filtro «Tributo» de la pantalla, dentro de «Filtros del detalle»',
+    },
+  ],
+  // La granularidad de la fila, que es lo que decide si la fila se puede dar de
+  // baja (#551).
+  //
+  // Por omision `GET /consultas/deuda` agrega los periodos: `periodoDesde` y
+  // `periodoHasta` son el minimo y el maximo del grupo, y hay UN solo desglose
+  // para todos. `POST /rentas/deuda/bajas` extingue UNA cuota —su
+  // `ClaveDeSaldo` lleva el periodo—, asi que desde una fila que agrega cinco
+  // periodos no hay ningun cuerpo que se pueda componer: la pantalla sabe cuanto
+  // se debe por el conjunto y no cuanto por cada cuota, y repartir el total en la
+  // interfaz es componer dinero en la pantalla (RNF-083).
+  //
+  // Con `porPeriodo=true` cada fila es una cuota, con `periodoDesde ==
+  // periodoHasta` y su propio desglose con su fecha. La forma del recurso no
+  // cambia: lo unico que cambia es donde se corta.
+  //
+  // No lo dibuja la pantalla porque el prototipo nunca tuvo que elegirlo —su
+  // grilla es la de cobranza—, y por eso se declara aqui y no como filtro.
+  consulta_deuda: [
+    {
+      nombre: 'porPeriodo',
+      ejemplo: 'true',
+      tras: 'incluyeConvenios',
+      esquema: '{ type: string, enum: [true, false] }',
+      descripcion: bloque(`
+        Una fila por cuota («true») o una por obligacion con sus periodos agregados
+        (ausente o «false»). Cualquier otra palabra es 422: un «si» tecleado que se leyera
+        como «false» devolveria filas agregadas a quien pidio cuotas, y esa respuesta es
+        indistinguible de la correcta hasta que alguien intenta dar una de baja.
+      `),
     },
   ],
   // El ejercicio del calculo individual del predial, con su nombre (#541).
@@ -748,6 +788,19 @@ const DESCRIPCIONES = {
     así que ninguna de esas nueve opciones casaría con ningún dato y la respuesta sería la tabla
     vacía, que se lee como «no hay cuotas». Se acota por código predial. La pantalla los dibuja
     bloqueados con su motivo, como los de #322 y #398.
+  `),
+  // Fiscalizacion (#593)
+  resolucion_determinacion_fisc: bloque(`
+    El valor que cierra un procedimiento de fiscalización: determina por ejercicio la diferencia
+    de tributo y la multa tributaria, y es lo que arranca el plazo del art. 137 para reclamar
+    (#52, RF-057). Las cifras salen **nulas** mientras D-02a siga abierta, y eso no es un cero:
+    lo que no se puede determinar todavía no se dibuja como «no debe nada» (#198).
+
+    Con \`?formato=PDF|XLS|RTF\` la respuesta es el **documento**; sin él, el JSON que la pantalla
+    pinta (#593, RF-132). El papel **no se emite aquí**: la resolución ya se numeró y se guardó al
+    transferirla, así que esta ruta entrega los datos guardados dibujados en el formato pedido
+    —no recompone nada con datos vivos, que daría otro papel con el mismo número— y no registra
+    ninguna reimpresión.
   `),
   // Cuenta corriente (#72)
   constancia: bloque(`
@@ -1629,6 +1682,55 @@ const OPERACIONES_ADICIONALES = {
         },
       ],
     },
+    // El marco de lo levantado (#612). Existe porque `plano_catastral` exige
+    // `bbox` —y hace bien: sin el la consulta seria el padron entero— y NINGUNA
+    // operacion del contrato decia donde esta la municipalidad: ni su extension,
+    // ni la de un sector, ni un centroide, ni un ubigeo resoluble a coordenadas.
+    //
+    // Cuelga de la misma ruta y hereda su acceso, porque es el encuadre del
+    // mismo mapa. No tiene `bbox` —es justo lo que calcula— ni `limite` —su
+    // respuesta son cuatro cifras y una cuenta, pese lo que pese el padron—.
+    {
+      operationId: 'marco_del_plano',
+      metodo: 'get',
+      ruta: '/api/v1/catastro/predios/plano/marco',
+      titulo: 'Dónde está lo levantado: el marco del plano',
+      descripcion: literal(`
+        El rectángulo que envuelve la geometría **ya cargada**, con los mismos filtros de sector
+        y de manzana que \`GET /catastro/predios/plano\` (#612). Es de dónde sale el primer
+        \`bbox\`: aquella operación lo exige, y hasta ahora ninguna decía dónde está la
+        municipalidad, así que el visor abría sobre un marco declarado del país entero — y con
+        geometría cargada eso contesta «hay N lotes, acércate», una respuesta correcta que desde
+        la pantalla no se puede obedecer.
+
+        **Sale de la geometría cargada, nunca de una constante.** Se agrega sobre las cuatro
+        columnas que \`V65\` deriva del polígono de cada lote, con los **mismos** filtros que el
+        plano: un marco calculado sobre otro conjunto de predios encuadraría sobre algo que
+        después no se dibuja, y sobre un plano sin base cartográfica un encuadre equivocado **no
+        se ve**.
+
+        **\`marco\` es \`null\` cuando no hay ninguno que publicar, y \`notaDelMarco\` dice por
+        qué.** Son dos situaciones distintas y se arreglan distinto: \`lotes: 0\` es que no hay
+        ni un predio con polígono —el estado de hoy en todas las municipalidades, lo que falta es
+        la carga cartográfica de ADR-0021— y \`lotes > 0\` con \`marco: null\` es que todo lo
+        levantado cae sobre la misma línea, o sea que su envolvente no es un rectángulo. Nunca
+        \`0,0,0,0\`: ese punto está en el golfo de Guinea.
+
+        Lo que publica es **un rectángulo y una cuenta**, y nada más: ni un \`predioId\`, ni un
+        código, ni una dirección. Añadir el del lote más al norte la convertiría en una forma de
+        recorrer el padrón sin pedir el padrón.
+      `),
+      parametros: [
+        {
+          nombre: 'codigoDeSector',
+          descripcion: 'Filtro «Sector» de la pantalla, por código. El mismo que el del plano',
+        },
+        {
+          nombre: 'codigoDeManzana',
+          descripcion: 'Filtro «Manzana» de la pantalla, por código. El mismo que el del plano',
+        },
+      ],
+    },
   ],
   // `declaracion_jurada` declara «GET /rentas/declaraciones/{djNro}» como su
   // endpoint —consultar la DJ ya presentada—, y hasta #365 eso era todo lo que
@@ -2475,7 +2577,11 @@ const OPERACIONES_ADICIONALES = {
         ' seleccionados» de la pantalla y también de donde el acta de inspección resuelve sus tres' +
         ' identificadores —programa, contribuyente y predio—, que su catálogo dibuja de solo' +
         ' lectura. La columna «Estado» se DERIVA de si el predio ya tiene acta en el programa: no' +
-        ' es una columna de la fila, porque guardarla dejaría dos verdades sobre lo mismo.',
+        ' es una columna de la fila, porque guardarla dejaría dos verdades sobre lo mismo. Los' +
+        ' tres campos del titular —contribuyenteId, codContribuyente y titular— salen NULOS en el' +
+        ' predio sin titularidad vigente: es el predio que nadie reclama, el candidato de primer' +
+        ' orden, y desde #586 la muestra lo admite en vez de apartarlo. Quien lo visite averigua' +
+        ' quién lo ocupa y nombra al contribuyente al levantar el acta.',
     },
     {
       operationId: 'fisc_programa_generar_muestra',
@@ -2495,7 +2601,12 @@ const OPERACIONES_ADICIONALES = {
         ' un predio que otro programa abierto ya se llevó ni uno ya fiscalizado en el ejercicio,' +
         ' así que la muestra depende del orden: el primer programa que se genere se lleva los' +
         ' predios. Responde 409 si el programa ya la sorteó — una muestra es un acto y no se' +
-        ' regenera, porque hay actas levantadas sobre ella.',
+        ' regenera, porque hay actas levantadas sobre ella. La respuesta dice sobre qué padrón se' +
+        ' sorteó y no sólo cuántos entraron: detectados, predios, sinTitular —cuántos de los' +
+        ' sorteados no tienen titular vigente— y los excluidos POR MOTIVO, de modo que detectados' +
+        ' = predios + excluidosPorOtroPrograma + excluidosPorActaDelEjercicio. Un número suelto no' +
+        ' distinguiría «otro programa se lo llevó» de «ya se fiscalizó», que se arreglan de' +
+        ' maneras distintas (#586).',
     },
   ],
   // «Resultados y determinaciones» declara «GET /fiscalizacion/resultados» como
@@ -2873,6 +2984,58 @@ const OPERACIONES_ADICIONALES = {
         'Prorroga el plazo de la licencia que el expediente de revalidación nombra. NO sustituye la' +
         ' vigencia original: agrega el tramo siguiente, y la respuesta devuelve los dos con el acto' +
         ' que concedió cada uno. Se cobra en caja de tasas antes, con su propio concepto del TUPA.',
+    },
+  ],
+  // `prescripcion` declara «POST /coactiva/prescripcion» —el acto que la declara—;
+  // #674 le añade la LECTURA por la que quien audita ve qué deuda quedó sin acción
+  // de cobro. Misma ruta, otro verbo, como `permisos_de_grupo` sobre la suya.
+  prescripcion: [
+    {
+      operationId: 'prescripciones_declaradas',
+      metodo: 'get',
+      titulo: 'Prescripciones declaradas',
+      paginacion: true,
+      parametros: [
+        {
+          nombre: 'codContribuyente',
+          descripcion:
+            'Código del contribuyente. Un código que no está en el padrón es 404 nombrándolo,' +
+            ' no una relación vacía.',
+        },
+        { nombre: 'tributo', descripcion: 'Tributo sobre el que se declaró' },
+        {
+          nombre: 'ejercicio',
+          descripcion:
+            'Acota a las declaraciones que RESOLVIERON ese ejercicio, hayan prescrito o no:' +
+            ' cuáles prescribieron lo dice `ejerciciosPrescritos` de cada fila.',
+        },
+        {
+          nombre: 'resultado',
+          descripcion: 'PROCEDE, PROCEDE_EN_PARTE o NO_PROCEDE; otro valor es 422',
+        },
+      ],
+      descripcion: literal(`
+        La relación de declaraciones de prescripción: **qué deuda quedó sin acción de
+        cobro** (#674, RF-094).
+
+        **La deuda sigue ahí, y eso es la decisión, no un defecto.** Lo que prescribe es
+        la *acción* para exigir el pago —art. 43 del TUO del Código Tributario—, no la
+        obligación: el libro conserva sus asientos, la deuda sigue siendo cartera
+        pendiente y sigue contando como emisión del ejercicio en el panel de recaudación.
+        Deja de contar cuando la administración la **da de baja** con RF-044, cuya
+        primera causal se llama «PRESCRIPCIÓN DECLARADA» —participio: presupone esta
+        declaración, que es su sustento y no la baja misma—.
+
+        Por eso existe esta lectura: si la deuda inexigible no se puede *ver* en ninguna
+        parte, quien audita la cartera no sabe qué parte de ella ya no se puede exigir, y
+        quien registra la baja no tiene dónde encontrar el acto que la sustenta.
+
+        **Ninguna cifra de dinero**, y no por descuido: la prescripción no extingue un
+        importe. \`ejerciciosPrescritos\` es la lista de los que de verdad prescribieron
+        —una solicitud pide un rango y se resuelve año por año, así que «procede en
+        parte» es el caso corriente— y con el contribuyente y el tributo identifica la
+        obligación alcanzada.
+      `),
     },
   ],
   // `ciiu` declara «GET /licencias/ciiu» como su endpoint —el catálogo—; RF-112

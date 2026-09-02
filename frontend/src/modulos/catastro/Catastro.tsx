@@ -7,6 +7,7 @@ import { usarPreferencias } from '../../shell/preferencias';
 import type { PantallaProps } from '../../App';
 import {
   filtroDeViaPorCriterio,
+  cifrasDelMarcoLleno,
   comoBbox,
   darDeBaja,
   inscribirPredio,
@@ -25,7 +26,21 @@ import {
   marcoDe,
   planoCatastral,
   reactivar,
+  registrarTitular,
+  resumenDeConciliacion,
   titularesDelPredio,
+  buscarEnElPadron,
+  actualizarFicha,
+  fichaDelPredio,
+  impedimentoDeActualizacion,
+  leerFicha,
+  MODALIDAD_DE_TIPO,
+  ORIGENES_DE_FICHA,
+  type OrigenDeFicha,
+  CONDICIONES_DE_TITULARIDAD,
+  CONDICION_POR_EL_TOTAL,
+  type CondicionDeTitularidad,
+  type Contribuyente,
   type EstadoDePredio,
   type GeometriaDelLote,
   type LoteDelPlano,
@@ -40,9 +55,8 @@ import { ErrorDeApi, fijarToken } from '../../api/cliente';
 import { FalloDeLectura } from '../../api/Fallo';
 import { Descargas } from '../../api/descarga';
 import { hayPuerta } from '../../api/sesion';
-import { Aviso } from '../../ds/componentes';
+import { Aviso, Paginador, PasoAtras } from '../../ds/componentes';
 import {
-  BASE,
   CAPAS,
   DEFECTOS_DE_FICHA_NUEVA,
   GRUPOS,
@@ -55,7 +69,10 @@ import {
   type CampoDeFicha,
   type ColumnaDeTabla,
   type Modalidad,
+  type SelectorDeLectura,
+  type TotalDeBloque,
   type ValoresDeFicha,
+  PROCEDENCIA,
 } from '../../datos/catastro';
 
 /* ══════════ Los estilos que el artboard declara como constantes ══════════ */
@@ -425,6 +442,24 @@ export default function Catastro({ dest, onDest }: PantallaProps) {
      dado de alta con la modalidad Rural encendida entraba como urbano y nada lo
      decia. */
   const [tipoDelAlta, setTipoDelAlta] = useState<TipoDePredio>('URBANO');
+  /* El titular del predio. Es un SEGUNDO acto —`POST
+     /catastro/predios/{predioId}/titulares`, #490— y no un campo del alta: el
+     cuerpo de la inscripcion no lleva ningun contribuyente, asi que esto no
+     viaja con ella sino detras, con su propia observacion y su propio motivo en
+     la bitacora. Declararlo es opcional; dejarlo a medias, no. */
+  const [titularElegido, setTitularElegido] = useState<Contribuyente | null>(null);
+  const [busquedaDeTitular, setBusquedaDeTitular] = useState('');
+  const [condicionDelTitular, setCondicionDelTitular] = useState<CondicionDeTitularidad>(CONDICION_POR_EL_TOTAL);
+  const [porcentajeDelTitular, setPorcentajeDelTitular] = useState('');
+  const [documentoDelTitular, setDocumentoDelTitular] = useState('');
+  const [observacionDelTitular, setObservacionDelTitular] = useState('');
+  const [registrandoTitular, setRegistrandoTitular] = useState(false);
+  /* Lo que quedo a medias: el predio SI se inscribio y su titular no.
+     Son dos peticiones, y la segunda puede fallar con la primera ya escrita —un
+     409 de porcentajes, un 404 de contribuyente, la red—. Sin esto la pantalla
+     daria el alta entera por fallida y alguien volveria a inscribir el mismo
+     codigo, que es lo unico irreparable de esta pantalla. */
+  const [altaAMedias, setAltaAMedias] = useState<{ predioId: number; codigo: string; motivo: string } | null>(null);
   const [valTab, setValTab] = useState(0);
   const [sectorAbierto, setSectorAbierto] = useState('01');
   const [paginaDeManzanas, setPaginaDeManzanas] = useState(0);
@@ -472,17 +507,24 @@ export default function Catastro({ dest, onDest }: PantallaProps) {
      dibuje el asistente y no la página entera. */
   const modo: 'pagina' | 'pasos' = esNuevo ? 'pasos' : modoElegido;
 
-  /* En una ficha nueva no hay datos: todo queda en blanco salvo lo que la
-     municipalidad ya sabe y las marcas que arrancan apagadas. Así la cuenta de
-     pendientes cuenta de verdad lo que falta. */
+  /**
+   * Con qué arranca cada casilla: en blanco, siempre.
+   *
+   * Sobre una ficha que ya existe esto devolvía `BASE`, los valores del predio
+   * del artboard: «VILLEGAS PRADO, ROSA» de contribuyente, «198.40» de arancel,
+   * la partida registral «11024-0418», el material del piso 02. Se dibujaban
+   * sobre el predio que se acabara de abrir y eran indistinguibles de lo
+   * declarado. Ahora lo que la ficha publica lo pone `leido`, campo por campo, y
+   * lo que no publica nadie sale «—» con su motivo, así que aquí no queda
+   * ningún valor de la maqueta: el blanco se compone de las claves que el
+   * formulario dibuja y de los ocho tramos del código.
+   */
   const d = useMemo<ValoresDeFicha>(() => {
-    if (!esNuevo) return BASE;
     const vaciados: ValoresDeFicha = {};
-    Object.keys(BASE).forEach((k) => {
-      vaciados[k] = BASE[k] === true || BASE[k] === false ? false : '';
-    });
+    GRUPOS.forEach((g) => g.bloques.forEach((b) => b.campos.forEach((f) => (vaciados[f.k] = f.t === 'chk' ? false : ''))));
+    TRAMOS.forEach((t) => (vaciados[t[1]] = ''));
     return { ...vaciados, ...DEFECTOS_DE_FICHA_NUEVA };
-  }, [esNuevo]);
+  }, []);
 
   const valor = (k: string): string | boolean => {
     const v = vals[k];
@@ -506,6 +548,17 @@ export default function Catastro({ dest, onDest }: PantallaProps) {
     setCerradas({});
     setSucio(false);
     setPredio(null);
+    /* El titular de la ficha anterior no se arrastra a la siguiente: declararle
+       a un predio nuevo el dueño del anterior es el error que ninguna pantalla
+       desmiente después. Y con él se va el aviso de lo que quedó a medias, que
+       hablaba de otro predio. */
+    setTitularElegido(null);
+    setBusquedaDeTitular('');
+    setCondicionDelTitular(CONDICION_POR_EL_TOTAL);
+    setPorcentajeDelTitular('');
+    setDocumentoDelTitular('');
+    setObservacionDelTitular('');
+    setAltaAMedias(null);
     onDest('alta');
     toast('Ficha nueva: empieza por componer el código catastral.');
   };
@@ -527,6 +580,12 @@ export default function Catastro({ dest, onDest }: PantallaProps) {
     setAbierto(fila);
     setPaso(0);
     setSucio(false);
+    /* Lo tecleado sobre el predio anterior no se arrastra al siguiente. Desde
+       que el número municipal VIAJA, dejarlo puesto sería corregir el predio que
+       se acaba de abrir con el número del que se estaba mirando —y esa
+       corrección se guarda—. Los datos del acto se limpian con la ficha, en el
+       efecto que la siembra. */
+    setVals({});
     onDest('predios');
   };
 
@@ -575,10 +634,16 @@ export default function Catastro({ dest, onDest }: PantallaProps) {
       g.bloques.forEach((b) =>
         b.campos.forEach((f) => {
           if (f.t === 'ro' || f.t === 'chk' || f.t === 'codigo') return;
-          /* En el alta solo cuentan los campos que el servidor acepta. Los demás
-             se siguen viendo —son la ficha del manual— pero no bloquean nada:
-             pedirlos para registrar el predio era exigir 81 datos para mandar 7. */
-          if (esNuevo && !CAMPOS_QUE_VIAJAN_EN_EL_ALTA.has(f.k)) return;
+          /* Solo cuentan los campos que el servidor acepta. Los demás se siguen
+             viendo —son la ficha del manual— pero no bloquean nada: pedirlos
+             para registrar el predio era exigir 81 datos para mandar 7, y
+             contarlos «pendientes» sobre una ficha leída decía que faltaba
+             rellenar ciento y pico casillas que no llegan a ninguna parte.
+
+             En el alta manda `CAMPOS_QUE_VIAJAN_EN_EL_ALTA` —el cuerpo es el de
+             `POST /catastro/predios`— y sobre una ficha que ya existe manda
+             `PROCEDENCIA`, que es el cuerpo del `PUT` de la actualización. */
+          if (esNuevo ? !CAMPOS_QUE_VIAJAN_EN_EL_ALTA.has(f.k) : PROCEDENCIA[f.k]?.escribe === undefined) return;
           viajan++;
           const v = vals[f.k] === undefined ? d[f.k] : vals[f.k];
           if (v === '' || v === undefined) faltan++;
@@ -703,6 +768,26 @@ export default function Catastro({ dest, onDest }: PantallaProps) {
   const viasQueCasan = catalogo.datos?.contenido ?? [];
 
   /**
+   * El padron, para poder ELEGIR al titular en vez de teclearlo.
+   *
+   * El manual dibuja «Contribuyente» como campo de solo lectura y el alta no
+   * traia ningun buscador, asi que no habia por donde decir de quien es el
+   * predio. Y lo que la escritura pide no es lo que el manual teclea: pide el
+   * **codigo** del padron, no el nombre —el mismo tropiezo que #427 documento
+   * con «Solicitante»—, asi que se resuelve con una lectura antes de mandar.
+   *
+   * Se pide tambien cuando el alta quedo a medias: ahi la busqueda sigue viva
+   * porque el titular todavia se puede declarar sobre el predio que si nacio.
+   */
+  const titularBuscado = useRebote(busquedaDeTitular.trim());
+  const padronDelTitular = useRecurso(
+    (senal) => buscarEnElPadron(titularBuscado, 8, senal),
+    [titularBuscado],
+    (esNuevo || altaAMedias !== null) && titularElegido === null && titularBuscado !== '',
+  );
+  const personasQueCasan = padronDelTitular.datos?.contenido ?? [];
+
+  /**
    * La dirección que va a viajar, compuesta de lo que se eligió.
    *
    * Del catálogo salen el tipo y el nombre tal como están escritos ahí: no se
@@ -711,6 +796,33 @@ export default function Catastro({ dest, onDest }: PantallaProps) {
    */
   const direccionDelAlta = viaElegida ? viaElegida.tipo + ' ' + viaElegida.nombre : direccionLibre.trim();
 
+  /**
+   * El titular que se va a declarar, y lo que le falta para poder declararse.
+   *
+   * `PROPIETARIO_UNICO` es la unica condicion «por el total»: su porcentaje no se
+   * declara —lo pone el dominio en 100— y las otras cinco lo exigen. Medido: una
+   * cuota `COPROPIETARIO` sin porcentaje vuelve `422 «Un titular COPROPIETARIO
+   * necesita su porcentaje: solo el propietario unico lo es por el total»`.
+   *
+   * Aqui **no se comprueba el rango** —mayor que 0 y hasta 100— ni la suma de
+   * cuotas: eso lo dice el servidor, y repetirlo aqui es garantizar que las dos
+   * comprobaciones se separen. Lo unico que se hace es no mandar una cadena que
+   * no llega ni a ser un porcentaje.
+   */
+  const titularPorElTotal = condicionDelTitular === CONDICION_POR_EL_TOTAL;
+  const porcentajeTecleado = porcentajeDelTitular.trim().replace(',', '.');
+  const porcentajeConForma = /^\d{1,3}(\.\d{1,4})?$/.test(porcentajeTecleado);
+  const faltaDelTitular: string[] = [];
+  if (titularElegido !== null) {
+    if (!titularPorElTotal && porcentajeTecleado === '') faltaDelTitular.push('el porcentaje de la cuota');
+    else if (!titularPorElTotal && !porcentajeConForma) faltaDelTitular.push('un porcentaje que sea un número —«50», «33.3333»—');
+    if (documentoDelTitular.trim() === '') faltaDelTitular.push('el documento que sustenta la titularidad');
+    if (observacionDelTitular.trim() === '') faltaDelTitular.push('la observación del titular, que es la suya y no la del alta');
+  }
+  /* Se puede mandar el titular solo: el predio ya existe y lo unico que falta es
+     su cuota. Es lo que sostiene el reintento del alta a medias. */
+  const puedeRegistrarTitular = titularElegido !== null && faltaDelTitular.length === 0 && !registrandoTitular;
+
   /* Lo que de verdad impide registrar, NOMBRADO. Antes se contaban los 81 campos
      del formulario —«Quedan 81 datos obligatorios sin llenar»— cuando solo dos
      de ellos llegaban al servidor, y la cuenta no decía cuál faltaba. */
@@ -718,9 +830,15 @@ export default function Catastro({ dest, onDest }: PantallaProps) {
   if (!codigoListo) faltaDelAlta.push('los ocho tramos del código de referencia catastral');
   if (direccionDelAlta === '') faltaDelAlta.push('la dirección del predio');
   if (observacion.trim() === '') faltaDelAlta.push('la observación');
+  faltaDelAlta.push(...faltaDelTitular);
 
   const puedeRegistrar =
-    codigoListo && !codigoDuplicado && direccionDelAlta !== '' && observacion.trim() !== '' && !inscribiendo;
+    codigoListo &&
+    !codigoDuplicado &&
+    direccionDelAlta !== '' &&
+    observacion.trim() !== '' &&
+    faltaDelTitular.length === 0 &&
+    !inscribiendo;
   const motivoBloqueo = codigoDuplicado
     ? 'Ese código ya está inscrito en este padrón: no se puede registrar dos veces.'
     : faltaDelAlta.length > 0
@@ -753,17 +871,34 @@ export default function Catastro({ dest, onDest }: PantallaProps) {
   const censoActivos = useRecurso((s2) => listarPredios({ estado: 'ACTIVO' }, { tamano: 1 }, s2), [], conCenso);
   const censoSinFicha = useRecurso((s2) => listarPredios({ fichado: false }, { tamano: 1 }, s2), [], enPanel);
   const censoDeBaja = useRecurso((s2) => listarPredios({ estado: 'DADO_DE_BAJA' }, { tamano: 1 }, s2), [], enPanel);
-  /* **«Sin conciliar» no se cuenta, y no es que falte permiso.** `GET
-     /catastro/fichas/conciliacion?conciliadaConRentas=No` filtra sobre la página
-     y deja el total SIN filtrar —su propio javadoc lo dice
-     (`ConsultaDeConciliacion.java`, «El filtro se aplica sobre la pagina y el
-     total sigue siendo el del padron filtrado por catastro»)—, de modo que su
-     `totalElementos` es el padrón entero: en Catacaos decía «14 422 predios sin
-     conciliar» encima de un padrón de 14 422 predios. Contarlo de verdad exigiría
-     recorrer las 14 422 filas por una operación que además deja rastro en la
-     bitácora en cada página, así que la cifra sale «—» y la petición no se hace.
-     Lo que falta es del backend: issue abierto. */
   const sectoresDelPanel = useRecurso((s2) => listarSectores(s2), [], conCenso);
+  /* **«Sin conciliar» ya se cuenta**, desde que el backend publica
+     `GET /catastro/fichas/conciliacion/resumen` (#564). El resumen lo resuelve
+     en una consulta agregada, trae su ejercicio y su fecha de corte —y las dos
+     se dibujan, porque no existe «sin conciliar», existe «sin conciliar a
+     2026»—. El ejercicio que viaja es el de la barra; el que se dibuja es el
+     que contesta el servidor.
+
+     **Y se sigue contando con el resumen aunque la grilla ya cuente bien.**
+     Hasta #631 el motivo era que no contaba: su filtro se aplicaba sobre la
+     página ya devuelta y su `totalElementos` seguía siendo el del padrón SIN
+     filtrar, así que `conciliadaConRentas=Si` decía «722 páginas, 14 422
+     elementos» y devolvía cero filas en todas. Eso quedó arreglado —medido
+     contra Catacaos: `Si` da 0 de 0 páginas y `No` da 14 422, las mismas cifras
+     que `conciliados` y `noConciliados` del resumen—, y **el motivo ahora es
+     otro**: cada consulta de la grilla con `No` deja una fila `ACCESO` en la
+     bitácora (ADR-0015 §2.3) —medido: dos peticiones, dos filas, con
+     `clave = conciliacion=NO;ejercicio=2026`—, así que pedirla solo para leer
+     su total llenaría la auditoría con una entrada por cada pintada del panel,
+     y de paso haría que una pantalla de solo lectura escribiera. Aquella
+     además exige el permiso de fiscalización sobre `fisc_omisos`; ésta no.
+     Aquella nombra —es la lista de a quién no le va a llegar recibo—, ésta
+     cuenta. */
+  const conciliacion = useRecurso(
+    (s2) => resumenDeConciliacion({ ejercicio: pref.ejercicio }, s2),
+    [pref.ejercicio],
+    enPanel,
+  );
 
   /* ── El plano, contra `GET /api/v1/catastro/predios/plano` (#536) ──────
      `bbox` es obligatorio y no tiene valor por omision en el servidor: sin el,
@@ -847,6 +982,15 @@ export default function Catastro({ dest, onDest }: PantallaProps) {
      es peor que uno apagado, porque el apagado al menos dice que no se puede. */
   const marcoEsElInicial = bbox === comoBbox(MARCO_INICIAL);
 
+  /* Las dos cifras del «acercate», leidas del propio rechazo (#611).
+     Se leen SIEMPRE, tambien cuando el codigo es otro, y entonces salen las dos
+     nulas: lo que dibuja el bloque de arriba es cada una si vino, y `SIN_DATO`
+     si no. Ninguna se supone —el tope no es LOTES_POR_MARCO aunque sea lo que
+     esta pantalla pidio: el servidor tiene el suyo y es el quien lo dice—, y la
+     resta no se hace, que es la que convertiria dos cifras publicadas en una
+     inventada. */
+  const marcoLleno = cifrasDelMarcoLleno(plano.error?.detalles);
+
   /* La cabecera de la hoja: lo que el recurso publica y nada más. La
      calificación del contribuyente no viene, así que sale «—». */
   const metaDeLaFicha: [string, string][] = [
@@ -914,6 +1058,184 @@ export default function Catastro({ dest, onDest }: PantallaProps) {
     [abierto?.predioId],
     abierto !== null,
   );
+
+  /* ── La ficha catastral del predio abierto ───────────────────── */
+
+  /**
+   * De qué TIPO es la ficha, que es lo que decide cuál de las cuatro lecturas
+   * pedir.
+   *
+   * `GET /catastro/predios` publica `fichado: true|false` y **no** el tipo, así
+   * que sin esta pregunta habría que probar las cuatro rutas —tres de ellas
+   * contestando 404 a propósito— o adivinar por el tipo del predio, que no
+   * decide: un predio urbano puede tener ficha única, económica o de bienes
+   * comunes.
+   *
+   * Cuesta un acceso distinto (`consulta_fichas`), así que un perfil que
+   * actualice el catastro sin poder consultar fichas recibe 403 aquí y la
+   * pantalla lo dice en vez de quedarse en blanco.
+   */
+  const tipoDeFicha = useRecurso(
+    (senal) => fichaDelPredio(abierto!.codRefCatastral, senal),
+    [abierto?.codRefCatastral],
+    abierto !== null && abierto.fichado,
+  );
+
+  const modalidadDeLaFicha = tipoDeFicha.datos === null ? null : MODALIDAD_DE_TIPO[tipoDeFicha.datos.tipo];
+
+  /* La ficha vigente, con su histórico: las versiones anteriores son la mitad
+     de lo que hay que enseñar —quién cambió qué y por qué—, y pedirlas cuesta
+     el mismo viaje. */
+  const lecturaDeLaFicha = useRecurso(
+    (senal) => leerFicha(modalidadDeLaFicha!, abierto!.codRefCatastral, { historico: true }, senal),
+    [modalidadDeLaFicha, abierto?.codRefCatastral],
+    abierto !== null && modalidadDeLaFicha !== null,
+  );
+  const leida = lecturaDeLaFicha.datos;
+
+  /* ── El acto que versiona la ficha ───────────────────────────── */
+  /* Los cuatro datos que `PeticionDeActualizacion` exige y que el manual NO
+     dibuja en ninguna de sus casillas: se preguntan en la barra de guardado,
+     que es donde se decide el acto. La observación es la de ESTE acto y no la
+     de la versión que se lee (regla 10, RNF-052). */
+  const [observacionDeLaFicha, setObservacionDeLaFicha] = useState('');
+  const [documentoDeLaFicha, setDocumentoDeLaFicha] = useState('');
+  const [origenDeLaFicha, setOrigenDeLaFicha] = useState<OrigenDeFicha>('DECLARACION_JURADA');
+  const [vigenciaDeLaFicha, setVigenciaDeLaFicha] = useState('');
+  const [versionando, setVersionando] = useState(false);
+
+  /* Lo que hay que corregir del predio, tecleado. Es lo ÚNICO del formulario
+     que llega al servidor, y va aparte de `vals` porque `vals` guarda las 123
+     casillas del artboard y ninguna otra viaja. */
+  const numeroMunicipal = vals['numMun'];
+  const numeroTecleado = typeof numeroMunicipal === 'string' ? numeroMunicipal : null;
+
+  /* El origen se siembra con el de la versión que rige en cuanto se lee: la
+     versión siguiente suele venir del mismo sitio, y dejarlo en el primero de
+     la lista afirmaría «lo declaró el contribuyente» sobre una corrección de
+     oficio. Se siembra una vez por ficha, no en cada render, para no pisar lo
+     que quien atiende acabe de elegir. */
+  const fichaSembrada = useRef<number | null>(null);
+  useEffect(() => {
+    if (leida === null || fichaSembrada.current === leida.id) return;
+    fichaSembrada.current = leida.id;
+    const conocido = ORIGENES_DE_FICHA.find((o) => o === leida.origen);
+    if (conocido !== undefined) setOrigenDeLaFicha(conocido);
+    setObservacionDeLaFicha('');
+    setDocumentoDeLaFicha('');
+    setVigenciaDeLaFicha('');
+    /* Y las modalidades pasan a ser las de la ficha que hay delante. Los tres
+       conmutadores son del artboard —«qué bloques enseño»— y nacían en urbana y
+       económica encendidas: abrir una ficha RURAL escondía su propio bloque, con
+       sus grupos de tierra y sus colindantes, y quien atendía no tenía cómo
+       saber que estaban ahí. Se siembra una vez por ficha y luego se puede
+       tocar: sigue siendo un conmutador de vista. */
+    setModalidades({
+      urbana: leida.tipo !== 'RURAL',
+      economica: leida.tipo === 'ECONOMICA',
+      bienes: leida.tipo === 'BIENES_COMUNES',
+      rural: leida.tipo === 'RURAL',
+    });
+  }, [leida]);
+
+  /**
+   * Lo que cada campo del formulario enseña, resuelto de lo que se leyó.
+   *
+   * El tipo lo obliga a estar completo: `SelectorDeLectura` es la unión de los
+   * selectores que `PROCEDENCIA` puede nombrar, así que declarar uno nuevo allí
+   * sin resolverlo aquí no compila. Es lo que impide que un campo diga leerse de
+   * un sitio y salga vacío.
+   */
+  const leido = useMemo<Record<SelectorDeLectura, string | null>>(
+    () => ({
+      'predio.codRefCatastral': abierto?.codRefCatastral ?? null,
+      'predio.via': abierto?.via ?? null,
+      'predio.numeroMunicipal': abierto?.numeroMunicipal ?? null,
+      'titulares.texto': abierto === null ? null : textoDeTitulares(titulares.cargando, titulares.error, titulares.datos),
+      'ficha.uso': leida?.uso ?? null,
+      'ficha.origen': leida?.origen ?? null,
+      'ficha.observacion': leida?.observacion ?? null,
+      'ficha.frontis': leida?.frontis ?? null,
+      'ficha.denominacion': leida?.denominacion ?? null,
+      'ficha.hectareasTotales': leida?.rural?.hectareasTotales ?? null,
+      /* Cuántas actividades declaradas no tienen licencia. Lo cuenta el
+         servidor y no se recompone aquí; con cero actividades no se dice «0
+         sin licencia», que se leería como un hallazgo sobre un local que no
+         existe. */
+      'ficha.sinLicencia':
+        leida?.economico == null
+          ? null
+          : leida.economico.actividades.length === 0
+            ? 'Sin actividad declarada'
+            : leida.economico.sinLicencia + ' de ' + leida.economico.actividades.length + ' sin licencia',
+    }),
+    [abierto, leida, titulares.cargando, titulares.error, titulares.datos],
+  );
+
+  /* Mientras la ficha viaja, un «—» se leería como «este predio no lo declara»,
+     que es lo contrario de lo que pasa. Cubre los DOS viajes: el que resuelve el
+     tipo y el que trae la ficha. */
+  const esperandoLaFicha = tipoDeFicha.cargando || lecturaDeLaFicha.cargando;
+
+  /* Lo que impide versionar, dicho entero. Vive en el cliente de la API y no
+     aquí para que se pueda romper desde fuera: `verificaciones/ficha-catastral.mjs`
+     le quita la observación y la ficha leída y exige que se niegue nombrándolas. */
+  const impedimento = impedimentoDeActualizacion({
+    ficha: leida,
+    observacion: observacionDeLaFicha,
+    documentoOrigen: documentoDeLaFicha,
+    vigenciaDesde: vigenciaDeLaFicha,
+  });
+
+  const versionarLaFicha = async () => {
+    if (impedimento !== null || leida === null || modalidadDeLaFicha === null || abierto === null) {
+      toast(impedimento ?? 'No hay ninguna ficha leída que versionar.');
+      return;
+    }
+    setVersionando(true);
+    try {
+      /* **Sólo viaja lo que se puede mandar sin perder nada.** Las listas van
+         AUSENTES —no vacías—, que es como el backend dice «no las toques»:
+         presentes aunque vacías reemplazarían lo declarado, y reenviarlas tal
+         como se leyeron perdería el «% construido» de cada piso y la fecha de
+         cada actividad, que la lectura publica y el cuerpo no lleva. */
+      const nueva = await actualizarFicha(modalidadDeLaFicha, abierto.codRefCatastral, {
+        observacion: observacionDeLaFicha.trim(),
+        documentoOrigen: documentoDeLaFicha.trim(),
+        origen: origenDeLaFicha,
+        ...(vigenciaDeLaFicha === '' ? {} : { vigenciaDesde: vigenciaDeLaFicha }),
+        /* El número municipal sólo viaja si se tecleó algo distinto de lo que
+           el padrón publica: mandarlo igual sería una corrección del predio que
+           nadie pidió, con su fila en la bitácora.
+
+           Y si se deja EN BLANCO teniendo número, viaja la cadena vacía, que
+           es como el backend dice «bórralo» —ausente sería «no lo toques»—.
+           Esa distinción es suya y se respeta: pasar las dos por el mismo
+           tamiz dejaría un número municipal equivocado sin manera de quitarlo. */
+        ...(numeroTecleado === null || numeroTecleado === (abierto.numeroMunicipal ?? '')
+          ? {}
+          : { predio: { numeroMunicipal: numeroTecleado } }),
+      });
+      setVals({});
+      setSucio(false);
+      setObservacionDeLaFicha('');
+      setDocumentoDeLaFicha('');
+      setVigenciaDeLaFicha('');
+      /* La versión que se enseña es la que DEVOLVIÓ el servidor, no una sumada
+         aquí: el aviso decía «Versión 4 desde hoy» componiendo el número en el
+         cliente, y con dos personas versionando la misma ficha ese número es el
+         de otra. */
+      toast('Ficha versionada: ahora rige la versión ' + nueva.version + ' desde el ' + nueva.vigenciaDesde + '.');
+      lecturaDeLaFicha.reintentar();
+      tipoDeFicha.reintentar();
+      padron.reintentar();
+    } catch (error) {
+      const e = error instanceof ErrorDeApi ? error : new ErrorDeApi('ERROR_INTERNO', 'No se pudo versionar la ficha', 0);
+      toast(e.mensaje);
+    } finally {
+      setVersionando(false);
+    }
+  };
 
   /* ── Lo que el plano dibuja, ya proyectado ──────────────────── */
 
@@ -1064,14 +1386,40 @@ export default function Catastro({ dest, onDest }: PantallaProps) {
       dest: 'predios',
     },
     {
+      /* La cifra es `noConciliados` del resumen y **no una resta hecha aquí**: el
+         servidor la lee y la resta en la misma consulta, y recomponerla contra el
+         total de otra lectura es el defecto que #564 cerró. Va con su ejercicio y
+         su fecha de corte porque sin ellos no significa nada: el padrón afecto se
+         rehace cada año, y quien declaró 2024 no concilia 2026. */
       tipo: 'Rentas',
       titulo: 'Predios sin conciliar con el padrón de rentas',
-      detalle:
-        'Ninguna lectura los cuenta: el filtro «sin conciliar» se aplica sobre la página y el total ' +
-        'que devuelve sigue siendo el del padrón entero, así que decía 14 422 sobre un padrón de 14 422. ' +
-        'La lista se recorre desde Rentas; la cifra se queda sin decir hasta que el backend la publique.',
-      conteo: SIN_DATO,
-      tono: 'warn' as Tono,
+      detalle: conciliacion.cargando
+        ? 'Contando los predios con ficha vigente que no declararon el ejercicio…'
+        : conciliacion.error !== null
+          ? /* El mensaje del backend no siempre acaba en punto, y sin el las dos
+               frases se leen como una sola: «…no trae un token valido Mientras
+               no se lea…». */
+            'No se pudo contar: ' +
+            conciliacion.error.mensaje.replace(/\.?$/, '.') +
+            (conciliacion.error.codigo === 'SIN_PRIVILEGIO'
+              ? ' El recuento pide el mismo acceso que la consulta de fichas.'
+              : '') +
+            /* No se sustituye por la de la grilla, y desde #631 ya no porque
+               aquélla cuente mal —cuenta bien—: porque leerla con
+               `conciliadaConRentas=No` deja fila en la bitácora y pide un
+               permiso que quien mira el panel no tiene por qué tener. */
+            ' Mientras no se lea, la cifra no se dice: no se sustituye por la de la grilla, que queda registrada en la bitácora y pide el permiso de fiscalización.'
+          : conciliacion.datos
+            ? `${conciliacion.datos.noConciliados.toLocaleString('es-PE')} de ${conciliacion.datos.total.toLocaleString('es-PE')} predios con ficha vigente al ` +
+              `${conciliacion.datos.aLaFecha} no declararon ${conciliacion.datos.ejercicio}. ` +
+              `Tienen ficha catastral y no generan deuda predial; la lista se recorre desde Rentas.`
+            : 'Tienen ficha catastral y no generan deuda predial. La lista se recorre desde Rentas.',
+      conteo: conciliacion.cargando
+        ? '…'
+        : conciliacion.datos
+          ? conciliacion.datos.noConciliados.toLocaleString('es-PE')
+          : SIN_DATO,
+      tono: (conciliacion.datos && conciliacion.datos.noConciliados === 0 ? 'ok' : 'warn') as Tono,
       dest: 'predios',
     },
     {
@@ -1129,7 +1477,17 @@ export default function Catastro({ dest, onDest }: PantallaProps) {
       ? {
           volver: { label: 'Padrón', onClick: () => irA('predios') },
           codigo: codigoCompleto === '' ? 'Sin código' : codigoCompleto,
-          titular: txt('contrib') === '' ? 'Sin titular asignado' : txt('contrib'),
+          /* `contrib` es el campo «Contribuyente» de la ficha del manual, que es
+             de solo lectura y en una ficha nueva esta siempre vacio: la cabecera
+             decia «Sin titular asignado» pasara lo que pasara. Ahora dice a
+             quien se va a declarar, y sigue diciendo que la ficha es un borrador
+             —esa es la pastilla de al lado—, que es lo que distingue lo elegido
+             de lo escrito. */
+          titular: titularElegido
+            ? 'Titular a declarar: ' + titularElegido.nombreRazonSocial
+            : txt('contrib') === ''
+              ? 'Sin titular asignado'
+              : txt('contrib'),
           ubic: txt('calle') === '' ? 'Sin dirección' : txt('calle') + ' ' + txt('numMun'),
           estado: 'Borrador · no registrada',
           estadoColor: 'var(--warn-fg)',
@@ -1162,6 +1520,64 @@ export default function Catastro({ dest, onDest }: PantallaProps) {
     : undefined;
 
   /**
+   * El cuerpo del alta de titular, con los nombres que viajan.
+   *
+   * `codContribuyente` es el **codigo** del padron —lo que la escritura pide— y
+   * sale de la fila elegida en el buscador, no de lo tecleado. `porcentaje` solo
+   * viaja cuando la condicion no es por el total: mandarlo con
+   * `PROPIETARIO_UNICO` seria declarar como dato lo que el dominio ya sabe, y
+   * mandarlo sin el en las otras cinco es el 422 que nombra la condicion.
+   *
+   * `vigenciaDesde` no se manda: ausente, el servidor pone hoy, y **hoy es lo
+   * cierto** —la fecha desde la que este sistema sabe de esta titularidad—.
+   * Poner aqui la fecha del documento que la sustenta afirmaria que el predio
+   * fue de esa persona desde entonces, que es una reconstruccion historica y no
+   * un dato de esta pantalla; el documento se guarda igual, en `documentoOrigen`.
+   */
+  const cuerpoDelTitular = () => ({
+    observacion: observacionDelTitular.trim(),
+    codContribuyente: titularElegido!.codigo,
+    condicion: condicionDelTitular,
+    porcentaje: titularPorElTotal ? undefined : porcentajeTecleado,
+    documentoOrigen: documentoDelTitular.trim(),
+  });
+
+  const limpiarElTitular = () => {
+    setTitularElegido(null);
+    setBusquedaDeTitular('');
+    setCondicionDelTitular(CONDICION_POR_EL_TOTAL);
+    setPorcentajeDelTitular('');
+    setDocumentoDelTitular('');
+    setObservacionDelTitular('');
+  };
+
+  /**
+   * Declara el titular de un predio que YA existe.
+   *
+   * Es el mismo acto que el alta manda detras de la inscripcion, aqui suelto:
+   * lo usa el reintento de un alta que quedo a medias, que es el unico caso en
+   * que la interfaz conoce un predio sin titular y tiene delante los datos con
+   * que declararlo.
+   */
+  const declararTitular = async (predioId: number, codigo: string) => {
+    if (!puedeRegistrarTitular) return;
+    setRegistrandoTitular(true);
+    try {
+      await registrarTitular(predioId, cuerpoDelTitular());
+      setAltaAMedias(null);
+      limpiarElTitular();
+      toast('Titular registrado sobre el predio ' + codigo + '.');
+    } catch (error) {
+      const e =
+        error instanceof ErrorDeApi ? error : new ErrorDeApi('ERROR_INTERNO', 'No se pudo registrar el titular', 0);
+      setAltaAMedias({ predioId, codigo, motivo: e.mensaje });
+      toast(e.mensaje);
+    } finally {
+      setRegistrandoTitular(false);
+    }
+  };
+
+  /**
    * Inscribe el predio contra `POST /api/v1/catastro/predios`.
    *
    * Manda **solo los campos que el endpoint declara**: el código, el tipo, la
@@ -1188,6 +1604,7 @@ export default function Catastro({ dest, onDest }: PantallaProps) {
   const inscribir = async () => {
     setInscribiendo(true);
     setFallo(null);
+    setAltaAMedias(null);
     try {
       const creado = await inscribirPredio({
         observacion: observacion.trim(),
@@ -1204,6 +1621,24 @@ export default function Catastro({ dest, onDest }: PantallaProps) {
       setSucio(false);
       setModo('pagina');
       setObservacion('');
+
+      /* ── El segundo acto ──────────────────────────────────────────
+         El predio ya esta escrito. Lo que viene ahora es otra peticion, con su
+         propia observacion, y **puede fallar sin deshacer la primera**: no hay
+         transaccion que abarque las dos y no la puede haber, porque son dos
+         actos distintos del catastro. Si falla, lo que no se puede hacer es dar el alta
+         entera por fallida —quien lo lea volveria a inscribir el mismo codigo, y
+         eso el padron no lo deshace—. */
+      let titularAMedias: string | null = null;
+      if (titularElegido !== null) {
+        try {
+          await registrarTitular(creado.predioId, cuerpoDelTitular());
+        } catch (error) {
+          titularAMedias =
+            error instanceof ErrorDeApi ? error.mensaje : 'no hubo respuesta del servidor al declarar el titular';
+        }
+      }
+
       /* Se abre con lo que el servidor devolvió, no con lo tecleado: si el
          backend normalizó algo, lo que se ve es lo que quedó escrito. */
       abrirPredio(
@@ -1227,7 +1662,17 @@ export default function Catastro({ dest, onDest }: PantallaProps) {
       setViaElegida(null);
       setBusquedaDeVia('');
       setDireccionLibre('');
-      toast('Predio ' + creado.codRefCatastral + ' inscrito. Todavía sin ficha y sin titular.');
+      if (titularAMedias !== null) {
+        setAltaAMedias({ predioId: creado.predioId, codigo: creado.codRefCatastral, motivo: titularAMedias });
+        toast('Predio ' + creado.codRefCatastral + ' inscrito. El titular NO quedó registrado: ' + titularAMedias);
+      } else if (titularElegido !== null) {
+        /* Lo que quedó escrito son las dos cosas, y se dicen las dos: el titular
+           declarado no exime de que la ficha siga sin levantarse. */
+        limpiarElTitular();
+        toast('Predio ' + creado.codRefCatastral + ' inscrito con su titular. Todavía sin ficha.');
+      } else {
+        toast('Predio ' + creado.codRefCatastral + ' inscrito. Todavía sin ficha y sin titular.');
+      }
     } catch (error) {
       const e = error instanceof ErrorDeApi ? error : new ErrorDeApi('ERROR_INTERNO', 'No se pudo inscribir el predio', 0);
       setFallo(e);
@@ -1277,20 +1722,23 @@ export default function Catastro({ dest, onDest }: PantallaProps) {
       void inscribir();
       return;
     }
-    /* Sobre una ficha que ya existe, el último paso NO guarda: decía «Ficha
-       guardada. Versión 4 desde hoy» y no salía ni una petición. Lo que se
-       podría llamar es `PUT /catastro/fichas/{codigo}/actualizacion`, y no se
-       llama a propósito: ver `MOTIVO_SIN_GUARDADO_DE_FICHA`. */
+    /* Sobre una ficha que ya existe, el último paso versiona. Antes decía
+       «Ficha guardada. Versión 4 desde hoy» sin que saliera una sola petición, y
+       el número lo componía el cliente: con dos personas versionando la misma
+       ficha, ése es el de otra. Ahora la versión la dice el servidor. */
     if (ultimo) {
-      setModo('pagina');
-      toast(MOTIVO_SIN_GUARDADO_DE_FICHA);
+      if (impedimento !== null) {
+        toast(impedimento);
+        return;
+      }
+      void versionarLaFicha();
     } else {
       setPaso(paso + 1);
     }
   };
   const pasoBloqueado = esNuevo
     ? paso >= secciones.length - 1 && !puedeRegistrar
-    : paso >= secciones.length - 1;
+    : paso >= secciones.length - 1 && impedimento !== null;
 
   /**
    * La vía del predio, elegida del catálogo vial de verdad.
@@ -1437,8 +1885,183 @@ export default function Catastro({ dest, onDest }: PantallaProps) {
     </div>
   );
 
+  /**
+   * El titular del predio, elegido del padron de verdad.
+   *
+   * Es la mitad del alta que hasta ahora no existia: `PeticionDeInscripcionDePredio`
+   * no tiene campo de contribuyente, el campo «Contribuyente» del manual es de
+   * solo lectura y esta pantalla no dibujaba ningun buscador, asi que un predio
+   * nacia sin nadie a quien cobrarle y no habia por donde arreglarlo.
+   *
+   * Lo que se declara aqui **no viaja con el alta**: viaja detras, en su propia
+   * peticion y con su propia observacion. Por eso lo dice antes de mandarlo.
+   */
+  const bloqueDeTitular = (
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 12, padding: '14px 16px' }}>
+      {titularElegido ? (
+        <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap', border: '1px solid var(--accent)', borderRadius: 7, padding: '9px 11px', background: 'var(--accent-soft)' }}>
+          <span style={{ fontFamily: 'var(--font-mono)', fontSize: 12, color: 'var(--accent-ink)' }}>{titularElegido.codigo}</span>
+          <span style={{ flex: 1, minWidth: 0, fontSize: 13 }}>{titularElegido.nombreRazonSocial}</span>
+          <span style={{ fontFamily: 'var(--font-mono)', fontSize: 11, color: 'var(--ink-4)' }}>
+            {titularElegido.tipoDocumento} {titularElegido.numeroDocumento}
+          </span>
+          {!titularElegido.activo && <span style={INS.warn}>De baja en el padrón</span>}
+          <button onClick={limpiarElTitular} className="hov-linea" style={BOTON_LINEA}>
+            Cambiar
+          </button>
+        </div>
+      ) : (
+        <>
+          <label style={{ display: 'flex', flexDirection: 'column', gap: 5 }}>
+            <span style={{ fontSize: 11.5, fontWeight: 500, color: 'var(--ink-3)' }}>
+              Buscar en el padrón · por D.N.I., R.U.C., código o nombre
+            </span>
+            <input
+              value={busquedaDeTitular}
+              onChange={(e) => setBusquedaDeTitular(e.target.value)}
+              placeholder="29614026, 00000000008, SULLON VILCHEZ…"
+              aria-label="Buscar el contribuyente que será titular del predio"
+              style={IN}
+            />
+          </label>
+          {/* Lo que se busca según lo tecleado, dicho antes de buscarlo: los
+              cuatro filtros comparan por igualdad salvo el nombre, y un código
+              a medias no devuelve nada porque no es una búsqueda por prefijo. */}
+          <p style={{ margin: 0, fontSize: 11.5, lineHeight: 1.5, color: 'var(--ink-4)', textWrap: 'pretty' }}>
+            Ocho dígitos se buscan como D.N.I.; once, como código y como R.U.C. a la vez, porque hay padrones donde el
+            código son once dígitos; el resto de números, como código; algo sin espacios con algún dígito —«C-000001»—,
+            como código y por nombre; y lo demás, por parecido en el nombre. El código, el D.N.I. y el R.U.C. se comparan
+            enteros: a medias no encuentran nada.
+          </p>
+          {padronDelTitular.error && (
+            <FalloDeLectura
+              error={padronDelTitular.error}
+              que="el padrón de contribuyentes"
+              acceso="contribuyentes"
+              alReintentar={padronDelTitular.reintentar}
+            />
+          )}
+          {padronDelTitular.cargando && <span style={{ fontSize: 12, color: 'var(--ink-3)' }}>Buscando en el padrón…</span>}
+          {titularBuscado !== '' && !padronDelTitular.cargando && padronDelTitular.error === null && personasQueCasan.length === 0 && (
+            <span style={{ fontSize: 12, color: 'var(--ink-3)' }}>
+              Nadie del padrón responde a «{titularBuscado}». Si la persona no está registrada, hay que darla de alta en
+              Rentas antes: la titularidad se declara con su código, y aquí no se puede crear.
+            </span>
+          )}
+          {/* Cuando el padrón deja a alguien fuera se dice, en vez de enseñar
+              ocho filas como si fueran todas: buscar por nombre compara por
+              parecido —«SULLON» son 129 de 10 603 en Catacaos— y elegir de una
+              lista recortada sin saberlo es elegir al homónimo. */}
+          {padronDelTitular.datos?.hayMas === true && (
+            <span style={{ fontSize: 12, color: 'var(--warn-fg)' }}>
+              El padrón devuelve más de los que caben aquí: se enseñan los {personasQueCasan.length} primeros. Afina con el
+              D.N.I., el R.U.C. o el código si el que buscas no está.
+            </span>
+          )}
+          {personasQueCasan.map((c) => (
+            <button
+              key={c.id}
+              onClick={() => {
+                setTitularElegido(c);
+                setBusquedaDeTitular('');
+              }}
+              className="hov-acento"
+              style={{ display: 'flex', alignItems: 'center', gap: 10, width: '100%', textAlign: 'left', border: '1px solid var(--line)', borderRadius: 6, background: 'var(--bg-card)', padding: '8px 11px', cursor: 'pointer' }}
+            >
+              <span style={{ fontFamily: 'var(--font-mono)', fontSize: 11.5, color: 'var(--ink-4)' }}>{c.codigo}</span>
+              <span style={{ flex: 1, minWidth: 0, fontSize: 13 }}>{c.nombreRazonSocial}</span>
+              <span style={{ fontFamily: 'var(--font-mono)', fontSize: 11, color: 'var(--ink-4)' }}>
+                {c.tipoDocumento} {c.numeroDocumento}
+              </span>
+              {!c.activo && <span style={INS.warn}>De baja</span>}
+            </button>
+          ))}
+        </>
+      )}
+
+      {titularElegido && (
+        <>
+          <div style={{ display: 'flex', gap: 12, flexWrap: 'wrap' }}>
+            <label style={{ display: 'flex', flexDirection: 'column', gap: 5, flex: '1 1 220px', minWidth: 0 }}>
+              <span style={{ fontSize: 11.5, fontWeight: 500, color: 'var(--ink-3)' }}>Condición · viaja como condicion</span>
+              <select
+                value={condicionDelTitular}
+                onChange={(e) => setCondicionDelTitular(e.target.value as CondicionDeTitularidad)}
+                style={{ ...IN, fontFamily: 'var(--font-mono)', fontSize: 12.5 }}
+              >
+                {CONDICIONES_DE_TITULARIDAD.map((c) => (
+                  <option key={c} value={c}>
+                    {c}
+                  </option>
+                ))}
+              </select>
+            </label>
+            {!titularPorElTotal && (
+              <label style={{ display: 'flex', flexDirection: 'column', gap: 5, flex: '0 1 180px', minWidth: 0 }}>
+                <span style={{ fontSize: 11.5, fontWeight: 500, color: 'var(--ink-3)' }}>% de la cuota · obligatorio</span>
+                <input
+                  value={porcentajeDelTitular}
+                  onChange={(e) => setPorcentajeDelTitular(e.target.value)}
+                  inputMode="decimal"
+                  placeholder="50"
+                  aria-label="Porcentaje de la cuota de titularidad"
+                  style={porcentajeTecleado !== '' && !porcentajeConForma ? IN_ERR : IN}
+                />
+              </label>
+            )}
+          </div>
+          {/* Los seis valores del enumerado, con su nombre exacto, y lo que el
+              manual ofrece y no está aquí. Traducir por parecido es el error que
+              #427 se negó a cometer: «ARRENDATARIO» y «OCUPANTE» ni siquiera son
+              titularidad —son la ocupación, otro acto y otra tabla—. */}
+          <p style={{ margin: 0, fontSize: 11.5, lineHeight: 1.5, color: 'var(--ink-4)', textWrap: 'pretty' }}>
+            Son las seis que el dominio declara, escritas como él las escribe. El manual ofrece además «ARRENDATARIO» y
+            «OCUPANTE», que no son titularidad sino ocupación —otro acto, y esta pantalla no lo hace—, y escribe
+            «PROPIETARIO ÚNICO» y «SUCESIÓN INDIVISA» donde el dominio dice{' '}
+            <code style={{ fontFamily: 'var(--font-mono)' }}>PROPIETARIO_UNICO</code> y{' '}
+            <code style={{ fontFamily: 'var(--font-mono)' }}>SUCESION</code>. No se traduce ninguno: se manda el del
+            dominio.
+          </p>
+          <p style={{ margin: 0, fontSize: 11.5, lineHeight: 1.5, color: 'var(--ink-3)', textWrap: 'pretty' }}>
+            {titularPorElTotal
+              ? 'PROPIETARIO_UNICO es por el total: su porcentaje no se declara, lo pone el dominio en 100. Una copropiedad se declara registrando una cuota por persona, y cada una con su acto.'
+              : 'Las cuotas vigentes de un predio no pueden pasar del 100 %, y eso lo comprueba la base al confirmar: si se pasa, el servidor lo rechaza diciendo cuánto suman. Aquí no se adivina.'}
+          </p>
+          <label style={{ display: 'flex', flexDirection: 'column', gap: 5 }}>
+            <span style={{ fontSize: 11.5, fontWeight: 500, color: 'var(--ink-3)' }}>
+              Documento que la sustenta · obligatorio, viaja como documentoOrigen
+            </span>
+            <input
+              value={documentoDelTitular}
+              onChange={(e) => setDocumentoDelTitular(e.target.value)}
+              placeholder="ESCRITURA PÚBLICA 001-2026 / PARTIDA 11002345"
+              style={IN}
+            />
+          </label>
+          <label style={{ display: 'block' }}>
+            <span style={{ display: 'block', fontSize: 11.5, fontWeight: 500, color: 'var(--ink-3)', marginBottom: 5 }}>
+              Observación del titular · obligatoria, y no es la del alta
+            </span>
+            <textarea
+              value={observacionDelTitular}
+              onChange={(e) => setObservacionDelTitular(e.target.value)}
+              rows={2}
+              placeholder="Por qué se le declara titular de este predio"
+              style={{ width: '100%', boxSizing: 'border-box', border: '1px solid var(--line-2)', borderRadius: 6, padding: '9px 11px', background: 'var(--bg-card)', fontSize: 13.5, resize: 'vertical' }}
+            />
+          </label>
+          <p style={{ margin: 0, fontSize: 11.5, lineHeight: 1.5, color: 'var(--ink-4)', textWrap: 'pretty' }}>
+            Son dos actos y dos motivos en la bitácora: el del alta explica por qué nace el predio y este por qué es de
+            esta persona. Reutilizar uno para los dos dejaría el segundo sin explicación propia. La vigencia empieza hoy
+            —es desde cuándo lo sabe este sistema—; la fecha del documento queda en el campo de arriba.
+          </p>
+        </>
+      )}
+    </div>
+  );
+
   /* ── Un campo de la ficha ───────────────────────────────────── */
-  const campoDeFicha = (f: CampoDeFicha) => {
+  const campoDeFicha = (f: CampoDeFicha, motivoYaDicho?: string) => {
     /* En el alta, «Vía o calle» y «Tipo de vía» no son campos del formulario:
        los resuelve el catálogo vial de verdad. El desplegable del artboard ofrecía
        cinco calles —«CALLE BOLÍVAR», «AV. JOSÉ DE LAMA», «CALLE SANTA ROSA»,
@@ -1447,12 +2070,99 @@ export default function Catastro({ dest, onDest }: PantallaProps) {
        escrito en el padrón real. */
     if (esNuevo && f.k === 'calle') return resolutorDeVia;
     if (esNuevo && f.k === 'tipoVia') return null;
-    const v = valor(f.k);
-    const error =
-      f.k === 'areaVer' && sucio && (v === '' || v === undefined)
-        ? 'El área verificada del piso 02 es obligatoria para grabar la actualización.'
-        : '';
-    const estilo = error ? IN_ERR : IN;
+
+    /* «Fuente de la información» es el ORIGEN de la versión, y es uno de los dos
+       campos del manual que llegan al servidor. Se ata al acto y no a `vals`
+       porque es el mismo dato que viaja en el cuerpo: con dos estados, el
+       desplegable diría una cosa y el `PUT` mandaría otra.
+
+       Y los cuatro valores son los del dominio, letra por letra. El desplegable
+       del manual ofrece «DECLARACIÓN DEL TITULAR», «INSPECCIÓN DE CAMPO»,
+       «CONVENIO INTERINSTITUCIONAL» y «BARRIDO CATASTRAL», y ninguno de los
+       cuatro es ninguno de éstos: dos se parecen y dos no tienen equivalente,
+       mientras RESOLUCION y MIGRACION no están en el manual. No se traducen, por
+       lo mismo que #427 no tradujo «ACTIVA» a VIGENTE. */
+    if (!esNuevo && f.k === 'fuente') {
+      return (
+        <label key={f.k} style={{ display: 'flex', flexDirection: 'column', gap: 5, minWidth: 0 }}>
+          <span style={{ fontSize: 11.5, fontWeight: 500, color: 'var(--ink-3)' }}>{f.l}</span>
+          <select
+            value={origenDeLaFicha}
+            disabled={leida === null}
+            onChange={(e) => {
+              setOrigenDeLaFicha(e.target.value as OrigenDeFicha);
+              setSucio(true);
+            }}
+            style={IN}
+          >
+            {ORIGENES_DE_FICHA.map((o) => (
+              <option key={o} value={o}>
+                {o}
+              </option>
+            ))}
+          </select>
+          <span style={{ fontSize: 11.5, lineHeight: 1.4, color: 'var(--ink-4)', textWrap: 'pretty' }}>
+            {leida === null
+              ? 'Sin ficha leída no hay versión que originar.'
+              : 'Es de dónde sale la versión NUEVA, y decide cómo se defiende: una de FISCALIZACION se sustenta en un acta y una de DECLARACION_JURADA en el documento del contribuyente. La que rige hoy es ' +
+                leida.origen +
+                '. Se ofrecen los cuatro valores del dominio; las cuatro fuentes del manual no coinciden con ellos y no se traducen.'}
+          </span>
+        </label>
+      );
+    }
+
+    /* ── Sobre una ficha que ya existe, manda la procedencia ──────
+       Un campo se puede teclear sólo si hay una clave del cuerpo del `PUT` que
+       lo lleve, y hay dos de ciento veintitrés. Los demás se dibujan de sólo
+       lectura con lo que la ficha publica —o «—» si no lo publica nadie— y con
+       su motivo debajo. Antes eran cajas de texto rellenas con el valor del
+       artboard: «VILLEGAS PRADO, ROSA», «198.40» de arancel, la partida
+       registral «11024-0418», todas sobre el predio que se acababa de abrir. */
+    const p = esNuevo ? undefined : PROCEDENCIA[f.k];
+    if (p !== undefined && p.escribe === undefined) {
+      const texto = p.lee === undefined ? null : leido[p.lee];
+      return (
+        <label key={f.k} data-ancho={f.ancho ? '1' : '0'} style={{ display: 'flex', flexDirection: 'column', gap: 5, minWidth: 0 }}>
+          <span style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 11.5, fontWeight: 500, color: 'var(--ink-3)' }}>
+            <span>{f.l}</span>
+            {mostrarSiglas && f.c && (
+              <span style={{ fontFamily: 'var(--font-mono)', fontSize: 9.5, letterSpacing: '.02em', color: 'var(--ink-4)', border: '1px solid var(--line-2)', borderRadius: 3, padding: '1px 4px' }}>
+                {f.c}
+              </span>
+            )}
+          </span>
+          <span
+            style={{
+              display: 'block',
+              minHeight: 38,
+              lineHeight: '19px',
+              padding: '9px 10px',
+              border: '1px dashed var(--line-2)',
+              borderRadius: 6,
+              background: 'transparent',
+              fontFamily: 'var(--font-mono)',
+              fontSize: 13,
+              color: texto === null ? 'var(--ink-4)' : 'var(--ink-2)',
+              overflowWrap: 'anywhere',
+            }}
+          >
+            {texto ?? (p.lee !== undefined && esperandoLaFicha ? 'Leyendo la ficha…' : SIN_DATO)}
+          </span>
+          {p.motivo && p.motivo !== motivoYaDicho && (
+            <span style={{ fontSize: 11.5, lineHeight: 1.4, color: 'var(--ink-4)', textWrap: 'pretty' }}>{p.motivo}</span>
+          )}
+        </label>
+      );
+    }
+
+    /* El campo que SÍ viaja arranca con lo que el padrón publica y lo tecleado
+       manda. Aquí vivía además un error inventado —«El área verificada del piso
+       02 es obligatoria para grabar la actualización»— sobre un campo que no
+       llega al servidor por ningún camino: exigía rellenar un dato para
+       desbloquear un cierre que no existe. */
+    const v = p !== undefined && p.lee !== undefined ? (vals[f.k] ?? leido[p.lee] ?? '') : valor(f.k);
+    const estilo = IN;
     const texto = typeof v === 'boolean' ? '' : v;
     return (
       <label
@@ -1586,20 +2296,208 @@ export default function Catastro({ dest, onDest }: PantallaProps) {
           </span>
         )}
 
-        {error && (
-          <span style={{ display: 'flex', alignItems: 'center', gap: 5, fontSize: 11.5, lineHeight: 1.4, color: 'var(--error-texto)' }}>
-            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" style={{ flex: '0 0 auto' }}>
-              <circle cx="12" cy="12" r="9" />
-              <path d="M12 8v4.5M12 16h.02" />
-            </svg>
-            {error}
-          </span>
-        )}
-        {!error && f.ayuda && (
+        {f.ayuda && (
           <span style={{ fontSize: 11.5, lineHeight: 1.4, color: 'var(--ink-4)', textWrap: 'pretty' }}>{f.ayuda}</span>
         )}
       </label>
     );
+  };
+
+  /* ── Las tablas de la ficha, con las filas que se leyeron ─────
+
+     Cinco tablas dibuja el artboard y las cinco traían filas inventadas sobre
+     el predio que se acabara de abrir: dos copropietarios al 50 % con su
+     D.N.I., dos direcciones de otro predio, cuatro pisos con sus categorías.
+     Aquí cada una se resuelve por su título contra lo que la lectura publica,
+     y **la rama por omisión devuelve la tabla vacía**: una tabla nueva del
+     artboard no puede volver a colar sus filas por no estar en esta lista.
+
+     Y las columnas son las del RECURSO, no las del manual, por lo mismo que en
+     los omisos de fiscalización: una cabecera que promete «Estado civil» o
+     «Valor asignado» sobre una celda que nadie publica se lee como un dato que
+     falta, cuando lo que falta es la columna. Lo que el manual dibuja y el
+     sistema no guarda se dice en el pie. */
+  const tablaConectada = (titulo: string): { cols: readonly ColumnaDeTabla[]; filas: readonly (readonly string[])[]; nota: string } => {
+    const raya = (x: string | null | undefined) => (x === null || x === undefined || x === '' ? SIN_DATO : x);
+    if (titulo === 'Titulares registrados') {
+      const t = titulares.datos;
+      return {
+        cols: [['Cód. contribuyente', 0], ['Nombre / razón social', 0], ['Condición', 0], ['% propiedad', 1]],
+        filas: (t?.titulares ?? []).map((x) => [raya(x.codigo), x.nombre ?? 'Titular fuera del padrón', x.condicion, String(x.porcentaje)]),
+        nota:
+          t === null
+            ? 'Los titulares no se han podido leer.'
+            : 'Vigentes al ' + t.vigenteA + '. El manual dibuja además D.N.I., R.U.C., estado civil y fecha de inicio: la lectura de titulares publica el código, el nombre, la condición y la cuota, y nada más. Registrar una cuota es otro acto, con su propia observación.',
+      };
+    }
+    if (titulo === 'Pisos declarados') {
+      return {
+        cols: [['Piso', 0], ['Área construida', 1], ['Año', 1], ['Material', 0], ['Estado', 0], ['Categorías', 0], ['% construido', 1]],
+        filas: (leida?.construcciones ?? []).map((c) => [
+          c.piso,
+          c.areaConstruida,
+          raya(c.anioConstruccion === null ? null : String(c.anioConstruccion)),
+          raya(c.material),
+          raya(c.estadoConservacion),
+          c.categorias,
+          raya(c.porcentajeConstruido),
+        ]),
+        nota:
+          'Las siete letras de «Categorías» van en el orden del manual: muros y columnas, techos, pisos, puertas y ventanas, revestimientos, baños e instalaciones. El mes de construcción, el estado de la construcción y el uso de la unidad no están en el modelo, y el área construida es una sola: el manual la parte en declarada y verificada.',
+      };
+    }
+    if (titulo === 'Instalaciones registradas') {
+      return {
+        cols: [['Descripción', 0], ['Cantidad', 1], ['Unidad', 0], ['Año', 1], ['Estado', 0]],
+        filas: (leida?.instalaciones ?? []).map((o) => [
+          o.descripcion,
+          o.cantidad,
+          o.unidad,
+          raya(o.anioConstruccion === null ? null : String(o.anioConstruccion)),
+          raya(o.estadoConservacion),
+        ]),
+        nota: 'Sin su valor: cuánto vale una obra complementaria sale de un valor unitario, del incremento del 5 %, de la depreciación y de un factor de oficialización que ni siquiera tiene fuente identificada (D-11). Nada de eso lo publica catastro.',
+      };
+    }
+    if (titulo === 'Unidades que participan') {
+      const bc = leida?.bienesComunes ?? null;
+      return {
+        cols: [['Unidad (predio)', 1], ['% participación', 1]],
+        filas: (bc?.participaciones ?? []).map((x) => [String(x.predioId), x.porcentaje]),
+        nota: 'La unidad se nombra por su identificador de predio, que es como la publica la lectura y como la pediría la escritura. El contribuyente de cada unidad, su área exclusiva y el valor que le toca no salen de aquí: los dos primeros son de otra ficha y el tercero es un importe.',
+      };
+    }
+    if (titulo === 'Otras puertas del predio') {
+      return {
+        cols: [['Nombre de calle', 0], ['Tipo de vía', 0], ['Tipo de puerta', 0], ['Número', 1], ['Adicional', 1], ['Nomenclatura', 0]],
+        filas: [],
+        nota: 'Vacía porque el sistema no guarda más de una puerta: `predio` tiene una dirección, una vía y un número municipal. Las dos filas que el artboard dibujaba aquí eran de otro predio.',
+      };
+    }
+    return { cols: [['—', 0]], filas: [], nota: 'Esta tabla no la publica ninguna lectura, así que no se dibuja con nada.' };
+  };
+
+  /* Las tablas que el manual NO dibuja y la ficha SÍ publica: las actividades,
+     los bienes comunes, los grupos de tierra, los colindantes y el histórico de
+     versiones. Sin ellas, media ficha leída se quedaría sin enseñar y sus
+     campos dirían «es una lista» sin que la lista estuviera en ninguna parte. */
+  const tablasDeMas = (b: BloqueDeFicha): { titulo: string; cols: readonly ColumnaDeTabla[]; filas: readonly (readonly string[])[]; nota: string }[] => {
+    if (esNuevo || leida === null) return [];
+    const raya = (x: string | null | undefined) => (x === null || x === undefined || x === '' ? SIN_DATO : x);
+    if (b.titulo === 'Actividad económica' && leida.economico !== null) {
+      return [
+        {
+          titulo: 'Actividades declaradas',
+          cols: [['Conductor', 0], ['Nombre comercial', 0], ['CIIU', 0], ['Área ocupada', 1], ['Nº de licencia', 0], ['Nº de anuncio', 0], ['Declarada desde', 0]],
+          filas: leida.economico.actividades.map((a) => [
+            a.conductor,
+            raya(a.nombreComercial),
+            raya(a.ciiu),
+            raya(a.areaOcupada),
+            /* Que falte NO es un dato incompleto: es el hallazgo, y por eso se
+               escribe con todas las letras en vez de con una raya. */
+            a.licenciaNumero ?? 'SIN LICENCIA',
+            raya(a.anuncioNumero),
+            raya(a.vigenciaDesde),
+          ]),
+          nota: 'Catastro guarda el NÚMERO de la licencia, no su estado: si vale o no lo dice Autorizaciones y Licencias. «SIN LICENCIA» es lo que fiscalización cruza.',
+        },
+      ];
+    }
+    if (b.titulo === 'Bienes comunes de la edificación' && leida.bienesComunes !== null) {
+      return [
+        {
+          titulo: 'Áreas comunes declaradas',
+          cols: [['Descripción', 0], ['Área', 1], ['Material', 0], ['Estado', 0], ['Año', 1]],
+          filas: leida.bienesComunes.bienes.map((x) => [
+            x.descripcion,
+            x.area,
+            raya(x.material),
+            raya(x.estadoConservacion),
+            raya(x.anioConstruccion === null ? null : String(x.anioConstruccion)),
+          ]),
+          nota: 'Un bien común se valoriza como una construcción más, y de qué año es decide su depreciación. Su valor no sale de aquí.',
+        },
+      ];
+    }
+    if (b.titulo === 'Predio rústico' && leida.rural !== null) {
+      return [
+        {
+          titulo: 'Grupos de tierra',
+          cols: [['Clasificación', 0], ['Calidad agrológica', 0], ['Riego', 0], ['Hectáreas', 1], ['De áreas comunes', 1]],
+          filas: leida.rural.tierras.map((t) => [t.clasificacion, raya(t.calidadAgrologica), t.riego, t.hectareas, raya(t.hectareasComunes)]),
+          nota: 'Las superficies van en hectáreas y con su unidad dentro: el arancel rural es por hectárea, y leerlas como metros calcularía diez mil veces de menos.',
+        },
+        {
+          titulo: 'Colindantes',
+          cols: [['Orientación', 0], ['Descripción', 0]],
+          filas: leida.rural.colindantes.map((c) => [c.orientacion, c.descripcion]),
+          nota: 'Cuatro orientaciones declara el dominio: norte, sur, este y oeste.',
+        },
+      ];
+    }
+    if (b.titulo === 'Observaciones' && leida.historico !== null) {
+      return [
+        {
+          titulo: 'Histórico de la ficha',
+          cols: [['Versión', 1], ['Rige desde', 0], ['Hasta', 0], ['Área terreno', 1], ['Uso', 0], ['Origen', 0], ['Documento', 0], ['Usuario', 0], ['Observación', 0]],
+          filas: leida.historico.map((v) => [
+            String(v.version) + (v.vigente ? ' · vigente' : ''),
+            v.vigenciaDesde,
+            raya(v.vigenciaHasta),
+            v.areaTerreno,
+            v.uso,
+            v.origen,
+            v.documentoOrigen,
+            v.usuario,
+            v.observacion,
+          ]),
+          nota: 'Aquí no se corrige: se emite otra versión y la anterior se cierra el día antes. La observación es la mitad útil —un diff dice que el área pasó de 120 a 180; sólo ella dice que fue una fiscalización de campo y no un error de tecleo—.',
+        },
+      ];
+    }
+    return [];
+  };
+
+  /* Los pies de cifras de un bloque. Los del artboard traían **dinero
+     inventado** —«Autovalúo S/ 240,347.50»— dibujado sobre el predio que se
+     acababa de abrir, y la ficha no publica ni un importe (regla 5, D-02a). */
+  const totalesConectados = (b: BloqueDeFicha): readonly TotalDeBloque[] => {
+    if (esNuevo) return (b.totales ?? []).map((t) => [t[0], SIN_DATO, t[2]] as const);
+    if (b.titulo === 'Valuación del ejercicio') {
+      return [
+        ['Valor del terreno', SIN_DATO, 0],
+        ['Valor de la construcción', SIN_DATO, 0],
+        ['Otras instalaciones', SIN_DATO, 0],
+        ['Autovalúo ' + pref.ejercicio, SIN_DATO, 1],
+      ];
+    }
+    if (b.tabla?.titulo === 'Unidades que participan') {
+      const bc = leida?.bienesComunes ?? null;
+      return [
+        ['Área común total', bc === null ? SIN_DATO : bc.areaComunTotal + ' m²', 0],
+        ['Valor bienes comunes', SIN_DATO, 0],
+        ['Unidades que participan', bc === null ? SIN_DATO : String(bc.participaciones.length), 1],
+      ];
+    }
+    return (b.totales ?? []).map((t) => [t[0], SIN_DATO, t[2]] as const);
+  };
+
+  /**
+   * El motivo que comparten TODOS los campos mudos de un bloque, si es uno solo.
+   *
+   * Existe por legibilidad y no cambia lo que se dice: «Piso en edición» tiene
+   * trece casillas que no viajan por la misma razón, y repetirla trece veces
+   * convierte el bloque en un muro de texto que nadie lee — que es la forma en
+   * que un motivo deja de proteger. Se dice una vez arriba y las casillas se
+   * quedan con su «—».
+   */
+  const motivoComunDelBloque = (b: BloqueDeFicha): string | undefined => {
+    if (esNuevo) return undefined;
+    const motivos = b.campos.map((f) => PROCEDENCIA[f.k]?.motivo);
+    if (motivos.length < 3) return undefined;
+    const primero = motivos[0];
+    return primero !== undefined && motivos.every((m) => m === primero) ? primero : undefined;
   };
 
   const bloqueDeFicha = (b: BloqueDeFicha, i: number) => (
@@ -1615,43 +2513,72 @@ export default function Catastro({ dest, onDest }: PantallaProps) {
         </p>
       )}
 
+      {motivoComunDelBloque(b) && (
+        <p style={{ margin: 0, padding: '8px 16px 0', fontSize: 12.5, lineHeight: 1.5, color: 'var(--warn-fg)', maxWidth: '76ch', textWrap: 'pretty' }}>
+          Ninguna casilla de este bloque llega al servidor. {motivoComunDelBloque(b)}
+        </p>
+      )}
+
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit,minmax(192px,1fr))', gap: '15px 16px', padding: '15px 16px 17px' }}>
-        {b.campos.map(campoDeFicha)}
+        {b.campos.map((f) => campoDeFicha(f, motivoComunDelBloque(b)))}
       </div>
 
-      {b.tabla && (
-        <div style={{ borderTop: '1px solid var(--line)' }}>
+      {b.tabla &&
+        (() => {
+          /* En una ficha NUEVA las filas del artboard no son de nadie: la de
+             «Titulares registrados» ponía dos copropietarios al 50 % con su
+             D.N.I., y la de «Otras puertas del predio» dos direcciones de otro
+             predio, sobre un formulario en blanco. Y sobre una ficha LEÍDA
+             tampoco: ponía las mismas filas encima de un predio real. */
+          const t = esNuevo ? null : tablaConectada(b.tabla!.titulo);
+          const cols = t === null ? b.tabla!.cols : t.cols;
+          const filas = t === null ? [] : t.filas;
+          return (
+            <div style={{ borderTop: '1px solid var(--line)' }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap', padding: '11px 16px' }}>
+                <p style={{ margin: 0, flex: 1, fontSize: 13, fontWeight: 500 }}>{b.tabla!.titulo}</p>
+                {/* El conteo del artboard —«2 direcciones», «4 pisos»— hablaba de
+                    otra ficha. Y el botón «+ Añadir puerta» sólo llamaba a
+                    `setSucio(true)`: ofrecía añadir una fila que no se guarda en
+                    ninguna parte. */}
+                <span style={META}>
+                  {esNuevo ? 'ninguna todavía' : esperandoLaFicha ? 'leyendo…' : filas.length === 0 ? 'ninguna' : filas.length}
+                </span>
+              </div>
+              <div style={{ borderTop: '1px solid var(--line)' }}>
+                <TablaDelArtboard cols={cols} filas={filas} min={b.tabla!.min} />
+              </div>
+              {esNuevo ? (
+                <p style={PIE}>
+                  El manual dibuja esta tabla en la ficha, y la ficha se levanta con otra operación: el alta del predio no la manda, así
+                  que aquí no hay nada declarado todavía.
+                </p>
+              ) : (
+                t !== null && <p style={PIE}>{t.nota}</p>
+              )}
+            </div>
+          );
+        })()}
+
+      {/* Lo que la ficha publica y el manual no dibuja: sin estas tablas, media
+          ficha leída se quedaría sin enseñar y sus campos dirían «es una lista»
+          sin que la lista estuviera en ninguna parte. */}
+      {tablasDeMas(b).map((t) => (
+        <div key={t.titulo} style={{ borderTop: '1px solid var(--line)' }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap', padding: '11px 16px' }}>
-            <p style={{ margin: 0, flex: 1, fontSize: 13, fontWeight: 500 }}>{b.tabla.titulo}</p>
-            <span style={META}>{esNuevo ? 'ninguna todavía' : b.tabla.conteo}</span>
-            {!esNuevo && (
-              <button onClick={() => setSucio(true)} className="hov-linea" style={BOTON_LINEA}>
-                {b.tabla.accion}
-              </button>
-            )}
+            <p style={{ margin: 0, flex: 1, fontSize: 13, fontWeight: 500 }}>{t.titulo}</p>
+            <span style={META}>{t.filas.length === 0 ? 'ninguna' : t.filas.length}</span>
           </div>
           <div style={{ borderTop: '1px solid var(--line)' }}>
-            {/* En una ficha NUEVA las filas del artboard no son de nadie: la de
-                «Titulares registrados» ponía dos copropietarios al 50 % con su
-                D.N.I., y la de «Otras puertas del predio» dos direcciones de otro
-                predio, sobre un formulario en blanco. La ficha se levanta con otra
-                operación, así que aquí no hay ninguna que enseñar. */}
-            <TablaDelArtboard cols={b.tabla.cols} filas={esNuevo ? [] : b.tabla.filas} min={b.tabla.min} />
+            <TablaDelArtboard cols={t.cols} filas={t.filas} min="620px" />
           </div>
-          {esNuevo ? (
-            <p style={PIE}>
-              El manual dibuja esta tabla en la ficha, y la ficha se levanta con otra operación: el alta del predio no la manda, así
-              que aquí no hay nada declarado todavía.
-            </p>
-          ) : (
-            b.tabla.nota && <p style={PIE}>{b.tabla.nota}</p>
-          )}
+          <p style={PIE}>{t.nota}</p>
         </div>
-      )}
+      ))}
 
       {b.totales && (
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit,minmax(158px,1fr))', gap: 0, background: 'var(--bg-card)', borderTop: '1px solid var(--line)' }}>
-          {b.totales.map((t) => (
+          {totalesConectados(b).map((t) => (
             <div
               key={t[0]}
               /* El divisor va en la celda, no en el `gap`: con `auto-fit` la
@@ -1691,8 +2618,15 @@ export default function Catastro({ dest, onDest }: PantallaProps) {
           { etiqueta: 'Código catastral', valor: abierto.codRefCatastral },
           { etiqueta: 'Titular', valor: textoDeTitulares(titulares.cargando, titulares.error, titulares.datos) },
           { etiqueta: 'Tipo', valor: rotuloDeTipo(abierto.tipo) },
-          { etiqueta: 'Uso', valor: SIN_DATO },
-          { etiqueta: 'Área de terreno', valor: SIN_DATO },
+          /* Los tres de la ficha ya salen de la ficha. El uso y el área son
+             suyos; el autovalúo NO lo publica y sigue en «—», porque sale de
+             cuadros normativos versionados que hoy no están sellados. */
+          { etiqueta: 'Uso', valor: leida?.uso ?? (esperandoLaFicha ? 'Leyendo la ficha…' : SIN_DATO) },
+          { etiqueta: 'Área de terreno', valor: leida === null ? SIN_DATO : leida.areaTerreno + ' m²' },
+          {
+            etiqueta: 'Ficha',
+            valor: leida === null ? SIN_DATO : 'v' + leida.version + ' desde ' + leida.vigenciaDesde,
+          },
           { etiqueta: 'Autovalúo ' + pref.ejercicio, valor: SIN_DATO },
         ]
       : /* Sin predio abierto no hay nada que resumir. Aquí decía «Villegas
@@ -2098,29 +3032,12 @@ export default function Catastro({ dest, onDest }: PantallaProps) {
                   </table>
                 </div>
 
-                {padron.datos.totalPaginas > 1 && (
-                  <div style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '10px 16px', borderTop: '1px solid var(--line)' }}>
-                    <button
-                      onClick={() => setPagina((n) => Math.max(0, n - 1))}
-                      disabled={pagina === 0}
-                      className="hov-linea"
-                      style={{ ...BOTON_LINEA, opacity: pagina === 0 ? 0.45 : 1, cursor: pagina === 0 ? 'not-allowed' : 'pointer' }}
-                    >
-                      Anterior
-                    </button>
-                    <span style={{ fontFamily: 'var(--font-mono)', fontSize: 12, color: 'var(--ink-3)' }}>
-                      {padron.datos.pagina + 1} de {padron.datos.totalPaginas}
-                    </span>
-                    <button
-                      onClick={() => setPagina((n) => n + 1)}
-                      disabled={!padron.datos.hayMas}
-                      className="hov-linea"
-                      style={{ ...BOTON_LINEA, opacity: padron.datos.hayMas ? 1 : 0.45, cursor: padron.datos.hayMas ? 'pointer' : 'not-allowed' }}
-                    >
-                      Siguiente
-                    </button>
-                  </div>
-                )}
+                <Paginador
+                  pagina={padron.datos.pagina}
+                  totalPaginas={padron.datos.totalPaginas}
+                  hayMas={padron.datos.hayMas}
+                  ir={setPagina}
+                />
 
                 {/* Por qué no hay columna de titular, dicho donde se echa en falta:
                     publicarlo en la fila convertiría «quien puede listar predios» en
@@ -2138,6 +3055,70 @@ export default function Catastro({ dest, onDest }: PantallaProps) {
         {/* ══════════ EL PREDIO ══════════ */}
         {esPredio && (
           <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
+            {/* El alta que quedó a medias: el predio SÍ está inscrito y su
+                titular no. Es un aviso permanente y no un `toast`, porque lo que
+                dice hay que poder leerlo después de mirar a otro sitio: si se
+                lee como «no se inscribió», alguien vuelve a inscribir el mismo
+                código —y eso el padrón no lo deshace (regla 4)—.
+
+                Y no se queda en decirlo: el predio ya existe, así que el titular
+                se puede declarar aquí mismo sobre él. Es el mismo acto que el
+                alta manda detrás, con los datos que siguen en pantalla. */}
+            {altaAMedias !== null && (
+              <section style={{ ...TARJETA, borderColor: 'var(--warn-fg)' }}>
+                <div style={{ padding: '14px 16px', borderBottom: '1px solid var(--line)' }}>
+                  <Aviso tono="warn" titulo={'El predio ' + altaAMedias.codigo + ' SÍ quedó inscrito. Su titular NO.'}>
+                    Está en el padrón catastral con el identificador{' '}
+                    <code style={{ fontFamily: 'var(--font-mono)' }}>{altaAMedias.predioId}</code>:{' '}
+                    <strong>no lo vuelvas a inscribir</strong>, el mismo código de referencia catastral se rechaza y dos
+                    fichas sobre el mismo lote generan dos deudas. Lo que falló fue la segunda petición, la del titular:{' '}
+                    {altaAMedias.motivo}
+                  </Aviso>
+                </div>
+                {bloqueDeTitular}
+                <div style={{ display: 'flex', alignItems: 'center', gap: 12, flexWrap: 'wrap', padding: '13px 16px', borderTop: '1px solid var(--line)' }}>
+                  <button
+                    onClick={() => void declararTitular(altaAMedias.predioId, altaAMedias.codigo)}
+                    disabled={!puedeRegistrarTitular}
+                    title={
+                      registrandoTitular
+                        ? 'Se está registrando el titular…'
+                        : titularElegido === null
+                          ? 'Elige arriba al contribuyente que es titular de este predio.'
+                          : faltaDelTitular.length > 0
+                            ? 'Falta ' + faltaDelTitular.join(', ') + '.'
+                            : undefined
+                    }
+                    className="hov-linea"
+                    style={{
+                      border: '1px solid var(--accent)',
+                      borderRadius: 6,
+                      padding: '9px 16px',
+                      background: puedeRegistrarTitular ? 'var(--accent)' : 'var(--bg-card)',
+                      color: puedeRegistrarTitular ? 'var(--accent-contraste)' : 'var(--ink-4)',
+                      fontSize: 13,
+                      cursor: puedeRegistrarTitular ? 'pointer' : 'not-allowed',
+                    }}
+                  >
+                    {registrandoTitular ? 'Registrando…' : 'Registrar el titular sobre este predio'}
+                  </button>
+                  <button
+                    onClick={() => {
+                      setAltaAMedias(null);
+                      limpiarElTitular();
+                    }}
+                    className="hov-linea"
+                    style={BOTON_LINEA}
+                  >
+                    Dejarlo sin titular por ahora
+                  </button>
+                  <span style={{ flex: 1, minWidth: 200, fontSize: 11.5, color: 'var(--ink-3)', textWrap: 'pretty' }}>
+                    Sin titular el predio está en el padrón catastral y fuera de toda emisión: la obligación predial se
+                    determina por contribuyente.
+                  </span>
+                </div>
+              </section>
+            )}
             {esNuevo && (
               <>
                 <section style={TARJETA}>
@@ -2345,23 +3326,45 @@ export default function Catastro({ dest, onDest }: PantallaProps) {
                 <Icono d={ICO.aviso} tam={16} grosor={1.8} style={{ flex: '0 0 auto', marginTop: 1 }} />
                 <span style={{ flex: 1, minWidth: 0, fontSize: 12.5, lineHeight: 1.55, textWrap: 'pretty' }}>
                   <strong style={{ display: 'block', fontWeight: 600, marginBottom: 2 }}>
-                    {abierto
-                      ? 'De este predio, el sistema conoce su identidad; su ficha todavía no.'
-                      : 'Aquí no hay ningún predio abierto: lo de abajo es el ejemplo del prototipo, entero.'}
+                    {abierto === null
+                      ? 'Aquí no hay ningún predio abierto: lo de abajo no es de nadie.'
+                      : !abierto.fichado
+                        ? 'Este predio está en el padrón y NO tiene ficha catastral.'
+                        : leida !== null
+                          ? 'Ficha ' + rotuloDeModalidad(leida.tipo) + ', versión ' + leida.version + ', vigente desde el ' + leida.vigenciaDesde + '.'
+                          : esperandoLaFicha
+                            ? 'Leyendo la ficha de este predio…'
+                            : 'La ficha de este predio no se ha podido leer.'}
                   </strong>
-                  {abierto ? (
+                  {abierto === null ? (
                     <>
-                      El código, la ubicación, el tipo, el estado y el titular salen del padrón —
-                      <span style={{ fontFamily: 'var(--font-mono)' }}>GET /catastro/predios</span>—. El uso, las áreas, la valuación y todo
-                      lo que se teclea más abajo son datos de la ficha catastral, que la sirve otra operación (
-                      <span style={{ fontFamily: 'var(--font-mono)' }}>/catastro/fichas/…</span>) y aún no está conectada: lo que se ve en esos
-                      campos es el ejemplo del prototipo, no lo declarado para{' '}
-                      <span style={{ fontFamily: 'var(--font-mono)' }}>{abierto.codRefCatastral}</span>.
+                      Ni el código, ni el titular, ni las áreas: no se ha leído ningún predio. Vuelve al padrón y abre uno.
+                    </>
+                  ) : !abierto.fichado ? (
+                    <>
+                      Lo que falta es la <strong>primera versión</strong> de su ficha, y esa se levanta con{' '}
+                      <span style={{ fontFamily: 'var(--font-mono)' }}>POST /catastro/fichas/&#123;tipo&#125;</span> —urbana, económica, de
+                      bienes comunes o rural—, no con la actualización, que versiona una que ya existe. Esta pantalla todavía no lo hace:
+                      ese alta pide el área del terreno, el uso y el detalle del tipo, y ninguno de esos campos llega hoy al servidor desde
+                      aquí. Lo de abajo se dibuja vacío a propósito.
+                    </>
+                  ) : lecturaDeLaFicha.error !== null || tipoDeFicha.error !== null ? (
+                    <>
+                      {(lecturaDeLaFicha.error ?? tipoDeFicha.error)!.mensaje}. Las cuatro lecturas de ficha exigen cada una su propio
+                      acceso —<span style={{ fontFamily: 'var(--font-mono)' }}>ficha_urbana</span>,{' '}
+                      <span style={{ fontFamily: 'var(--font-mono)' }}>ficha_economica</span>,{' '}
+                      <span style={{ fontFamily: 'var(--font-mono)' }}>ficha_bienes</span> y{' '}
+                      <span style={{ fontFamily: 'var(--font-mono)' }}>ficha_rural</span>—, y resolver de cuál de las cuatro es exige además{' '}
+                      <span style={{ fontFamily: 'var(--font-mono)' }}>consulta_fichas</span>.
                     </>
                   ) : (
                     <>
-                      Ni el código, ni el titular, ni las áreas, ni el autovalúo son de nadie: no se ha leído ningún predio. Vuelve al
-                      padrón y abre uno.
+                      Los campos de abajo salen de{' '}
+                      <span style={{ fontFamily: 'var(--font-mono)' }}>GET /catastro/fichas/{modalidadDeLaFicha}/{abierto.codRefCatastral}</span>{' '}
+                      y del padrón, y los que aparecen en <span style={{ fontFamily: 'var(--font-mono)' }}>—</span> es porque{' '}
+                      <strong>nadie los publica</strong>: cada uno dice cuál. De las 123 casillas que el manual dibuja, el sistema sostiene
+                      catorce y sólo dos llegan al servidor —el número municipal y la fuente—; las demás describen datos que no están en el
+                      modelo, listas que se enseñan en sus tablas, o importes que la ficha no publica a propósito.
                     </>
                   )}
                 </span>
@@ -2482,10 +3485,13 @@ export default function Catastro({ dest, onDest }: PantallaProps) {
 
             {/* Aquí iba «Falta el área construida verificada del piso 02. Es el
                 único dato que impide cerrar la actualización de esta ficha»: no
-                impide nada, porque desde esta pantalla la ficha no se guarda
-                —ver `MOTIVO_SIN_GUARDADO_DE_FICHA`—, así que prometía un cierre
-                que no existe y mandaba al paso 4 a llenar un campo que se pierde
-                al salir. */}
+                impide nada, porque el área construida verificada no llega al
+                servidor por ningún camino —el cuerpo de la actualización lleva
+                la lista de construcciones y ninguna de las dos áreas que el
+                manual dibuja—, así que prometía un cierre que no existe y
+                mandaba al paso 4 a llenar un campo que se pierde al salir. Lo
+                que de verdad impide versionar lo dice `impedimento`, en la barra
+                de guardado. */}
 
             {!esNuevo && (
               <div style={{ display: 'flex', alignItems: 'center', gap: 12, flexWrap: 'wrap' }}>
@@ -2593,8 +3599,8 @@ export default function Catastro({ dest, onDest }: PantallaProps) {
                       }}
                     >
                       <span style={{ flex: 1, minWidth: 0, fontSize: 12.5 }}>{x.label}</span>
-                      <span style={{ fontFamily: 'var(--font-mono)', fontSize: 11, flex: '0 0 auto', color: x.faltan === 0 ? 'var(--ok-fg)' : 'var(--warn-fg)' }}>
-                        {x.faltan === 0 ? '✓' : '·'}
+                      <span style={{ fontFamily: 'var(--font-mono)', fontSize: 11, flex: '0 0 auto', color: x.viajan > 0 && x.faltan === 0 ? 'var(--ok-fg)' : 'var(--warn-fg)' }}>
+                        {x.viajan > 0 && x.faltan === 0 ? '✓' : '·'}
                       </span>
                     </a>
                   ))}
@@ -2639,22 +3645,41 @@ export default function Catastro({ dest, onDest }: PantallaProps) {
                           borderRadius: 999,
                           padding: '3px 10px',
                           flex: '0 0 auto',
-                          color: esNuevo ? (s.viajan === 0 ? 'var(--warn-fg)' : 'var(--ok-fg)') : s.faltan === 0 ? 'var(--ok-fg)' : 'var(--warn-fg)',
-                          background: esNuevo ? (s.viajan === 0 ? 'var(--warn-bg)' : 'var(--ok-bg)') : s.faltan === 0 ? 'var(--ok-bg)' : 'var(--warn-bg)',
+                          color: s.viajan === 0 ? 'var(--warn-fg)' : 'var(--ok-fg)',
+                          background: s.viajan === 0 ? 'var(--warn-bg)' : 'var(--ok-bg)',
                         }}
                       >
-                        {esNuevo
-                          ? s.viajan === 0
-                            ? 'De aquí no viaja nada todavía'
-                            : s.viajan + (s.viajan === 1 ? ' campo viaja' : ' campos viajan')
-                          : s.faltan === 0
-                            ? 'Completa'
-                            : s.faltan + (s.faltan === 1 ? ' campo pendiente' : ' campos pendientes')}
+                        {/* «Completa» decía de una sección con dieciocho casillas
+                            en blanco que estaba completa, porque ninguna era
+                            obligatoria. Lo que hay que saber de una sección es
+                            cuántos de sus campos llegan al servidor. */}
+                        {s.viajan === 0
+                          ? 'De aquí no viaja nada'
+                          : s.viajan + (s.viajan === 1 ? ' campo viaja' : ' campos viajan')}
                       </span>
                     </button>
                     {s.abierta && <div style={{ borderTop: '1px solid var(--line)' }}>{s.bloques.map(bloqueDeFicha)}</div>}
                   </section>
                 ))}
+
+                {/* El titular: el segundo acto, en el paso donde se cierra el alta.
+                    Va antes del resumen porque el resumen lo cuenta. */}
+                {esNuevo && paso >= secciones.length - 1 && (
+                  <section style={TARJETA}>
+                    <div style={{ ...CABECERA_SECCION, flexWrap: 'wrap' }}>
+                      <p style={{ ...H2, margin: 0 }}>Titular del predio</p>
+                      <span style={META}>{titularElegido ? 'segunda petición' : 'opcional, pero el predio no se cobra sin él'}</span>
+                    </div>
+                    <p style={{ margin: 0, padding: '11px 16px', borderBottom: '1px solid var(--line)', fontSize: 12.5, lineHeight: 1.5, color: 'var(--ink-3)', maxWidth: '76ch', textWrap: 'pretty' }}>
+                      El alta del predio no lleva contribuyente: la titularidad es otro acto,{' '}
+                      <code style={{ fontFamily: 'var(--font-mono)' }}>POST /catastro/predios/&#123;predioId&#125;/titulares</code>, y se
+                      manda <strong>después</strong> de que el predio exista, porque hasta entonces no hay identificador al
+                      que colgarla. Se puede inscribir el predio sin titular —así estaba hasta ahora—, pero un predio sin
+                      titular no tiene a quién cobrarse.
+                    </p>
+                    {bloqueDeTitular}
+                  </section>
+                )}
 
                 {/* Lo que se va a registrar: el cierre del alta guiada */}
                 {esNuevo && paso >= secciones.length - 1 && (
@@ -2700,14 +3725,34 @@ export default function Catastro({ dest, onDest }: PantallaProps) {
                         valor: tipoDelAlta,
                         ok: true,
                       },
-                      {
-                        titulo: 'NO se le vincula ningún titular',
-                        detalle:
-                          'El alta del predio no lleva contribuyente. La titularidad se registra después, con su propia ' +
-                          'observación y su porcentaje; hasta entonces el predio no tiene a quién cobrarse.',
-                        valor: 'Después',
-                        ok: false,
-                      },
+                      /* Esta línea decía «NO se le vincula ningún titular» y era
+                         cierta: no había por dónde elegirlo. Ahora lo hay, así que
+                         dice lo que va a pasar de verdad —una cosa u otra— en vez
+                         de una sola de las dos. Cuando no se declara ninguno,
+                         sigue diciendo que no se vincula. */
+                      titularElegido === null
+                        ? {
+                            titulo: 'NO se le vincula ningún titular',
+                            detalle:
+                              'El alta del predio no lleva contribuyente. Elige uno arriba, o el predio entra en el padrón ' +
+                              'sin nadie a quien cobrarle: la obligación predial se determina por contribuyente.',
+                            valor: 'Sin titular',
+                            ok: false,
+                          }
+                        : {
+                            titulo:
+                              'Se le declara titular a ' + titularElegido.nombreRazonSocial + ' (' + titularElegido.codigo + ')',
+                            detalle:
+                              'Como ' +
+                              condicionDelTitular +
+                              (titularPorElTotal ? ', por el total' : ' con el ' + (porcentajeTecleado || SIN_DATO) + ' %') +
+                              ', con «' +
+                              (documentoDelTitular.trim() || SIN_DATO) +
+                              '». Es una SEGUNDA petición, detrás del alta y con su propia observación: si el predio se ' +
+                              'inscribe y ésta falla, el predio queda inscrito y se dice cuál es.',
+                            valor: titularPorElTotal ? '100 %' : (porcentajeTecleado || SIN_DATO) + ' %',
+                            ok: faltaDelTitular.length === 0,
+                          },
                       {
                         titulo: 'NO empieza a generar obligación predial',
                         detalle:
@@ -2803,7 +3848,9 @@ export default function Catastro({ dest, onDest }: PantallaProps) {
                       }}
                     >
                       {puedeRegistrar
-                        ? 'Todo listo. Al registrar, el predio entra en el padrón catastral: sin ficha, sin titular y sin obligación.'
+                        ? titularElegido
+                          ? 'Todo listo. Son dos peticiones: primero el predio y después su titular, cada una con su observación. El predio entra en el padrón sin ficha y sin obligación.'
+                          : 'Todo listo. Al registrar, el predio entra en el padrón catastral: sin ficha, sin titular y sin obligación.'
                         : 'No se puede registrar todavía. ' + motivoBloqueo}
                     </p>
                   </section>
@@ -2811,26 +3858,7 @@ export default function Catastro({ dest, onDest }: PantallaProps) {
 
                 {modo === 'pasos' && (
                   <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>
-                    <button
-                      onClick={() => setPaso(Math.max(paso - 1, 0))}
-                      aria-disabled={paso === 0}
-                      className="hov-linea"
-                      style={{
-                        display: 'flex',
-                        alignItems: 'center',
-                        gap: 7,
-                        border: '1px solid var(--line-2)',
-                        borderRadius: 6,
-                        padding: '10px 18px',
-                        background: 'var(--bg-card)',
-                        fontSize: 13,
-                        cursor: 'pointer',
-                        opacity: paso === 0 ? 0.5 : 1,
-                      }}
-                    >
-                      <Icono d={ICO.flechaIzq} tam={14} grosor={1.8} />
-                      Anterior
-                    </button>
+                    <PasoAtras paso={paso} atras={() => setPaso(paso - 1)} />
                     <p style={{ margin: 0, flex: 1, minWidth: 160, fontSize: 12, color: 'var(--ink-3)', textWrap: 'pretty' }}>
                       {/* «El borrador se guarda al avanzar: si se corta la sesión, lo
                           escrito no se pierde» — no se guarda en ninguna parte:
@@ -2838,17 +3866,20 @@ export default function Catastro({ dest, onDest }: PantallaProps) {
                       {paso >= secciones.length - 1
                         ? esNuevo
                           ? puedeRegistrar
-                            ? 'Al registrar, el predio entra en el padrón catastral: sin ficha, sin titular y sin obligación.'
+                            ? titularElegido
+                              ? 'Son dos peticiones: el predio y, detrás, su titular. Si la segunda falla, el predio queda inscrito y la pantalla dice cuál es.'
+                              : 'Al registrar, el predio entra en el padrón catastral: sin ficha, sin titular y sin obligación.'
                             : motivoBloqueo
-                          : MOTIVO_SIN_GUARDADO_DE_FICHA
+                          : (impedimento ??
+                            'Se emite la versión siguiente de la ficha y la que rige se cierra el día antes: aquí no se corrige, se versiona.')
                         : esNuevo
                           ? 'Nada se guarda hasta el último paso: lo escrito vive en esta pestaña y se pierde al recargar.'
-                          : MOTIVO_SIN_GUARDADO_DE_FICHA}
+                          : MOTIVO_DE_LOS_CAMPOS_QUE_NO_VIAJAN}
                     </p>
                     <button
                       onClick={pasoAdelante}
                       aria-disabled={pasoBloqueado}
-                      title={pasoBloqueado ? motivoBloqueo : undefined}
+                      title={pasoBloqueado ? (esNuevo ? motivoBloqueo : (impedimento ?? undefined)) : undefined}
                       className="hov-acento-2"
                       style={{
                         display: 'flex',
@@ -2865,7 +3896,13 @@ export default function Catastro({ dest, onDest }: PantallaProps) {
                         opacity: pasoBloqueado ? 0.55 : 1,
                       }}
                     >
-                      {paso >= secciones.length - 1 ? (esNuevo ? 'Registrar el predio' : 'Guardar la ficha') : 'Continuar'}
+                      {paso >= secciones.length - 1
+                        ? esNuevo
+                          ? 'Registrar el predio'
+                          : versionando
+                            ? 'Versionando…'
+                            : 'Guardar como versión nueva'
+                        : 'Continuar'}
                       <Icono d={ICO.flechaDer} tam={14} grosor={1.8} />
                     </button>
                   </div>
@@ -3001,42 +4038,96 @@ export default function Catastro({ dest, onDest }: PantallaProps) {
                   </div>
                 )}
 
-                {/* El 422 del marco lleno NO es un error, es una respuesta: hay
-                    más lotes de los que se sirven y hay que acercarse (ADR-0022
-                    §2). Comparte el código `VALIDACION` con «el marco está del
-                    revés», que sí es un defecto de esta pantalla, y **no se
-                    separan leyendo el texto**: reaccionar al mensaje es lo que
-                    esta interfaz no hace en ninguna parte. Así que se enseña el
-                    mensaje del servidor tal cual —él dice cuántos hay— y se
-                    ofrece acercar, que sirve en el primer caso y no estorba en
-                    el segundo. Separarlos por contrato es #611. */}
-                {plano.error !== null && plano.error.codigo === 'VALIDACION' && (
-                  <div style={{ padding: 14, display: 'flex', flexDirection: 'column', gap: 10 }}>
-                    <Aviso tono="warn" titulo="El servidor no sirve este marco">
-                      {plano.error.mensaje}
-                    </Aviso>
-                    <div style={{ display: 'flex', gap: 8 }}>
-                      <button onClick={() => acercarElMarco()} className="hov-acento-2" style={{ border: 0, borderRadius: 6, padding: '9px 14px', background: 'var(--accent)', color: '#fff', fontSize: 12.5, fontWeight: 500, cursor: 'pointer' }}>
-                        Acercar el marco
-                      </button>
-                      <button
-                        onClick={() => cambiarMarco(MARCO_INICIAL)}
-                        disabled={marcoEsElInicial}
-                        title={marcoEsElInicial ? 'El marco ya es el inicial: lo que hay que hacer es acercarlo' : undefined}
-                        className="hov-linea"
-                        style={{ ...BOTON_LINEA, opacity: marcoEsElInicial ? 0.5 : 1 }}
-                      >
-                        Restablecer
-                      </button>
+                {/* Los 422 de esta operación son dos cosas opuestas, y desde
+                    #611 el código las separa: `MARCO_CON_DEMASIADOS_LOTES` dice
+                    «la petición está bien, hay demasiado dentro» —y lo resuelve
+                    acercarse—, y `VALIDACION` dice «corrige lo que pediste».
+                    Hasta aquí compartían código y lo único que las distinguía
+                    era el texto en castellano, así que la pantalla ofrecía
+                    acercar también ante un marco del revés y titulaba «el
+                    servidor no sirve este marco» a una respuesta que sí sirve.
+                    El orden importa: el caso propio va delante del genérico. */}
+                {plano.error !== null &&
+                  (plano.error.codigo === 'MARCO_CON_DEMASIADOS_LOTES' ? (
+                    <div style={{ padding: 14, display: 'flex', flexDirection: 'column', gap: 10 }}>
+                      {/* Tono de aviso y no de error, como el «ese código no
+                          está en el padrón» de Consultas (#622): la lectura se
+                          hizo, el servidor contestó lo que sabía, y reintentar
+                          devolvería exactamente esto. Por eso tampoco hay
+                          «Reintentar» —`reintentable` es falso para este
+                          código— y sí las dos acciones que sí lo resuelven. */}
+                      <Aviso tono="warn" titulo="Hay más lotes en este marco de los que se dibujan">
+                        Dentro de este marco hay{' '}
+                        <strong>{marcoLleno.lotes === null ? SIN_DATO : marcoLleno.lotes.toLocaleString('es-PE')}</strong> lotes, y el
+                        máximo que este servidor dibuja de una vez son{' '}
+                        <strong>{marcoLleno.tope === null ? SIN_DATO : marcoLleno.tope.toLocaleString('es-PE')}</strong>. No es un fallo
+                        ni un rechazo de lo que pediste: el marco está bien escrito y lo que no cabe es lo que tiene dentro. Y no se
+                        dibujan «los primeros», porque un plano al que le faltan lotes no se ve recortado —se ve como un plano donde ahí
+                        no hay lotes— (ADR-0022 §2). Acércalo, o acota por sector y manzana con los dos desplegables de arriba.
+                        {(marcoLleno.lotes === null || marcoLleno.tope === null) && (
+                          <span style={{ display: 'block', marginTop: 6, opacity: 0.85 }}>
+                            Las cifras que salen con «{SIN_DATO}» no vinieron en esta respuesta. La línea de abajo es el texto del
+                            servidor tal cual, y es lo único que queda para saberlas.
+                          </span>
+                        )}
+                      </Aviso>
+                      {/* El texto del servidor baja a la línea técnica, como en
+                          #622: ahí vale de evidencia y no compite con el titular
+                          —que lo escribe la pantalla, porque el mensaje se
+                          reescribe y el código no—. */}
+                      <p style={{ margin: 0, fontFamily: 'var(--font-mono)', fontSize: 10.5, color: 'var(--ink-4)' }}>
+                        GET /catastro/predios/plano · {plano.error.estado} · «{plano.error.mensaje}»
+                      </p>
+                      <div style={{ display: 'flex', gap: 8 }}>
+                        <button onClick={() => acercarElMarco()} className="hov-acento-2" style={{ border: 0, borderRadius: 6, padding: '9px 14px', background: 'var(--accent)', color: '#fff', fontSize: 12.5, fontWeight: 500, cursor: 'pointer' }}>
+                          Acercar el marco
+                        </button>
+                        <button
+                          onClick={() => cambiarMarco(MARCO_INICIAL)}
+                          disabled={marcoEsElInicial}
+                          title={marcoEsElInicial ? 'El marco ya es el inicial: lo que hay que hacer es acercarlo' : undefined}
+                          className="hov-linea"
+                          style={{ ...BOTON_LINEA, opacity: marcoEsElInicial ? 0.5 : 1 }}
+                        >
+                          Restablecer
+                        </button>
+                      </div>
                     </div>
-                  </div>
-                )}
-
-                {plano.error !== null && plano.error.codigo !== 'VALIDACION' && (
-                  <div style={{ padding: 14 }}>
-                    <FalloDeLectura error={plano.error} que="el plano catastral" acceso="consulta_fichas" alReintentar={plano.reintentar} />
-                  </div>
-                )}
+                  ) : plano.error.codigo === 'VALIDACION' ? (
+                    <div style={{ padding: 14, display: 'flex', flexDirection: 'column', gap: 10 }}>
+                      {/* Aquí sí es un defecto de lo que se pidió, y en esta
+                          pantalla sólo puede ser el marco: `limite` viaja fijo
+                          en LOTES_POR_MARCO —que es el tope del propio
+                          servidor—, así que sus tres rechazos no son
+                          alcanzables desde aquí. El mensaje del servidor sale
+                          entero y arriba porque es lo único que dice CUÁL de
+                          los cuatro números está mal: medido, «el oeste (-80.67)
+                          tiene que ser menor que el este (-80.69)» y «La latitud
+                          norte tiene que estar entre -90 y 90 grados». */}
+                      <Aviso tono="bad" titulo="El marco que se pidió no es un marco">
+                        {plano.error.mensaje}
+                        <span style={{ display: 'block', marginTop: 6, opacity: 0.85 }}>
+                          Se corrige en la caja «Marco» de aquí arriba, que son esos cuatro números en grados, o restableciendo el
+                          inicial. No se ofrece acercar: acercar parte de estos mismos cuatro y lo que hay que cambiar son ellos.
+                        </span>
+                      </Aviso>
+                      <div style={{ display: 'flex', gap: 8 }}>
+                        <button
+                          onClick={() => cambiarMarco(MARCO_INICIAL)}
+                          disabled={marcoEsElInicial}
+                          title={marcoEsElInicial ? 'El marco ya es el inicial: corrígelo en la caja de arriba' : undefined}
+                          className="hov-acento-2"
+                          style={{ border: 0, borderRadius: 6, padding: '9px 14px', background: 'var(--accent)', color: '#fff', fontSize: 12.5, fontWeight: 500, cursor: marcoEsElInicial ? 'default' : 'pointer', opacity: marcoEsElInicial ? 0.5 : 1 }}
+                        >
+                          Restablecer el marco
+                        </button>
+                      </div>
+                    </div>
+                  ) : (
+                    <div style={{ padding: 14 }}>
+                      <FalloDeLectura error={plano.error} que="el plano catastral" acceso="consulta_fichas" alReintentar={plano.reintentar} />
+                    </div>
+                  ))}
 
                 {/* **El estado de hoy, y el primero que esta pantalla tiene que
                     saber dibujar** (ADR-0022 §3): el plano contesta bien y no
@@ -3394,29 +4485,15 @@ export default function Catastro({ dest, onDest }: PantallaProps) {
                                   </span>
                                 ))}
                               </div>
-                              {(manzanas.datos?.totalPaginas ?? 1) > 1 && (
-                                <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginTop: 9 }}>
-                                  <button
-                                    onClick={() => setPaginaDeManzanas((n) => Math.max(n - 1, 0))}
-                                    disabled={paginaDeManzanas === 0}
-                                    className="hov-linea"
-                                    style={{ ...BOTON_LINEA, padding: '4px 10px', fontSize: 11.5, opacity: paginaDeManzanas === 0 ? 0.45 : 1, cursor: paginaDeManzanas === 0 ? 'not-allowed' : 'pointer' }}
-                                  >
-                                    Anterior
-                                  </button>
-                                  <span style={{ fontFamily: 'var(--font-mono)', fontSize: 11, color: 'var(--ink-3)' }}>
-                                    {paginaDeManzanas + 1} de {manzanas.datos?.totalPaginas ?? 1} ·{' '}
-                                    {(manzanas.datos?.totalElementos ?? 0).toLocaleString('es-PE')} manzanas
-                                  </span>
-                                  <button
-                                    onClick={() => setPaginaDeManzanas((n) => n + 1)}
-                                    disabled={!(manzanas.datos?.hayMas ?? false)}
-                                    className="hov-linea"
-                                    style={{ ...BOTON_LINEA, padding: '4px 10px', fontSize: 11.5, opacity: (manzanas.datos?.hayMas ?? false) ? 1 : 0.45, cursor: (manzanas.datos?.hayMas ?? false) ? 'pointer' : 'not-allowed' }}
-                                  >
-                                    Siguiente
-                                  </button>
-                                </div>
+                              {manzanas.datos != null && (
+                                <Paginador
+                                  pagina={manzanas.datos.pagina}
+                                  totalPaginas={manzanas.datos.totalPaginas}
+                                  hayMas={manzanas.datos.hayMas}
+                                  ir={setPaginaDeManzanas}
+                                  detalle={`${manzanas.datos.totalElementos.toLocaleString('es-PE')} manzanas`}
+                                  style={{ padding: 0, borderTop: 'none', marginTop: 9 }}
+                                />
                               )}
                             </>
                           )}
@@ -3474,28 +4551,14 @@ export default function Catastro({ dest, onDest }: PantallaProps) {
                     </table>
                   </div>
                 )}
-                {(vias.datos?.totalPaginas ?? 0) > 1 && (
-                  <div style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '10px 14px', borderTop: '1px solid var(--line)' }}>
-                    <button
-                      onClick={() => setPaginaVias((n) => Math.max(0, n - 1))}
-                      disabled={paginaVias === 0}
-                      className="hov-linea"
-                      style={{ ...BOTON_LINEA, opacity: paginaVias === 0 ? 0.45 : 1, cursor: paginaVias === 0 ? 'not-allowed' : 'pointer' }}
-                    >
-                      Anterior
-                    </button>
-                    <span style={{ fontFamily: 'var(--font-mono)', fontSize: 12, color: 'var(--ink-3)' }}>
-                      {(vias.datos?.pagina ?? 0) + 1} de {vias.datos?.totalPaginas}
-                    </span>
-                    <button
-                      onClick={() => setPaginaVias((n) => n + 1)}
-                      disabled={!vias.datos?.hayMas}
-                      className="hov-linea"
-                      style={{ ...BOTON_LINEA, opacity: vias.datos?.hayMas ? 1 : 0.45, cursor: vias.datos?.hayMas ? 'pointer' : 'not-allowed' }}
-                    >
-                      Siguiente
-                    </button>
-                  </div>
+                {vias.datos != null && (
+                  <Paginador
+                    pagina={vias.datos.pagina}
+                    totalPaginas={vias.datos.totalPaginas}
+                    hayMas={vias.datos.hayMas}
+                    ir={setPaginaVias}
+                    style={{ padding: '10px 14px' }}
+                  />
                 )}
                 <p style={{ ...PIE, padding: '11px 14px' }}>
                   El catálogo es del ubigeo entero y no de un sector: una vía no pertenece a un sector en el modelo, así que esta tabla no
@@ -3788,7 +4851,12 @@ export default function Catastro({ dest, onDest }: PantallaProps) {
       {/* ══════════ BARRA DE GUARDADO ══════════ */}
       {/* `sucio` es estado del módulo y la barra se dibujaba en los seis destinos:
           se quedaba pegada al pie del mapa, de los valores y de la hoja del
-          contribuyente, hablando de una ficha que ahí no hay. */}
+          contribuyente, hablando de una ficha que ahí no hay.
+
+          Y ahora `sucio` significa lo que dice: de las 123 casillas sólo dos
+          llegan al servidor —el número municipal y la fuente—, así que la barra
+          aparece cuando hay algo que mandar y no cuando se tecleó en cualquier
+          sitio. */}
       {sucio && esPredio && !esNuevo && (
         <div
           data-noprint="1"
@@ -3797,7 +4865,7 @@ export default function Catastro({ dest, onDest }: PantallaProps) {
             bottom: 0,
             zIndex: 38,
             display: 'flex',
-            alignItems: 'center',
+            alignItems: 'flex-end',
             gap: 12,
             flexWrap: 'wrap',
             margin: '18px -20px 0',
@@ -3807,24 +4875,69 @@ export default function Catastro({ dest, onDest }: PantallaProps) {
             boxShadow: '0 -6px 18px rgba(26,22,18,.06)',
           }}
         >
-          <span style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 12.5, color: 'var(--warn-fg)', background: 'var(--warn-bg)', borderRadius: 999, padding: '5px 12px' }}>
+          <span style={{ display: 'flex', alignItems: 'center', gap: 8, alignSelf: 'center', fontSize: 12.5, color: 'var(--warn-fg)', background: 'var(--warn-bg)', borderRadius: 999, padding: '5px 12px' }}>
             <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round">
               <circle cx="12" cy="12" r="9" />
               <path d="M12 7.5V12l3 2" />
             </svg>
-            Cambios sin guardar
+            Sin versionar
           </span>
-          {/* Prometía «se guardará como una versión nueva de la ficha; la anterior
-              queda en el histórico CON SU OBSERVACIÓN» —y no hay campo de
-              observación en ninguna parte de esta pantalla (regla 10, RNF-052)—,
-              debajo de un botón que no mandaba nada. */}
-          <p style={{ margin: 0, flex: 1, minWidth: 180, fontSize: 12, color: 'var(--ink-3)', textWrap: 'pretty' }}>
-            {MOTIVO_SIN_GUARDADO_DE_FICHA} Se pierde al salir de la pantalla.
+
+          {/* Los tres datos que el acto exige y que el manual NO dibuja en
+              ninguna de sus 123 casillas. Se preguntan aquí —controles añadidos,
+              con su propio rótulo— porque sin ellos el `PUT` responde 422 y
+              porque la observación es lo único que explicará este cambio cuando
+              la versión pase al histórico (regla 10, RNF-052). */}
+          <label style={{ flex: 2, minWidth: 240, display: 'flex', flexDirection: 'column', gap: 4 }}>
+            <span style={{ fontSize: 11, fontWeight: 500, color: 'var(--ink-3)' }}>Observación · obligatoria</span>
+            <input
+              value={observacionDeLaFicha}
+              onChange={(e) => setObservacionDeLaFicha(e.target.value)}
+              placeholder="Por qué cambia la ficha, y con qué se comprobó"
+              style={IN}
+            />
+          </label>
+          <label style={{ flex: 1, minWidth: 170, display: 'flex', flexDirection: 'column', gap: 4 }}>
+            <span style={{ fontSize: 11, fontWeight: 500, color: 'var(--ink-3)' }}>Documento de origen · obligatorio</span>
+            <input
+              value={documentoDeLaFicha}
+              onChange={(e) => setDocumentoDeLaFicha(e.target.value)}
+              placeholder="DJ-2026-000418, acta, resolución…"
+              style={IN}
+            />
+          </label>
+          <label style={{ flex: '0 0 auto', display: 'flex', flexDirection: 'column', gap: 4 }}>
+            <span style={{ fontSize: 11, fontWeight: 500, color: 'var(--ink-3)' }}>Rige desde</span>
+            <input
+              type="date"
+              value={vigenciaDeLaFicha}
+              onChange={(e) => setVigenciaDeLaFicha(e.target.value)}
+              style={IN}
+            />
+          </label>
+
+          <p style={{ margin: 0, flexBasis: '100%', fontSize: 11.5, lineHeight: 1.5, color: 'var(--ink-3)', textWrap: 'pretty' }}>
+            {/* Prometía «se guardará como una versión nueva de la ficha; la
+                anterior queda en el histórico CON SU OBSERVACIÓN» y no había
+                campo de observación en ninguna parte, debajo de un botón que no
+                mandaba nada. */}
+            Se emite la <strong>versión siguiente</strong> y la que rige se cierra el día antes: aquí no se corrige, se versiona, y la
+            anterior queda entera en el histórico. Dos versiones no pueden empezar el mismo día, así que si esta ficha ya se versionó hoy
+            hay que fechar la nueva más adelante. <strong>Sólo viajan el número municipal y la fuente</strong>: los pisos, las obras, las
+            actividades y los grupos de tierra no se mandan, y no van vacíos sino ausentes —el cuerpo los copia de la versión que rige—,
+            porque reenviarlos perdería el «% construido» de cada piso y la fecha de cada actividad, que la lectura publica y el cuerpo no
+            lleva.
           </p>
+
           <button
             onClick={() => {
               setVals({});
               setSucio(false);
+              setObservacionDeLaFicha('');
+              setDocumentoDeLaFicha('');
+              setVigenciaDeLaFicha('');
+              const conocido = ORIGENES_DE_FICHA.find((o) => o === leida?.origen);
+              if (conocido !== undefined) setOrigenDeLaFicha(conocido);
               toast('Cambios descartados.');
             }}
             className="hov-linea"
@@ -3833,9 +4946,11 @@ export default function Catastro({ dest, onDest }: PantallaProps) {
             Deshacer
           </button>
           <button
-            disabled
-            aria-describedby="motivo-sin-guardado"
-            title={MOTIVO_SIN_GUARDADO_DE_FICHA}
+            onClick={() => void versionarLaFicha()}
+            aria-disabled={impedimento !== null || versionando}
+            aria-describedby={impedimento === null ? undefined : 'impedimento-de-la-ficha'}
+            title={impedimento ?? undefined}
+            className={impedimento === null ? 'hov-acento-2' : undefined}
             style={{
               border: 0,
               borderRadius: 6,
@@ -3844,15 +4959,20 @@ export default function Catastro({ dest, onDest }: PantallaProps) {
               color: '#fff',
               fontSize: 13.5,
               fontWeight: 500,
-              cursor: 'not-allowed',
-              opacity: 0.5,
+              cursor: impedimento === null && !versionando ? 'pointer' : 'not-allowed',
+              opacity: impedimento === null && !versionando ? 1 : 0.5,
             }}
           >
-            Guardar cambios
+            {versionando ? 'Versionando…' : 'Guardar como versión nueva'}
           </button>
-          <span id="motivo-sin-guardado" style={{ position: 'absolute', width: 1, height: 1, overflow: 'hidden', clip: 'rect(0 0 0 0)' }}>
-            {MOTIVO_SIN_GUARDADO_DE_FICHA}
-          </span>
+          {/* El motivo se dice en texto y no sólo en el `title`: un dato al que
+              sólo se llega pasando el ratón no está disponible para quien usa el
+              teclado (RNF-082). */}
+          {impedimento !== null && (
+            <p id="impedimento-de-la-ficha" role="status" style={{ margin: 0, flexBasis: '100%', fontSize: 12, lineHeight: 1.5, color: 'var(--warn-fg)', textWrap: 'pretty' }}>
+              {impedimento}
+            </p>
+          )}
         </div>
       )}
     </Shell>
@@ -3866,21 +4986,22 @@ export default function Catastro({ dest, onDest }: PantallaProps) {
 const SIN_DATO = '—';
 
 /**
- * Por qué «Guardar cambios» está apagado, dicho entero.
+ * Por qué la mayoría de estas casillas no se pueden teclear, dicho entero.
  *
- * El endpoint existe —`PUT /api/v1/catastro/fichas/{codigo}/actualizacion`— y
- * aun así no se llama, y el motivo es que esta pantalla **no lee la ficha**: los
- * 123 campos que dibuja debajo son los del artboard, no los declarados para este
- * predio, y su franja ya lo dice. Mandarlos por ese `PUT` no sería conectar la
- * pantalla: sería crear una versión nueva de una ficha real con el contenido de
- * una maqueta, y como versionar no borra, la ficha buena quedaría cerrada debajo
- * de la inventada.
+ * La ficha catastral **ya se lee y ya se escribe** —`GET /catastro/fichas/{tipo}/{codigo}`
+ * y `PUT /catastro/fichas/…/actualizacion`—, y lo que queda es que de las 123
+ * casillas que el manual dibuja el sistema sostiene catorce y sólo dos llegan al
+ * servidor. Las demás describen datos que no están en el modelo, listas que se
+ * enseñan en sus tablas, o importes que la ficha no publica a propósito (regla
+ * 5, D-02a): cada una lo dice debajo, y la tabla completa —campo a campo, con
+ * su motivo— vive en `PROCEDENCIA`, en `datos/catastro.ts`.
  *
- * Lo que hacía antes era peor de leer: decía «Ficha guardada. Versión 4 desde
- * hoy» sin que saliera una sola petición.
+ * Lo que había antes era peor de leer: «Guardar cambios» decía «Ficha guardada.
+ * Versión 4 desde hoy» sin que saliera una sola petición, con el número de
+ * versión compuesto en el cliente.
  */
-const MOTIVO_SIN_GUARDADO_DE_FICHA =
-  'La ficha catastral todavía no está conectada: lo que se escriba en estos campos no se guarda en ningún sitio.';
+const MOTIVO_DE_LOS_CAMPOS_QUE_NO_VIAJAN =
+  'De las casillas de esta ficha sólo el número municipal y la fuente llegan al servidor; cada una de las demás dice debajo por qué no.';
 
 const SELECT_FILTRO: CSSProperties = {
   width: '100%',
@@ -3890,6 +5011,22 @@ const SELECT_FILTRO: CSSProperties = {
   background: 'var(--bg-card)',
   fontSize: 13.5,
 };
+
+/**
+ * Cómo se llama cada tipo de ficha en la pantalla.
+ *
+ * El dominio llama `UNICA` a lo que el manual llama «urbana individual», y la
+ * ruta que la sirve es `/urbana/`. No se traduce ninguno de los otros tres: se
+ * escribe el rótulo del manual y se conserva el nombre del dominio donde lo que
+ * importa es el valor exacto —la modalidad de la ruta—.
+ */
+function rotuloDeModalidad(tipo: string): string {
+  if (tipo === 'UNICA') return 'urbana individual';
+  if (tipo === 'ECONOMICA') return 'económica';
+  if (tipo === 'BIENES_COMUNES') return 'de bienes comunes';
+  if (tipo === 'RURAL') return 'rural';
+  return tipo;
+}
 
 function rotuloDeTipo(tipo: string): string {
   if (tipo === 'URBANO') return 'Urbano';

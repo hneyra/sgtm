@@ -22,6 +22,7 @@ export function FalloDeLectura({
   error,
   que,
   acceso,
+  llave,
   alReintentar,
 }: {
   error: ErrorDeApi;
@@ -29,11 +30,20 @@ export function FalloDeLectura({
   que: string;
   /** El acceso que hace falta, si se sabe cuál. Sólo se nombra ante un 403. */
   acceso?: string;
+  /** La llave del conjunto sellado que ESTA lectura necesita, si se sabe cuál (#562). */
+  llave?: string;
   alReintentar?: () => void;
 }) {
+  const causas = causasDelRechazo(error, llave);
   return (
     <Aviso tono="bad" titulo={tituloDelFallo(error, que)}>
       {explicacionDelFallo(error, acceso)}
+      {/* Un 422 es la única respuesta con DOS causas que el código no separa, y
+          la de arriba —el mensaje del servidor— es lo único que las distingue.
+          Sale sólo aquí: en un 403 o en un 500 este párrafo sobraría. */}
+      {causas !== null && (
+        <span style={{ display: 'block', marginTop: 6, opacity: 0.85 }}>{causas}</span>
+      )}
       {error.incidencia !== undefined && (
         <>
           {' '}
@@ -76,9 +86,19 @@ export function tituloDelFallo(error: ErrorDeApi | null, que: string): string {
       return 'La sesión no dice de qué municipalidad es';
     case 'NO_ENCONTRADO':
       return `No se encontró ${que}`;
+    case 'METODO_NO_ADMITIDO':
+      /* Es un defecto de la propia interfaz: pidio con el verbo que no era.
+         Se dice asi para que no se confunda con un fallo del servidor, que es
+         lo que parecia cuando esto salia 500 con incidencia (#556). */
+      return 'La interfaz pidió esto de una forma que el servidor no admite';
     case 'VALIDACION':
     case 'ORDEN_NO_ADMITIDO':
-      return 'El servidor no admite esa búsqueda';
+      /* No dice «esa búsqueda»: desde #562 un 422 puede ser también una cifra
+         normativa que nadie ha publicado —el conjunto sellado del ejercicio sin
+         la llave que la operación pide—, y culpar a lo tecleado pone a quien
+         atiende a corregir un formulario que está bien. Lo que sí se sabe por
+         código es que el servidor lo rechazó y que reintentar no lo cambia. */
+      return 'El servidor rechazó esta consulta';
     case 'SIN_RESPUESTA':
       /* Con estado, algo contestó: lo que falla es QUÉ contestó, no que no
          hubiera nadie. Decir «no contestó» al lado de un 200 se lee como que la
@@ -102,6 +122,7 @@ export function explicacionDelFallo(error: ErrorDeApi | null, acceso?: string): 
     case 'SIN_MUNICIPALIDAD':
       return 'No hay valor por omisión: sin municipalidad en el token no hay nada que consultar.';
     case 'NO_ENCONTRADO':
+    case 'METODO_NO_ADMITIDO':
       return error.mensaje;
     case 'VALIDACION':
     case 'ORDEN_NO_ADMITIDO':
@@ -113,4 +134,43 @@ export function explicacionDelFallo(error: ErrorDeApi | null, acceso?: string): 
     default:
       return error?.mensaje ?? 'La consulta falló en el servidor.';
   }
+}
+
+/**
+ * Las dos causas de un 422, que el código NO separa.
+ *
+ * Desde #562 los últimos veinte endpoints que faltaban dejaron de contestar un
+ * 500 opaco cuando falta publicar una cifra normativa: ahora contestan **422
+ * nombrando la llave** —`TASA_ANUNCIO:PANEL`, `ARANCEL_COSTA:REC1`,
+ * `PLAZO:DESCARGO_PAPELETA`—. Lo que eso deja en la interfaz es que ese 422
+ * llega con el **mismo `VALIDACION`** que un campo mal tecleado: los
+ * controladores construyen el `ProblemaDeNegocio` de dos argumentos, así que la
+ * llave viaja sólo dentro de la prosa del `mensaje` y `detalles` llega vacío.
+ * No hay ningún discriminador legible por programa (#604, #605).
+ *
+ * Y **no se adivina leyendo el texto**: el mensaje se reescribe en cuanto
+ * alguien lo lee en voz alta, y una clasificación por subcadena acabaría
+ * llamando «cifra sin publicar» a un campo que falta. Se hace lo que ya decidió
+ * tesorería en #547: decir las dos posibilidades y en qué se reconocen, y decir
+ * lo único que sí se sabe por código —que reintentar no lo cambia—.
+ *
+ * Devuelve `null` para todo lo demás, y ahí está la mitad del valor: un
+ * `ORDEN_NO_ADMITIDO` es siempre un campo de orden que la operación no admite y
+ * nunca una cifra sin publicar, y un `ERROR_INTERNO` sí es un fallo del
+ * servidor y trae su incidencia. Un párrafo que saliera en los tres volvería a
+ * juntar lo que #562 separó.
+ *
+ * `llave` es la que ESTA pantalla necesitaría, para que el ejemplo no sea el de
+ * otro módulo. Sin ella se describe la forma y no se inventa ninguna.
+ */
+export function causasDelRechazo(error: ErrorDeApi | null, llave?: string): string | null {
+  if (error?.codigo !== 'VALIDACION') return null;
+  return (
+    'El texto de arriba es el del servidor, tal cual: es el único sitio donde se nombra lo que falta, y ' +
+    'reintentar sin cambiar nada volvería a dar lo mismo. Si nombra un dato de esta pantalla, se corrige ' +
+    'aquí. Si nombra un ejercicio sin conjunto de parámetros sellado, o una llave ' +
+    (llave === undefined ? 'en mayúsculas del estilo «TIPO:CLAVE»' : `como «${llave}»`) +
+    ', es una cifra normativa que todavía no se ha publicado al conjunto del ejercicio: eso no se arregla ' +
+    'desde esta pantalla, no es un fallo del servidor y no se corrige tecleando otra cosa (D-02a, D-02b).'
+  );
 }

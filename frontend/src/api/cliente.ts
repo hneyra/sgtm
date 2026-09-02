@@ -5,26 +5,64 @@
  * permite cambiar el origen, el token o el trato de los errores en un sitio.
  *
  * El backend contesta RFC 9457 (`ProblemDetail`) con dos extensiones propias,
- * `codigo` y `mensaje`, y en un fallo interno además `incidencia`. La interfaz
- * reacciona al **código**, nunca al texto: el texto se reescribe en cuanto
- * alguien lo lee en voz alta, y el código es estable por contrato.
+ * `codigo` y `mensaje`, en un fallo interno además `incidencia`, y en unos pocos
+ * rechazos `detalles`. La interfaz reacciona al **código**, nunca al texto: el
+ * texto se reescribe en cuanto alguien lo lee en voz alta, y el código es
+ * estable por contrato.
+ *
+ * Las cuatro extensiones llegan **al primer nivel del cuerpo**, no anidadas:
+ * `ManejadorDeErrores` las pone con `ProblemDetail.setProperty`, y así se midió
+ * contra el backend en marcha —`{"detail":…,"status":422,"codigo":"VALIDACION",
+ * "mensaje":…}`—. En las pruebas del backend salen bajo `properties` porque ahí
+ * lo que se serializa es el objeto Java, no la respuesta.
  */
 
-/** El catálogo de errores del backend, tal como lo declara `CodigoDeError`. */
-export type CodigoDeError =
-  | 'NO_AUTENTICADO'
-  | 'SIN_MUNICIPALIDAD'
-  | 'SIN_DOCUMENTO'
-  | 'SIN_PRIVILEGIO'
-  | 'VALIDACION'
-  | 'ORDEN_NO_ADMITIDO'
-  | 'NO_ENCONTRADO'
-  | 'CONFLICTO'
-  | 'ERROR_INTERNO'
+/**
+ * El catálogo de errores del backend, tal como lo declara su `CodigoDeError`.
+ *
+ * Es una **lista en tiempo de ejecución**, y el tipo se deriva de ella y no al
+ * revés. El motivo no es de estilo: lo que llega por el cable es una cadena
+ * cualquiera —el `codigo` lo escribe el servidor— y sin una lista a la que
+ * preguntar, la única manera de meterla en la unión es un `as`. Eso compila, y
+ * a partir de ahí **el tipo miente**: la unión afirma que sólo puede valer una
+ * de estas doce cosas y por ahí entra cualquier cadena. Pasó exactamente eso
+ * con `METODO_NO_ADMITIDO` (#556, #625) —el valor llegaba del backend, entraba
+ * por el `as`, ningún `switch` tenía su rama y `tsc` no dijo nada—.
+ *
+ * `SIN_RESPUESTA` es el único que no está en el enumerado del backend, y no
+ * puede estarlo: nombra que no hubo ninguna respuesta que clasificar.
+ */
+export const CODIGOS_DE_ERROR = [
+  'NO_AUTENTICADO',
+  'SIN_MUNICIPALIDAD',
+  'SIN_DOCUMENTO',
+  'SIN_PRIVILEGIO',
+  'VALIDACION',
+  'ORDEN_NO_ADMITIDO',
+  /* El marco pedido tiene dentro más lotes de los que el servidor dibuja (#611).
+     **No es un error de quien pregunta ni un fallo del servidor: es la
+     respuesta**, y la resuelve acercar el marco. Nació compartiendo `VALIDACION`
+     con «el marco está del revés», que sí es un defecto de lo pedido, y con eso
+     lo único que las separaba era el texto en castellano —que es justo lo que
+     esta interfaz no lee—. Trae en `detalles` las dos cifras que hacen falta
+     para saber cuánto acercarse: `lotes=N` y `tope=T`. */
+  'MARCO_CON_DEMASIADOS_LOTES',
+  'NO_ENCONTRADO',
+  'CONFLICTO',
+  /* El verbo no se admite en esa ruta (#556). Llega con la cabecera `Allow`.
+     Importa que NO sea `ERROR_INTERNO`: aquel es reintentable y este no puede
+     funcionar nunca, asi que ofrecer «Reintentar» manda a insistir sobre algo
+     que ya se sabe imposible. Y hasta el arreglo del backend salia 500 con
+     incidencia, o sea indistinguible de un fallo del servidor. */
+  'METODO_NO_ADMITIDO',
+  'ERROR_INTERNO',
   /* No lo produce el servidor: es lo que se sabe cuando la petición no llegó a
      tener respuesta —red caída, servidor apagado, CORS—. Se distingue del
      ERROR_INTERNO porque ese sí llegó y trae incidencia con la que preguntar. */
-  | 'SIN_RESPUESTA';
+  'SIN_RESPUESTA',
+] as const;
+
+export type CodigoDeError = (typeof CODIGOS_DE_ERROR)[number];
 
 export class ErrorDeApi extends Error {
   constructor(
@@ -32,6 +70,15 @@ export class ErrorDeApi extends Error {
     readonly mensaje: string,
     readonly estado: number,
     readonly incidencia?: string,
+    /**
+     * Las cifras del rechazo, como dato y no dentro de la frase.
+     *
+     * Llegan en la forma `clave=valor`, y **sólo cuando hay alguna**: medido
+     * contra el backend, los siete rechazos del plano que no son «acércate»
+     * llegan sin este campo, porque `ManejadorDeErrores` no lo escribe cuando la
+     * lista está vacía. Quien las lea tiene que admitir que no estén: la
+     * ausencia es «este rechazo no publica cifras», nunca un cero.
+     */
     readonly detalles?: string[],
   ) {
     super(mensaje);
@@ -192,7 +239,7 @@ function intentarLeer(texto: string): unknown {
  */
 function errorDe(estado: number, datos: unknown): ErrorDeApi {
   const cuerpo = (datos ?? {}) as Record<string, unknown>;
-  const codigo = typeof cuerpo.codigo === 'string' ? (cuerpo.codigo as CodigoDeError) : porEstado(estado);
+  const codigo = esCodigoConocido(cuerpo.codigo) ? cuerpo.codigo : porEstado(estado);
   const mensaje =
     typeof cuerpo.mensaje === 'string'
       ? cuerpo.mensaje
@@ -204,11 +251,27 @@ function errorDe(estado: number, datos: unknown): ErrorDeApi {
   return new ErrorDeApi(codigo, mensaje, estado, incidencia, detalles);
 }
 
+/**
+ * Si el `codigo` del cuerpo es uno de los que esta interfaz conoce.
+ *
+ * Un código que no conozca **no se cuela en la unión**: se deduce del estado,
+ * que es lo que ya se hace con un cuerpo sin `codigo` —el 502 de un proxy, la
+ * página de error de nginx—. Dejarlo pasar es peor de lo que parece, porque el
+ * desenlace no se distingue de uno correcto: no casaría con ninguna rama, así
+ * que el aviso saldría con el título por omisión, y `reintentable` diría que no
+ * aunque el estado fuese un 500 —un fallo del servidor sin el botón que sí lo
+ * arregla, y sin nada que lo delate—.
+ */
+function esCodigoConocido(valor: unknown): valor is CodigoDeError {
+  return typeof valor === 'string' && (CODIGOS_DE_ERROR as readonly string[]).includes(valor);
+}
+
 function porEstado(estado: number): CodigoDeError {
   if (estado === 401) return 'NO_AUTENTICADO';
   if (estado === 403) return 'SIN_PRIVILEGIO';
   if (estado === 404) return 'NO_ENCONTRADO';
   if (estado === 409) return 'CONFLICTO';
+  if (estado === 405) return 'METODO_NO_ADMITIDO';
   if (estado === 422) return 'VALIDACION';
   return 'ERROR_INTERNO';
 }
@@ -236,6 +299,21 @@ export function claveDeIdempotencia(): string {
 }
 
 /**
+ * Lo que el servidor acabó de entregar.
+ *
+ * `numero` es la cabecera `X-Sgtm-Numero`. La ponen los emisores que **numeran**
+ * el papel —la constancia libre de infracciones es hoy el único de tránsito— y
+ * no la ponen las trece lecturas imprimibles, que no numeran nada. Por eso
+ * quien la lea tiene que admitir el `null`: la ausencia significa «este
+ * documento no lleva número propio», nunca una cadena vacía ni un cero.
+ */
+export type DocumentoEntregado = {
+  /** El nombre con el que se guardó el archivo. */
+  nombre: string;
+  numero: string | null;
+};
+
+/**
  * Descarga un documento del backend y lo entrega al navegador.
  *
  * `solicitar()` no sirve: parsea JSON y un PDF no cabe por ahi. Va aparte —y no
@@ -257,7 +335,24 @@ export async function descargar(
   ruta: string,
   parametros: Record<string, string | number | undefined> = {},
   nombre?: string,
-  opciones: { metodo?: 'GET' | 'POST'; cuerpo?: unknown } = {},
+  opciones: {
+    metodo?: 'GET' | 'POST';
+    cuerpo?: unknown;
+    /**
+     * Qué se entregó, para quien necesite saberlo.
+     *
+     * Va como aviso y **no** como valor de retorno a propósito. `descargar()`
+     * se declara `Promise<void>` y sus ocho llamadas lo devuelven tal cual
+     * desde funciones que también lo declaran así; TypeScript no admite un
+     * `Promise<T>` donde se espera un `Promise<void>` —el retorno no se ensancha
+     * como el de una función `void` suelta—, de modo que cambiarlo obligaría a
+     * tocar seis módulos por un dato que sólo uno necesita: el número del papel
+     * numerado, que un `<a download>` deja en el nombre del archivo y ahí no lo
+     * lee nadie —el navegador lo renombra si ya existe y la barra de descargas
+     * se va sola—.
+     */
+    alEntregar?: (documento: DocumentoEntregado) => void;
+  } = {},
 ): Promise<void> {
   const url = new URL(RAIZ + ruta, window.location.origin);
   for (const [clave, valor] of Object.entries(parametros)) {
@@ -305,12 +400,18 @@ export async function descargar(
   const blob = await respuesta.blob();
   const enlace = document.createElement('a');
   const objeto = URL.createObjectURL(blob);
+  const archivo = nombre ?? deLaCabecera(respuesta) ?? 'documento';
   enlace.href = objeto;
-  enlace.download = nombre ?? deLaCabecera(respuesta) ?? 'documento';
+  enlace.download = archivo;
   document.body.appendChild(enlace);
   enlace.click();
   document.body.removeChild(enlace);
   URL.revokeObjectURL(objeto);
+
+  /* Se avisa DESPUES de entregar: lo que la pantalla va a escribir es «se
+     emitio la constancia N y se bajo el archivo», y decirlo antes de que el
+     archivo salga es afirmar algo que todavia podria no pasar. */
+  opciones.alEntregar?.({ nombre: archivo, numero: respuesta.headers.get('X-Sgtm-Numero') });
 }
 
 /** El nombre que el propio backend propone en `Content-Disposition`. */
