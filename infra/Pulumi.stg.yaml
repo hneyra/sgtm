@@ -86,7 +86,7 @@ config:
   # Lo llevaba una persona hasta el 2026-09-02, y ese dia se midio lo que costaba:
   # **cuatro** PR de dos lineas en hora y media (#705, #715, #717, #719), y el tercero
   # obsoleto durante su propio CI porque otra migracion entro mientras corria.
-  sgtm:applicationBootstrapVersion: fd3ffaa748aae3353a8c1eb7818f6830c5fe5000
+  sgtm:applicationBootstrapVersion: c755de2149344b8033736958ee8ae6f643c90281
   sgtm:webReplicas: "1"
   # La municipalidad de ensayo. El ubigeo es el de Catacaos, igual que en prod (D-01,
   # 2026-08-24), porque stg restaura los respaldos de prod anonimizados (INF-03 §2 y

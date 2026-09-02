@@ -373,14 +373,23 @@ class AltaDePredioFronteraTest {
             }
             sembrado = true;
             long contribuyente = crearContribuyente(municipalidadA, "C-690", "40690690");
+            long conyuge = crearContribuyente(municipalidadA, "C-691", "40690691");
             long completo = inscribirYDevolverId(COMPLETO, "AV. COMPLETA 1");
             long aMedias = inscribirYDevolverId(A_MEDIAS, "AV. A MEDIAS 2");
             inscribirYDevolverId(SIN_DUENO, "AV. SIN DUENO 3");
 
             // 60 + 40: cubre el predio entero, y de paso comprueba que la copropiedad cuenta como
             // completa. Con una sola cuota del 100 no se distinguiria de una suma mal hecha.
+            //
+            // Y son DOS personas, que es lo que hace de esto una copropiedad (#725). Con las dos
+            // cuotas a nombre del mismo contribuyente no se estaba midiendo lo que el nombre de la
+            // prueba promete, y ademas la base lo rechaza desde V72 (#672):
+            // `titularidad_vigencias_no_se_pisan` lleva `contribuyente_id` en la llave a proposito
+            // —«la copropiedad NO se toca: son contribuyentes distintos»—, porque a una persona con
+            // dos cuotas a la vez el porcentaje le PONDERA DOS VECES la base imponible del predial
+            // (NEG-05 §1, #395) y ninguna cifra del recibo lo diria.
             crearTitularidad(municipalidadA, completo, contribuyente, "60");
-            crearTitularidad(municipalidadA, completo, contribuyente, "40");
+            crearTitularidad(municipalidadA, completo, conyuge, "40");
             // Y el que se queda corto, que es el caso que este censo existe para encontrar.
             crearTitularidad(municipalidadA, aMedias, contribuyente, "60");
         }
