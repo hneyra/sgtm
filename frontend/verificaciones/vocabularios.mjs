@@ -152,6 +152,8 @@ for (const [rotulo, valor] of Object.entries(TIPO_DE_TRANSFERENCIA_DEL_BACKEND))
     fallos.push(
       `transferencias · «${rotulo}» se traduce a «${valor}», que TipoTransferencia no declara`,
     );
+  }
+}
 
 /* ── El tributo del libro, contra el enumerado de Java (#553) ───────────────
 

@@ -90,6 +90,28 @@ export type FiltroDePredios = {
   estado?: EstadoDePredio;
   /** `true` = con ficha; `false` = sin ella; sin declarar, los dos. */
   fichado?: boolean;
+  /**
+   * El estado de saneamiento de la titularidad del predio (#690).
+   *
+   * `SIN_TITULAR` es el predio que **no figura a nombre de nadie** y `INCOMPLETA`
+   * aquel cuyas cuotas vigentes no suman 100 %. Los dos importan por lo mismo:
+   * el `%` de propiedad **pondera la base imponible** (NEG-05), así que un predio
+   * cuyas cuotas suman el 10 % tributa por el 10 % de su valor, y uno sin titular
+   * no tiene a quién cargárselo. Ninguna cifra parece mal en ninguna pantalla: la
+   * determinación sale correcta *para lo registrado*.
+   *
+   * Medido contra el backend, y son las cifras con las que se abrió #690:
+   *
+   * ```
+   *                SIN_TITULAR  INCOMPLETA  COMPLETA
+   * Sullana demo             5           2        25
+   * Catacaos              4 977         304     9 141
+   * ```
+   *
+   * Una palabra que no sea una de las tres es **422 nombrando las tres**, no la
+   * página vacía —que se leería como «no hay ninguno», que es lo contrario—.
+   */
+  titularidad?: 'SIN_TITULAR' | 'INCOMPLETA' | 'COMPLETA';
 };
 
 export type Paginacion = {

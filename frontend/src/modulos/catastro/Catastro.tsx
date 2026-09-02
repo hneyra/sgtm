@@ -426,6 +426,7 @@ export default function Catastro({ dest, onDest, sujeto, onSujeto, filtros, onFi
   const [fSector, setFSector] = useState('');
   const [fEstado, setFEstado] = useState<'' | EstadoDePredio>('');
   const [fFichado, setFFichado] = useState('');
+  const [fTitularidad, setFTitularidad] = useState<'' | 'SIN_TITULAR' | 'INCOMPLETA' | 'COMPLETA'>('');
   const [pagina, setPagina] = useState(0);
   /* El tamaño del padrón, recordado: al abrir un predio la consulta se apaga y
      sin esto la nota del panel volvería a la cifra del prototipo. */
@@ -749,7 +750,7 @@ export default function Catastro({ dest, onDest, sujeto, onSujeto, filtros, onFi
   /* Volver a la primera página en cuanto cambia lo que se busca: sin esto,
      afinar un filtro desde la página 4 devuelve una página que ya no existe y
      la tabla sale vacía sin que nada lo explique. */
-  useEffect(() => setPagina(0), [criterio, fSector, fEstado, fFichado]);
+  useEffect(() => setPagina(0), [criterio, fSector, fEstado, fFichado, fTitularidad]);
 
   const padron = useRecurso(
     (senal) =>
@@ -759,11 +760,12 @@ export default function Catastro({ dest, onDest, sujeto, onSujeto, filtros, onFi
           codigoDeSector: fSector || undefined,
           estado: fEstado || undefined,
           fichado: fFichado === '' ? undefined : fFichado === 'true',
+          titularidad: fTitularidad || undefined,
         },
         { pagina, tamano: 20 },
         senal,
       ),
-    [criterio, fSector, fEstado, fFichado, pagina],
+    [criterio, fSector, fEstado, fFichado, fTitularidad, pagina],
     dest === 'predios' && predio === null,
   );
 
@@ -954,6 +956,20 @@ export default function Catastro({ dest, onDest, sujeto, onSujeto, filtros, onFi
   const censoActivos = useRecurso((s2) => listarPredios({ estado: 'ACTIVO' }, { tamano: 1 }, s2), [], conCenso);
   const censoSinFicha = useRecurso((s2) => listarPredios({ fichado: false }, { tamano: 1 }, s2), [], enPanel);
   const censoDeBaja = useRecurso((s2) => listarPredios({ estado: 'DADO_DE_BAJA' }, { tamano: 1 }, s2), [], enPanel);
+  /* La cola de saneamiento de la titularidad (#690, #713). Son DOS censos y no
+     uno porque son dos hechos distintos con dos arreglos distintos: al predio sin
+     titular hay que encontrarle dueño, y al de cuotas incompletas le falta el
+     resto del reparto. Juntarlos daría una cifra que no dice qué hacer. */
+  const censoSinTitular = useRecurso(
+    (s2) => listarPredios({ titularidad: 'SIN_TITULAR' }, { tamano: 1 }, s2),
+    [],
+    enPanel,
+  );
+  const censoTitularidadIncompleta = useRecurso(
+    (s2) => listarPredios({ titularidad: 'INCOMPLETA' }, { tamano: 1 }, s2),
+    [],
+    enPanel,
+  );
   const sectoresDelPanel = useRecurso((s2) => listarSectores(s2), [], conCenso);
   /* **«Sin conciliar» ya se cuenta**, desde que el backend publica
      `GET /catastro/fichas/conciliacion/resumen` (#564). El resumen lo resuelve
@@ -1171,7 +1187,7 @@ export default function Catastro({ dest, onDest, sujeto, onSujeto, filtros, onFi
   const caido = padron.error !== null;
   const sinResultados = !cargando && !caido && padron.datos !== null && filas.length === 0;
   const hayResultados = !cargando && !caido && filas.length > 0;
-  const filtrosPuestos = [criterio, fSector, fEstado, fFichado].filter((x) => x !== '').length;
+  const filtrosPuestos = [criterio, fSector, fEstado, fFichado, fTitularidad].filter((x) => x !== '').length;
 
   useEffect(() => {
     if (padron.datos && filtrosPuestos === 0) setTotalDelPadron(padron.datos.totalElementos);
@@ -1525,6 +1541,19 @@ export default function Catastro({ dest, onDest, sujeto, onSujeto, filtros, onFi
       valor: cifra(censoSinFicha),
       etiqueta: 'Predios sin ficha catastral',
       nota: 'Están en el padrón y no tienen con qué valorizarse. Es la cola de saneamiento.',
+    },
+    /* Los dos de #690. Hasta que el backend publicó el filtro, esto sólo se podía
+       ver predio a predio: la ficha lo dice desde `c6340c19`, pero mirando uno no
+       se sabe cuántos son ni se pueden atacar. */
+    {
+      valor: cifra(censoSinTitular),
+      etiqueta: 'Predios sin titular vigente',
+      nota: 'No figuran a nombre de nadie, así que no hay a quién cargarles el impuesto.',
+    },
+    {
+      valor: cifra(censoTitularidadIncompleta),
+      etiqueta: 'Predios con la titularidad incompleta',
+      nota: 'Sus cuotas vigentes no suman 100 %, y el % de propiedad pondera la base: tributan por la parte registrada.',
     },
     {
       /* El arancel mediano lo componia el prototipo. No se calcula aqui: es una
@@ -3026,6 +3055,23 @@ export default function Catastro({ dest, onDest, sujeto, onSujeto, filtros, onFi
                           <option value="">Con y sin ficha</option>
                           <option value="true">Con ficha</option>
                           <option value="false">Sin ficha — cola de saneamiento</option>
+                        </select>
+                      </label>
+                      {/* El saneamiento de la titularidad (#690). Es lo que
+                          convierte el censo del panel en algo que se puede
+                          atacar: sin este filtro, esos 4 977 predios se ven de
+                          uno en uno o no se ven. */}
+                      <label style={{ display: 'flex', flexDirection: 'column', gap: 5, minWidth: 0 }}>
+                        <span style={{ fontSize: 11.5, fontWeight: 500, color: 'var(--ink-3)' }}>Titularidad</span>
+                        <select
+                          value={fTitularidad}
+                          onChange={(e) => setFTitularidad(e.target.value as '' | 'SIN_TITULAR' | 'INCOMPLETA' | 'COMPLETA')}
+                          style={SELECT_FILTRO}
+                        >
+                          <option value="">Cualquiera</option>
+                          <option value="SIN_TITULAR">Sin titular vigente</option>
+                          <option value="INCOMPLETA">Cuotas que no suman 100 %</option>
+                          <option value="COMPLETA">Con la titularidad completa</option>
                         </select>
                       </label>
                     </div>
