@@ -123,6 +123,18 @@ import tools.jackson.databind.json.JsonMapper;
  * BASE: `convenio_idempotencia_uq` (V70). Con un doble, la unicidad la reproduciria el propio doble
  * y la prueba diria que el doble funciona.
  */
+/*
+ * #604 — Y que ese 422 se distinga por CONTRATO del de un campo que falta.
+ *
+ * <p>#547 dejo los dos saliendo con el mismo `codigo` y el mismo `mensaje`, de modo que la unica
+ * forma de separarlos era leer el texto —que se reescribe—. Las pruebas de #604 no miran el codigo
+ * ni el texto sino el miembro `parametroQueFalta`, y las tres de CONTRASTE exigen que NO salga
+ * donde no toca: un discriminador que sale siempre no discrimina nada.
+ *
+ * <p>Van aqui, contra PostgreSQL, y no solo con dobles, por lo mismo que las de #547: lo que hay
+ * que demostrar es que la llave sale de las filas que hay —o que no hay— en `conjunto_parametros`
+ * y `parametro_tributario`, y con un doble la llave la pondria el doble.
+ */
 @DisplayName("#547 — Fraccionamientos: el 422 que nombra la llave, de HTTP a PostgreSQL")
 class ConveniosFronteraTest {
 
@@ -433,6 +445,129 @@ class ConveniosFronteraTest {
                 .isEmpty();
     }
 
+    // ------------------------------------------------ #604: el discriminador, por contrato
+
+    /*
+     * Lo que estas ocho pruebas miden no es el codigo ni el texto —eso lo cerro #547— sino el
+     * miembro `parametroQueFalta`, que es lo unico que un PROGRAMA puede leer para saber cual de
+     * los dos 422 tiene delante. Las siete primeras exigen que este; las dos ultimas, que NO este,
+     * y son las que impiden «arreglarlo» poniendolo en todos: un discriminador que sale siempre no
+     * discrimina nada.
+     *
+     * El fragmento se compara entero y no por partes porque el orden es deterministico —el miembro
+     * se compone en un LinkedHashMap—, y porque «contiene 2027» lo cumpliria tambien el mensaje.
+     */
+
+    @Test
+    @DisplayName("#604 — sin conjunto sellado, el miembro trae el ejercicio y NINGUNA llave")
+    void sinConjuntoSelladoElMiembroNombraElEjercicio() throws Exception {
+        MvcResult resultado = fraccionar(SIN_SELLAR, true);
+
+        assertThat(resultado.getResponse().getStatus()).isEqualTo(422);
+        assertThat(resultado.getResponse().getContentAsString())
+                .as(
+                        "lo que falta no es una fila sino el conjunto donde publicarla: nombrar"
+                                + " una llave diria que basta con publicarla, y no basta")
+                .contains("\"parametroQueFalta\":{\"ejercicio\":2027}");
+    }
+
+    @Test
+    @DisplayName("#604 — y tambien al registrar, que es el otro «try» del mismo endpoint")
+    void elMiembroTambienSaleAlRegistrar() throws Exception {
+        MvcResult resultado = fraccionar(SIN_SELLAR, false);
+
+        assertThat(resultado.getResponse().getStatus()).isEqualTo(422);
+        assertThat(resultado.getResponse().getContentAsString())
+                .as("declarar el miembro solo en el «try» de simular deja la mitad del endpoint")
+                .contains("\"parametroQueFalta\":{\"ejercicio\":2027}");
+    }
+
+    @Test
+    @DisplayName("#604 — la llave que falta viaja legible por programa, no solo en la prosa")
+    void laLlaveQueFaltaViajaLegiblePorPrograma() throws Exception {
+        MvcResult resultado = fraccionar(SIN_INTERES, true);
+
+        assertThat(resultado.getResponse().getStatus()).isEqualTo(422);
+        assertThat(resultado.getResponse().getContentAsString())
+                .as("el texto se reescribe en cuanto alguien lo lee en voz alta; el miembro no")
+                .contains(
+                        "\"parametroQueFalta\":{\"ejercicio\":2028,"
+                                + "\"llave\":\"INTERES_FRACCIONAMIENTO:ORDINARIO\"}");
+    }
+
+    @Test
+    @DisplayName("#604 — sin ningun punto observado, la llave es el TIPO solo, sin clave")
+    void sinPuntosObservadosLaLlaveEsElTipo() throws Exception {
+        MvcResult resultado = fraccionar(SIN_REDONDEO, true);
+
+        assertThat(resultado.getResponse().getStatus()).isEqualTo(422);
+        assertThat(resultado.getResponse().getContentAsString())
+                .as(
+                        "quien lee las politicas no sabe cual de los trece puntos queria el que"
+                                + " llamo: nombrar REDONDEO:CUOTA seria verosimil y equivocado")
+                .contains("\"parametroQueFalta\":{\"ejercicio\":2029,\"llave\":\"REDONDEO\"}");
+    }
+
+    @Test
+    @DisplayName("#604 — media politica nombra la fila concreta que hay que republicar")
+    void mediaPoliticaNombraSuFila() throws Exception {
+        MvcResult resultado = fraccionar(MEDIA_POLITICA, true);
+
+        assertThat(resultado.getResponse().getStatus()).isEqualTo(422);
+        assertThat(resultado.getResponse().getContentAsString())
+                .contains(
+                        "\"parametroQueFalta\":{\"ejercicio\":2030,\"llave\":\"REDONDEO:CUOTA\"}");
+    }
+
+    @Test
+    @DisplayName("#604 — una escala con decimales, igual")
+    void escalaNoEnteraNombraSuFila() throws Exception {
+        MvcResult resultado = fraccionar(ESCALA_CON_DECIMALES, true);
+
+        assertThat(resultado.getResponse().getStatus()).isEqualTo(422);
+        assertThat(resultado.getResponse().getContentAsString())
+                .contains(
+                        "\"parametroQueFalta\":{\"ejercicio\":2031,\"llave\":\"REDONDEO:CUOTA\"}");
+    }
+
+    @Test
+    @DisplayName("#604 — un modo de redondeo que no existe, igual")
+    void modoDesconocidoNombraSuFila() throws Exception {
+        MvcResult resultado = fraccionar(MODO_DESCONOCIDO, true);
+
+        assertThat(resultado.getResponse().getStatus()).isEqualTo(422);
+        assertThat(resultado.getResponse().getContentAsString())
+                .contains(
+                        "\"parametroQueFalta\":{\"ejercicio\":2032,\"llave\":\"REDONDEO:CUOTA\"}");
+    }
+
+    @Test
+    @DisplayName("#604 — CONTRASTE: un campo que falta es el MISMO 422 y NO lleva el miembro")
+    void elCampoQueFaltaNoLlevaElMiembro() throws Exception {
+        MvcResult resultado = fraccionarSinCuotas();
+
+        assertThat(resultado.getResponse().getStatus())
+                .as("las dos son 422 VALIDACION: eso es justo lo que hacia falta discriminar")
+                .isEqualTo(422);
+        String cuerpo = resultado.getResponse().getContentAsString();
+        assertThat(cuerpo).contains("Falta el campo 'nroDeCuotas'").contains("VALIDACION");
+        assertThat(cuerpo)
+                .as(
+                        "esto SI lo arregla quien atiende, aqui mismo; ponerle el miembro dejaria"
+                                + " a la interfaz sin nada que distinguir")
+                .doesNotContain("parametroQueFalta");
+    }
+
+    @Test
+    @DisplayName("#604 — CONTRASTE: un valor que no vale tampoco lo lleva")
+    void unValorInvalidoTampocoLoLleva() throws Exception {
+        MvcResult resultado = fraccionarConCuotaInicial("999");
+
+        assertThat(resultado.getResponse().getStatus()).isEqualTo(422);
+        assertThat(resultado.getResponse().getContentAsString())
+                .doesNotContain("parametroQueFalta");
+    }
+
     // ---------------------------------------------------------------- #606: el reenvio
 
     @Test
@@ -580,6 +715,38 @@ class ConveniosFronteraTest {
             peticion = peticion.header("Idempotency-Key", clave);
         }
         return mvc.perform(peticion).andReturn();
+    }
+
+    /** La misma peticion sin {@code nroDeCuotas}: el 422 que SI arregla quien atiende. */
+    private static MvcResult fraccionarSinCuotas() throws Exception {
+        return mvc.perform(
+                        post("/api/v1/tesoreria/fraccionamientos")
+                                .contentType(MediaType.APPLICATION_JSON)
+                                .content(
+                                        """
+                                        {"codContribuyente":"%s","fecha":"2026-03-16",
+                                         "cuotaInicial":"20","simular":true,
+                                         "observacion":"Fraccionamiento pedido en ventanilla",
+                                         "obligaciones":[{"tributo":"PREDIAL","ejercicio":2026}]}
+                                        """
+                                                .formatted(CODIGO)))
+                .andReturn();
+    }
+
+    /** La misma peticion con un valor que el objeto de valor rechaza en su constructor. */
+    private static MvcResult fraccionarConCuotaInicial(String cuotaInicial) throws Exception {
+        return mvc.perform(
+                        post("/api/v1/tesoreria/fraccionamientos")
+                                .contentType(MediaType.APPLICATION_JSON)
+                                .content(
+                                        """
+                                        {"codContribuyente":"%s","fecha":"2026-03-16",
+                                         "nroDeCuotas":6,"cuotaInicial":"%s","simular":true,
+                                         "observacion":"Fraccionamiento pedido en ventanilla",
+                                         "obligaciones":[{"tributo":"PREDIAL","ejercicio":2026}]}
+                                        """
+                                                .formatted(CODIGO, cuotaInicial)))
+                .andReturn();
     }
 
     /** El numero impreso que trae la respuesta, tal cual sale del JSON. */

@@ -30,6 +30,7 @@ import pe.gob.sgtm.dominio.Alicuota;
 import pe.gob.sgtm.dominio.Ejercicio;
 import pe.gob.sgtm.dominio.Observacion;
 import pe.gob.sgtm.parametros.LectorDeParametros;
+import pe.gob.sgtm.parametros.ParametroSinPublicar;
 import pe.gob.sgtm.parametros.PoliticasDeRedondeoSelladas;
 import pe.gob.sgtm.tesoreria.aplicacion.CerrarConvenio;
 import pe.gob.sgtm.tesoreria.aplicacion.CondicionesParametrizadas;
@@ -51,6 +52,7 @@ import pe.gob.sgtm.tesoreria.dominio.TipoDeGarantia;
 import pe.gob.sgtm.tesoreria.dominio.TipoDeMovimientoDeConvenio;
 import pe.gob.sgtm.web.Api;
 import pe.gob.sgtm.web.CodigoDeError;
+import pe.gob.sgtm.web.ParametroQueFalta;
 import pe.gob.sgtm.web.ParametrosDePaginacion;
 import pe.gob.sgtm.web.ProblemaDeNegocio;
 import pe.gob.sgtm.web.RespuestaPaginada;
@@ -218,7 +220,7 @@ public class ConvenioController {
                     | PoliticasDeRedondeoSelladas.MediaPolitica
                     | PoliticasDeRedondeoSelladas.EscalaNoEntera
                     | PoliticasDeRedondeoSelladas.ModoDesconocido falta) {
-                throw new ProblemaDeNegocio(CodigoDeError.VALIDACION, mensajeDe(falta));
+                throw faltaPublicar(falta);
             } catch (RegistrarPreconvenio.SinDeudaQueFraccionar
                     | CondicionesDelConvenio.DemasiadasCuotas
                     | Cronograma.NadaQueFraccionar
@@ -252,7 +254,7 @@ public class ConvenioController {
                 | PoliticasDeRedondeoSelladas.MediaPolitica
                 | PoliticasDeRedondeoSelladas.EscalaNoEntera
                 | PoliticasDeRedondeoSelladas.ModoDesconocido falta) {
-            throw new ProblemaDeNegocio(CodigoDeError.VALIDACION, mensajeDe(falta));
+            throw faltaPublicar(falta);
         } catch (RegistrarPreconvenio.SinDeudaQueFraccionar
                 | CondicionesDelConvenio.DemasiadasCuotas
                 | Cronograma.NadaQueFraccionar
@@ -392,8 +394,8 @@ public class ConvenioController {
                 | PoliticasDeRedondeoSelladas.ModoDesconocido falta) {
             // La reformulacion registra un preconvenio nuevo, y ese pide sus condiciones al
             // conjunto sellado del ejercicio en que se firma: lo mismo que /fraccionamientos,
-            // y por eso se traduce igual.
-            throw new ProblemaDeNegocio(CodigoDeError.VALIDACION, mensajeDe(falta));
+            // y por eso se traduce igual —con su discriminador incluido (#604)—.
+            throw faltaPublicar(falta);
         } catch (RegistrarPreconvenio.SinDeudaQueFraccionar
                 | CerrarConvenio.ConvenioSinFormalizar
                 | CondicionesDelConvenio.DemasiadasCuotas
@@ -651,5 +653,34 @@ public class ConvenioController {
     private static String mensajeDe(RuntimeException excepcion) {
         String mensaje = excepcion.getMessage();
         return mensaje == null ? "El valor recibido no es valido" : mensaje;
+    }
+
+    /**
+     * El 422 de una cifra normativa que no esta publicada, <b>con su discriminador</b> (#604).
+     *
+     * <p>Las seis excepciones que #547 tradujo salen con el miembro {@code parametroQueFalta}; un
+     * campo ausente o un valor invalido, no. Esa diferencia es lo que la interfaz necesita para
+     * decir <i>una</i> de las dos cosas —«corrige el formulario» o «hay que publicar una cifra»— en
+     * vez de enumerar las dos, y para no tener que adivinarlo leyendo el texto del mensaje, que se
+     * reescribe en cuanto alguien lo lee en voz alta.
+     *
+     * <p>El mensaje sigue siendo el de la propia excepcion: ya esta redactado en lenguaje del
+     * dominio y nombra el ejercicio o la llave. Lo que se anade es el mismo dato en forma legible
+     * por programa.
+     *
+     * <p><b>El parametro esta acotado a los dos limites a la vez</b> —{@code RuntimeException} para
+     * poder leer su mensaje y {@link ParametroSinPublicar} para poder leer su llave—, que es
+     * exactamente lo que el tipo de un {@code catch} multiple da. Con eso, anadir a la lista una
+     * excepcion que no publique su llave <b>no compila</b>, en vez de producir un 422 sin miembro
+     * que nadie distinguiria de uno de campo ausente.
+     */
+    private static <E extends RuntimeException & ParametroSinPublicar>
+            ProblemaDeNegocio faltaPublicar(E falta) {
+        int ejercicio = falta.ejercicio().valor();
+        ParametroQueFalta discriminador =
+                falta.llave()
+                        .map(llave -> ParametroQueFalta.llave(ejercicio, llave))
+                        .orElseGet(() -> ParametroQueFalta.conjuntoDelEjercicio(ejercicio));
+        return new ProblemaDeNegocio(CodigoDeError.VALIDACION, mensajeDe(falta), discriminador);
     }
 }

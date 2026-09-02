@@ -3,6 +3,7 @@ package pe.gob.sgtm.web;
 import static org.assertj.core.api.Assertions.assertThat;
 
 import java.util.List;
+import java.util.Map;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.springframework.dao.DataIntegrityViolationException;
@@ -86,6 +87,79 @@ class ManejadorDeErroresTest {
                 .containsEntry(ManejadorDeErrores.CAMPO_CODIGO, "CONFLICTO")
                 .containsEntry(ManejadorDeErrores.CAMPO_MENSAJE, "El recibo ya fue anulado")
                 .containsEntry(ManejadorDeErrores.CAMPO_DETALLES, List.of("Recibo 2026-000123"));
+    }
+
+    // ------------------------------------------------ #604: el discriminador de lo que falta
+
+    @Test
+    @DisplayName("#604 — el problema que trae la cifra sin publicar sale con su miembro")
+    void elProblemaDeLaCifraSinPublicarSaleConSuMiembro() {
+        ResponseEntity<ProblemDetail> respuesta =
+                manejador.problemaDeNegocio(
+                        new ProblemaDeNegocio(
+                                CodigoDeError.VALIDACION,
+                                "El conjunto sellado del ejercicio 2026 no tiene el parametro"
+                                        + " INTERES_FRACCIONAMIENTO:ORDINARIO",
+                                ParametroQueFalta.llave(
+                                        2026, "INTERES_FRACCIONAMIENTO:ORDINARIO")));
+
+        assertThat(respuesta.getStatusCode()).isEqualTo(HttpStatus.UNPROCESSABLE_ENTITY);
+        assertThat(respuesta.getBody()).isNotNull();
+        assertThat(respuesta.getBody().getProperties())
+                .as("el ejercicio y la llave, en el orden en que se componen")
+                .containsEntry(
+                        ManejadorDeErrores.CAMPO_PARAMETRO_QUE_FALTA,
+                        Map.of("ejercicio", 2026, "llave", "INTERES_FRACCIONAMIENTO:ORDINARIO"));
+    }
+
+    @Test
+    @DisplayName("#604 — sin conjunto sellado no hay llave, y el miembro NO la inventa")
+    void sinConjuntoSelladoElMiembroNoInventaLlave() {
+        ResponseEntity<ProblemDetail> respuesta =
+                manejador.problemaDeNegocio(
+                        new ProblemaDeNegocio(
+                                CodigoDeError.VALIDACION,
+                                "El ejercicio 2027 no tiene un conjunto de parametros sellado",
+                                ParametroQueFalta.conjuntoDelEjercicio(2027)));
+
+        assertThat(respuesta.getBody()).isNotNull();
+        assertThat(respuesta.getBody().getProperties())
+                .as(
+                        "una llave nula seria un valor presente: quien pregunte por ella la vera,"
+                                + " y lo que hay que decir es que ahi no hay ninguna")
+                .containsEntry(
+                        ManejadorDeErrores.CAMPO_PARAMETRO_QUE_FALTA, Map.of("ejercicio", 2027));
+    }
+
+    @Test
+    @DisplayName("#604 — CONTRASTE: un problema corriente sigue sin el miembro")
+    void unProblemaCorrienteSigueSinElMiembro() {
+        ResponseEntity<ProblemDetail> respuesta =
+                manejador.problemaDeNegocio(
+                        new ProblemaDeNegocio(
+                                CodigoDeError.VALIDACION, "Falta el campo 'nroDeCuotas'"));
+
+        assertThat(respuesta.getBody()).isNotNull();
+        assertThat(respuesta.getBody().getProperties())
+                .as("el miembro solo significa algo mientras no salga en todos")
+                .doesNotContainKey(ManejadorDeErrores.CAMPO_PARAMETRO_QUE_FALTA);
+    }
+
+    @Test
+    @DisplayName("#604 — y las dos formas de siempre de construirlo siguen sin llevarlo")
+    void lasDosFormasDeSiempreSiguenIguales() {
+        ResponseEntity<ProblemDetail> conDetalles =
+                manejador.problemaDeNegocio(
+                        new ProblemaDeNegocio(
+                                CodigoDeError.CONFLICTO,
+                                "El recibo ya fue anulado",
+                                List.of("Recibo 2026-000123")));
+
+        assertThat(conDetalles.getBody()).isNotNull();
+        assertThat(conDetalles.getBody().getProperties())
+                .as("el mecanismo es aditivo: 675 usos de los dos constructores no cambian")
+                .containsEntry(ManejadorDeErrores.CAMPO_DETALLES, List.of("Recibo 2026-000123"))
+                .doesNotContainKey(ManejadorDeErrores.CAMPO_PARAMETRO_QUE_FALTA);
     }
 
     @Test
