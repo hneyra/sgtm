@@ -60,11 +60,19 @@ class ActaPredialControllerTest {
                                             acta.fiscalizador(),
                                             acta.hallazgo(),
                                             acta.areaHallada(),
+                                            acta.usoHallado(),
                                             acta.detalle(),
                                             acta.estado(),
                                             acta.observacion());
                             guardadas.add(guardada);
                             return guardada;
+                        }
+
+                        @Override
+                        public pe.gob.sgtm.compartido.Pagina<ActaFiscalizacion> consultar(
+                                pe.gob.sgtm.fiscalizacion.dominio.CriterioDeActas criterio,
+                                pe.gob.sgtm.compartido.Paginacion paginacion) {
+                            return pe.gob.sgtm.compartido.Pagina.vacia(paginacion);
                         }
 
                         @Override
@@ -195,6 +203,53 @@ class ActaPredialControllerTest {
                                 + " hubiera hallado")
                 .isEqualTo(422);
         assertThat(resultado.getResponse().getContentAsString()).contains("hallazgo");
+        assertThat(guardadas).isEmpty();
+    }
+
+    @Test
+    @DisplayName("#599 — el uso hallado viaja en el cuerpo, se guarda y sale en la respuesta")
+    void elUsoHalladoViajaEnElCuerpo() throws Exception {
+        String cuerpo =
+                "{\"observacion\":\"Se fiscaliza para la prueba\",\"programaId\":1,"
+                        + "\"contribuyenteId\":10,\"predioId\":20,\"fechaVisita\":\"2026-03-15\","
+                        + "\"fiscalizador\":\"J. Perez\",\"hallazgo\":\"USO_DISTINTO\","
+                        + "\"areaHallada\":\"120.50\",\"usoHallado\":\"COMERCIO\"}";
+
+        MvcResult resultado =
+                mvc.perform(
+                                post("/api/v1/fiscalizacion/predial/actas")
+                                        .contentType(MediaType.APPLICATION_JSON)
+                                        .content(cuerpo))
+                        .andReturn();
+
+        assertThat(resultado.getResponse().getStatus()).isEqualTo(201);
+        assertThat(resultado.getResponse().getContentAsString())
+                .contains("\"hallazgo\":\"USO_DISTINTO\"")
+                .contains("\"usoHallado\":\"COMERCIO\"");
+        assertThat(guardadas).hasSize(1);
+        assertThat(guardadas.get(0).usoHallado())
+                .as("sin el campo en la lista blanca, Jackson lo descarta sin decir nada (#538)")
+                .isEqualTo("COMERCIO");
+    }
+
+    @Test
+    @DisplayName("#599 — USO_DISTINTO sin el uso observado es 422, y no guarda nada")
+    void usoDistintoSinUsoObservadoEs422() throws Exception {
+        String cuerpo =
+                "{\"observacion\":\"Se fiscaliza para la prueba\",\"programaId\":1,"
+                        + "\"contribuyenteId\":10,\"predioId\":20,\"fechaVisita\":\"2026-03-15\","
+                        + "\"fiscalizador\":\"J. Perez\",\"hallazgo\":\"USO_DISTINTO\","
+                        + "\"areaHallada\":\"120.50\"}";
+
+        MvcResult resultado =
+                mvc.perform(
+                                post("/api/v1/fiscalizacion/predial/actas")
+                                        .contentType(MediaType.APPLICATION_JSON)
+                                        .content(cuerpo))
+                        .andReturn();
+
+        assertThat(resultado.getResponse().getStatus()).isEqualTo(422);
+        assertThat(resultado.getResponse().getContentAsString()).contains("USO_DISTINTO");
         assertThat(guardadas).isEmpty();
     }
 

@@ -132,6 +132,7 @@ class GenerarMuestraTest {
                         Hallazgo.OMISO,
                         null,
                         null,
+                        null,
                         OBSERVACION));
         long programaId = programas.sembrar(programa(CondicionFiscalizada.OMISO));
 
@@ -203,6 +204,7 @@ class GenerarMuestraTest {
                         Hallazgo.OMISO,
                         null,
                         null,
+                        null,
                         OBSERVACION));
         long programaId = programas.sembrar(programa(CondicionFiscalizada.OMISO));
 
@@ -235,6 +237,7 @@ class GenerarMuestraTest {
                         LocalDate.of(2026, 2, 1),
                         "R. MENDOZA CRUZ",
                         Hallazgo.OMISO,
+                        null,
                         null,
                         null,
                         OBSERVACION));

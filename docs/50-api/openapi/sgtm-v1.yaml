@@ -3179,6 +3179,51 @@ paths:
           $ref: "#/components/responses/SinMunicipalidad"
         "422":
           $ref: "#/components/responses/ErrorDeValidacion"
+  "/fiscalizacion/actas":
+    get:
+      operationId: fisc_actas_listado
+      summary: "Actas de inspección levantadas"
+      description: "Las actas de inspección de la municipalidad, predial y vehicular en la misma lista: las dos comparten tabla y ciclo de vida, y cuál es cuál lo dice cuál de `predioId` y `vehiculoId` trae valor. Agregada por #599, y no antes a propósito: #546 midió que un listado no habría llenado la pantalla del acta —el cuerpo del POST tenía nueve campos contra los veintitrés que el manual dibuja— y que lo que faltaba era dónde guardar el **uso hallado**, hoy `usoHallado` (V76). **`totalElementos` cuenta todas las actas que el filtro deja pasar, no las de la página**: es de ahí de donde el embudo del programa llena su etapa «Inspeccionados», y sumar `visitado` fila a fila recompondría esa cifra sobre la página que se hubiera pedido. Un solo filtro, y es el único que alguien pide: las dos pantallas del acta no dibujan ninguno —su catálogo no declara ni filtros ni tabla—, así que publicar el predio, el hallazgo o el estado sería inventar promesas que ninguna pantalla hace. Exige LECTURA sobre `fisc_predial` **o** sobre `fisc_vehicular`: un perfil de fiscalización vehicular registraría actas que no podría volver a ver."
+      tags: ["Fiscalización"]
+      parameters:
+        - name: programa
+          in: query
+          required: false
+          description: "Acota a las actas de un programa, por su numero interno; es de donde el embudo saca cuantas se inspeccionaron"
+          schema: { type: string }
+        - name: pagina
+          in: query
+          required: false
+          description: "Pagina que se pide, contada desde 0"
+          schema: { type: string }
+          example: "0"
+        - name: tamano
+          in: query
+          required: false
+          description: "Filas por pagina"
+          schema: { type: string }
+          example: "20"
+        - name: ordenarPor
+          in: query
+          required: false
+          description: "Campo por el que se ordena, en camelCase"
+          schema: { type: string }
+        - name: direccion
+          in: query
+          required: false
+          description: "ASCENDENTE | DESCENDENTE"
+          schema: { type: string }
+          example: "ASCENDENTE"
+      responses:
+        200:
+          description: Operacion realizada
+          content:
+            application/json:
+              schema: { type: object }
+        "403":
+          $ref: "#/components/responses/SinMunicipalidad"
+        "422":
+          $ref: "#/components/responses/ErrorDeValidacion"
   "/fiscalizacion/vehicular":
     post:
       operationId: fisc_vehicular
@@ -3189,8 +3234,8 @@ paths:
         - name: hallazgo
           in: query
           required: false
-          description: "Lo que el fiscalizador encontro en campo. El vocabulario es el del enumerado «Hallazgo», letra por letra —cuatro valores, y no los cinco de «CondicionFiscalizada»: un acta no consigna el uso observado—. Tambien se admite en el cuerpo, y ahi gana (#425)."
-          schema: { type: string, enum: [CONFORME, OMISO, SUBVALUADOR, NO_UBICADO] }
+          description: "Lo que el fiscalizador encontro en campo. El vocabulario es el del enumerado «Hallazgo», letra por letra. En un acta VEHICULAR «USO_DISTINTO» se rechaza: un vehiculo no declara uso, asi que no hay uso declarado del que difiera, y el acta vehicular no consigna uso hallado. Tambien se admite en el cuerpo, y ahi gana (#425)."
+          schema: { type: string, enum: [CONFORME, OMISO, SUBVALUADOR, USO_DISTINTO, NO_UBICADO] }
       requestBody:
         required: true
         content:
