@@ -118,6 +118,18 @@ batch que se invoca no existe en esa imagen, Spring arranca con el contexto vac�
 con código 0. Pasó en `stg` con `cargar-catalogo-vial.sh` (PR #244) y es exactamente lo
 que hace falta distinguir con un `SELECT count(*)`, no con el código de salida.
 
+**Y ya no hay que acordarse de mirarlo** (issue #675): desde el 2026-09-02,
+`infra/verificaciones/deriva-de-migraciones.test.ts` compara en cada PR las migraciones
+que trae el `sha` declarado con las que declara `origin/main`, y se pone rojo nombrando
+las dos cifras y las migraciones que faltan. Corre en `yarn verificar`, **sin clúster**,
+y el filtro `paths` de `infra.yml` incluye ahora el directorio de migraciones — sin eso,
+integrar una migración no disparaba el flujo y la guarda no llegaba a correr.
+
+Se midió lo que costaba no tenerlo: entre el 2026-08-29 y el 2026-09-02 la línea no se
+movió, entraron trece migraciones (`V58`…`V71`) y los dos ambientes corrían **48 de 61**,
+sin que ninguna corrida se pusiera roja por ello. `verificar-el-ambiente.sh` decía
+«48 · 48 · OK», y tenía razón: compara la base con **la versión declarada**.
+
 ```bash
 # El sha al que subir: el último de `main` con las tres imágenes publicadas en verde.
 gh run list --workflow publicar-imagenes.yml --limit 5 \
@@ -135,6 +147,12 @@ primero, y lo segundo puede no existir en el registro.
    deployments*). El grupo de concurrencia `infra-aplicar-prod` retiene **una sola**
    corrida en espera: aprobar una corrida vieja despliega la versión vieja, que es la
    trampa entera. Aprobar **la que nace del merge**, no la que estaba esperando.
+   Antes del `up`, el mismo trabajo corre
+   [`crear-extensiones.sh`](../../../despliegue/crear-extensiones.sh) contra el motor que
+   ya existe: `crear-roles.sql` sólo corre con el volumen vacío, y una extensión añadida
+   después no llega sola — `V61` empieza con `ADD COLUMN … geography(...)` y sin
+   `postgis` el `Job` se cae con «type "geography" does not exist» (ADR-0021). Es
+   idempotente. Aplicando el stack **a mano**, correrlo primero.
 3. `pulumi up` crea el `Job` de migración nuevo, espera a que complete, y sigue.
 4. Comprobar con [`verificar-el-ambiente.sh`](../../../infra/verificaciones/ambiente/verificar-el-ambiente.sh)
    (abajo). Anotar fecha y duración en [`INF-03` §5.1](../../80-infraestructura/ambientes.md).

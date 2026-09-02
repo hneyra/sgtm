@@ -180,6 +180,10 @@ Todas se ejercen editando archivos reales y viendo el rojo:
 | Quitar un panel del tablero de su fuente de datos real | `verificar-tableros.sh`: «No data», nombrando el panel |
 | Quitar `recovery_target_time` del simulacro | `simulacro-de-restauracion.sh`: se restauran 4 filas donde había 3 |
 | Hacer `SUPERUSER` a `sgtm_respaldo`, o darle `CONNECT` al padrón | `verificar-el-motor.sh` y el simulacro |
+| Apuntar `applicationBootstrapVersion` a un `sha` con migraciones de menos | `yarn test`, con **las dos cifras** y las migraciones que faltan |
+| Apuntarlo a un `sha` que no está en el clon | `yarn test`: no concluye en vez de contar las del árbol de trabajo, y dice `fetch-depth: 0` |
+| Quitar `db/migration/**` del filtro `paths` de `infra.yml` | `yarn test`: la guarda existiría y no correría al integrar una migración |
+| Que la base tenga MÁS migraciones que la versión declarada | `verificar-el-ambiente.sh`: hasta #675 decía «al día» |
 
 Las últimas cuatro son las que más valen, porque **no se pueden comprobar leyendo el
 manifiesto**. `30-base-de-keycloak.sh` revoca el `CONNECT` que `PUBLIC` tiene por omisión
@@ -248,6 +252,37 @@ yarn manifiestos --ambiente prod --componente migracion | kubectl apply -f -
 
 El nombre del Job lleva la versión, así que una versión nueva crea un Job nuevo y
 volver a aplicar la misma no hace nada: el migrador es idempotente.
+
+### Y por eso hay que subir `applicationBootstrapVersion` (issue #675)
+
+Ese mismo nombre es lo que hace que **no subirla no se note**. Mientras
+`sgtm:applicationBootstrapVersion` no se mueva, `pulumi up` encuentra el Job de
+migración que ya existe, no crea ninguno, y sale en verde con «unchanged»; no hay ningún
+`Deployment` que quede `NotReady` por ello.
+
+Se midió el 2026-09-02: la línea llevaba desde el 2026-08-29 en `5fc02f3` —**48**
+migraciones— mientras `main` declaraba **61**, así que a `stg` le faltaban trece
+(`V58`…`V71`) y a `prod` las mismas. Y `verificar-el-ambiente.sh` decía, con toda la
+razón, «48 · 48 · OK»: compara la base con **la versión declarada**, no con `main`.
+
+Las tres cosas que lo miden hoy, y ninguna sustituye a las otras:
+
+| Qué compara | Quién | Cuándo |
+|---|---|---|
+| La versión declarada vs. `origin/main` | `infra/verificaciones/deriva-de-migraciones.test.ts` | `yarn verificar`, en cada PR — **sin clúster** |
+| La base vs. la versión declarada | `verificaciones/ambiente/verificar-el-ambiente.sh` | tras cada `pulumi up`, y a diario contra `prod` |
+| El clúster vs. lo declarado en Pulumi | `pulumi preview --expect-no-changes` | a diario contra `prod` |
+
+Subir la línea es un PR de una línea, y el `sha` tiene que tener sus **tres** imágenes
+publicadas:
+
+```bash
+gh run list --workflow publicar-imagenes.yml --branch main --limit 5 \
+  --json headSha,conclusion,createdAt
+```
+
+Sube en **stg y prod a la vez**: `aplicar-prod` tiene `needs: aplicar-stg`, así que `stg`
+es la puerta por la que pasa toda versión que llegue a producción.
 
 ## Cómo llegar a un VPS real
 

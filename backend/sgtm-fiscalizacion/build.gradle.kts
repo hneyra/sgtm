@@ -57,3 +57,15 @@ dependencies {
     testImplementation("org.springframework:spring-test")
     testRuntimeOnly(libs.postgresql)
 }
+
+// El contrato vive fuera de este modulo y `LaMuestraSeSorteaTest` lo lee del
+// disco: comprueba que ninguna ruta de fiscalizacion admita una seleccion de
+// predios ni una esquela (#550, ADR-0023). Sin declararlo como entrada, editar
+// el YAML deja a `test` en UP-TO-DATE y la guarda pasa en **verde rancio** en
+// local —en CI corre fresco y muerde, que es la peor forma de enterarse—. Es la
+// leccion de #192 punto 2, que #399 volvio a medir sobre este mismo archivo.
+tasks.test {
+    inputs
+        .file(rootProject.file("../docs/50-api/openapi/sgtm-v1.yaml"))
+        .withPathSensitivity(PathSensitivity.RELATIVE)
+}
