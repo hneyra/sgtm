@@ -43,6 +43,10 @@ public interface ExtincionDeDeuda {
      * MovimientoDeDeuda} de sentido {@code BAJA} produce, y por eso el estado de cuenta la muestra
      * como una baja con su motivo y no como un pago que nadie hizo.
      *
+     * <p>Y desde #662 cada asiento nace estampado como {@code BAJA_DEUDA}, que es lo que hace que
+     * el libro la trate como lo que es: sale en la relacion de altas y bajas (RF-045), deja de
+     * contar como emision del ejercicio y <b>no</b> se publica como recaudacion.
+     *
      * <p>Una obligacion que ya no deba nada <b>no produce ningun asiento</b> y devuelve un
      * movimiento vacio: la deuda pudo pagarse mientras el recurso se tramitaba, y en ese caso lo
      * que corresponde no es una baja sino una devolucion, que es otro procedimiento.
