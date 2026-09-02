@@ -123,6 +123,13 @@ export type DesgloseDeDeuda = {
  * `predioId` y `vehiculoId` son la unidad sobre la que pesa: los dos pueden
  * venir nulos —el predial del contribuyente sin predio resuelto, por ejemplo—,
  * y eso no es un cero, es una obligación sin unidad.
+ *
+ * **`periodoDesde`/`periodoHasta` significan dos cosas distintas según el corte
+ * que se pidió** (ver `FiltroDeDeuda.porPeriodo`): sin `porPeriodo` son el
+ * mínimo y el máximo de las cuotas que la fila agrega, y con él son la misma
+ * cuota repetida. Quien dibuje esta fila tiene que decir cuál de los dos está
+ * mirando: «PREDIAL 2026» y «PREDIAL 2026 cuota 3» se parecen lo bastante como
+ * para dar de baja la que no era.
  */
 export type ObligacionConDeuda = {
   tributo: string;
@@ -140,6 +147,55 @@ export type FiltroDeDeuda = {
   /** ISO `AAAA-MM-DD`. Sin ella, el servidor calcula a hoy con su reloj. */
   fechaDeCorte?: string;
   fase?: Fase;
+  /**
+   * Dónde se corta la lectura: una fila por **cuota** en vez de una por
+   * obligación (#551).
+   *
+   * La forma del recurso no cambia —siguen siendo `periodoDesde`,
+   * `periodoHasta` y un `DesgloseDeDeuda`—; lo que cambia es qué agrupa cada
+   * fila. Sin el parámetro, `periodoDesde`/`periodoHasta` son el mínimo y el
+   * máximo del grupo y el desglose es el de **toda** la obligación. Con
+   * `true`, cada fila **es** una cuota, `periodoDesde === periodoHasta`, y el
+   * desglose es el suyo.
+   *
+   * Medido contra el backend con `C-000001` de la municipalidad 1:
+   *
+   * ```
+   * sin el parámetro   PREDIAL 2026 · cuotas 0-9 · insoluto 444.90
+   * porPeriodo=true    PREDIAL 2026 · cuota 1 · 148.30
+   *                    PREDIAL 2026 · cuota 2 · 148.30
+   *                    PREDIAL 2026 · cuota 3 · 148.30
+   *                    PREDIAL 2026 · cuotas 0, 4 y 9 · 0.00
+   * ```
+   *
+   * Ahí está para qué existe: la fila agregada dice cuánto se debe por el
+   * conjunto y **no** cuánto por cada cuota, así que con ella sola no se puede
+   * componer el cuerpo de una baja de la cuota 1 —y repartirlo en la pantalla
+   * sería componer dinero (RNF-083) sobre cifras que la lectura no publica—.
+   *
+   * **La `fase` también se corta distinto, y ésa es la que viaja en el acto.**
+   * La fila agregada publica la más avanzada del grupo; la de una cuota, la
+   * suya. Medido sobre la misma persona: `ARBITRIOS 2026 · predio 1` sale
+   * agregada como `VALOR` con 146.00, y por cuota sale `VALOR` la cuota 0 —que
+   * debe 0— y `ORDINARIA` las cuotas 1 a 4, que son las que deben los 146.00.
+   *
+   * Una palabra que no sea `true` ni `false` es **422 nombrando el parámetro**
+   * (`?porPeriodo=si` → «El parametro «porPeriodo» admite «true» o «false»:
+   * 'si'»), por lo mismo que el `activa` del catálogo vial: un «sí» leído como
+   * «false» devolvería filas agregadas a quien pidió cuotas, y esa respuesta es
+   * indistinguible de la correcta hasta que alguien intenta dar una de baja. El
+   * tipo lo impide desde aquí.
+   *
+   * **No se declara en `api/tesoreria.ts`, y es deliberado**: la ventanilla lee
+   * esta misma operación para cobrar, y `PeticionDeCobranza.PeticionDeObligacion`
+   * identifica lo que se cobra con tributo, ejercicio y unidad — **sin
+   * `periodo`**. Cuatro cuotas marcadas ahí serían cuatro veces la misma
+   * obligación para el servidor. Lo mismo en Valores: ni
+   * `PeticionDeValor.PeticionDeObligacion` ni `PeticionDePrescripcion` llevan
+   * cuota. Que el filtro no exista en la fachada de tesorería es lo que impide
+   * mandarlo por error donde rompería la cobranza.
+   */
+  porPeriodo?: boolean;
 };
 
 export function deudaDelContribuyente(

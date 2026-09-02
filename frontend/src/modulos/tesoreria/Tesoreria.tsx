@@ -2,7 +2,8 @@ import { useEffect, useMemo, useRef, useState, type CSSProperties, type ReactNod
 import { Shell, type EntradaDePaleta } from '../../shell/Shell';
 import type { PantallaProps } from '../../App';
 import { Icono } from '../../ds/Icono';
-import { Aviso, Insignia, Paginador, type Tono } from '../../ds/componentes';
+import { Aviso, Insignia, Paginador, filaPulsable, type Tono } from '../../ds/componentes';
+import { dia, instante, zonaDelLector } from '../../ds/fechas';
 import { usarPreferencias } from '../../shell/preferencias';
 import { ErrorDeApi, claveDeIdempotencia, fijarToken } from '../../api/cliente';
 import { cuentaActual, hayPuerta } from '../../api/sesion';
@@ -19,6 +20,7 @@ import {
   contribuyentePorCodigo,
   deudaDelContribuyente,
   duplicadoDeRecibo,
+  listarCajas,
   listarConvenios,
   listarRecibos,
   recaudacionPorArea,
@@ -28,6 +30,7 @@ import {
   type ActaDeAnulacion,
   type ActaDeCierre,
   type Arqueo,
+  type CajaDelCatalogo,
   type Convenio,
   type EstadoDeConvenio,
   type EstadoDeRecibo,
@@ -221,22 +224,6 @@ function moneda(texto: string | null | undefined): string {
   return 'S/ ' + (/^-?\d+$/.test(texto) ? texto + '.00' : texto);
 }
 
-/** Una fecha ISO en el orden en que se lee aquí. Sin `Date`: partir la cadena no
- *  tiene zona horaria que equivocar. */
-function dia(iso: string | null | undefined): string {
-  if (!iso) return SIN_DATO;
-  const [f] = iso.split('T');
-  const p = (f ?? '').split('-');
-  return p.length === 3 ? `${p[2]}/${p[1]}/${p[0]}` : iso;
-}
-
-/** El instante de emisión, partido en día y hora. */
-function instante(iso: string | null | undefined): string {
-  if (!iso) return SIN_DATO;
-  const [f, h] = iso.split('T');
-  return dia(f) + (h ? ' ' + h.slice(0, 5) : '');
-}
-
 /** La llave con la que se identifica una obligación marcada. Es la misma tupla
  *  con la que `ClaveDeSaldo` la busca: tributo, ejercicio y unidad. */
 function llaveDe(o: ObligacionConDeuda): string {
@@ -256,11 +243,22 @@ export default function Tesoreria({ dest, onDest }: PantallaProps) {
   const { pref, toast } = usarPreferencias();
 
   /* ── El turno: la caja y el cajero ──────────────────────────────
-     Los dos se teclean, y no por comodidad: **ninguna lectura del contrato
-     publica el catálogo de cajas** —`cargar-cajas.sh` las siembra desde un CSV y
-     no hay `GET /tesoreria/cajas`—, así que un desplegable aquí saldría de una
-     lista inventada. El cajero arranca con la cuenta de la sesión, que es la que
-     el backend usa para decidir si un recibo es ajeno. */
+     La caja **se elige** desde #618: `GET /tesoreria/cajas` publica el catálogo
+     que `cargar-cajas.sh` siembra en el paso 4, así que el desplegable sale de
+     la base y no de las cuatro ventanillas que el artboard dibujaba. Hasta
+     entonces se tecleaba, y quien atiende tenía que saberse de memoria un código
+     que el sistema conocía; el comentario que lo justificaba se corrige aquí y en
+     los cuatro sitios donde el campo se dibuja, porque una explicación que se
+     quedó vieja es indistinguible de una que nunca fue cierta.
+
+     El valor sigue siendo una cadena y no la fila entera **a propósito**: lo que
+     viaja en el cuerpo del cobro y del cierre es el `codigo`, y guardar aquí el
+     objeto invitaría a mandar el rótulo. Un rótulo por código manda el dinero del
+     turno a otra ventanilla, y ninguna cifra parecería mal.
+
+     El cajero sigue tecleándose: es la cuenta de quien atiende, no un catálogo, y
+     arranca con la de la sesión, que es la que el backend compara para decidir si
+     un recibo es ajeno. */
   const [caja, setCaja] = useState('');
   const [cajero, setCajero] = useState(cuentaActual() ?? '');
   const hoy = useMemo(() => new Date().toISOString().slice(0, 10), []);
@@ -408,6 +406,29 @@ export default function Tesoreria({ dest, onDest }: PantallaProps) {
   const turnoCompleto = caja.trim() !== '' && cajero.trim() !== '';
 
   /* ══════════ Las lecturas ══════════ */
+
+  /**
+   * El catálogo de ventanillas (#618).
+   *
+   * Se pide en los **cuatro** destinos que dibujan el campo «Caja» y en ninguno
+   * más: el panel —donde se elige el turno—, la cobranza, el cierre y el filtro
+   * del listado de recibos. Convenios y Recaudación no lo piden porque no tienen
+   * ese campo, y una lectura que ninguna pantalla dibuja es un viaje de más en
+   * cada cambio de destino.
+   *
+   * No depende de nada tecleado, así que `llaves` va vacío: se pide una vez por
+   * destino y se queda. Y **puede fallar sola** sin tumbar la pantalla: exige uno
+   * de cinco accesos, así que un perfil que sólo cierra caja podría recibir un
+   * 403 aquí y seguir necesitando cerrar su turno. Lo que se hace entonces está
+   * abajo, en `campoDeCaja`: se vuelve a la caja de texto con el motivo escrito,
+   * nunca a un desplegable vacío.
+   */
+  const necesitaElCatalogoDeCajas = dest === 'panel' || dest === 'cobrar' || dest === 'cierre' || dest === 'recibos';
+  const cajas = useRecurso((s) => listarCajas(s), [], necesitaElCatalogoDeCajas);
+  const catalogoDeCajas: CajaDelCatalogo[] = cajas.datos?.contenido ?? [];
+  /** La ventanilla elegida, cuando el catálogo la conoce. Es lo que permite decir
+   *  que está dada de baja **antes** del 422, y sale nula cuando se tecleó. */
+  const cajaElegida = catalogoDeCajas.find((c) => c.codigo === caja.trim()) ?? null;
 
   /** El sujeto, resuelto del código. `CajaController` hace lo mismo con
    *  `DirectorioDeContribuyentes` y contesta 404 si no está: preguntarlo antes es
@@ -632,8 +653,15 @@ export default function Tesoreria({ dest, onDest }: PantallaProps) {
       : contribuyente === null
         ? 'Falta el contribuyente: se teclea su código y tiene que estar en el padrón.'
         : caja.trim() === ''
-          ? 'Falta el código de la caja: el recibo se numera con su serie.'
-          : cajero.trim() === ''
+          ? 'Falta la caja: el recibo se numera con su serie.'
+          : /* La ventanilla puede venir elegida desde el cierre o desde el filtro
+               de recibos, donde una dada de baja SÍ vale —el turno de ayer hay que
+               poder cerrarlo—, y el estado es uno solo. Aquí no vale: `AbrirCaja`
+               lanza `CajaDeBaja` y el cobro se caería con un 422 después de haber
+               marcado la deuda. Se dice antes. */
+            cajaElegida !== null && !cajaElegida.activa
+            ? `La ventanilla «${cajaElegida.codigo}» está dada de baja: no se puede abrir turno en ella, así que no puede cobrar. Elige una abierta.`
+            : cajero.trim() === ''
             ? 'Falta el cajero: el arqueo del turno es suyo.'
             : tipoDePago === 'PRECONVENIO' && numeroDeConvenio.trim() === ''
               ? 'Cobrar una cuota inicial exige el número del convenio que formaliza.'
@@ -1259,7 +1287,15 @@ export default function Tesoreria({ dest, onDest }: PantallaProps) {
         </div>
         <div style={{ textAlign: 'right', fontFamily: 'var(--font-mono)', fontSize: 10.5, color: 'var(--ink-3)' }}>
           <p style={{ margin: 0 }}>{r.numero}</p>
+          {/* La hora va con su zona, y es el unico sitio del producto donde hace
+              falta decirla (#619). Es el dato con el que se distinguen dos cobros
+              del mismo dia y del mismo importe, y el papel que el contribuyente
+              trae lleva la del reloj de la caja: quien mire desde otra zona ve
+              aqui el nombre de la suya y sabe que no van a coincidir. En una
+              ventanilla de Piura las dos son la misma y la coletilla sobra, pero
+              no cuesta nada y su ausencia si costaria. */}
           <p style={{ margin: '2px 0 0' }}>{instante(r.emitidoEn)}</p>
+          <p style={{ margin: '1px 0 0', fontSize: 9.5 }}>hora de {zonaDelLector()}</p>
         </div>
       </div>
       <div style={{ padding: '14px 0', borderBottom: '1px solid var(--line)' }}>
@@ -1316,6 +1352,114 @@ export default function Tesoreria({ dest, onDest }: PantallaProps) {
 
   /* ══════════ PANEL: EL TURNO ══════════ */
 
+  /**
+   * El campo «Caja», y es **el mismo** en las cuatro pantallas que lo piden.
+   *
+   * <h2>Qué había antes, que no era lo mismo en las cuatro</h2>
+   *
+   * Ninguna dibujaba el desplegable «Todas · C-1 · C-2 · C-3 · C-4» del artboard
+   * —esas cuatro ventanillas son de la maqueta—, pero las cuatro pedían el código
+   * tecleado y cada una lo justificaba de una manera distinta: el panel decía que
+   * «ninguna lectura del contrato publica el catálogo de cajas», el filtro de
+   * recibos decía que «`GET /tesoreria/cajas` contesta 404» y nombraba este mismo
+   * issue, y la cobranza y el cierre **no decían nada**: una caja de texto con
+   * `C-01` de marcador, y quien atiende teniendo que saberse de memoria un código
+   * que el sistema conocía. Las dos primeras explicaciones eran ciertas y hoy son
+   * falsas; las otras dos nunca dijeron nada. Se cierran las cuatro aquí, en un
+   * solo sitio, para que la próxima no pueda quedarse a medias.
+   *
+   * <h2>Lo que viaja es el código, nunca el rótulo</h2>
+   *
+   * `value` es `c.codigo`. Ésta es la única pantalla por la que entra dinero
+   * (#430) y el cuerpo del cobro lleva `caja`, que `AbrirCaja` resuelve con
+   * `CajaRepository.porCodigo`. Mandar el rótulo es **ruidoso** —medido poniendo
+   * `value={c.nombre}` y cobrando: 404 «No hay ninguna caja con el codigo 'Caja
+   * tributaria 1' en esta municipalidad»—; mandar el código de **otra ventanilla**
+   * es silencioso, porque el cobro sale 201 y el dinero se abona al turno de una
+   * caja que no es la que atendió, sin que ninguna cifra parezca mal. Por eso el
+   * estado guarda la cadena y no la fila: guardar el objeto invita a mandar el
+   * campo equivocado.
+   *
+   * <h2>Las dadas de baja salen, y no se pueden elegir en las cuatro</h2>
+   *
+   * El catálogo no admite filtro de estado y devuelve todas (#618), así que el
+   * criterio lo pone la pantalla —y **no es el mismo**, medido contra el backend:
+   * `AbrirCaja` lanza `CajaDeBaja` y la cobranza contesta 422, mientras
+   * `CerrarTurno` sólo resuelve el código y no mira `activa`—. De modo que en el
+   * cobro la opción se dibuja pero **apagada**, con «dada de baja» en el rótulo, y
+   * en el turno, el cierre y el filtro se puede elegir: el turno de ayer de una
+   * ventanilla cerrada hoy hay que poder arquearlo, y sus recibos siguen
+   * existiendo (RNF-051). Apagada y no escondida porque una lista recortada en
+   * silencio se lee como que esa ventanilla no existe, que es lo contrario de lo
+   * que pasa.
+   *
+   * @param modo `cobro` exige una abierta; `turno` admite cualquiera; `filtro`
+   *     admite además el vacío, que ahí significa «todas»
+   */
+  const campoDeCaja = (valor: string, fijar: (v: string) => void, modo: 'cobro' | 'turno' | 'filtro') => {
+    /* Se vuelve a la caja de texto en dos casos, y los dos hay que distinguirlos
+       porque se arreglan de forma distinta: que la lectura FALLE —403 de quien no
+       tiene ninguno de los cinco accesos, o el servidor caído— y que conteste una
+       página VACÍA, que no es un fallo sino una municipalidad recién implantada a
+       la que todavía no se le han cargado ventanillas. Lo que no vale en ninguno
+       de los dos es un desplegable vacío: se lee como «esta municipalidad no tiene
+       cajas», que en el primer caso es sencillamente falso. */
+    const catalogoVacio = cajas.datos !== null && catalogoDeCajas.length === 0;
+    const seTeclea = cajas.error !== null || catalogoVacio;
+
+    if (seTeclea) {
+      return (
+        <label style={CAMPO}>
+          <span style={ETIQUETA}>Caja</span>
+          <input
+            value={valor}
+            onChange={(e) => fijar(e.target.value.toUpperCase())}
+            placeholder="C-01"
+            style={{ ...IN, fontFamily: 'var(--font-mono)' }}
+          />
+          <span style={AYUDA}>
+            {cajas.error !== null
+              ? `${tituloDelFallo(cajas.error, 'el catálogo de ventanillas')}. ${explicacionDelFallo(cajas.error)} Mientras tanto el código se teclea, como antes de #618.`
+              : 'Esta municipalidad no tiene ninguna ventanilla cargada: el catálogo contestó una página vacía, que es el estado normal de una instalación recién implantada. Las carga «cargar-cajas.sh», el paso 4 de la siembra; hasta entonces el cobro contesta 422 aunque se teclee un código.'}
+          </span>
+        </label>
+      );
+    }
+
+    return (
+      <label style={CAMPO}>
+        <span style={ETIQUETA}>Caja</span>
+        <select value={valor} onChange={(e) => fijar(e.target.value)} style={IN}>
+          {/* Mientras se lee, la opción del valor que ya hay: sin ella el
+              desplegable se vaciaría un instante y parecería que se ha perdido lo
+              elegido. */}
+          {cajas.cargando && (
+            <option value={valor}>{valor === '' ? 'leyendo el catálogo…' : `${valor} · leyendo el catálogo…`}</option>
+          )}
+          {!cajas.cargando && (
+            <option value="">{modo === 'filtro' ? 'Todas' : '(elige una ventanilla)'}</option>
+          )}
+          {catalogoDeCajas.map((c) => (
+            <option key={c.codigo} value={c.codigo} disabled={modo === 'cobro' && !c.activa}>
+              {rotuloDeCaja(c)}
+            </option>
+          ))}
+        </select>
+        <span style={AYUDA}>
+          {modo === 'cobro'
+            ? 'Lo que viaja en el cobro es el código, no el rótulo. Una ventanilla dada de baja sale en la lista y no se puede elegir: el backend rechaza abrir turno en ella.'
+            : modo === 'turno'
+              ? '(caja, cajero, día) es lo que hace único un turno desde V3. Las dadas de baja se pueden elegir aquí: el turno de ayer de una ventanilla cerrada hoy hay que poder arquearlo y cerrarlo.'
+              : 'Salen también las dadas de baja: sus recibos siguen existiendo (RNF-051), y no listarlas dejaría sin encontrar los que emitieron.'}{' '}
+          Junto al rótulo va el área a la que se imputa lo que recauda; las que no cuelgan de ninguna lo dicen, porque
+          ahí no falta un dato: lo tributario no se imputa a ninguna partida.
+          {cajas.datos?.hayMas === true &&
+            ' El catálogo trae más ventanillas de las que caben en una lectura: aquí sólo están las primeras 200 por código.'}
+        </span>
+      </label>
+    );
+  };
+
   const campoDelTurno = (
     <section style={TARJETA}>
       <div style={CABECERA}>
@@ -1323,19 +1467,7 @@ export default function Tesoreria({ dest, onDest }: PantallaProps) {
         <span style={META}>{dia(hoy)}</span>
       </div>
       <div style={REJILLA(200)}>
-        <label style={CAMPO}>
-          <span style={ETIQUETA}>Caja</span>
-          <input
-            value={caja}
-            onChange={(e) => setCaja(e.target.value.toUpperCase())}
-            placeholder="C-01"
-            style={{ ...IN, fontFamily: 'var(--font-mono)' }}
-          />
-          <span style={AYUDA}>
-            Se teclea: ninguna lectura del contrato publica el catálogo de cajas, y un desplegable aquí saldría de una
-            lista inventada.
-          </span>
-        </label>
+        {campoDeCaja(caja, setCaja, 'turno')}
         <label style={CAMPO}>
           <span style={ETIQUETA}>Cajero</span>
           <input value={cajero} onChange={(e) => setCajero(e.target.value)} placeholder="jperez" style={IN} />
@@ -1368,8 +1500,8 @@ export default function Tesoreria({ dest, onDest }: PantallaProps) {
 
         {!turnoCompleto && (
           <p style={{ margin: 0, padding: '22px 16px', fontSize: 13, color: 'var(--ink-3)', textWrap: 'pretty' }}>
-            Teclea arriba la caja y el cajero. El arqueo en vivo es de un turno concreto —(caja, cajero, día) es lo que
-            lo hace único desde V3—, así que sin los dos no hay nada que pedir.
+            Falta la caja o el cajero, arriba. El arqueo en vivo es de un turno concreto —(caja, cajero, día) es lo
+            que lo hace único desde V3—, así que sin los dos no hay nada que pedir.
           </p>
         )}
         {turnoCompleto && turno.cargando && (
@@ -1548,10 +1680,7 @@ export default function Tesoreria({ dest, onDest }: PantallaProps) {
               <span style={META}>POST /tesoreria/caja/cobranza</span>
             </div>
             <div style={REJILLA(200)}>
-              <label style={CAMPO}>
-                <span style={ETIQUETA}>Caja</span>
-                <input value={caja} onChange={(e) => setCaja(e.target.value.toUpperCase())} placeholder="C-01" style={{ ...IN, fontFamily: 'var(--font-mono)' }} />
-              </label>
+              {campoDeCaja(caja, setCaja, 'cobro')}
               <label style={CAMPO}>
                 <span style={ETIQUETA}>Cajero</span>
                 <input value={cajero} onChange={(e) => setCajero(e.target.value)} placeholder="jperez" style={IN} />
@@ -2064,7 +2193,10 @@ export default function Tesoreria({ dest, onDest }: PantallaProps) {
                       return (
                         <tr
                           key={c.nroConvenio}
-                          onClick={() => { setAbierto(c.nroConvenio); setFalloCierre(null); }}
+                          {...filaPulsable(`Abrir el convenio ${c.nroConvenio}`, () => {
+                            setAbierto(c.nroConvenio);
+                            setFalloCierre(null);
+                          })}
                           className="hov-acento"
                           style={{
                             borderTop: '1px solid var(--line)',
@@ -2291,21 +2423,7 @@ export default function Tesoreria({ dest, onDest }: PantallaProps) {
                 que sí los tiene.
               </span>
             </label>
-            <label style={CAMPO}>
-              <span style={ETIQUETA}>Caja</span>
-              <input
-                value={fRecCaja}
-                onChange={(e) => setFRecCaja(e.target.value.toUpperCase())}
-                placeholder="C-01"
-                style={{ ...IN, fontFamily: 'var(--font-mono)' }}
-              />
-              <span style={AYUDA}>
-                Se teclea, no se elige: no hay ninguna lectura que liste las cajas de la municipalidad —
-                <code style={{ fontFamily: 'var(--font-mono)' }}>GET /tesoreria/cajas</code> contesta 404—, y el
-                desplegable «C-1…C-4» del prototipo son cuatro ventanillas inventadas en el artboard. Publicar ese
-                catálogo es #618.
-              </span>
-            </label>
+            {campoDeCaja(fRecCaja, setFRecCaja, 'filtro')}
             <label style={CAMPO}>
               <span style={ETIQUETA}>Cajero</span>
               <input value={fRecCajero} onChange={(e) => setFRecCajero(e.target.value)} placeholder="jperez" style={IN} />
@@ -2415,7 +2533,9 @@ export default function Tesoreria({ dest, onDest }: PantallaProps) {
                     return (
                       <tr
                         key={r.numero}
-                        onClick={() => setNumeroDeRecibo(r.numero)}
+                        {...filaPulsable(`Abrir el recibo ${r.numero}, de ${r.contribuyente ?? 'contribuyente sin resolver'}`, () =>
+                          setNumeroDeRecibo(r.numero),
+                        )}
                         className="hov-acento"
                         style={{
                           borderTop: '1px solid var(--line)',
@@ -2738,10 +2858,7 @@ export default function Tesoreria({ dest, onDest }: PantallaProps) {
           <span style={META}>POST /tesoreria/caja/cierre</span>
         </div>
         <div style={REJILLA(200)}>
-          <label style={CAMPO}>
-            <span style={ETIQUETA}>Caja</span>
-            <input value={caja} onChange={(e) => setCaja(e.target.value.toUpperCase())} placeholder="C-01" style={{ ...IN, fontFamily: 'var(--font-mono)' }} />
-          </label>
+          {campoDeCaja(caja, setCaja, 'turno')}
           <label style={CAMPO}>
             <span style={ETIQUETA}>Cajero</span>
             <input value={cajero} onChange={(e) => setCajero(e.target.value)} placeholder="jperez" style={IN} />
@@ -2770,7 +2887,7 @@ export default function Tesoreria({ dest, onDest }: PantallaProps) {
 
         {!turnoCompleto && (
           <p style={{ margin: 0, padding: '22px 16px', fontSize: 13, color: 'var(--ink-3)' }}>
-            Teclea la caja y el cajero: el arqueo es de un turno concreto.
+            Falta la caja o el cajero: el arqueo es de un turno concreto.
           </p>
         )}
         {turnoCompleto && turno.cargando && (
@@ -3221,7 +3338,7 @@ export default function Tesoreria({ dest, onDest }: PantallaProps) {
               ? `${arqueo.recibosEmitidos} ${arqueo.recibosEmitidos === 1 ? 'recibo' : 'recibos'} · ${arqueo.recibosAnulados} ${arqueo.recibosAnulados === 1 ? 'anulado' : 'anulados'} · al ${dia(arqueo.neto.actualizadoA)}`
               : turnoCompleto
                 ? 'Nadie ha abierto turno hoy con esa caja y ese cajero.'
-                : 'Teclea la caja y el cajero en el panel.'}
+                : 'La caja y el cajero se indican en el panel del turno.'}
           </p>
         </div>
       }
@@ -3250,6 +3367,31 @@ function comoErrorDeApi(error: unknown, porOmision: string): ErrorDeApi {
 }
 
 /** El rótulo de una forma de pago, sin traducir la clave que viaja. */
+/**
+ * Cómo se lee una ventanilla en el desplegable (#618).
+ *
+ * Tres cosas, y las tres están medidas contra el backend en vez de supuestas:
+ *
+ *   1. **El código delante**, porque es lo que viaja en el cuerpo del cobro, del
+ *      cierre y del filtro de recibos. Lo que el contribuyente ve impreso NO es
+ *      el código sino la **serie** de la ventanilla —medido: C-01 numera
+ *      `001-0000007`—, y esa el catálogo no la publica: `CajaEnListaResource`
+ *      trae código, rótulo, área y estado, y nada más. No se deriva de aquí ni se
+ *      inventa; se dice en el informe de #618.
+ *   2. **El área**, cuando la hay. Y cuando no la hay se dice, en vez de dejar el
+ *      hueco: `areaCodigo` nulo no es «falta el área», es que esa ventanilla no
+ *      cuelga de ninguna —las dos tributarias de esta instalación, medido— y lo
+ *      que recauda no se imputa a ninguna partida. Un hueco se lee como un dato
+ *      que falta; un «—» diría que el backend no lo publica, y sí lo publica:
+ *      publica que no hay.
+ *   3. **Si está dada de baja**, porque el catálogo las devuelve todas y quien
+ *      elige tiene que poder distinguirlas antes de pulsar.
+ */
+function rotuloDeCaja(c: CajaDelCatalogo): string {
+  const area = c.areaCodigo !== null ? `${c.areaCodigo} ${c.areaNombre ?? ''}`.trim() : 'no cuelga de ningún área';
+  return `${c.codigo} · ${c.nombre} · ${area}${c.activa ? '' : ' · dada de baja'}`;
+}
+
 function rotuloDeForma(clave: string): string {
   const encontrada = FORMAS_DE_PAGO.find((f) => f[0] === clave);
   /* Una forma que el dominio gane mañana no se dibuja en blanco ni se traduce a
@@ -3329,19 +3471,48 @@ function queSePuedeHacer(error: ErrorDeApi): string {
     case 'ORDEN_NO_ADMITIDO':
     case 'CONFLICTO':
     case 'NO_ENCONTRADO':
-      return (
-        'El texto de arriba es el del servidor, tal cual: es el único sitio donde se nombra lo que falta, ' +
-        'y reintentar sin cambiar nada volvería a dar lo mismo. Si nombra un dato de este formulario, se ' +
-        'corrige aquí. Si nombra un ejercicio sin conjunto de parámetros sellado, o una llave como ' +
-        '«INTERES_FRACCIONAMIENTO:ORDINARIO», es una cifra que todavía no se ha publicado: eso no se ' +
-        'arregla desde esta pantalla y no es un fallo del servidor (D-02a, D-02b).'
-      );
+      /* UNA de las dos cosas, no las dos (#604). Hasta aquí esta frase
+         enumeraba —«si nombra un dato de este formulario…; si nombra un
+         ejercicio sin conjunto…»— y dejaba la clasificación a quien atiende,
+         que es justo quien no puede hacerla: los dos casos salen con el mismo
+         `codigo` y el mismo `estado`, y lo único que los separaba era el texto.
+         Desde #688 el servidor lo dice como dato, y se pregunta por la
+         PRESENCIA del miembro y nunca por el texto: clasificar por subcadena
+         deja de funcionar en cuanto alguien reescribe la frase, y esa
+         reescritura no rompe ninguna compilación. */
+      return error.faltaUnaCifraNormativa
+        ? 'Lo que falta es una cifra normativa, no un dato de este formulario: ' +
+          (error.parametroQueFalta?.llave === undefined
+            ? 'el ejercicio ' + String(error.parametroQueFalta?.ejercicio) + ' no tiene conjunto de parámetros sellado'
+            : 'falta publicar «' +
+              error.parametroQueFalta.llave +
+              '» en el conjunto de ' +
+              String(error.parametroQueFalta.ejercicio)) +
+          '. Eso no se arregla desde esta pantalla y no es un fallo del servidor (D-02a, D-02b): lo resuelve quien publica los valores normativos.'
+        : 'El texto de arriba es el del servidor, tal cual: es el único sitio donde se nombra lo que falta, ' +
+          'y reintentar sin cambiar nada volvería a dar lo mismo. Lo que nombra es un dato de esta petición, ' +
+          'así que se corrige aquí.';
     case 'SIN_RESPUESTA':
       return 'No llegó a haber respuesta, así que reintentar puede funcionar en cuanto el servidor conteste.';
     default:
+      /* Se DERIVA del propio error y no se afirma (#678). Este `default` decía
+         «trae referencia: reintentar puede funcionar» de todo lo que no tuviera
+         rama, y con el 405 pelado —el del proxy, sin cuerpo `problem+json`— eso
+         era falso dos veces: no hay incidencia que buscar y el botón de
+         reintentar no está, porque `reintentable` es falso. La pantalla se
+         contradecía en el mismo golpe de vista y mandaba a buscar un número que
+         no existe.
+
+         Un código nuevo del backend ya no puede volver a hacerlo: lo que se dice
+         sale de `reintentable` y de si vino `incidencia`, que son hechos de la
+         respuesta. */
       return (
-        'Esto sí es un fallo del servidor, y por eso trae referencia: reintentar puede funcionar, y con ' +
-        'esa referencia se busca en su registro qué pasó.'
+        (error.reintentable
+          ? 'Puede haber sido un tropiezo del servidor: reintentar puede funcionar'
+          : 'Reintentar no lo cambia: la petición, tal cual, no se puede atender') +
+        (error.incidencia === undefined
+          ? '. Esta respuesta no trae referencia de incidencia.'
+          : ', y con la referencia de arriba se busca en el registro del servidor qué pasó.')
       );
   }
 }
@@ -3377,9 +3548,15 @@ function explicacionDelFallo(error: ErrorDeApi | null): string {
         ? 'El servidor no contestó. Puede estar apagado o no alcanzable desde aquí.'
         : error.mensaje;
     default:
+      /* La referencia se promete SÓLO si vino (#678). Este `default` la
+         anunciaba de todo lo que no tuviera rama, y con el 405 pelado —el del
+         proxy, sin cuerpo `problem+json`— no hay ninguna que buscar: quien
+         atiende se queda mirando abajo un número que no está. */
       return (
         (error?.mensaje ?? 'La operación falló en el servidor').replace(/\.?$/, '.') +
-        ' Con la referencia de abajo se puede buscar la incidencia en el registro del servidor.'
+        (error?.incidencia === undefined
+          ? ' Esta respuesta no trae referencia de incidencia.'
+          : ' Con la referencia de abajo se puede buscar la incidencia en el registro del servidor.')
       );
   }
 }

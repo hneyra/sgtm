@@ -578,6 +578,28 @@ export type PeticionDeMovimientoDeDeuda = {
    *
    * **Un alta no se reparte** y el backend la rechaza con 422: incorporar deuda
    * que no estaba no tiene tope contra el que repartir.
+   *
+   * <h2>Cuando NO se manda (#551)</h2>
+   *
+   * Desde que `GET /consultas/deuda` sabe cortar por cuota
+   * —`FiltroDeDeuda.porPeriodo`—, la baja tiene dos cuerpos y este campo separa
+   * uno del otro:
+   *
+   * - de una fila **agregada** salen el desglose del grupo y `repartir: true`,
+   *   porque lo declarado es el total del acto y quien sabe cuanto queda vivo
+   *   en cada cuota a la fecha valor es el servidor;
+   * - de una fila **por cuota** salen `cuota: <la suya>`, su propio desglose y
+   *   **ningun `repartir`**: no hay nada que repartir, los cuatro importes son
+   *   los de esa obligacion y es contra ellos contra los que
+   *   `RegistrarMovimientoDeDeuda.registrar` valida parte por parte.
+   *
+   * Y con el cuerpo cambia la `fase`, que es el otro dato que el corte decide:
+   * la fila agregada publica la mas avanzada del grupo. Medido: dar de baja
+   * «ARBITRIOS 2026 predio 1» agregada —`fase: VALOR`, 146.00, `repartir`—
+   * asienta los cuatro abonos con `fase: VALOR` sobre unas cuotas que estaban
+   * en `ORDINARIA`, y la proyeccion se queda con la fase del ultimo asiento
+   * (`ProyeccionDelSaldo`), asi que las cuotas 1 a 4 pasan a decir que las rige
+   * un valor que nadie emitio.
    */
   repartir?: boolean;
   /**
@@ -715,23 +737,75 @@ export function bajaDeDeuda(peticion: PeticionDeMovimientoDeDeuda): Promise<Movi
 
 /* ══════════ Indicadores y corrida ══════════ */
 
-/** Es `IndicadoresResource`. Los importes llevan su fecha (regla 9). */
+/** Un importe con la fecha a la que se calculo. Es `ImporteActualizado`, y no
+ *  admite lo uno sin lo otro: una cifra de dinero sin su fecha no se dibuja
+ *  (RNF-075, regla 9). */
+export type ImporteConFecha = { importe: string; actualizadoA: string };
+
+/** Es `PanelResource`. Los importes llevan su fecha (regla 9). */
 export type Indicadores = {
   ejercicio: number;
+  /** El **dia tributario** al que corresponden las cifras. Es un `LocalDate`:
+   *  se dibuja con `dia()`, nunca con `instante()`. */
   fechaCalculo: string;
-  kpis: { label: string; value: string; note: string; importe: { importe: string; actualizadoA: string } | null }[];
+  /**
+   * El **instante** en que se leyeron, con zona. Es un `Instant`, asi que se
+   * dibuja con `instante()` y no con `dia()`: partir la cadena lo deja en la
+   * zona del emisor —UTC— y en Peru eso son cinco horas, suficiente para
+   * cambiar de dia (`ds/fechas.ts`).
+   *
+   * No es lo mismo que {@link fechaCalculo} y por eso van los dos: dos lecturas
+   * del mismo dia dan cifras distintas —el interes corre, la caja cobra— y sin
+   * la hora no se distingue cual se esta mirando.
+   */
+  calculadoEn: string;
+  /**
+   * Lo **emitido** del ejercicio, como campo propio (#549).
+   *
+   * Hasta #549 la unica forma de leerlo era sacarlo de la frase del KPI «Avance
+   * de cobranza» —«de S/ 14,384.83 cargados»— con una expresion regular, que es
+   * peor que no tenerlo: el dia que el servidor redacte la nota de otra manera,
+   * el numero sale mal y nada lo dice. Ahora es un importe con su fecha, y la
+   * franja «Emitido contra recaudado» del panel puede decirlo **leyendolo**, no
+   * recomponiendolo a partir de las filas (RNF-083).
+   *
+   * No es nulo: `PanelResource` lo declara sin `@Nullable`.
+   */
+  cargado: ImporteConFecha;
+  kpis: {
+    label: string;
+    value: string;
+    note: string;
+    /** La misma cifra del `value`, con su fecha. **Nulo cuando no es un
+     *  importe** —un porcentaje, un recuento—: entonces no hay nada que fechar. */
+    importe: ImporteConFecha | null;
+  }[];
   /** «Recaudacion por tributo» y «por mes», cada uno con sus filas y su barra. */
   paneles: {
     title: string;
     note: string;
     rows: {
       label: string;
+      /** Contra que se mide la fila, **en palabras**: «cargado S/ 1,697.65 ·
+       *  pendiente S/ 1,697.65», o «sin cargos asentados en el ejercicio». Es
+       *  para leer; para dibujar cifras estan {@link cargado} y
+       *  {@link pendiente}, que no hay que sacar de una frase. */
       sub: string;
       value: string;
       pct: number;
       /** `false` cuando no hay base sobre la que calcular el avance: la barra
        *  no se dibuja, porque un 0 % y un «no se sabe» no son lo mismo. */
       avanceConocido: boolean;
+      /** La cifra del `value`, con su fecha. */
+      importe: ImporteConFecha | null;
+      /**
+       * Lo cargado de esta fila (#549). **Nulo cuando la fila no agrupa
+       * cargos**: el bloque «Recaudacion por mes» agrupa por el mes del abono y
+       * no tiene cargado propio, y un cero ahi afirmaria que ese mes cargo cero.
+       */
+      cargado: ImporteConFecha | null;
+      /** El insoluto pendiente de esta fila. Nulo por lo mismo que {@link cargado}. */
+      pendiente: ImporteConFecha | null;
     }[];
   }[];
 };
@@ -743,6 +817,79 @@ export type Indicadores = {
  */
 export function indicadores(ejercicio: string, senal?: AbortSignal): Promise<Indicadores> {
   return solicitar('/indicadores/recaudacion', { parametros: { ejercicio }, senal });
+}
+
+/**
+ * Un frente de trabajo parado: un cuello de botella **contable**.
+ *
+ * No es una alerta ni un indicador de gestion: es un recuento de expedientes,
+ * papeletas o predios que ya existen, que estan esperando un acto de la
+ * administracion y que mientras esperan no cobran.
+ */
+export type FrenteParado = {
+  /** El nombre del frente en el enumerado del backend —`TRANSITO`, `VALORES`,
+   *  `COACTIVA`, `CATASTRO`—. **Se enruta por el, no por el rotulo**: el rotulo
+   *  es prosa que el servidor redacta (RNF-080) y cambiarla no debe mover a
+   *  nadie de modulo. */
+  frente: string;
+  /** El modulo del manual donde se desatasca, tal como el backend lo nombra. */
+  modulo: string;
+  /** Que es lo que esta parado. Lo redacta el servidor. */
+  queEstaParado: string;
+  /** Por que cuesta dinero tenerlo asi. Tambien del servidor. */
+  porQueCuestaDinero: string;
+  /** Cuantos hay. Es un recuento, no dinero: no lleva fecha propia —la del
+   *  bloque entero es la {@link TrabajoParado.fechaCalculo}—. */
+  cuantos: number;
+  /**
+   * Lo que suma, con su fecha. **Nulo no es cero.**
+   *
+   * De los cuatro frentes solo el de Transito se cifra —la misma consulta que
+   * cuenta las papeletas suma su importe—; los otros tres salen `null` porque
+   * la consulta que sostiene su pantalla no suma ninguna cifra, y sumarla aqui
+   * seria una segunda definicion de lo mismo (AC 2.4). Un frente cifrado con
+   * cero filas si trae `"0.00"`, y **esa** es la diferencia que la pantalla
+   * tiene que poder dibujar (AC 2.2), igual que `avanceConocido` hace con las
+   * barras del panel de recaudacion.
+   */
+  importe: ImporteConFecha | null;
+};
+
+/** Es `TrabajoParadoResource`. */
+export type TrabajoParado = {
+  ejercicio: number;
+  /** El dia de corte de los recuentos. `LocalDate`: se dibuja con `dia()`. */
+  fechaCalculo: string;
+  /** El instante de la lectura. `Instant`: se dibuja con `instante()`. */
+  calculadoEn: string;
+  /**
+   * Uno por frente **visible**, y **vacia** si el perfil no puede ver ninguno.
+   *
+   * La lista ya viene filtrada por permiso: cada frente lleva detras el acceso
+   * de lectura de la pantalla del modulo donde se desatasca —`transito_padron`,
+   * `consulta_valores`, `coactiva_expedientes`, `consulta_fichas`— y el que no
+   * se autoriza **no aparece**. Asi que la pantalla no tiene que preguntar por
+   * los permisos ni dibujar un hueco: lo que llega es lo que quien mira puede
+   * abrir (AC 2.3, y la leccion de #297 — una fila vacia ya dice que ahi hay
+   * algo que mirar).
+   */
+  frentes: FrenteParado[];
+};
+
+/**
+ * El trabajo parado por modulo (#549, RF-130).
+ *
+ * Vive aqui, al lado de {@link indicadores}, porque son **las dos lecturas del
+ * mismo controlador** —`IndicadoresController`— y las dos las dibuja la misma
+ * pantalla de aterrizaje. Separarlas en un fichero propio dejaria a las dos
+ * mitades de un mismo panel en sitios distintos, que es como una se queda vieja
+ * sin que nadie lo note.
+ *
+ * `ejercicio` acota el frente de Catastro —contra que padron se concilia—; los
+ * otros tres no dependen de el.
+ */
+export function trabajoParado(ejercicio: string, senal?: AbortSignal): Promise<TrabajoParado> {
+  return solicitar('/indicadores/trabajo-parado', { parametros: { ejercicio }, senal });
 }
 
 /**

@@ -193,7 +193,15 @@ export const GRUPOS: GrupoDeFicha[] = [
         ],
       },
       {
-        titulo: 'Piso en edición — 02',
+        /* Sin el «— 02» del artboard (#686). Ese número era el `nPiso` del predio
+           de la maqueta escrito en el rótulo, y afirmaba de todas las fichas que
+           se estaba editando su piso 02: medido, sale igual sobre un predio con
+           un solo piso, sobre los 14 422 de Catacaos —que no declaran ninguna
+           construcción— y sobre un alta en blanco. Y no había ningún piso en
+           edición: los quince campos del bloque salen «—», porque ninguno viaja.
+           La lista real es la tabla «Pisos declarados», que sí sale de
+           `construcciones[]`. */
+        titulo: 'Piso de la edificación',
         nota: 'Las siete partidas de acabados llevan una categoría de la A a la J. La letra es la categoría, no una nota. Van de la A a la J y no de la A a la G desde que se leyeron los cuatro anexos: el cuadro de la Costa tiene nueve y el de la Selva diez —la J es «CAÑA GUAYAQUIL PONA O PINTOC»—, y con el rango corto una municipalidad de la Selva no podía fichar una construcción de ese material (#436).',
         campos: [
           { k: 'nPiso', l: 'Nº de piso', t: 'text' },
@@ -624,6 +632,12 @@ export const SELECTORES_DE_LECTURA = [
   'ficha.denominacion',
   'ficha.hectareasTotales',
   'ficha.sinLicencia',
+  /* Los dos que NO salen de la ficha ni del predio, y que hasta #687 se decían
+     indisponibles cuando el backend sí los publica. Un «—» honesto y un «—» que
+     se podía haber llenado se leen exactamente igual, y eso es peor que un
+     campo que falta. */
+  'via.tipo',
+  'sector.zona',
 ] as const;
 export type SelectorDeLectura = (typeof SELECTORES_DE_LECTURA)[number];
 
@@ -680,7 +694,19 @@ export const PROCEDENCIA: Record<string, ProcedenciaDeCampo> = {
   },
 
   /* ── Ubicación ────────────────────────────────────────────────── */
-  tipoVia: { motivo: 'El padrón publica el código y el nombre de la vía, no su tipo; resolverlo pediría el catálogo vial una vez por predio, y el cuerpo de la corrección no lleva ningún tipo de vía: lleva `codigoDeVia`.' },
+  tipoVia: {
+    lee: 'via.tipo',
+    /* Se lee, y cuesta UNA petición y no el catálogo entero: `GET /catastro/vias`
+       admite `codigoDeVia` como filtro exacto —medido, `?codigoDeVia=V-0003` da
+       una fila con `tipo: CALLE`—, y el predio publica ese código. El motivo
+       anterior decía que resolverlo «pediría el catálogo vial una vez por
+       predio», que era cierto del coste y falso de la disponibilidad; y es la
+       disponibilidad lo que un «—» afirma.
+
+       El motivo que queda es el de ESCRIBIR, que sigue siendo verdad. */
+    motivo:
+      'El tipo se lee del catálogo vial por el `codigoDeVia` del predio, pero no se puede corregir aquí: el cuerpo de la corrección no lleva ningún tipo de vía, lleva `codigoDeVia`, y cambiar el tipo es elegir otra vía del catálogo.',
+  },
   calle: {
     lee: 'predio.via',
     motivo: 'Cambiar la vía es mandar `predio.codigoDeVia`, y un código de vía se elige del catálogo vial, no se teclea. Esta pantalla lo resuelve en el alta y todavía no aquí.',
@@ -695,7 +721,19 @@ export const PROCEDENCIA: Record<string, ProcedenciaDeCampo> = {
   prov: { motivo: 'Por lo mismo que el departamento: hay ubigeo y no hay catálogo que lo traduzca.' },
   dist: { motivo: 'Por lo mismo que el departamento: hay ubigeo y no hay catálogo que lo traduzca.' },
   habUrb: { motivo: 'La habilitación urbana no está en el modelo: lo que el predio guarda de su territorio es sector, manzana, lote y ubigeo.' },
-  zona: { motivo: 'La zona de arbitrios vive en `sector.zona` y es texto libre por municipalidad; no es un dato de la ficha y el cuerpo de la actualización no la lleva.' },
+  zona: {
+    lee: 'sector.zona',
+    /* Sale del sector del predio, y el cruce no cuesta ni una petición: la
+       pantalla ya tiene los sectores descargados para su filtro. El motivo
+       anterior hablaba de escribir —«el cuerpo de la actualización no la
+       lleva»—, que es cierto y no viene al caso para un campo que se muestra de
+       solo lectura como los demás de su bloque.
+
+       Y sigue saliendo «—» cuando el sector no la trae: en Catacaos los seis
+       sectores tienen `zona` nula, y ahí el guion es la verdad. */
+    motivo:
+      'La zona vive en el sector del predio, no en su ficha: se lee de ahí y se corrige en Territorio. Un sector sin zona declarada la deja en blanco, y eso no es un fallo de esta pantalla.',
+  },
   ref: { motivo: 'La referencia de ubicación no está en el modelo.' },
 
   /* ── Titularidad ──────────────────────────────────────────────── */

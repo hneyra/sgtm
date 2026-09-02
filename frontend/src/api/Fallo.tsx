@@ -86,6 +86,12 @@ export function tituloDelFallo(error: ErrorDeApi | null, que: string): string {
       return 'La sesión no dice de qué municipalidad es';
     case 'NO_ENCONTRADO':
       return `No se encontró ${que}`;
+    case 'CONFLICTO':
+      /* Llega aquí desde la copia que Sanciones tenía aparte (#678). Las dos
+         funciones habían divergido en las DOS direcciones —ésta no tenía
+         `CONFLICTO`, aquélla no tenía `METODO_NO_ADMITIDO`—, que es lo que pasa
+         con dos copias de la misma cosa. */
+      return 'El acto choca con algo que ya está registrado';
     case 'METODO_NO_ADMITIDO':
       /* Es un defecto de la propia interfaz: pidio con el verbo que no era.
          Se dice asi para que no se confunda con un fallo del servidor, que es
@@ -123,6 +129,10 @@ export function explicacionDelFallo(error: ErrorDeApi | null, acceso?: string): 
       return 'No hay valor por omisión: sin municipalidad en el token no hay nada que consultar.';
     case 'NO_ENCONTRADO':
     case 'METODO_NO_ADMITIDO':
+      return error.mensaje;
+    /* Llega de las copias que Transito y Sanciones tenian aparte (#678): las
+       tres decian lo mismo y ninguna las tres cosas. */
+    case 'CONFLICTO':
       return error.mensaje;
     case 'VALIDACION':
     case 'ORDEN_NO_ADMITIDO':
@@ -164,13 +174,52 @@ export function explicacionDelFallo(error: ErrorDeApi | null, acceso?: string): 
  * otro módulo. Sin ella se describe la forma y no se inventa ninguna.
  */
 export function causasDelRechazo(error: ErrorDeApi | null, llave?: string): string | null {
-  if (error?.codigo !== 'VALIDACION') return null;
+  if (error === null) return null;
+  /* No sólo el 422: **el mismo hecho sale con dos códigos** y es deliberado.
+     Catastro traduce «falta publicar» a 404 porque allí se LEE un cuadro —el
+     ejercicio sin conjunto sellado no tiene esa tabla—, mientras un cálculo lo
+     da como 422 (#540, #723). Mirando sólo el código, los tres cuadros de
+     catastro se quedaban sin esta frase aunque su respuesta trae el
+     discriminador; y mirando sólo el discriminador, un 404 corriente —«ese
+     número no existe»— se llevaría una frase sobre valores normativos.
+
+     Así que se admite el 404 **sólo cuando trae el miembro**, que es lo que lo
+     distingue de un no-encontrado de verdad. */
+  if (error.codigo !== 'VALIDACION' && !(error.codigo === 'NO_ENCONTRADO' && error.faltaUnaCifraNormativa)) return null;
+  /* UNA de las dos cosas, no las dos (#691, AC 5).
+     Hasta que #714 llevó el discriminador a los seis módulos que no eran
+     convenios, esta frase tenía que enumerar —«si nombra un dato de esta
+     pantalla…; si nombra un ejercicio sin conjunto…»— y dejarle la clasificación
+     a quien atiende, que es justo quien no puede hacerla: los dos casos salen con
+     el mismo `codigo` y el mismo `estado`, y lo único que los separaba era el
+     texto. Es la misma corrección que #604 hizo en Tesorería, ahora en el sitio
+     compartido y por tanto en los cuatro módulos que llaman aquí.
+
+     Se pregunta por la PRESENCIA del miembro y nunca por el texto: clasificar por
+     subcadena deja de funcionar en cuanto alguien reescribe la frase, y esa
+     reescritura no rompe ninguna compilación. */
+  if (error.faltaUnaCifraNormativa) {
+    const p = error.parametroQueFalta;
+    return (
+      'Lo que falta es una cifra normativa, no un dato de esta pantalla: ' +
+      (p?.llave === undefined
+        ? 'el ejercicio ' + String(p?.ejercicio) + ' no tiene conjunto de parámetros sellado'
+        : 'falta publicar «' + p.llave + '» en el conjunto de ' + String(p.ejercicio)) +
+      '. Eso no se arregla desde aquí, no es un fallo del servidor y no se corrige tecleando otra cosa ' +
+      '(D-02a, D-02b): lo resuelve quien publica los valores normativos.'
+    );
+  }
+  /* Sin el miembro, lo que falta es de la petición — **en las rutas cuyas
+     excepciones de parámetro lo llevan todas**. Donde no, la ausencia significa
+     tres cosas a la vez y el texto del servidor es lo único que las separa; por
+     eso se dice que es el del servidor y se deja delante, en vez de afirmar que
+     hay un campo que corregir. `llave` se conserva porque una pantalla que sabe
+     cuál es la suya puede nombrarla antes de que el rechazo llegue. */
   return (
     'El texto de arriba es el del servidor, tal cual: es el único sitio donde se nombra lo que falta, y ' +
-    'reintentar sin cambiar nada volvería a dar lo mismo. Si nombra un dato de esta pantalla, se corrige ' +
-    'aquí. Si nombra un ejercicio sin conjunto de parámetros sellado, o una llave ' +
-    (llave === undefined ? 'en mayúsculas del estilo «TIPO:CLAVE»' : `como «${llave}»`) +
-    ', es una cifra normativa que todavía no se ha publicado al conjunto del ejercicio: eso no se arregla ' +
-    'desde esta pantalla, no es un fallo del servidor y no se corrige tecleando otra cosa (D-02a, D-02b).'
+    'reintentar sin cambiar nada volvería a dar lo mismo. Lo corriente es que nombre un dato de esta ' +
+    'pantalla, y entonces se corrige aquí' +
+    (llave === undefined ? '' : `; si nombrara una llave como «${llave}», sería una cifra por publicar`) +
+    '.'
   );
 }

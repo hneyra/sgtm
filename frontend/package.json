@@ -3,6 +3,9 @@
   "private": true,
   "version": "0.1.0",
   "type": "module",
+  "engines": {
+    "node": "^20.19.0 || >=22.12.0"
+  },
   "scripts": {
     "dev": "vite",
     "build": "tsc -b && vite build",
@@ -10,12 +13,17 @@
     "verificar": "tsc -b --noEmit",
     "mirar": "node verificaciones/mirar.mjs",
     "flujos": "node verificaciones/flujos.mjs",
+    "filas": "node verificaciones/filas.mjs",
     "sin-red": "node verificaciones/sin-red.mjs",
     "paleta": "node verificaciones/paleta.mjs",
     "impedimentos": "node verificaciones/impedimentos.mjs",
+    "desplegables": "node verificaciones/desplegables.mjs",
     "vocabularios": "node verificaciones/vocabularios.mjs",
     "errores": "node verificaciones/errores.mjs",
-    "ficha-catastral": "node verificaciones/ficha-catastral.mjs"
+    "impresion": "node verificaciones/impresion.mjs",
+    "ficha-catastral": "node verificaciones/ficha-catastral.mjs",
+    "fechas": "node verificaciones/fechas.mjs",
+    "node": "node verificaciones/node.mjs"
   },
   "dependencies": {
     "react": "^19.1.0",

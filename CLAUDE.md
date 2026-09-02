@@ -114,10 +114,12 @@ dos fuentes reales. Un corredor traería una segunda forma de verificar —dos s
 cuando algo se pone rojo— y, sobre todo, la tentación de probar la función y no la pantalla, que
 es lo contrario de lo que esta interfaz necesita: sus defectos se ven al dibujar.
 
-Lo que sujeta al `frontend/` de hoy es `tsc -b --noEmit`, que caza el tipo que miente, y cinco
-arneses en `frontend/verificaciones/`: `mirar`, `sin-red` y `paleta` **operan un navegador de
-verdad** contra la compilación, `flujos` además pulsa contra el backend real, y `vocabularios`
-compila las dos fuentes reales y las compara. `errores` (#625) hace las dos cosas a la vez, porque
+Lo que sujeta al `frontend/` de hoy es `tsc -b --noEmit`, que caza el tipo que miente, y **trece**
+arneses en `frontend/verificaciones/`: nueve **operan un navegador de verdad** contra la
+compilación —`mirar`, `sin-red`, `paleta`, `impedimentos`, `impresion`, `errores`,
+`ficha-catastral`, `desplegables` y `filas`—, `flujos` además pulsa contra el backend real,
+`vocabularios` compila las dos fuentes reales y las compara, y `fechas` y `node` no abren
+navegador. `errores` (#625) hace las dos cosas a la vez, porque
 las dos mitades fallan por separado: compara el catálogo de `cliente.ts` con el enumerado
 `CodigoDeError` del backend, mide `solicitar()` contra respuestas fabricadas —el 405 pelado de
 nginx, el 502 del proxy, el 200 que devuelve el `index.html` de la propia interfaz— y recorre los
@@ -125,7 +127,17 @@ destinos con **todas** las peticiones contestadas 405, donde ninguna pantalla pu
 «Reintentar», y luego con un 500, donde alguna tiene que ofrecerlo. El más propio sigue siendo
 `sin-red`: recorre los 65 destinos con **todas** las peticiones a `/api/v1` abortadas y falla si
 alguno enseña una cifra. Es la regla que gobierna esta interfaz, y es la que no se puede comprobar
-con datos delante, porque con datos la pantalla parece correcta siempre.
+con datos delante, porque con datos la pantalla parece correcta siempre. Y **recorre los estados de
+la pantalla, no sólo el primero** (#702): un asistente por pasos y una barra de pestañas no
+*ocultan* su contenido —no lo dibujan—, así que desplegar `aria-expanded` no basta, y las dos
+cifras de la maqueta del acta de fiscalización vivían en el paso 4 con este arnés en verde.
+
+`desplegables` (#718) mira lo que ninguno de los otros ve: un `<select>` cuya única opción es
+«Todos» no es una cifra, ni un botón apagado, ni un error de consola, y lo que se lee ahí es «esta
+municipalidad no tiene ninguno» cuando lo que ha pasado es que la lectura contestó 403 o 500. **No
+declara cuál se alimenta de una lectura: lo mide** —recorre con todas las lecturas en 500, y el que
+se queda sin opción real lo es por construcción—, porque una marca en el DOM habría que ponerla a
+mano en 49 desplegables y la que alguien olvidara diría que está bien.
 
 Lista completa con su justificación:
 [`docs/30-arquitectura/estandares-de-codigo-backend.md`](docs/30-arquitectura/estandares-de-codigo-backend.md)
@@ -372,11 +384,20 @@ yarn paleta                       # la paleta se opera solo con el teclado
 yarn impedimentos                 # ningun boton apagado esta mudo: los 65 destinos, y el motivo de cada acto que no se puede
 yarn vocabularios                 # los desplegables coinciden con el enumerado del backend, en las dos direcciones
 yarn errores                      # el catalogo de errores, la puerta y las pantallas: «Reintentar» solo donde puede cambiar algo
+yarn impresion                    # las hojas imprimibles: ninguna lleva el shell delante, ninguna sale en blanco
+yarn ficha-catastral              # los 123 campos de la ficha: cual sale de una lectura y cual lleva su motivo
+yarn desplegables                 # con las lecturas rotas, ningun desplegable se queda sin nada que ofrecer y mudo
+yarn fechas                       # la fecha sin zona no se convierte, y el instante si. Sin navegador
+yarn node                         # `.nvmrc`, `engines` y lo que vite pide, los tres de acuerdo. Sin navegador
+yarn filas                        # lo que se abre con el raton se abre con el teclado; NO esta en CI (necesita token)
 yarn flujos                       # opera los botones contra el backend real; NO esta en CI (necesita token)
 
-# `mirar`, `sin-red`, `paleta`, `impedimentos` y `errores` van contra `yarn preview`, sin backend. `flujos` y `mirar`
-# necesitan SGTM_TOKEN, y cualquier 401 invalida la corrida: un token caducado a mitad del
-# recorrido dejaba este arnes en verde sin haber mirado nada.
+# Van contra `yarn preview` SIN backend: `sin-red`, `paleta`, `impedimentos`, `impresion`, `errores`
+# y `desplegables` —los tres ultimos fabrican la respuesta, que es la unica forma de ver el defecto:
+# con el backend delante los catalogos vienen llenos y la pantalla parece correcta siempre—.
+# `fechas` y `node` no abren navegador. `mirar`, `ficha-catastral`, `filas` y `flujos` necesitan
+# SGTM_TOKEN, y cualquier 401 invalida la corrida: un token caducado a mitad del recorrido dejaba
+# estos arneses en verde sin haber mirado nada.
 ```
 
 ## Verificar antes de afirmar

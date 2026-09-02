@@ -1,6 +1,7 @@
 import { useCallback, useState } from 'react';
 import { ErrorDeApi } from './cliente';
 import { cuentaActual } from './sesion';
+import { puede, usarPermisos, type EstadoDePermisos } from '../shell/permisos';
 import { Aviso, Boton } from '../ds/componentes';
 import { ICO } from '../ds/iconos';
 
@@ -81,11 +82,23 @@ export function useDescarga() {
 /**
  * Los tres botones de descarga, con su fallo debajo.
  *
- * `impedimento` los apaga con su motivo en el `title`. Existe porque el defecto
- * de esta familia ya pasó: la ficha del contribuyente se imprimía ante un 404,
- * ante un 403 y con la caja de búsqueda vacía, y un papel oficial con todos los
- * datos en «—» sigue siendo un papel oficial. Si no hay hoja leída, no hay
- * documento que pedir.
+ * `impedimento` los apaga con su motivo dibujado. Existe porque el defecto de
+ * esta familia ya pasó: la ficha del contribuyente se imprimía ante un 404, ante
+ * un 403 y con la caja de búsqueda vacía, y un papel oficial con todos los datos
+ * en «—» sigue siendo un papel oficial. Si no hay hoja leída, no hay documento
+ * que pedir.
+ *
+ * <h2>Y desde #592 hay una segunda puerta, antes que ésa</h2>
+ *
+ * Las nueve descargas de Tránsito e Infracciones exigen `IMPRESION`, y hasta
+ * ahora esta interfaz no lo preguntaba: dibujaba el botón encendido y quien no
+ * tenía el privilegio recibía el 403 **después** de que se le hubiera prometido
+ * el archivo. Ahora se comprueba contra el mapa de la sesión —una lectura, en
+ * `App.tsx`— y el botón nace apagado diciendo cuál de los tres casos es.
+ *
+ * Un `impedimento` que llegue por prop **gana**, y es lo correcto: es más
+ * específico —«no hay hoja leída», «falta la observación»— y el privilegio no
+ * hace falta para algo que de todas formas no se puede pedir todavía.
  */
 export function Descargas({
   traer,
@@ -108,7 +121,12 @@ export function Descargas({
   formatos?: readonly FormatoDeDocumento[];
 }) {
   const { pidiendo, error, pedir } = useDescarga();
-  const apagado = impedimento !== undefined || pidiendo !== null;
+  /* Preguntar ANTES de prometer el archivo (#592). El 403 de abajo sigue
+     estando y sigue explicándose bien, pero llega tarde: para entonces ya se
+     pulsó el botón y ya se fue a por el papel a la impresora. */
+  const sesion = usarPermisos();
+  const motivo = impedimento ?? impedimentoDelPrivilegio(sesion, acceso, privilegio);
+  const apagado = motivo !== undefined || pidiendo !== null;
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 9, minWidth: 0 }}>
@@ -121,7 +139,7 @@ export function Descargas({
             key={f}
             icono={ICO.descarga}
             disabled={apagado}
-            title={impedimento}
+            title={motivo}
             onClick={() => void pedir(f, traer)}
             style={{ padding: '7px 12px', fontSize: 12.5 }}
           >
@@ -134,8 +152,8 @@ export function Descargas({
           pasa por encima ni un lector de pantalla (RNF-082, y es lo que #385
           cerro un escalon mas abajo). El `title` se queda ademas, para quien si
           pase el raton. */}
-      {impedimento !== undefined && (
-        <p style={{ margin: 0, fontSize: 11.5, lineHeight: 1.5, color: 'var(--ink-3)', textWrap: 'pretty' }}>{impedimento}</p>
+      {motivo !== undefined && (
+        <p style={{ margin: 0, fontSize: 11.5, lineHeight: 1.5, color: 'var(--ink-3)', textWrap: 'pretty' }}>{motivo}</p>
       )}
       {error !== null && (
         <Aviso tono="bad" titulo={tituloDeLaDescarga(error, que)}>
@@ -157,6 +175,43 @@ export function Descargas({
       )}
     </div>
   );
+}
+
+/**
+ * Lo que impide descargar por falta de privilegio, dicho de tres maneras (#592).
+ *
+ * <h2>Con `lectura` no se aplica NUNCA, y eso es lo que la hace útil</h2>
+ *
+ * La ficha del contribuyente, la constancia y la resolución de determinación se
+ * conforman con `LECTURA`, que es el mismo privilegio con el que ya se está
+ * mirando la hoja: comprobarlo aquí apagaría una descarga que el servidor
+ * entrega sin rechistar, y una guarda que dice que no a todo se acaba quitando
+ * entera. La lista de lo que exige `IMPRESION` la fija cada pantalla al declarar
+ * su `privilegio`, contra el `@RequiereAcceso` de su controlador.
+ *
+ * <h2>Tres textos y no uno, porque se arreglan de tres maneras</h2>
+ *
+ * Mientras se lee no se sabe todavía; ante un fallo de la lectura no se ha
+ * podido saber —y decir ahí «no tienes permiso» manda a pedirle a Seguridad algo
+ * que a lo mejor ya se tiene—; y sin el privilegio sí se sabe, y entonces lo que
+ * hace falta es nombrar el acceso y el privilegio, que es lo que hay que pedir.
+ *
+ * El caso sin `acceso` declarado no se calla: no es que la sesión no pueda, es
+ * que esta pantalla no dice contra qué comprobarlo, y apagar sin explicación es
+ * el defecto que RNF-082 nombra.
+ */
+export function impedimentoDelPrivilegio(
+  sesion: EstadoDePermisos,
+  acceso: string | undefined,
+  privilegio: PrivilegioDelDocumento,
+): string | undefined {
+  if (privilegio !== 'impresion' || puede(sesion, acceso, 'impresion')) return undefined;
+  if (sesion.leyendo) return 'Comprobando si esta sesión puede imprimir…';
+  if (sesion.fallo)
+    return 'No se pudieron leer los permisos de esta sesión, así que no se ofrece la descarga. No quiere decir que falte el privilegio de impresión: quiere decir que no se sabe. Vuelve a cargar la pantalla.';
+  if (acceso === undefined)
+    return 'Esta descarga no declara qué acceso necesita, así que no se puede comprobar si la sesión puede imprimirla. Es un defecto de la interfaz, no un permiso que falte.';
+  return `Hace falta el acceso «${acceso}» con privilegio de impresión. Con lectura se ve la hoja en pantalla; sacarla del sistema es otro permiso.`;
 }
 
 /**

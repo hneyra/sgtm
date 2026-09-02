@@ -3,11 +3,11 @@ import { Shell } from '../../shell/Shell';
 import type { PantallaProps } from '../../App';
 import { Icono } from '../../ds/Icono';
 import { ICO } from '../../ds/iconos';
-import { Aviso, Dato, Entradilla, Insignia, Nota, Seccion, type Tono } from '../../ds/componentes';
+import { Aviso, Dato, Entradilla, Insignia, Nota, Seccion, filaPulsable, type Tono } from '../../ds/componentes';
 import { usarPreferencias } from '../../shell/preferencias';
 import { ErrorDeApi, fijarToken } from '../../api/cliente';
-import { causasDelRechazo } from '../../api/Fallo';
-import { cuentaActual, hayPuerta } from '../../api/sesion';
+import { causasDelRechazo, tituloDelFallo } from '../../api/Fallo';
+import { hayPuerta } from '../../api/sesion';
 import { useRebote, useRecurso } from '../../api/useRecurso';
 import {
   consultarValores,
@@ -24,6 +24,7 @@ import {
   MODALIDADES,
   RESULTADOS,
   declararPrescripcion,
+  listarPrescripciones,
   emitirValor,
   generarValoresMasivos,
   listarValores,
@@ -159,31 +160,15 @@ function Fallo({
 }) {
   const { toast } = usarPreferencias();
   const [tokenPegado, setTokenPegado] = useState('');
-  const cuenta = cuentaActual();
-  const titulo =
-    error.codigo === 'NO_AUTENTICADO'
-      ? 'La sesión no vale'
-      : error.codigo === 'SIN_PRIVILEGIO'
-        ? cuenta === null
-          ? 'Esta sesión no puede hacer esto'
-          : `La cuenta «${cuenta}» no puede hacer esto`
-        : error.codigo === 'SIN_MUNICIPALIDAD'
-          ? 'La sesión no dice de qué municipalidad es'
-          : error.codigo === 'NO_ENCONTRADO'
-            ? 'Eso no está en esta municipalidad'
-            : error.codigo === 'VALIDACION'
-              ? /* No dice «no admite eso»: desde #562 la notificación de un
-                   valor y la prescripción contestan 422 cuando falta publicar
-                   el plazo al conjunto sellado, y ese titular pone a corregir
-                   un formulario que está bien. */
-                'El servidor rechazó la operación'
-              : error.codigo === 'CONFLICTO'
-                ? 'Eso ya estaba hecho'
-                : error.codigo === 'SIN_RESPUESTA'
-                  ? error.estado === 0
-                    ? 'No se pudo contactar con el servidor'
-                    : 'El servidor contestó otra cosa'
-                  : 'Falló en el servidor';
+  /* Del sitio compartido y no de una cadena de ternarios propia (#678): sin
+     rama para `METODO_NO_ADMITIDO`, un 405 caía en el `else` y esta pantalla
+     decía «Falló en el servidor» de un defecto de la propia interfaz. Y lo que
+     la hacía irreparable es que `tsc` no puede ayudar con un ternario
+     encadenado: añadir un código al enumerado no rompe ninguna compilación.
+
+     Se conserva «hacer esto» —y no «esta consulta»— porque este aviso cubre
+     también los actos del módulo, no sólo sus lecturas. */
+  const titulo = tituloDelFallo(error, 'hacer esto');
   const explicacion =
     error.codigo === 'SIN_PRIVILEGIO'
       ? `Hace falta el acceso «${acceso}». Que la cuenta entre no basta: tiene que estar dada de alta en esta municipalidad, y el permiso lo concede Seguridad.`
@@ -253,6 +238,11 @@ function Fallo({
               onReintentar();
             }}
             disabled={tokenPegado.trim() === ''}
+            /* Un boton apagado no recibe el foco, asi que su `title` no lo lee un
+               lector de pantalla — pero SI se ve al pasar el raton, y sin el este
+               es un callejon: quien lo pulsa no sabe que le falta pegar el token.
+               Solo aparece sin sesion, que es como corre el arnes y como corre CI. */
+            title={tokenPegado.trim() === '' ? 'Pega antes un token del emisor en la caja de al lado' : undefined}
             style={{
               border: 0,
               borderRadius: 6,
@@ -338,7 +328,11 @@ function TablaDeTextos({
             <tr
               key={i}
               className={onFila ? 'hov-acento' : 'hov-elev'}
-              onClick={onFila ? () => onFila(i) : undefined}
+              /* Cuando la fila abre algo, tiene que abrirlo también con el
+                 teclado (#683). El nombre sale de la PRIMERA celda, que en las
+                 tablas de este módulo es el número que identifica la fila —el
+                 del valor, el del recibo—: es lo que distingue una de otra. */
+              {...(onFila ? filaPulsable(`Abrir ${String(f[0] ?? '')}`, () => onFila(i)) : {})}
               style={{ borderTop: '1px solid var(--line)', cursor: onFila ? 'pointer' : undefined }}
             >
               {f.map((c, j) =>
@@ -623,6 +617,16 @@ export default function Valores({ dest, onDest }: PantallaProps) {
     (s) => consultarValores({ codContribuyente: codDePrescripcion, estado: 'PRESCRITO' }, { tamano: 20 }, s),
     [codDePrescripcion],
     dest === 'prescripcion' && codDePrescripcion !== '',
+  );
+
+  /* Las solicitudes ya declaradas (#674). Se pide SIN exigir contribuyente: la
+     pregunta de quien audita es «qué hay declarado prescrito», no «qué le
+     declaré a esta persona», y acotarla al código tecleado dejaría la lectura
+     inalcanzable justo para esa pregunta. Con código puesto, acota. */
+  const declaradas = useRecurso(
+    (s) => listarPrescripciones(codDePrescripcion === '' ? {} : { codContribuyente: codDePrescripcion }, { tamano: 20 }, s),
+    [codDePrescripcion],
+    dest === 'prescripcion',
   );
 
   /* ── Emisión individual: qué se marcó ─────────────────────── */
@@ -1797,11 +1801,63 @@ export default function Valores({ dest, onDest }: PantallaProps) {
               </Seccion>
             )}
 
+            {/* Lo que #674 publicó, y es la contrapartida de su decisión: una deuda
+                cuya acción de cobro prescribió SIGUE siendo cartera pendiente y
+                emisión del ejercicio, y la declaración no escribe un solo asiento
+                en el libro. Sin esta lista, la deuda inexigible no se vería en
+                ninguna parte y esa decisión sería indistinguible de un descuido. */}
+            <Seccion
+              titulo="Solicitudes declaradas"
+              meta={declaradas.datos ? `${declaradas.datos.totalElementos}` : ''}
+              pie={
+                'Sin código, las de toda la municipalidad; con código, las de ese contribuyente. «Ejercicios prescritos» es la lista y no ' +
+                'un sí o un no: una solicitud pide un rango y el cómputo se resuelve año por año, así que lo corriente es que los ' +
+                'primeros hayan prescrito y los últimos sigan siendo exigibles. Ninguna cifra de dinero: la prescripción no extingue un ' +
+                'importe, deja sin acción su cobro (art. 43 del TUO).'
+              }
+            >
+              <Lectura lectura={declaradas} ruta="GET /api/v1/coactiva/prescripcion" acceso="prescripcion">
+                <TablaDeTextos
+                  cols={[
+                    ['Contribuyente', 0],
+                    ['Tributo', 0],
+                    ['Rango pedido', 0],
+                    ['Presentada', 0],
+                    ['Plazo', 0],
+                    ['Resultado', 0],
+                    ['Ejercicios prescritos', 0],
+                    ['Resolución', 0],
+                  ]}
+                  /* Las dos ausencias son distintas y decir la del padrón entero
+                     con un código puesto es afirmar que la municipalidad no tiene
+                     ninguna, que aquí es falso en cuanto alguien filtra. */
+                  vacio={
+                    codDePrescripcion === ''
+                      ? 'Ninguna: en esta municipalidad no se ha declarado ninguna prescripción.'
+                      : 'Ninguna para «' + codDePrescripcion + '». Otras personas de esta municipalidad sí pueden tener alguna: borra el código para verlas todas.'
+                  }
+                  filas={(declaradas.datos?.contenido ?? []).map((p) => [
+                    /* El código nulo es la solicitud cuyo identificador el padrón ya
+                       no resuelve, y sale igual porque es la que hay que revisar. */
+                    p.contribuyente ?? (p.codContribuyente ?? 'Fuera del padrón'),
+                    p.tributo,
+                    `${p.ejercicioDesde} – ${p.ejercicioHasta}`,
+                    p.fechaDePresentacion,
+                    p.plazo,
+                    p.resultado,
+                    p.ejerciciosPrescritos.length === 0 ? 'Ninguno' : p.ejerciciosPrescritos.join(', '),
+                    p.nDeResolucion ?? SIN_DATO,
+                  ])}
+                />
+              </Lectura>
+            </Seccion>
+
             <Aviso tono="neutro" titulo="Lo que el prototipo daba por hecho y aquí no está">
-              La lista de «deuda con prescripción cumplida» que traía el artboard —tres contribuyentes con su conteo y su importe—{' '}
-              <strong>no la publica ninguna lectura</strong>: no hay un endpoint que diga «qué ha prescrito ya». Lo que hay es esta
-              declaración, que se pide por contribuyente y rango, y el cómputo que el servidor devuelve. Y «Origen de la declaración»,
-              «Nº de expediente» y «Fecha de resolución» no viajan: el cuerpo que el servidor acepta no los tiene.
+              La lista de «deuda con prescripción cumplida» que traía el artboard llevaba <strong>un importe por contribuyente</strong>, y
+              eso sigue sin existir y no por falta de lectura: la prescripción <strong>no extingue una cifra</strong>, deja sin acción su
+              cobro, así que una columna de dinero ahí afirmaría que la obligación desapareció. Lo que sí hay desde #674 es la tabla de
+              arriba, con los ejercicios que prescribieron de cada solicitud. Y «Origen de la declaración», «Nº de expediente» y «Fecha de
+              resolución» siguen sin viajar: el cuerpo que el servidor acepta no los tiene.
             </Aviso>
           </div>
         )}

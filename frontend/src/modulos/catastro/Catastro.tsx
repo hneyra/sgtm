@@ -24,6 +24,7 @@ import {
   listarValoresUnitarios,
   listarVias,
   marcoDe,
+  marcoDelPlano,
   planoCatastral,
   reactivar,
   registrarTitular,
@@ -55,7 +56,7 @@ import { ErrorDeApi, fijarToken } from '../../api/cliente';
 import { FalloDeLectura } from '../../api/Fallo';
 import { Descargas } from '../../api/descarga';
 import { hayPuerta } from '../../api/sesion';
-import { Aviso, Paginador, PasoAtras } from '../../ds/componentes';
+import { Aviso, Paginador, PasoAtras, filaPulsable } from '../../ds/componentes';
 import {
   CAPAS,
   DEFECTOS_DE_FICHA_NUEVA,
@@ -235,14 +236,17 @@ const CAMPOS_QUE_VIAJAN_EN_EL_ALTA = new Set(['numMun']);
 /**
  * El marco con que abre el plano: el Perú continental.
  *
- * **No sale de ninguna lectura, y eso es lo que hay que decir.** `bbox` es
- * obligatorio (ADR-0022 §2) y ninguna operación del contrato publica dónde está
- * la municipalidad —ni su extensión, ni la de un sector, ni la de una manzana—,
- * así que la pantalla no puede encuadrar sobre sus datos antes de tenerlos. Se
- * abre sobre el país entero, que es lo único cierto, y **el dibujo se encuadra
- * después sobre los polígonos que vuelven**. Su consecuencia el día que haya
- * geometría cargada está anotada en la pantalla y en #612: un marco tan ancho
- * contestará «hay N lotes, acércate», y desde aquí no se sabe hacia dónde.
+ * **Es el respaldo, no el encuadre.** Desde #612 el plano pregunta primero por
+ * `GET /catastro/predios/plano/marco`, que publica el rectángulo de lo ya
+ * digitalizado con los mismos filtros; este marco es al que se cae cuando esa
+ * lectura falla o cuando **no hay marco que dar**, que es el estado de hoy en
+ * las dos municipalidades: cero polígonos cargados (ADR-0021).
+ *
+ * Se sigue necesitando porque `bbox` es obligatorio (ADR-0022 §2) y una pantalla
+ * sin marco no puede pedir nada. Es el país entero, que es lo único cierto sin
+ * datos, y **el dibujo se encuadra después sobre los polígonos que vuelven**. De
+ * cuál de los tres casos se trata lo dice la propia pantalla, porque un encuadre
+ * equivocado sobre un plano sin base cartográfica no se ve.
  *
  * Los cuatro son negativos —el Perú está al sur y al oeste— salvo el norte, que
  * se escribe `-0.02` porque el país acaba justo antes del ecuador.
@@ -388,13 +392,17 @@ function escalaDelPlano(anchoEnGrados: number, latitudMedia: number): string {
 const COLORES_DE_GRUPO = ['#6f8cb0', '#9db3cd', '#c4d2e2', '#a8b89a', '#d4bfa0', '#b9a8c4', '#8fa8a0', '#cbb8a8'];
 
 
-export default function Catastro({ dest, onDest }: PantallaProps) {
+export default function Catastro({ dest, onDest, sujeto, onSujeto, filtros, onFiltros }: PantallaProps) {
   const { pref, toast } = usarPreferencias();
   const m = moduloDe('catastro');
 
   /* `alta` es la ficha nueva; dentro de `predios`, un código abierto es la
      ficha de un predio existente. Los dos son la misma pantalla. */
-  const [predio, setPredio] = useState<string | null>(null);
+  /* El predio abierto sale de la RUTA y no de un estado propio (#685). Con un
+     `useState` la ficha no estaba en la URL: no se podía compartir —la otra
+     pestaña enseñaba la lista—, se perdía al recargar, y «Atrás» no volvía a la
+     lista sino un nivel más arriba, porque nunca hubo entrada de historial. */
+  const predio = dest === 'predios' && sujeto !== '' ? sujeto : null;
   /* La fila que se abrió, guardada. No se busca en `filas`: al abrir un predio
      la consulta del padrón se apaga —no hay listado que enseñar— y con ella se
      iría la fila, de modo que la ficha volvería a los datos del prototipo sin
@@ -408,11 +416,17 @@ export default function Catastro({ dest, onDest }: PantallaProps) {
   const [vals, setVals] = useState<ValoresDeFicha>({});
   const [sucio, setSucio] = useState(false);
   const [filtrosAbiertos, setFiltrosAbiertos] = useState(false);
-  const [q, setQ] = useState('');
+  /* Lo tecleado en la búsqueda del padrón vive en la CONSULTA de la ruta (#685):
+     abrir una ficha y recargar dejaba la lista sin filtro, y con 14 422 predios
+     eso es teclearlo otra vez. No deja entrada de historial —una por pulsación
+     obligaría a pulsar «Atrás» una vez por letra—. */
+  const q = filtros.q ?? '';
+  const setQ = (v: string) => onFiltros({ ...filtros, q: v });
   /* Los cuatro filtros que `PredioController` admite, y ni uno más. */
   const [fSector, setFSector] = useState('');
   const [fEstado, setFEstado] = useState<'' | EstadoDePredio>('');
   const [fFichado, setFFichado] = useState('');
+  const [fTitularidad, setFTitularidad] = useState<'' | 'SIN_TITULAR' | 'INCOMPLETA' | 'COMPLETA'>('');
   const [pagina, setPagina] = useState(0);
   /* El tamaño del padrón, recordado: al abrir un predio la consulta se apaga y
      sin esto la nota del panel volvería a la cifra del prototipo. */
@@ -523,8 +537,18 @@ export default function Catastro({ dest, onDest }: PantallaProps) {
     const vaciados: ValoresDeFicha = {};
     GRUPOS.forEach((g) => g.bloques.forEach((b) => b.campos.forEach((f) => (vaciados[f.k] = f.t === 'chk' ? false : ''))));
     TRAMOS.forEach((t) => (vaciados[t[1]] = ''));
-    return { ...vaciados, ...DEFECTOS_DE_FICHA_NUEVA };
-  }, []);
+    /* Los valores por omisión son **del alta**, que es lo que su nombre dice, y
+       hasta #686 se mezclaban también sobre una ficha que ya existe. Uno de
+       ellos es `fuente: 'INSPECCIÓN DE CAMPO'`, un literal del artboard, y el
+       contador de la sección sólo mira `vals`/`d`: como esa clave no salía
+       vacía, «Uso y ocupación» contaba `faltan = 0` y el índice le ponía el ✓
+       verde **sobre una sección con todos sus campos vacíos**.
+
+       Sobre una ficha leída no se aplica ninguno: lo que la ficha publica lo
+       pone `leido` campo por campo, y lo que no publica nadie sale «—» con su
+       motivo. */
+    return esNuevo ? { ...vaciados, ...DEFECTOS_DE_FICHA_NUEVA } : vaciados;
+  }, [esNuevo]);
 
   const valor = (k: string): string | boolean => {
     const v = vals[k];
@@ -547,7 +571,6 @@ export default function Catastro({ dest, onDest }: PantallaProps) {
     setVals({});
     setCerradas({});
     setSucio(false);
-    setPredio(null);
     /* El titular de la ficha anterior no se arrastra a la siguiente: declararle
        a un predio nuevo el dueño del anterior es el error que ninguna pantalla
        desmiente después. Y con él se va el aviso de lo que quedó a medias, que
@@ -570,13 +593,13 @@ export default function Catastro({ dest, onDest }: PantallaProps) {
       nuevaFicha();
       return;
     }
-    setPredio(null);
+    /* Cerrar la ficha es irse a otro destino, y el sujeto se va con él: lo hace
+       `onDest`, que reescribe la ruta sin tercer tramo (#685). */
     setAbierto(null);
     onDest(k);
   };
 
   const abrirPredio = (fila: PredioDelCatastro | null, codigo: string) => {
-    setPredio(codigo);
     setAbierto(fila);
     setPaso(0);
     setSucio(false);
@@ -586,7 +609,10 @@ export default function Catastro({ dest, onDest }: PantallaProps) {
        corrección se guarda—. Los datos del acto se limpian con la ficha, en el
        efecto que la siembra. */
     setVals({});
-    onDest('predios');
+    /* Una sola escritura del hash: `onSujeto` ya fija el destino, y llamar
+       además a `onDest` dejaría DOS entradas de historial por cada predio
+       abierto —y «Atrás» tendría que pulsarse dos veces para volver a la lista—. */
+    onSujeto(codigo);
   };
 
   /* Las trece opciones del manual, tal cual las lista la paleta del artboard.
@@ -610,6 +636,16 @@ export default function Catastro({ dest, onDest }: PantallaProps) {
   }));
 
   /* ── Las secciones de la ficha ───────────────────────────────── */
+
+  /* Que seccion se esta mirando, para que el indice lo diga (#682).
+     Las seis entradas salian identicas —mismo peso, mismo color, sin
+     `aria-current`— arriba del todo y con la ultima seccion en pantalla, asi que
+     el indice servia para ir y no para saber donde se estaba.
+
+     Con `IntersectionObserver` y no mirando el scroll: el navegador ya sabe que
+     hay en pantalla, y calcularlo a mano obliga a leer la posicion de las seis
+     secciones en cada gesto de rueda. */
+  const [seccionALaVista, setSeccionALaVista] = useState<string>('');
 
   const secciones = useMemo<SeccionResuelta[]>(() => {
     if (!esPredio) return [];
@@ -662,6 +698,39 @@ export default function Catastro({ dest, onDest }: PantallaProps) {
     });
   }, [esPredio, esNuevo, modalidades, modo, cerradas, vals, d]);
 
+  /* El indice marca la seccion a la vista. Se mira la que este mas arriba de las
+     que cruzan la franja alta de la ventana: con «la mas visible» el marcador
+     salta hacia atras al llegar al final, porque la ultima seccion suele ser mas
+     corta que la ventana y nunca gana. */
+  useEffect(() => {
+    if (secciones.length === 0) return;
+    const nodos = secciones
+      .map((x) => document.getElementById(x.id))
+      .filter((n): n is HTMLElement => n !== null);
+    if (nodos.length === 0) return;
+    const visibles = new Set<string>();
+    const observador = new IntersectionObserver(
+      (entradas) => {
+        for (const e of entradas) {
+          if (e.isIntersecting) visibles.add(e.target.id);
+          else visibles.delete(e.target.id);
+        }
+        /* Sin `if`: cuando ninguna cruza la franja —arriba del todo, sobre la
+           cabecera— la respuesta honesta es ninguna. Conservar la ultima deja el
+           indice marcando «Terreno y construccion» con el titulo del predio en
+           pantalla, que es el mismo defecto de #682 con otra cara. */
+        const primera = secciones.find((x) => visibles.has(x.id));
+        setSeccionALaVista(primera?.id ?? '');
+      },
+      /* La franja alta: desde 120 px bajo el borde superior —lo que ocupa la
+         cabecera pegajosa— hasta el 60 % de la ventana. */
+      { rootMargin: '-120px 0px -40% 0px', threshold: 0 },
+    );
+    for (const n of nodos) observador.observe(n);
+    return () => observador.disconnect();
+  }, [secciones]);
+
+
   const paso = Math.min(pasoEstado, Math.max(secciones.length - 1, 0));
 
   /* ── El código de referencia catastral, compuesto ─────────────── */
@@ -681,7 +750,7 @@ export default function Catastro({ dest, onDest }: PantallaProps) {
   /* Volver a la primera página en cuanto cambia lo que se busca: sin esto,
      afinar un filtro desde la página 4 devuelve una página que ya no existe y
      la tabla sale vacía sin que nada lo explique. */
-  useEffect(() => setPagina(0), [criterio, fSector, fEstado, fFichado]);
+  useEffect(() => setPagina(0), [criterio, fSector, fEstado, fFichado, fTitularidad]);
 
   const padron = useRecurso(
     (senal) =>
@@ -691,20 +760,36 @@ export default function Catastro({ dest, onDest }: PantallaProps) {
           codigoDeSector: fSector || undefined,
           estado: fEstado || undefined,
           fichado: fFichado === '' ? undefined : fFichado === 'true',
+          titularidad: fTitularidad || undefined,
         },
         { pagina, tamano: 20 },
         senal,
       ),
-    [criterio, fSector, fEstado, fFichado, pagina],
+    [criterio, fSector, fEstado, fFichado, fTitularidad, pagina],
     dest === 'predios' && predio === null,
   );
 
-  /* Los sectores. Los usan el filtro del padrón y el árbol de Territorio, así
-     que se piden en los dos destinos y no dependen de la búsqueda. */
+  /* Los sectores. Los usan el filtro del padrón, el árbol de Territorio y —desde
+     #687— la «Zona de arbitrios» de la ficha, que vive en `sector.zona`.
+
+     El `activo` deja de mirar `predio === null`, y eso pide MENOS y no más: con
+     la condición anterior, abrir una ficha los descartaba y volver a la lista los
+     volvía a pedir, o sea dos peticiones por cada ciclo de abrir y cerrar. Con la
+     del destino entero se piden una vez al entrar. */
   const sectores = useRecurso(
     (senal) => listarSectores(senal),
     [],
-    dest === 'territorio' || (dest === 'predios' && predio === null),
+    dest === 'territorio' || dest === 'predios',
+  );
+
+  /* El tipo de la vía del predio abierto (#687).
+     Cuesta UNA petición y no el catálogo entero: `codigoDeVia` es filtro exacto.
+     Se pide sólo con un predio abierto que traiga código —un predio sin vía
+     resuelta no tiene nada que preguntar—. */
+  const viaDelPredio = useRecurso(
+    (senal) => listarVias({ codigoDeVia: abierto!.codigoDeVia! }, { tamano: 1 }, senal),
+    [abierto?.codigoDeVia],
+    dest === 'predios' && abierto !== null && (abierto.codigoDeVia ?? '') !== '',
   );
 
   /* Las manzanas del sector abierto (#537).
@@ -871,6 +956,20 @@ export default function Catastro({ dest, onDest }: PantallaProps) {
   const censoActivos = useRecurso((s2) => listarPredios({ estado: 'ACTIVO' }, { tamano: 1 }, s2), [], conCenso);
   const censoSinFicha = useRecurso((s2) => listarPredios({ fichado: false }, { tamano: 1 }, s2), [], enPanel);
   const censoDeBaja = useRecurso((s2) => listarPredios({ estado: 'DADO_DE_BAJA' }, { tamano: 1 }, s2), [], enPanel);
+  /* La cola de saneamiento de la titularidad (#690, #713). Son DOS censos y no
+     uno porque son dos hechos distintos con dos arreglos distintos: al predio sin
+     titular hay que encontrarle dueño, y al de cuotas incompletas le falta el
+     resto del reparto. Juntarlos daría una cifra que no dice qué hacer. */
+  const censoSinTitular = useRecurso(
+    (s2) => listarPredios({ titularidad: 'SIN_TITULAR' }, { tamano: 1 }, s2),
+    [],
+    enPanel,
+  );
+  const censoTitularidadIncompleta = useRecurso(
+    (s2) => listarPredios({ titularidad: 'INCOMPLETA' }, { tamano: 1 }, s2),
+    [],
+    enPanel,
+  );
   const sectoresDelPanel = useRecurso((s2) => listarSectores(s2), [], conCenso);
   /* **«Sin conciliar» ya se cuenta**, desde que el backend publica
      `GET /catastro/fichas/conciliacion/resumen` (#564). El resumen lo resuelve
@@ -900,6 +999,42 @@ export default function Catastro({ dest, onDest }: PantallaProps) {
     enPanel,
   );
 
+  /* ── Donde esta la municipalidad, para abrir sobre ella (#612) ─────────
+     Se pide con LOS MISMOS filtros que el plano: un marco calculado sobre otro
+     conjunto de predios encuadraria sobre algo que despues no se dibuja, y sobre
+     un plano sin base cartografica eso NO SE VE. */
+  const encuadre = useRecurso(
+    (s2) => marcoDelPlano({ codigoDeSector: mapaSector || undefined, codigoDeManzana: mapaManzana || undefined }, s2),
+    [mapaSector, mapaManzana],
+    dest === 'mapa',
+  );
+
+  /* Para que filtros esta ya resuelto el encuadre: la clave de los filtros con
+     que se resolvio, o `null` mientras no lo este.
+
+     Es ESTADO y no un `ref` a proposito, porque el plano se sujeta a el. Con un
+     `ref` no hay render entre «llego el marco» y «se aplico», asi que el plano
+     ya habria salido con el del pais: medido, dos peticiones y la primera con
+     `bbox=-81.4,-18.4,-68.6,-0.02`.
+
+     Y se resuelve UNA VEZ por juego de filtros, tambien cuando NO hay marco:
+     sin eso, el plano no se pediria nunca en el estado de hoy —cero poligonos—,
+     y cada vuelta de la lectura devolveria la vista al encuadre inicial, de modo
+     que acercarse seria imposible porque el zoom se desharia solo. */
+  const [encuadreResuelto, setEncuadreResuelto] = useState<string | null>(null);
+  const filtrosDelMapa = (mapaSector || '') + '|' + (mapaManzana || '');
+  useEffect(() => {
+    if (dest !== 'mapa') return;
+    if (encuadreResuelto === filtrosDelMapa) return;
+    if (encuadre.datos === null && encuadre.error === null) return;
+    const m = encuadre.datos?.marco ?? null;
+    if (m !== null) {
+      setMarco(m);
+      setMarcoTecleado(comoBbox(m));
+    }
+    setEncuadreResuelto(filtrosDelMapa);
+  }, [dest, encuadre.datos, encuadre.error, filtrosDelMapa, encuadreResuelto]);
+
   /* ── El plano, contra `GET /api/v1/catastro/predios/plano` (#536) ──────
      `bbox` es obligatorio y no tiene valor por omision en el servidor: sin el,
      422. El que viaja es el del estado, y su cadena es la llave —comparar el
@@ -917,7 +1052,11 @@ export default function Catastro({ dest, onDest }: PantallaProps) {
         s2,
       ),
     [bbox, mapaSector, mapaManzana],
-    dest === 'mapa',
+    /* Espera a que el encuadre conteste, aunque conteste que no hay marco. Sin
+       esperar salen DOS peticiones y la primera va con el marco del pais: sobre
+       un padron con carga cartografica esa primera es exactamente el «hay N
+       lotes, acercate» que #612 existe para no tener que obedecer a ciegas. */
+    dest === 'mapa' && encuadreResuelto === filtrosDelMapa,
   );
 
   /* Las manzanas del sector elegido en el mapa. Se piden al elegirlo y no al
@@ -977,10 +1116,16 @@ export default function Catastro({ dest, onDest }: PantallaProps) {
   };
   const acercarElMarco = () => escalarMarco(0.5);
   const alejarElMarco = () => escalarMarco(2);
-  /* Con el marco ya en el inicial, «Restablecer» no restablece nada: ni pide,
-     ni cambia el dibujo, ni dice por que. Un boton que se pulsa y no hace nada
-     es peor que uno apagado, porque el apagado al menos dice que no se puede. */
-  const marcoEsElInicial = bbox === comoBbox(MARCO_INICIAL);
+  /* A donde vuelve «Restablecer»: al encuadre de la municipalidad cuando lo hay,
+     y al pais cuando no. Devolverlo siempre al pais era lo correcto mientras
+     nadie publicaba donde esta la municipalidad; desde #612 seria mandar la
+     vista lejos de sus datos, que es justo lo que este issue vino a evitar.
+
+     Con el marco ya ahi, «Restablecer» no restablece nada: ni pide, ni cambia el
+     dibujo, ni dice por que. Un boton que se pulsa y no hace nada es peor que
+     uno apagado, porque el apagado al menos dice que no se puede. */
+  const marcoAlQueVolver = encuadre.datos?.marco ?? MARCO_INICIAL;
+  const marcoEsElInicial = bbox === comoBbox(marcoAlQueVolver);
 
   /* Las dos cifras del «acercate», leidas del propio rechazo (#611).
      Se leen SIEMPRE, tambien cuando el codigo es otro, y entonces salen las dos
@@ -1042,7 +1187,7 @@ export default function Catastro({ dest, onDest }: PantallaProps) {
   const caido = padron.error !== null;
   const sinResultados = !cargando && !caido && padron.datos !== null && filas.length === 0;
   const hayResultados = !cargando && !caido && filas.length > 0;
-  const filtrosPuestos = [criterio, fSector, fEstado, fFichado].filter((x) => x !== '').length;
+  const filtrosPuestos = [criterio, fSector, fEstado, fFichado, fTitularidad].filter((x) => x !== '').length;
 
   useEffect(() => {
     if (padron.datos && filtrosPuestos === 0) setTotalDelPadron(padron.datos.totalElementos);
@@ -1086,6 +1231,20 @@ export default function Catastro({ dest, onDest }: PantallaProps) {
   /* La ficha vigente, con su histórico: las versiones anteriores son la mitad
      de lo que hay que enseñar —quién cambió qué y por qué—, y pedirlas cuesta
      el mismo viaje. */
+  /* Al llegar por la URL —recarga, o el enlace pegado en otra pestaña— hay
+     código y no hay fila: la fila la trae el listado, y ahí no se ha pasado.
+     Se resuelve por su código, que es filtro exacto, y **sólo entonces**: con la
+     ficha abierta desde el listado, `abierto` ya está y no se pide nada (#685). */
+  const predioDeLaRuta = useRecurso(
+    (senal) => listarPredios({ codRefCatastral: predio! }, { tamano: 2 }, senal),
+    [predio],
+    dest === 'predios' && predio !== null && abierto === null,
+  );
+  useEffect(() => {
+    const fila = predioDeLaRuta.datos?.contenido.find((x) => x.codRefCatastral === predio);
+    if (fila !== undefined) setAbierto(fila);
+  }, [predioDeLaRuta.datos, predio]);
+
   const lecturaDeLaFicha = useRecurso(
     (senal) => leerFicha(modalidadDeLaFicha!, abierto!.codRefCatastral, { historico: true }, senal),
     [modalidadDeLaFicha, abierto?.codRefCatastral],
@@ -1168,8 +1327,26 @@ export default function Catastro({ dest, onDest }: PantallaProps) {
           : leida.economico.actividades.length === 0
             ? 'Sin actividad declarada'
             : leida.economico.sinLicencia + ' de ' + leida.economico.actividades.length + ' sin licencia',
+      /* El catálogo vial contesta por código exacto, así que o hay una fila o no
+         hay ninguna; con dos, ninguna es «la» vía y se prefiere no decir nada. */
+      'via.tipo': viaDelPredio.datos?.totalElementos === 1 ? (viaDelPredio.datos.contenido[0]?.tipo ?? null) : null,
+      /* La zona sale del sector del predio, cruzando por su código. Nula cuando
+         el sector no la declara —los seis de Catacaos—, y ahí el guion es la
+         verdad y no una falta de esta pantalla. */
+      'sector.zona':
+        abierto === null
+          ? null
+          : (sectores.datos?.contenido.find((x) => x.codigo === abierto.codigoDeSector)?.zona ?? null),
     }),
-    [abierto, leida, titulares.cargando, titulares.error, titulares.datos],
+    [
+      abierto,
+      leida,
+      titulares.cargando,
+      titulares.error,
+      titulares.datos,
+      viaDelPredio.datos,
+      sectores.datos,
+    ],
   );
 
   /* Mientras la ficha viaja, un «—» se leería como «este predio no lo declara»,
@@ -1335,7 +1512,12 @@ export default function Catastro({ dest, onDest }: PantallaProps) {
   const estadoDeLosAranceles: 'cargando' | 'sin-sellar' | 'no-se-pudo' | 'sin-filas' | 'con-filas' =
     aranceles.cargando
       ? 'cargando'
-      : aranceles.error?.codigo === 'NO_ENCONTRADO'
+      /* Se decide por el DISCRIMINADOR y no por el código (#723): desde #730 el
+         404 de los tres cuadros trae `parametroQueFalta`, así que «el ejercicio
+         no tiene conjunto sellado» es un hecho de la respuesta y no una
+         suposición sobre qué otros 404 puede dar esta ruta. Un 404 sin él
+         —mañana, si la ruta gana otro— cae en «no se pudo», que dice la verdad. */
+      : aranceles.error?.faltaUnaCifraNormativa === true
         ? 'sin-sellar'
         : aranceles.error !== null
           ? 'no-se-pudo'
@@ -1364,6 +1546,19 @@ export default function Catastro({ dest, onDest }: PantallaProps) {
       valor: cifra(censoSinFicha),
       etiqueta: 'Predios sin ficha catastral',
       nota: 'Están en el padrón y no tienen con qué valorizarse. Es la cola de saneamiento.',
+    },
+    /* Los dos de #690. Hasta que el backend publicó el filtro, esto sólo se podía
+       ver predio a predio: la ficha lo dice desde `c6340c19`, pero mirando uno no
+       se sabe cuántos son ni se pueden atacar. */
+    {
+      valor: cifra(censoSinTitular),
+      etiqueta: 'Predios sin titular vigente',
+      nota: 'No figuran a nombre de nadie, así que no hay a quién cargarles el impuesto.',
+    },
+    {
+      valor: cifra(censoTitularidadIncompleta),
+      etiqueta: 'Predios con la titularidad incompleta',
+      nota: 'Sus cuotas vigentes no suman 100 %, y el % de propiedad pondera la base: tributan por la parte registrada.',
     },
     {
       /* El arancel mediano lo componia el prototipo. No se calcula aqui: es una
@@ -2317,7 +2512,9 @@ export default function Catastro({ dest, onDest }: PantallaProps) {
      «Valor asignado» sobre una celda que nadie publica se lee como un dato que
      falta, cuando lo que falta es la columna. Lo que el manual dibuja y el
      sistema no guarda se dice en el pie. */
-  const tablaConectada = (titulo: string): { cols: readonly ColumnaDeTabla[]; filas: readonly (readonly string[])[]; nota: string } => {
+  const tablaConectada = (
+    titulo: string,
+  ): { cols: readonly ColumnaDeTabla[]; filas: readonly (readonly string[])[]; nota: string; aviso?: string } => {
     const raya = (x: string | null | undefined) => (x === null || x === undefined || x === '' ? SIN_DATO : x);
     if (titulo === 'Titulares registrados') {
       const t = titulares.datos;
@@ -2328,6 +2525,25 @@ export default function Catastro({ dest, onDest }: PantallaProps) {
           t === null
             ? 'Los titulares no se han podido leer.'
             : 'Vigentes al ' + t.vigenteA + '. El manual dibuja además D.N.I., R.U.C., estado civil y fecha de inicio: la lectura de titulares publica el código, el nombre, la condición y la cuota, y nada más. Registrar una cuota es otro acto, con su propia observación.',
+        /* El predio sin ninguna cuota y el predio con las cuotas cortas son dos
+           cosas distintas y las dos se callaban: la tabla salía vacía sin una
+           línea que lo dijera, o con una fila al 0,349 % que se lee como la
+           propiedad entera. Ver `huecoDeTitularidad`. */
+        aviso:
+          t === null || titulares.cargando
+            ? undefined
+            : t.titulares.length === 0
+              ? 'Este predio no tiene ninguna titularidad vigente al ' +
+                t.vigenteA +
+                '. No es que no se hayan podido leer: es que no hay ninguna registrada, así que el predio no tiene hoy a quién cargarle el impuesto.'
+              : ((h) =>
+                  h === null
+                    ? undefined
+                    : 'Las cuotas registradas suman ' +
+                      h +
+                      ' %, no 100 %. El resto del predio no tiene titular vigente registrado, y el % de propiedad pondera la base imponible: mientras siga así, este predio tributa por la parte registrada y no por su valor entero.')(
+                  huecoDeTitularidad(t.titulares.map((x) => x.porcentaje)),
+                ),
       };
     }
     if (titulo === 'Pisos declarados') {
@@ -2554,7 +2770,20 @@ export default function Catastro({ dest, onDest }: PantallaProps) {
                   que aquí no hay nada declarado todavía.
                 </p>
               ) : (
-                t !== null && <p style={PIE}>{t.nota}</p>
+                t !== null && (
+                  <>
+                    {/* El aviso va DEBAJO de la tabla y encima del pie: quien
+                        acaba de leer las filas es quien tiene que enterarse de
+                        que no las cubren todas, y arriba competiría con el
+                        título por la primera mirada. */}
+                    {t.aviso !== undefined && (
+                      <div style={{ padding: '0 16px 12px' }}>
+                        <Aviso tono="warn">{t.aviso}</Aviso>
+                      </div>
+                    )}
+                    <p style={PIE}>{t.nota}</p>
+                  </>
+                )
               )}
             </div>
           );
@@ -2833,6 +3062,23 @@ export default function Catastro({ dest, onDest }: PantallaProps) {
                           <option value="false">Sin ficha — cola de saneamiento</option>
                         </select>
                       </label>
+                      {/* El saneamiento de la titularidad (#690). Es lo que
+                          convierte el censo del panel en algo que se puede
+                          atacar: sin este filtro, esos 4 977 predios se ven de
+                          uno en uno o no se ven. */}
+                      <label style={{ display: 'flex', flexDirection: 'column', gap: 5, minWidth: 0 }}>
+                        <span style={{ fontSize: 11.5, fontWeight: 500, color: 'var(--ink-3)' }}>Titularidad</span>
+                        <select
+                          value={fTitularidad}
+                          onChange={(e) => setFTitularidad(e.target.value as '' | 'SIN_TITULAR' | 'INCOMPLETA' | 'COMPLETA')}
+                          style={SELECT_FILTRO}
+                        >
+                          <option value="">Cualquiera</option>
+                          <option value="SIN_TITULAR">Sin titular vigente</option>
+                          <option value="INCOMPLETA">Cuotas que no suman 100 %</option>
+                          <option value="COMPLETA">Con la titularidad completa</option>
+                        </select>
+                      </label>
                     </div>
                     {/* Los otros tres criterios del manual no se dibujan apagados: se
                         dice dónde se filtran, porque un desplegable que no filtra se
@@ -2935,6 +3181,11 @@ export default function Catastro({ dest, onDest }: PantallaProps) {
                           reintentar();
                         }}
                         disabled={tokenPegado.trim() === ''}
+            /* Un boton apagado no recibe el foco, asi que su `title` no lo lee un
+               lector de pantalla — pero SI se ve al pasar el raton, y sin el este
+               es un callejon: quien lo pulsa no sabe que le falta pegar el token.
+               Solo aparece sin sesion, que es como corre el arnes y como corre CI. */
+            title={tokenPegado.trim() === '' ? 'Pega antes un token del emisor en la caja de al lado' : undefined}
                         className={tokenPegado.trim() === '' ? undefined : 'hov-acento-2'}
                         style={{
                           border: 0,
@@ -3001,7 +3252,10 @@ export default function Catastro({ dest, onDest }: PantallaProps) {
                       {filas.map((r) => (
                         <tr
                           key={r.predioId}
-                          onClick={() => abrirPredio(r, r.codRefCatastral)}
+                          {...filaPulsable(
+                            `Abrir la ficha del predio ${r.codRefCatastral}, ${direccionDe(r)}`,
+                            () => abrirPredio(r, r.codRefCatastral),
+                          )}
                           className="hov-acento"
                           style={{ borderTop: '1px solid var(--line)', cursor: 'pointer' }}
                         >
@@ -3582,9 +3836,20 @@ export default function Catastro({ dest, onDest }: PantallaProps) {
                     En esta ficha
                   </p>
                   {secciones.map((x) => (
-                    <a
+                    /* El artboard enlaza con `href="#ident"`; aqui la ruta vive
+                       en el hash, asi que un ancla la reescribe, el router no
+                       reconoce `#ubic` y cae a Inicio: la ficha desaparece **y se
+                       lleva lo tecleado sin preguntar** (#682). Desplaza con
+                       `scrollIntoView`, que es lo que la pantalla gemela de
+                       Rentas ya hacia y lo que el propio modo «Por pasos» hace.
+
+                       Y es un `<button>` y no un `<a>` porque no navega a ningun
+                       sitio: mueve la vista. */
+                    <button
                       key={x.id}
-                      href={'#' + x.id}
+                      type="button"
+                      onClick={() => document.getElementById(x.id)?.scrollIntoView({ behavior: 'smooth', block: 'start' })}
+                      aria-current={seccionALaVista === x.id ? 'true' : undefined}
                       className="hov-acento"
                       style={{
                         display: 'flex',
@@ -3593,16 +3858,18 @@ export default function Catastro({ dest, onDest }: PantallaProps) {
                         border: 0,
                         borderRadius: 7,
                         padding: '8px 10px',
-                        textDecoration: 'none',
+                        textAlign: 'left',
+                        cursor: 'pointer',
+                        background: seccionALaVista === x.id ? 'var(--accent-soft)' : 'transparent',
                         color: 'var(--ink-2)',
                         borderBottom: '1px solid transparent',
                       }}
                     >
-                      <span style={{ flex: 1, minWidth: 0, fontSize: 12.5 }}>{x.label}</span>
+                      <span style={{ flex: 1, minWidth: 0, fontSize: 12.5, fontWeight: seccionALaVista === x.id ? 600 : 400 }}>{x.label}</span>
                       <span style={{ fontFamily: 'var(--font-mono)', fontSize: 11, flex: '0 0 auto', color: x.viajan > 0 && x.faltan === 0 ? 'var(--ok-fg)' : 'var(--warn-fg)' }}>
                         {x.viajan > 0 && x.faltan === 0 ? '✓' : '·'}
                       </span>
-                    </a>
+                    </button>
                   ))}
                 </nav>
               )}
@@ -3985,11 +4252,13 @@ export default function Catastro({ dest, onDest }: PantallaProps) {
                   </span>
                 </div>
 
-                {/* El marco. Se teclea porque no hay de dónde sacarlo: ninguna
-                    operación del contrato publica dónde está la municipalidad
-                    —ni su extensión, ni la de un sector—, y `bbox` es
-                    obligatorio. Se dice aquí y no en una franja de arriba
-                    porque es exactamente aquí donde se nota. */}
+                {/* El marco. Desde #612 SÍ hay de dónde sacarlo —el rectángulo
+                    de lo digitalizado, con los mismos filtros—, y se sigue
+                    pudiendo teclear porque ese rectángulo puede no existir:
+                    `bbox` es obligatorio y el estado de hoy en las dos
+                    municipalidades es cero polígonos cargados. De dónde salió el
+                    que se aplicó se dice debajo, y se dice aquí y no en una
+                    franja de arriba porque es exactamente aquí donde se nota. */}
                 <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap', padding: '9px 14px', borderBottom: '1px solid var(--line)', background: 'var(--bg-elev)' }}>
                   <label htmlFor="marco-del-plano" style={{ fontSize: 11.5, color: 'var(--ink-3)' }}>
                     Marco
@@ -4017,18 +4286,33 @@ export default function Catastro({ dest, onDest }: PantallaProps) {
                     Alejar
                   </button>
                   <button
-                    onClick={() => cambiarMarco(MARCO_INICIAL)}
+                    onClick={() => cambiarMarco(marcoAlQueVolver)}
                     disabled={marcoEsElInicial}
-                    title={marcoEsElInicial ? 'El marco ya es el inicial' : undefined}
+                    title={marcoEsElInicial ? 'El marco ya es aquel con el que abrio' : undefined}
                     className="hov-linea"
                     style={{ ...BOTON_LINEA, padding: '6px 12px', fontSize: 12, opacity: marcoEsElInicial ? 0.5 : 1 }}
                   >
                     Restablecer
                   </button>
+                  {/* Y de dónde salió el marco con que se abrió, que son tres
+                      respuestas distintas y hasta #612 sólo había una. Decirlo
+                      importa porque un encuadre equivocado sobre un plano SIN
+                      base cartográfica no se ve: no hay calles debajo con las
+                      que notar que se está mirando otro sitio. */}
                   <span id="marco-nota" style={{ width: '100%', fontSize: 11, color: 'var(--ink-4)', lineHeight: 1.5, textWrap: 'pretty' }}>
-                    <code style={{ fontFamily: 'var(--font-mono)' }}>oeste,sur,este,norte</code> en grados. Abre sobre el Perú entero
-                    porque ninguna lectura publica dónde está esta municipalidad (#612): el dibujo se encuadra después, sobre los
-                    polígonos que vuelvan.
+                    <code style={{ fontFamily: 'var(--font-mono)' }}>oeste,sur,este,norte</code> en grados.{' '}
+                    {encuadre.cargando
+                      ? 'Preguntando dónde está lo digitalizado…'
+                      : encuadre.error !== null
+                        ? 'Abre sobre el Perú entero: no se pudo leer dónde está lo digitalizado de esta municipalidad, así que el encuadre es el declarado y no el de sus datos.'
+                        : encuadre.datos === null || encuadre.datos.marco === null
+                          ? 'Abre sobre el Perú entero: ' +
+                            (encuadre.datos?.notaDelMarco ?? 'no hay marco que publicar') +
+                            '. El dibujo se encuadra después, sobre los polígonos que vuelvan.'
+                          : 'Abrió sobre lo digitalizado de esta municipalidad — ' +
+                            encuadre.datos.lotes +
+                            (encuadre.datos.lotes === 1 ? ' lote con polígono' : ' lotes con polígono') +
+                            ' —, y desde ahí se acerca o se teclea otro.'}
                   </span>
                 </div>
 
@@ -4083,7 +4367,7 @@ export default function Catastro({ dest, onDest }: PantallaProps) {
                           Acercar el marco
                         </button>
                         <button
-                          onClick={() => cambiarMarco(MARCO_INICIAL)}
+                          onClick={() => cambiarMarco(marcoAlQueVolver)}
                           disabled={marcoEsElInicial}
                           title={marcoEsElInicial ? 'El marco ya es el inicial: lo que hay que hacer es acercarlo' : undefined}
                           className="hov-linea"
@@ -4113,7 +4397,7 @@ export default function Catastro({ dest, onDest }: PantallaProps) {
                       </Aviso>
                       <div style={{ display: 'flex', gap: 8 }}>
                         <button
-                          onClick={() => cambiarMarco(MARCO_INICIAL)}
+                          onClick={() => cambiarMarco(marcoAlQueVolver)}
                           disabled={marcoEsElInicial}
                           title={marcoEsElInicial ? 'El marco ya es el inicial: corrígelo en la caja de arriba' : undefined}
                           className="hov-acento-2"
@@ -4617,7 +4901,10 @@ export default function Catastro({ dest, onDest }: PantallaProps) {
               ) : lecturaDeValores.error ? (
                 <span style={{ marginLeft: 'auto', display: 'flex', alignItems: 'center', gap: 7, fontSize: 11.5, color: 'var(--bad-fg)', background: 'var(--bad-bg)', borderRadius: 999, padding: '4px 11px' }}>
                   <Icono d={ICO.aviso} tam={12} grosor={2.2} />
-                  No se pudo leer
+                  {/* La insignia distingue el 405, como el resto (#678): «No se
+                      pudo leer» es lo que se dice de un servidor que no
+                      contesta, y aquí el que pidió mal fue esta interfaz. */}
+                  {lecturaDeValores.error.codigo === 'METODO_NO_ADMITIDO' ? 'La interfaz pidió mal' : 'No se pudo leer'}
                 </span>
               ) : filasDeValores(valTab, aranceles.datos, unitarios.datos, deprec.datos).length === 0 ? (
                 <span style={{ marginLeft: 'auto', display: 'flex', alignItems: 'center', gap: 7, fontSize: 11.5, color: 'var(--bad-fg)', background: 'var(--bad-bg)', borderRadius: 999, padding: '4px 11px' }}>
@@ -5061,6 +5348,52 @@ function ubicacionDe(p: PredioDelCatastro): string {
 }
 
 /**
+ * Lo que las cuotas registradas dejan sin dueño, dicho sólo cuando lo dejan.
+ *
+ * <h2>Por qué hace falta decirlo</h2>
+ *
+ * `titularidad_no_excede_trg` impide que las cuotas de un predio pasen del
+ * 100 %, y **no impide que se queden cortas**: eso es a propósito, porque entre
+ * cerrar una cuota y abrir la siguiente el total baja de 100 en la misma
+ * transacción (#16). El efecto es que un padrón real puede tener predios con la
+ * mitad —o con el 0,349 %— de su propiedad registrada, y la tabla los enseña
+ * igual que a los completos.
+ *
+ * Medido contra la base: en Catacaos **304 de los 9 445 predios con titular**
+ * tienen cuotas vigentes que no suman 100, desde un 0,349 % hacia arriba, y
+ * otros **4 977 de los 14 422 no tienen ninguna** — el mismo 34,5 % que #545
+ * midió por el otro lado, los que no llegaban a la detección de omisos.
+ *
+ * Y no es un detalle de registro: el `%` de propiedad **pondera la base
+ * imponible** de cada predio (NEG-05), así que un predio cuyas cuotas suman
+ * 0,349 % tributa por 0,349 % de su valor. Una fila que dice «COPROPIETARIO ·
+ * 0.3490» y nada más se lee como la propiedad entera del predio, que es la
+ * lectura plausible y equivocada.
+ *
+ * Se dice el porcentaje que suma lo registrado y **no** se dice de quién es lo
+ * que falta: eso no lo sabe nadie. La suma es una propiedad de las filas que la
+ * tabla acaba de dibujar, no un dato del padrón, y el texto lo dice así.
+ */
+function huecoDeTitularidad(porcentajes: readonly string[]): string | null {
+  if (porcentajes.length === 0) return null;
+  /* Llegan como cadena —«50.0000»—, igual que el dinero (RNF-055), y se leen
+     AQUI y en un solo sitio. Sumarlas sin leerlas concatena: `0 + "50.0000" +
+     "50.0000"` da `"050.000050.0000"`, y con un solo titular la coerción del
+     `*` lo salva, así que el defecto sólo aparece en los predios con dos. */
+  const numeros = porcentajes.map(Number);
+  if (numeros.some(Number.isNaN)) return null;
+  /* En CUATRO decimales, que es la escala del dominio `porcentaje`: el padrón
+     dice `0.3490` y redondear a dos lo enseñaría como «0,35», que es cambiar
+     una cifra del padrón al dibujarla. Se redondea sólo para deshacer el
+     último bit de la coma flotante —0.1 + 0.2 no da 0.3—, no para acortar. */
+  const suma = Math.round(numeros.reduce((a, b) => a + b, 0) * 10000) / 10000;
+  if (suma >= 100) return null;
+  /* Sin ceros de relleno a la derecha: «50 %» y no «50,0000 %». Los que la
+     cuota sí tiene se conservan, porque son suyos. */
+  return String(suma).replace('.', ',');
+}
+
+/**
  * Los titulares en una línea, con sus cuotas.
  *
  * Un predio puede tener varios —dos cónyuges al 50 %, una sucesión con tantos
@@ -5071,7 +5404,7 @@ function ubicacionDe(p: PredioDelCatastro): string {
 function textoDeTitulares(
   cargando: boolean,
   error: ErrorDeApi | null,
-  datos: { titulares: { nombre: string | null; porcentaje: number }[] } | null,
+  datos: { titulares: { nombre: string | null; porcentaje: string }[] }| null,
 ): string {
   if (cargando) return 'Resolviendo el titular…';
   if (error) return error.codigo === 'SIN_PRIVILEGIO' ? 'Sin acceso al padrón de contribuyentes' : 'No se pudo resolver el titular';

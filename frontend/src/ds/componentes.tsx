@@ -1,4 +1,4 @@
-import type { CSSProperties, ReactNode } from 'react';
+import type { CSSProperties, KeyboardEvent, ReactNode } from 'react';
 import { Icono, type Trazos } from './Icono';
 import { ICO } from './iconos';
 
@@ -893,4 +893,49 @@ export function PasoAtras({
       Anterior
     </button>
   );
+}
+
+/**
+ * Las props que hacen que una fila pulsable con el ratón lo sea con el teclado.
+ *
+ * <h2>Por qué existe, y por qué en un solo sitio</h2>
+ *
+ * La ficha de un predio se abría pulsando una fila, y esa fila **no se podía
+ * alcanzar con el teclado por ninguna vía** — ni con Tab, ni con Enter en la
+ * búsqueda, ni con las flechas, ni por la paleta, que navega pantallas y no
+ * predios (#683). Detrás de esa fila están los 123 campos de la ficha, su
+ * histórico y un acto irreversible.
+ *
+ * Y al medirlo con un arnés resultó no ser de un módulo: `#/catastro/predios`,
+ * `#/rentas/padron`, `#/tesoreria/recibos` y `#/valores/lista`, **43 filas** en
+ * total. Por eso vive aquí: cuatro copias del mismo gesto divergen, y la quinta
+ * pantalla que abra una fila lo hereda en vez de volver a olvidarlo.
+ *
+ * <h2>Un `<tr>` enfocable y no un `<button>` dentro</h2>
+ *
+ * Un botón dentro de la primera celda también sería alcanzable, pero mete un
+ * elemento interactivo **dentro** de una celda de datos: el lector de pantalla
+ * anuncia «botón» donde hay un código, y el resto de la fila sigue sin ser el
+ * objetivo. Con `tabIndex` en la fila, el objetivo es la fila —que es lo que el
+ * ratón pulsa— y la semántica de tabla no se toca.
+ *
+ * `aria-label` **nombra el sujeto** y no la posición: «Abrir la ficha del predio
+ * 2001…» y no «fila 3», porque en veinte filas iguales la posición no distingue
+ * ninguna.
+ *
+ * Espacio además de Enter, y con `preventDefault`: sin él, Espacio desplaza la
+ * página bajo la fila que se acaba de abrir.
+ */
+export function filaPulsable(nombre: string, alAbrir: () => void) {
+  return {
+    tabIndex: 0,
+    'aria-label': nombre,
+    onClick: alAbrir,
+    onKeyDown: (e: KeyboardEvent<HTMLTableRowElement>) => {
+      if (e.key !== 'Enter' && e.key !== ' ') return;
+      e.preventDefault();
+      alAbrir();
+    },
+    style: { cursor: 'pointer' } as const,
+  };
 }

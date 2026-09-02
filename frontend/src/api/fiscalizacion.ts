@@ -1,4 +1,5 @@
-import { solicitar, type RespuestaPaginada } from './cliente';
+import { descargar, solicitar, type RespuestaPaginada } from './cliente';
+import type { FormatoDeDocumento } from './descarga';
 import type { Paginacion } from './catastro';
 
 /**
@@ -276,6 +277,335 @@ export function listarMuestra(
   });
 }
 
+/* ══════════ Las dos escrituras del programa (#550, ADR-0023) ══════════
+ *
+ * Son las UNICAS dos puertas por las que se decide a quien se fiscaliza, y
+ * ninguna de las dos recibe una lista de predios. Lo dice ADR-0023 §1: la fila
+ * de `programa_muestra` **copia** la condicion del dia del sorteo y con eso
+ * contesta sola «¿por que me toco a mi?»; una seleccion a mano contesta «porque
+ * alguien te marco», que en una fiscalizacion de oficio no es una respuesta.
+ *
+ * Asi que la pantalla de deteccion no gana ninguna escritura —lo que aporta al
+ * programa son sus FILTROS— y las dos escrituras viven donde el manual las
+ * dibuja: en «Programacion de fiscalizacion».
+ */
+
+/**
+ * Registra un programa de fiscalizacion.
+ *
+ * <h2>Los cinco campos que el servidor exige, medidos y en su orden</h2>
+ *
+ * No se leyeron del backend: se midieron mandando el cuerpo vacio y añadiendo
+ * de uno en uno lo que el 422 pedia. Sale siempre `422 VALIDACION`, y el
+ * mensaje nombra el que falta:
+ *
+ * ```
+ * {}                                   → «Toda modificacion exige la observacion del usuario: sin ella no se guarda»
+ * {observacion}                        → «Falta el campo 'codigo'»
+ * {observacion,codigo}                 → «Falta el campo 'descripcion'»
+ * {observacion,codigo,descripcion}     → «Falta el campo 'tipo'»
+ * {…,tipo}                             → «Falta el campo 'fechaInicio'»
+ * {…,fechaInicio}                      → 201
+ * ```
+ *
+ * La observacion, ademas, tiene forma: «al menos 5 caracteres, y no espacios en
+ * blanco (ADR-0008)». Por eso la pantalla no se conforma con que no este vacia.
+ *
+ * <h2>Los cuatro «opcionales», de los que TRES no lo son</h2>
+ *
+ * `ejercicio`, `sector`, `criterio` y `fiscalizador` los admite el servidor en
+ * blanco —medido: un registro sin ninguno de los cuatro contesta 201—, y aun
+ * asi la pantalla pide **ejercicio, criterio y fiscalizador** con todas las
+ * letras, porque el programa que nace sin cualquiera de los tres **no puede
+ * sortear su muestra nunca**:
+ *
+ * ```
+ * POST /fiscalizacion/programas/3/muestra          (sin ninguno de los cuatro)
+ *   → 422 «El programa no declara 'ejercicio', y sin el no se puede sortear su muestra»
+ * POST /fiscalizacion/programas/5/muestra          (con ejercicio y criterio, sin fiscalizador)
+ *   → 422 «El programa no declara 'fiscalizador', y sin el no se puede sortear su muestra»
+ * ```
+ *
+ * Los tres hubo que descubrirlos **de uno en uno**, y eso es lo que hace
+ * peligroso el reparto: el 422 nombra el primero que falta y calla los otros,
+ * asi que un programa con ejercicio y criterio pasa dos comprobaciones y muere
+ * en la tercera. `sector` es el unico de verdad opcional —en blanco, el sorteo
+ * mira el distrito entero—, y se comprobo sorteando un programa que lo tiene
+ * nulo.
+ *
+ * Y no se arregla despues: **no hay ninguna ruta de edicion de un programa**
+ * —«reprogramar es registrar otro», dice `ProgramasController`—, de modo que un
+ * programa registrado sin alguno de los tres es una fila esteril y permanente.
+ * Es la trampa que este formulario existe para no tender: el servidor deja
+ * pasar el dato que falta y quien lo descubre es el sorteo, un acto despues y
+ * sin vuelta atras.
+ *
+ * <h2>«Todas» no es un criterio, y ahi las dos pantallas no dicen lo mismo</h2>
+ *
+ * En la deteccion «Todas» es «sin filtro» y trae el padron entero; en el
+ * programa **no existe**, y el 422 lo dice sin rodeos —«'Todas' no es un
+ * criterio de riesgo: es lo que la deteccion llama «sin filtro». Un programa
+ * sortea su muestra por UNA condicion, y hay que elegirla»— en vez de decir que
+ * la palabra no se conoce (ADR-0023 §2). Por eso el desplegable del alta NO
+ * ofrece ninguna opcion «Todas»: ofrecerla seria dibujar un 422 de ida y vuelta.
+ *
+ * El servidor devuelve el programa ya escrito, con su `id` —que es con lo que se
+ * sortea— y con lo que quedo guardado, no con lo tecleado.
+ */
+export function registrarPrograma(peticion: {
+  observacion: string;
+  codigo: string;
+  descripcion: string;
+  /** `PREDIAL` | `VEHICULAR`. Otro valor: «Tipo de programa desconocido: 'XXXX'». */
+  tipo: string;
+  /** ISO `AAAA-MM-DD`, que es como el servidor la devuelve. */
+  fechaInicio: string;
+  ejercicio?: string;
+  sector?: string;
+  /** Un `CondicionFiscalizada`, y nunca «Todas». */
+  criterio?: string;
+  fiscalizador?: string;
+}): Promise<ProgramaDeFiscalizacion> {
+  return solicitar('/fiscalizacion/programas', { metodo: 'POST', cuerpo: peticion });
+}
+
+/**
+ * Lo que el sorteo contesta: sobre que padron se sorteo, no solo cuantos entraron.
+ *
+ * Medido contra el backend, y son siete miembros:
+ *
+ * ```
+ * POST /fiscalizacion/programas/4/muestra   {"observacion":"…"}
+ *   → 201 {"programaId":4,"predios":0,"sinTitular":0,"detectados":0,
+ *          "excluidosPorOtroPrograma":0,"excluidosPorActaDelEjercicio":0,
+ *          "fechaSorteo":"2026-09-02"}
+ * ```
+ *
+ * Las tres cifras de exclusion se publican POR MOTIVO y no como un total,
+ * porque «otro programa se lo llevo» y «ya se fiscalizo en el ejercicio» se
+ * arreglan de maneras distintas (#586), y la identidad que las ata es
+ * `detectados = predios + excluidosPorOtroPrograma + excluidosPorActaDelEjercicio`.
+ * La pantalla las dibuja las tres: un «se sortearon 0 predios» a secas no deja
+ * distinguir «no hay ningun omiso con ese criterio» de «se los llevo el
+ * programa de al lado», y lo segundo se resuelve cerrando aquel.
+ */
+export type ResultadoDelSorteo = {
+  programaId: number;
+  /** Cuantos entraron en la muestra. */
+  predios: number;
+  /** Cuantos de los sorteados no tienen titular vigente (#586, V73). */
+  sinTitular: number;
+  /** Cuantos vio la deteccion antes de excluir nada. */
+  detectados: number;
+  excluidosPorOtroPrograma: number;
+  excluidosPorActaDelEjercicio: number;
+  /** El dia del sorteo, que es la foto que la fila de la muestra copia. */
+  fechaSorteo: string;
+};
+
+/**
+ * Sortea la muestra del programa. El cuerpo lleva **solo la observacion**.
+ *
+ * No es una omision que haya que completar: es la decision de ADR-0023, escrita
+ * tambien en el javadoc de `PeticionDeMuestra` —«a quien se fiscaliza lo deciden
+ * los parametros del programa, no esta peticion»— y sujeta por
+ * `LaMuestraSeSorteaTest`, que se pone roja si alguien le añade un componente.
+ * Mandar aqui una lista de predios no da error: el cuerpo admite campos que
+ * nadie lee y los descarta en silencio —medido, `{…,"predios":["1"]}` contesta
+ * 201 igual—, o sea que el unico sintoma de intentarlo seria una muestra que no
+ * se parece a lo que se marco.
+ *
+ * <h2>Lo que puede contestar, y lo que la pantalla tiene que saber antes</h2>
+ *
+ * <ul>
+ *   <li>`404` si el programa no existe.
+ *   <li>`422` si el programa no declara ejercicio, criterio o fiscalizador,
+ *       nombrando cual —y eso la pantalla lo sabe ANTES de pulsar, porque
+ *       `ProgramaResource` publica los tres: por eso el boton nace apagado con
+ *       el motivo dibujado en vez de descubrirlo al pulsar (RNF-082).
+ *   <li>`409` si el programa ya sorteo su muestra: una muestra es un acto y no
+ *       se regenera, porque hay actas levantadas sobre ella. **Con la muestra en
+ *       cero no lo contesta** —medido: dos sorteos seguidos de un programa que
+ *       detecta 0 dan 201 los dos—, y tiene sentido: no hay ninguna muestra que
+ *       proteger todavia.
+ * </ul>
+ *
+ * Y el orden importa, asi que la pantalla lo dice donde se opera: no se sortea
+ * un predio que otro programa abierto ya se llevo, de modo que el primero que
+ * genere se los lleva y el segundo sale mas corto.
+ */
+export function sortearMuestra(programaId: number, observacion: string): Promise<ResultadoDelSorteo> {
+  return solicitar(`/fiscalizacion/programas/${String(programaId)}/muestra`, {
+    metodo: 'POST',
+    cuerpo: { observacion },
+  });
+}
+
+/* ══════════ Las actas de inspeccion (#599) ══════════
+ *
+ * `GET /fiscalizacion/actas` no existia hasta #599, y no por descuido: #546
+ * midio que **lo que le faltaba al modulo no era una lectura sino una columna**.
+ * El acta se registraba —`POST /fiscalizacion/predial/actas`— y no se podia
+ * volver a leer; publicar el listado antes habria enseñado la misma foto
+ * incompleta, porque el cuerpo del `POST` tenia nueve campos contra los
+ * veintitres controles y las siete filas de contraste que la pantalla del
+ * manual dibuja. `V76` añadio `uso_hallado`, que es el sexto de esos siete
+ * contrastes y el segundo de los dos hallazgos que la fiscalizacion predial
+ * persigue —el otro es el area—, y con el la lectura deja de mentir por
+ * omision.
+ */
+
+/**
+ * `ActaFiscalizacionResource`: un acta de inspeccion levantada en campo.
+ *
+ * <h2>Lo que la fila NO trae, y por que la pantalla lo dice en vez de rellenarlo</h2>
+ *
+ * `programaId`, `contribuyenteId`, `predioId`, `vehiculoId` y `fichaId` son
+ * identificadores INTERNOS de fila: ni el codigo del programa (`PF-593-01`), ni
+ * el codigo municipal del contribuyente, ni el codigo de referencia catastral
+ * del predio. Se dibujan como lo que son —igual que `ResolucionDeDeterminacion`
+ * ya hace con `predioId`— y no se cambian por un codigo que esta respuesta no
+ * trae. El unico que se puede resolver sin inventar nada es el programa, y
+ * porque `GET /fiscalizacion/programas` lo publica al lado en la misma
+ * pantalla: si el programa no esta en la pagina traida, se queda el numero.
+ *
+ * `areaHallada` llega en METROS CUADRADOS y **sin la unidad dentro** (#546),
+ * igual que en omisos, en la muestra y en la liquidacion: `"260.00"`, no
+ * `"260.00 m2"`. La unidad la pone la cabecera de la columna.
+ *
+ * <h2>`usoHallado` nulo NO es «coincide con el declarado»</h2>
+ *
+ * Es «no se anoto», y el propio recurso lo dice de si mismo. Son dos cosas
+ * distintas y la celda no las puede mezclar: un acta conforme afirma que se
+ * miro y coincidia, y una sin uso anotado no afirma nada sobre el uso. Solo un
+ * acta PREDIAL puede llevarlo —un vehiculo no tiene uso declarado contra el que
+ * contrastar—, asi que en las vehiculares es nulo siempre y por construccion.
+ *
+ * <h2>`hallazgo` son CINCO valores, y ninguno es un rotulo del manual</h2>
+ *
+ * `Hallazgo` declara `CONFORME`, `OMISO`, `SUBVALUADOR`, `USO_DISTINTO` y
+ * `NO_UBICADO`. El desplegable «Hallazgo principal» del manual ofrece seis
+ * rotulos y **ninguno de los seis coincide letra por letra con ninguno de los
+ * cinco**, ni siquiera el que #599 hizo posible. Medido, mandando cada rotulo
+ * al `POST` del acta predial:
+ *
+ * ```
+ * SIN OBSERVACIONES          → 422 «Hallazgo desconocido: 'SIN OBSERVACIONES'»
+ * AMPLIACION NO DECLARADA    → 422 «Hallazgo desconocido: …»
+ * USO DISTINTO AL DECLARADO  → 422 «Hallazgo desconocido: …»
+ * OMISO A LA DECLARACION     → 422 «Hallazgo desconocido: …»
+ * PREDIO SUBVALUADO          → 422 «Hallazgo desconocido: …»
+ * PREDIO INEXISTENTE         → 422 «Hallazgo desconocido: …»
+ * ```
+ *
+ * Asi que **no se traduce ninguno** —el criterio de #427 al negarse a leer
+ * «ACTIVA» como `VIGENTE` y el de #546 con este mismo desplegable—: al leer se
+ * dibuja el valor del enumerado con su etiqueta, y al escribir no se puede
+ * escribir todavia por otros motivos, que estan en la pantalla.
+ *
+ * `estado` es `ABIERTA` | `LIQUIDADA` | `RELIQUIDADA` | `TRANSFERIDA` |
+ * `ANULADA` (`EstadoDeActa`).
+ */
+export type ActaDeFiscalizacion = {
+  id: number;
+  programaId: number;
+  version: number;
+  contribuyenteId: number;
+  predioId: number | null;
+  vehiculoId: number | null;
+  fichaId: number | null;
+  fechaVisita: string;
+  fiscalizador: string;
+  hallazgo: string | null;
+  areaHallada: string | null;
+  usoHallado: string | null;
+  detalle: string | null;
+  estado: string;
+};
+
+/**
+ * Lo unico que el listado de actas deja acotar: el programa, por su ID interno.
+ *
+ * Es UNO, y esta medido —el guardia de parametros de #539 contesta 422
+ * nombrando lo que admite—:
+ *
+ * ```
+ * ?estado=ABIERTA        → 422 «Se admiten: direccion, ordenarPor, pagina, programa, tamano»
+ * ?hallazgo=SUBVALUADOR  → 422 (el mismo)
+ * ?contribuyente=1       → 422 (el mismo)
+ * ?predio=1              → 422 (el mismo)
+ * ```
+ *
+ * De modo que «actas cerradas», «actas de esta persona» y «actas con este
+ * hallazgo» no son preguntas que se puedan hacer hoy, y la pantalla lo dice en
+ * vez de recomponerlas contando la pagina que se trajo: contar la pagina da el
+ * numero de la pagina, no el del padron (RNF-083).
+ *
+ * Y el valor va como **numero**, no como el codigo del programa:
+ *
+ * ```
+ * ?programa=1            → 200, las actas de ese programa
+ * ?programa=999          → 200 con la lista VACIA, no 404
+ * ?programa=PF-2026-014  → 422 «El programa se identifica por su numero interno»
+ * ```
+ *
+ * El 200 vacio del programa inexistente es lo contrario de lo que hace
+ * `listarMuestra`, que desde #546 contesta 404. No se disimula: aqui el filtro
+ * sale de una lista que la propia pantalla acaba de traer, asi que un id que no
+ * existe no es un caso que quien atiende pueda producir tecleando.
+ */
+export type FiltroDeActas = { programa?: string };
+
+/**
+ * Los CINCO campos por los que el listado de actas se deja ordenar, medidos.
+ *
+ * Se pregunta, no se deriva del recurso: `ordenarPor` viaja en el contrato como
+ * `{ type: string }` sin `enum` y la lista blanca vive en `OrdenSeguro`, que no
+ * cruza la frontera (#312, #546). Medido contra el backend de hoy:
+ *
+ * ```
+ * ordenarPor=id           → 200      ordenarPor=programaId      → 422
+ * ordenarPor=fechaVisita  → 200      ordenarPor=fiscalizador    → 422
+ * ordenarPor=version      → 200      ordenarPor=contribuyenteId → 422
+ * ordenarPor=hallazgo     → 200      ordenarPor=predioId        → 422
+ * ordenarPor=estado       → 200      ordenarPor=areaHallada     → 422
+ *                                    ordenarPor=usoHallado      → 422
+ *                                    ordenarPor=detalle         → 422
+ *                                    ordenarPor=fichaId         → 422
+ * ```
+ *
+ * El 422 es `ORDEN_NO_ADMITIDO` y nombra lo pedido. La forma `snake_case`
+ * —`fecha_visita`— tambien contesta 200 porque `OrdenSeguro` admite la columna
+ * cruda; **no se usa**: aqui se pide con el nombre que la fila publica, que es
+ * el unico que un lector de esta pantalla puede ver.
+ *
+ * Escribirlos como tipo y no como cadena suelta es lo que hace que una cabecera
+ * no pueda ofrecer un orden que el backend rechaza: `orden: 'fiscalizador'` en
+ * una columna **no compila**, en vez de contestar 422 en ventanilla y llevarse
+ * la tabla entera por delante.
+ */
+export type OrdenDeActas = 'id' | 'fechaVisita' | 'version' | 'hallazgo' | 'estado';
+
+/** La paginacion del listado de actas, con `ordenarPor` acotado a lo que admite. */
+export type PaginacionDeActas = Omit<Paginacion, 'ordenarPor'> & { ordenarPor?: OrdenDeActas };
+
+/**
+ * Las actas levantadas, prediales y vehiculares en una sola lista.
+ *
+ * Son una sola porque comparten tabla, ciclo de vida y recurso (V4): cual es
+ * cual lo dice cual de `predioId` y `vehiculoId` trae valor. Y el permiso lo
+ * comparten las dos pantallas que escriben actas —`fisc_predial` y
+ * `fisc_vehicular`—, para que un perfil de fiscalizacion vehicular no acabe
+ * registrando actas que no puede volver a ver.
+ */
+export function listarActas(
+  filtro: FiltroDeActas,
+  paginacion: PaginacionDeActas,
+  senal?: AbortSignal,
+): Promise<RespuestaPaginada<ActaDeFiscalizacion>> {
+  return solicitar('/fiscalizacion/actas', { parametros: { ...filtro, ...paginacion }, senal });
+}
+
 /**
  * `LiquidacionResource`. **Ninguna cifra de dinero**, y por eso ningun `Dinero`
  * en el DTO: base declarada, base hallada, insoluto omitido y multa son D-02a y
@@ -390,4 +720,168 @@ export function leerEstadoDeCuenta(
   senal?: AbortSignal,
 ): Promise<EstadoDeCuentaDeFiscalizacion> {
   return solicitar('/fiscalizacion/estado-cuenta', { parametros: { contribuyente }, senal });
+}
+
+/* ══════════ La resolucion de determinacion ══════════
+ *
+ * El valor que cierra el procedimiento: determina por ejercicio la diferencia
+ * de tributo y la multa, y es lo que arranca el plazo del art. 137 para
+ * reclamar. Es la ULTIMA lectura de fiscalizacion que faltaba por conectar.
+ *
+ * <h2>Su numero no lo lista nadie, y esta medido</h2>
+ *
+ * `GET /fiscalizacion/resultados` publica `LiquidacionResource`, que trae el
+ * numero de la LIQUIDACION —`LIQ-2026-000001`— y no el de la resolucion que la
+ * transfirio —`RDF-2026-000001`—; el contrato no declara ninguna otra ruta bajo
+ * `/fiscalizacion/resoluciones`, y la unica respuesta del sistema que trae ese
+ * numero es la del `POST /fiscalizacion/transferencias` que la dicta. De modo
+ * que el numero se **teclea**: sale del papel notificado, que es donde el
+ * contribuyente lo lee cuando viene a reclamar.
+ *
+ * Se midio, con la cadena entera sembrada en la municipalidad 1 (programa →
+ * acta → liquidacion → transferencia):
+ *
+ * ```
+ * GET /fiscalizacion/resultados      → LIQ-2026-000001, sin numero de resolucion
+ * GET .../resoluciones/RDF-2026-000001 → 200 application/json
+ * ```
+ */
+
+/**
+ * Una fila del cuadro de la determinacion. Es `LineaDeterminadaResource`.
+ *
+ * **Las cinco cifras de dinero llegan `null` y seguiran llegando `null`**
+ * mientras D-02a este abierta: determinar la base de un ejercicio exige el
+ * cuadro de valores unitarios, la depreciacion y el arancel, y ninguno esta
+ * firmado. Salen «—», nunca cero: un cero en un valor notificable se lee como
+ * «no debe nada», y esto es lo que el contribuyente recibe por escrito.
+ *
+ * `total` **lo suma el servidor** —y solo cuando conoce las dos partes, porque
+ * sumar una cifra con una ausencia daria la cifra—. La pantalla no lo
+ * recompone: componer dinero en la interfaz es RNF-083, y aqui ademas el papel
+ * emitido ya lleva su propio total dentro del PDF sellado.
+ *
+ * Las dos superficies viajan como `AreaM2` **sin la unidad dentro** (#546):
+ * `"260.00"`, no `"260.00 m2"`. La unidad la pone la cabecera de la columna.
+ */
+export type LineaDeterminada = {
+  ejercicio: number;
+  /** La base que resulta de lo hallado. Nula hasta D-02a. */
+  determinado: string | null;
+  /** La base que consta declarada. Nula hasta D-02a. */
+  declarado: string | null;
+  /** El tributo que se dejo de pagar. Nula hasta D-02a. */
+  diferencia: string | null;
+  /** La multa del art. 176. Nula hasta D-02a y D-02c. */
+  multa: string | null;
+  /** La suma de las dos anteriores, hecha por el servidor. Nula si falta cualquiera. */
+  total: string | null;
+  /** La condicion hallada. Esta si se conoce siempre. */
+  condicion: string;
+  areaDeclarada: string | null;
+  areaHallada: string | null;
+};
+
+/**
+ * `ResolucionResource`: la resolucion de determinacion tal como sale por HTTP.
+ *
+ * <h2>Lo que NO publica, y por eso la hoja lo dice en vez de rellenarlo</h2>
+ *
+ * El artboard dibuja seis rotulos en la cabecera del papel y el recurso
+ * sostiene cuatro. **R.U.C.** no viaja —el documento de identidad del obligado
+ * lo imprime el PDF («Documento: DNI 00000001») y el JSON no lo lleva— y
+ * **tipo de fiscalizacion** tampoco: es de la liquidacion
+ * (`LiquidacionResource.tipoDeFiscalizacion`), no de la resolucion. Los dos
+ * salen «—» con su motivo escrito al lado; inventarlos con lo que se parezca es
+ * exactamente lo que #427 se nego a hacer con «ACTIVA».
+ *
+ * `predioId` y `vehiculoId` son los identificadores INTERNOS de la unidad, no
+ * el codigo de referencia catastral ni la placa. Se dibujan como el propio
+ * papel los dibuja —«Predio 1»— y se dice que lo son: cambiarlos por un codigo
+ * que el recurso no trae seria afirmar un dato que nadie leyo.
+ *
+ * `aLaFecha` esta en la raiz y no en cada linea porque **todas** las cifras de
+ * esta respuesta son del dia de la resolucion, que es cuando se congelaron
+ * (regla 9, RNF-075). El papel no se recompone nunca con datos vivos: el
+ * domicilio de notificacion cambia y la ficha se versiona otra vez, y el valor
+ * que arranca el plazo del art. 137 es el de 2026, no el de 2030.
+ */
+export type ResolucionDeDeterminacion = {
+  numero: string;
+  fecha: string;
+  /** El dia al que estan las cifras. El mismo de la resolucion, dicho aparte. */
+  aLaFecha: string;
+  nLiquidacion: string;
+  versionDeLaLiquidacion: number;
+  periodoDesde: number;
+  periodoHasta: number;
+  codContribuyente: string | null;
+  contribuyente: string | null;
+  predioId: number | null;
+  vehiculoId: number | null;
+  documentoSustento: string;
+  sustento: string;
+  baseLegal: string;
+  fichaAnteriorId: number | null;
+  fichaNuevaId: number | null;
+  usuarioRegistro: string | null;
+  observacion: string;
+  lineas: LineaDeterminada[];
+  /** Cuantos cargos asento; **solo** en la respuesta de la transferencia. */
+  cargosAsentados: number | null;
+};
+
+/**
+ * La resolucion por su numero. Un numero que no existe contesta **404**.
+ *
+ * Y contesta 404 tambien desde otra municipalidad: medido, la municipalidad 9
+ * pidiendo `RDF-2026-000001` —que es de la 1— recibe «No hay ninguna resolucion
+ * de determinacion con el numero 'RDF-2026-000001'», que es RLS hablando. No
+ * hace falta que la pantalla lo distinga: para quien pregunta, un valor de otra
+ * municipalidad no existe.
+ */
+export function leerResolucion(numero: string, senal?: AbortSignal): Promise<ResolucionDeDeterminacion> {
+  return solicitar(`/fiscalizacion/resoluciones/${encodeURIComponent(numero)}`, { senal });
+}
+
+/**
+ * La misma resolucion, como documento: `?formato=PDF|XLS|RTF` (#593, RF-132).
+ *
+ * <h2>Descargarla no la vuelve a emitir</h2>
+ *
+ * Y el motivo es mas fuerte que el de la ficha del contribuyente y el de la
+ * constancia de no adeudo: no es que aqui no haya nada que numerar, es que **ya
+ * esta numerado**. `TransferirARentas` emitio el papel, le puso su correlativo
+ * y guardo su modelo con su SHA-256 en la misma transaccion que versiono la
+ * ficha y asento los cargos; lo que falta es entregarlo. Por eso esta descarga
+ * **no pide observacion y no gasta correlativo**: la regla 10 gobierna las
+ * escrituras y esto no lo es, al reves que el duplicado del recibo —que si
+ * suma una reimpresion y por eso si la exige—.
+ *
+ * Tampoco sale marcada «DUPLICADO N.º 1», y esta comprobado leyendo el PDF que
+ * el servidor entrega: `POST /fiscalizacion/transferencias` devuelve JSON y
+ * descarta los bytes que emitio, asi que esta descarga es la **primera** vez
+ * que ese papel sale del sistema.
+ *
+ * Basta `LECTURA`, no `IMPRESION`: el documento es la misma hoja que esta
+ * pantalla ya dibuja al lado. Los padrones de #53 piden impresion porque sacan
+ * un listado que nadie llego a ver entero; aqui no hay nada que no este ya en
+ * la respuesta JSON.
+ *
+ * Los cuatro casos, medidos contra el backend con `RDF-2026-000001`:
+ *
+ * ```
+ * ?formato=PDF    → 200 application/pdf            Content-Disposition: attachment; filename="RDF-2026-000001.pdf"
+ * ?formato=XLS    → 200 application/vnd.ms-excel   … filename="RDF-2026-000001.xls"
+ * ?formato=RTF    → 200 application/rtf            … filename="RDF-2026-000001.rtf"
+ * ?formato=PATATA → 422 «El parametro 'formato' admite PDF, XLS o RTF: 'PATATA'»
+ * ```
+ *
+ * Y `?formato=` **vacio tambien es 422**, no PDF por omision: `params =
+ * "formato"` elige ese handler en cuanto el parametro esta, asi que contestar
+ * PDF seria contestar con un formato que nadie pidio. De ahi que `descargar()`
+ * reciba siempre uno de los tres y nunca `undefined`.
+ */
+export function descargarResolucion(numero: string, formato: FormatoDeDocumento): Promise<void> {
+  return descargar(`/fiscalizacion/resoluciones/${encodeURIComponent(numero)}`, { formato });
 }

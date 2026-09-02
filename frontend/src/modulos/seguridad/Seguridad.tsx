@@ -1,7 +1,12 @@
 import { useEffect, useMemo, useState, type CSSProperties } from 'react';
 import { Icono } from '../../ds/Icono';
 import {
+  darDeBajaGrupo,
+  darDeBajaUsuario,
   fijarPermisosDelGrupo,
+  fijarPermisosDelUsuario,
+  fijarVigenciaDeGrupo,
+  fijarVigenciaDeUsuario,
   gruposDelUsuario,
   identidadDeLaSesion,
   iniciarCambioDeClave,
@@ -12,20 +17,26 @@ import {
   listarModulos,
   listarRespaldos,
   listarUsuarios,
+  permisosConfiguradosDelUsuario,
+  titularesDelPrivilegio,
   miembrosDelGrupo,
   permisosDelGrupo,
   permisosEfectivosDelUsuario,
+  reactivarGrupo,
+  reactivarUsuario,
   registrarUsuario,
   OPERACIONES,
   PRIVILEGIOS,
   ROTULO_DEL_PRIVILEGIO,
   type Acceso,
   type CambioDeClaveIniciado,
+  type CambioDeVigencia,
   type PermisoEfectivo,
   type Privilegio,
 } from '../../api/seguridad';
 import { FalloDeLectura } from '../../api/Fallo';
 import { Aviso, Paginador } from '../../ds/componentes';
+import { instante } from '../../ds/fechas';
 import { ErrorDeApi } from '../../api/cliente';
 import { enElProveedorDeIdentidad } from '../../api/sesion';
 import { useRebote, useRecurso } from '../../api/useRecurso';
@@ -201,9 +212,14 @@ export default function Seguridad({ dest, onDest }: PantallaProps) {
   const [q, setQ] = useState('');
   const [sel, setSel] = useState<Seleccion | null>(null);
   const [modFiltro, setModFiltro] = useState('Sensibles');
-  /* Lo tocado en esta sesión, por grupo y por código de acceso. La clave es el
-     id del grupo del BACKEND, no su nombre: dos municipalidades tienen grupos
-     que se llaman igual, y el nombre no identifica nada del otro lado. */
+  /* Lo tocado en esta sesión, por sujeto y por código de acceso. La clave lleva
+     el TIPO delante del id del BACKEND —«grupo:1», «usuario:1»—, y eso no es
+     adorno: hasta #585 sólo se editaba la matriz de un grupo y la clave era el
+     id a secas; con la excepción de una cuenta editable, el grupo 1 y el
+     usuario 1 son dos sujetos distintos con el mismo número, y lo tocado en uno
+     aparecería marcado en el otro —y se mandaría con él—. El nombre tampoco
+     sirve de clave: dos municipalidades tienen grupos que se llaman igual, y el
+     nombre no identifica nada del otro lado. */
   const [edicion, setEdicion] = useState<Record<string, Record<string, Privilegio[]>>>({});
   const [observacion, setObservacion] = useState('');
   const [guardando, setGuardando] = useState(false);
@@ -229,6 +245,24 @@ export default function Seguridad({ dest, onDest }: PantallaProps) {
   const [dandoDeAlta, setDandoDeAlta] = useState(false);
   const [errorDelAlta, setErrorDelAlta] = useState<ErrorDeApi | null>(null);
   const [altaHecha, setAltaHecha] = useState<string | null>(null);
+
+  /* ── El estado del sujeto elegido: baja, reactivación y vigencia (#572) ──
+     Tres actos con **dos** observaciones, no una: la que se teclea para dar de
+     baja no es el motivo de un cambio de vigencia, y una caja compartida haría
+     que el motivo del acto A viajara con el acto B —justo lo que la regla 10
+     existe para que no pase—. Baja y reactivación comparten caja porque nunca
+     están las dos a la vez: el estado de la fila decide cuál de las dos se
+     dibuja. */
+  const [obsDelEstado, setObsDelEstado] = useState('');
+  const [obsDeLaVigencia, setObsDeLaVigencia] = useState('');
+  const [vigDesde, setVigDesde] = useState('');
+  const [vigHasta, setVigHasta] = useState('');
+  const [cambiandoEstado, setCambiandoEstado] = useState(false);
+  const [errorDelEstado, setErrorDelEstado] = useState<ErrorDeApi | null>(null);
+  /* La confirmación de lo que corta el acceso, con el patrón de la casa: la
+     primaria se pulsa dos veces y el pie dice QUÉ se va a hacer, nunca «¿estás
+     seguro?». Guarda cuál acto se armó, porque en este bloque hay dos. */
+  const [confirmando, setConfirmando] = useState<'baja' | 'vigencia' | null>(null);
 
   const [cambiandoClave, setCambiandoClave] = useState(false);
   const [errorAlCambiar, setErrorAlCambiar] = useState<ErrorDeApi | null>(null);
@@ -258,6 +292,15 @@ export default function Seguridad({ dest, onDest }: PantallaProps) {
 
   const esGrupo = sel?.tipo === 'grupo';
   const esUsuario = sel?.tipo === 'usuario';
+  /* Ver el comentario de `edicion`: el tipo va delante para que el grupo 1 y el
+     usuario 1 no compartan lo tocado. */
+  const claveDeEdicion = sel === null ? '' : sel.tipo + ':' + sel.id;
+
+  /* El día de hoy en el formato en que el backend publica sus fechas, que es el
+     que se puede comparar como texto. Sube aquí desde el panel porque desde
+     #572 también lo necesita el bloque de estado: una vigencia que ya no
+     incluye hoy corta el acceso en el acto. */
+  const hoy = new Date().toISOString().slice(0, 10);
   const grupoElegido = esGrupo ? grupos.find((g) => g.id === sel?.id) : undefined;
   const usuarioElegido = sel?.tipo === 'usuario' ? usuarios.find((u) => u.id === sel.id) : undefined;
 
@@ -332,7 +375,26 @@ export default function Seguridad({ dest, onDest }: PantallaProps) {
   useEffect(() => {
     setObservacion('');
     setErrorAlGuardar(null);
+    /* Y lo mismo con el bloque de estado: una confirmación armada sobre la
+       cuenta anterior, leída tras cambiar de sujeto, daría de baja a otra
+       persona con una sola pulsación. */
+    setObsDelEstado('');
+    setObsDeLaVigencia('');
+    setErrorDelEstado(null);
+    setConfirmando(null);
   }, [sel?.tipo, sel?.id]);
+
+  /* Las dos cajas de fecha arrancan con lo que el sujeto tiene hoy: el `PUT`
+     reemplaza las DOS de una vez, así que dejarlas en blanco y mandar sería
+     quitar la que no se quería tocar. Se rellenan al cambiar de sujeto y al
+     llegar la lectura que lo trae. */
+  const vigenciaDelSujeto = (grupoElegido ?? usuarioElegido) ?? null;
+  const vigenciaDesdeDelSujeto = vigenciaDelSujeto?.vigenciaDesde ?? null;
+  const vigenciaHastaDelSujeto = vigenciaDelSujeto?.vigenciaHasta ?? null;
+  useEffect(() => {
+    setVigDesde(vigenciaDesdeDelSujeto ?? '');
+    setVigHasta(vigenciaHastaDelSujeto ?? '');
+  }, [sel?.tipo, sel?.id, vigenciaDesdeDelSujeto, vigenciaHastaDelSujeto]);
 
   /* ── Lo CONFIGURADO de un grupo, que es lo que se edita ─────────
      Ojo con no confundirlo con lo EFECTIVO de una cuenta, que es otra pregunta
@@ -349,7 +411,44 @@ export default function Seguridad({ dest, onDest }: PantallaProps) {
     return m;
   }, [permisosReales.datos]);
 
-  const editados = edicion[String(sel?.id ?? '')] ?? {};
+  /* Lo EFECTIVO de la cuenta, indexado. Sube aquí desde donde estaba —junto a
+     la matriz que lo dibuja— porque desde #585 no sólo se dibuja: es la línea
+     base contra la que se decide qué se tocó y qué viaja. */
+  const efectivosPorAcceso = useMemo(() => {
+    const m = new Map<string, PermisoEfectivo>();
+    (efectivosReales.datos ?? []).forEach((e) => m.set(e.acceso, e));
+    return m;
+  }, [efectivosReales.datos]);
+
+  /**
+   * Contra qué se compara lo tocado, que no es lo mismo en los dos sujetos.
+   *
+   * En un GRUPO es lo configurado, que es lo que ese mismo `PUT` guarda. En una
+   * CUENTA es lo EFECTIVO: lo que hoy puede, venga de donde venga. Y esa es la
+   * decisión: una excepción **sustituye** a lo que el grupo le da (#543), así
+   * que el punto de partida honesto de la casilla es lo que la persona puede
+   * hoy —si el grupo le da los siete, las siete casillas empiezan marcadas y
+   * desmarcar una escribe una excepción con las seis restantes—. Partir de la
+   * excepción existente dejaría las siete apagadas en una cuenta que puede
+   * todo, y el primer clic escribiría una negación de lo demás sin que nadie lo
+   * pidiera.
+   *
+   * Un acceso **sin fila** vale `[]`, igual que uno negado. Son distintos al
+   * leerlos —lo dice `origen`— y aquí valen lo mismo a propósito: la
+   * consecuencia es que marcar y desmarcar sobre un acceso sin configurar
+   * vuelve a `[]` y **no manda nada**, o sea que no se puede escribir por
+   * descuido la negación de algo que esa cuenta nunca tuvo.
+   */
+  const base = useMemo(() => {
+    if (esGrupo) return propios;
+    const m: Record<string, Privilegio[]> = {};
+    efectivosPorAcceso.forEach((e, acceso) => {
+      m[acceso] = e.privilegios.slice();
+    });
+    return m;
+  }, [esGrupo, propios, efectivosPorAcceso]);
+
+  const editados = edicion[claveDeEdicion] ?? {};
 
   const nombreDelModulo = useMemo(() => {
     const m = new Map<number, string>();
@@ -371,19 +470,19 @@ export default function Seguridad({ dest, onDest }: PantallaProps) {
 
   const matriz = useMemo(() => {
     const filas: FilaDeMatriz[] = accesosVisibles.map((a) => {
-      const vigentes = editados[a.codigo] ?? propios[a.codigo] ?? [];
+      const vigentes = editados[a.codigo] ?? base[a.codigo] ?? [];
       const celdas = PRIVILEGIOS.map((p) => ({ privilegio: p, on: vigentes.indexOf(p) >= 0 }));
       return {
         acceso: a,
         vigentes,
         celdas,
-        tocada: editados[a.codigo] !== undefined && !mismoConjunto(editados[a.codigo], propios[a.codigo] ?? []),
+        tocada: editados[a.codigo] !== undefined && !mismoConjunto(editados[a.codigo], base[a.codigo] ?? []),
         modulo: nombreDelModulo.get(a.moduloId) ?? SIN_DATO,
         sensible: MUEVEN_DINERO.has(a.codigo),
       };
     });
     return { filas };
-  }, [accesosVisibles, editados, propios, nombreDelModulo]);
+  }, [accesosVisibles, editados, base, nombreDelModulo]);
 
   /* Lo que se va a mandar: **sólo los accesos que se tocaron**, mirando la
      edición entera y no las filas en pantalla. Cuáles están en pantalla depende
@@ -392,45 +491,63 @@ export default function Seguridad({ dest, onDest }: PantallaProps) {
   const aGuardar = useMemo(
     () =>
       Object.keys(editados)
-        .filter((codigo) => !mismoConjunto(editados[codigo], propios[codigo] ?? []))
+        .filter((codigo) => !mismoConjunto(editados[codigo], base[codigo] ?? []))
         .map((codigo) => ({ acceso: codigo, privilegios: editados[codigo] })),
-    [editados, propios],
+    [editados, base],
   );
 
-  const impedimentoAlGuardar = !esGrupo
-    ? 'La matriz de una cuenta ya se lee (#543), pero su excepción propia no tiene ruta de escritura en el contrato (#585).'
-    : permisosReales.datos === null
+  /* La matriz de una cuenta ya se escribe (#585), así que el impedimento deja
+     de ser «no hay ruta» y pasa a ser el mismo de siempre en los dos sujetos:
+     que la lectura haya llegado, que se haya tocado algo y que haya motivo.
+     Lo único propio de la cuenta es de qué lectura depende. */
+  const leidoLoQueSeEdita = esGrupo ? permisosReales.datos !== null : efectivosReales.datos !== null;
+  const impedimentoAlGuardar = !leidoLoQueSeEdita
+    ? esGrupo
       ? 'Todavía no se han leído los permisos de este grupo.'
-      : aGuardar.length === 0
-        ? 'No has cambiado ninguna casilla: no hay nada que guardar.'
-        : observacion.trim() === ''
-          ? 'Falta la observación: toda modificación se guarda con el motivo de quien la hace (RNF-052).'
-          : '';
+      : 'Todavía no se han leído los permisos de esta cuenta.'
+    : aGuardar.length === 0
+      ? 'No has cambiado ninguna casilla: no hay nada que guardar.'
+      : observacion.trim() === ''
+        ? 'Falta la observación: toda modificación se guarda con el motivo de quien la hace (RNF-052).'
+        : '';
   const puedeGuardar = impedimentoAlGuardar === '' && !guardando;
 
   const alternar = (fila: FilaDeMatriz, c: CeldaDeMatriz) => {
-    if (sel === null || !esGrupo) return;
+    if (sel === null) return;
     const actual = fila.vigentes.slice();
     const i = actual.indexOf(c.privilegio);
     if (i >= 0) actual.splice(i, 1);
     else actual.push(c.privilegio);
-    const clave = String(sel.id);
-    setEdicion((x) => ({ ...x, [clave]: { ...(x[clave] ?? {}), [fila.acceso.codigo]: actual } }));
+    setEdicion((x) => ({
+      ...x,
+      [claveDeEdicion]: { ...(x[claveDeEdicion] ?? {}), [fila.acceso.codigo]: actual },
+    }));
   };
 
+  /* Las dos matrices se guardan por aquí, y el sujeto decide a cuál de los dos
+     `PUT` va. No son el mismo acto aunque compartan cuerpo: el del grupo fija lo
+     que ese grupo concede, y el de la cuenta escribe su EXCEPCIÓN, que sustituye
+     a lo del grupo para los accesos que viajan. Por eso lo que se dice al
+     terminar tampoco es lo mismo. */
   const guardar = async () => {
     if (!puedeGuardar || sel === null) return;
     setGuardando(true);
     setErrorAlGuardar(null);
     try {
-      await fijarPermisosDelGrupo(sel.id, aGuardar, observacion.trim());
-      setEdicion((x) => ({ ...x, [String(sel.id)]: {} }));
+      if (esGrupo) await fijarPermisosDelGrupo(sel.id, aGuardar, observacion.trim());
+      else await fijarPermisosDelUsuario(sel.id, aGuardar, observacion.trim());
+      setEdicion((x) => ({ ...x, [claveDeEdicion]: {} }));
       setObservacion('');
-      permisosReales.reintentar();
+      if (esGrupo) permisosReales.reintentar();
+      else efectivosReales.reintentar();
       toast(
-        aGuardar.length === 1
-          ? 'Guardado 1 acceso. Queda en la auditoría con tu usuario.'
-          : `Guardados ${aGuardar.length} accesos. Quedan en la auditoría con tu usuario.`,
+        esGrupo
+          ? aGuardar.length === 1
+            ? 'Guardado 1 acceso del grupo. Queda en la auditoría con tu usuario.'
+            : `Guardados ${aGuardar.length} accesos del grupo. Quedan en la auditoría con tu usuario.`
+          : aGuardar.length === 1
+            ? 'Escrita la excepción de 1 acceso. Ese acceso deja de heredar del grupo.'
+            : `Escritas las excepciones de ${aGuardar.length} accesos. Esos accesos dejan de heredar del grupo.`,
       );
     } catch (fallo) {
       setErrorAlGuardar(
@@ -440,6 +557,207 @@ export default function Seguridad({ dest, onDest }: PantallaProps) {
       setGuardando(false);
     }
   };
+
+
+  /* ══════════ El estado del sujeto elegido (#572) ══════════
+     Tres actos que el backend publica desde #572 y que ninguna pantalla
+     llamaba: baja, reactivación y vigencia, para una cuenta y para un grupo.
+     Van en la cabecera de lo elegido —donde ya se dibujan `habilitado` y las
+     dos fechas— y no en una pantalla propia: el sujeto ya está elegido ahí, y
+     una pantalla aparte obligaría a elegirlo dos veces. */
+
+  /* ── Quién puede administrar permisos HOY, preguntado y no deducido ────────
+     El backend **no** guarda la baja con la regla del último administrador: la
+     comprobación `usuariosQuePuedenAdministrarPermisos` se consulta en un solo
+     sitio de todo el backend —`AdministrarPermisos.guardarYComprobar`—, o sea
+     en los dos `PUT` de permisos y en ninguna otra escritura. Dar de baja a la
+     única cuenta capaz de administrarlos, o al grupo del que le venía, deja la
+     municipalidad en el mismo callejón del que el 409 de los permisos protege,
+     y de ahí no se sale por el sistema.
+
+     Aquí NO se bloquea, y esa es la decisión: bloquear exigiría afirmar, desde
+     una lectura de hace unos segundos, que ésta es la última — y una lectura
+     vieja rechazaría un acto legítimo mientras el guardia de verdad, que es
+     transaccional, no lo rechazaría. Lo que se hace es **decirlo** con la única
+     respuesta que resuelve la precedencia sin reimplementarla: la lista de
+     titulares del privilegio, que la contesta el servidor.
+
+     Cuesta una petición por entrar a Accesos —no por sujeto elegido: no depende
+     de `sel`— y es la que hace que la confirmación diga algo en vez de repetir
+     «¿estás seguro?». */
+  const administradores = useRecurso(
+    (s) => titularesDelPrivilegio('permisos', 'REGISTRO', { tamano: 100 }, s),
+    [],
+    enAccesos,
+  );
+
+  /* De los titulares leídos, los que se van con este acto. Para una cuenta es
+     ella misma; para un grupo, todos los que lo tienen POR ese grupo —los que
+     además lo tengan por otro sitio no lo pierden, y por eso se filtra por
+     `grupoId` y no por pertenencia—. */
+  const administradoresQueSeVan = useMemo(() => {
+    const filas = administradores.datos?.contenido ?? [];
+    if (sel === null) return [];
+    return esGrupo
+      ? filas.filter((t) => t.origen === 'GRUPO' && t.grupoId === sel.id)
+      : filas.filter((t) => t.usuarioId === sel.id);
+  }, [administradores.datos, sel, esGrupo]);
+
+  /* La cuenta de los que quedarían. `null` mientras no se haya podido leer: un
+     cero ahí se leería como «no queda ninguno» —la frase que asusta— y un
+     número inventado como «quedan varios», que es la que tranquiliza sin
+     motivo. Las dos son peores que el guion largo. */
+  const administradoresQueQuedan =
+    administradores.datos === null || administradores.datos.hayMas
+      ? null
+      : administradores.datos.totalElementos - administradoresQueSeVan.length;
+
+  const sujetoHabilitado = (grupoElegido ?? usuarioElegido)?.habilitado ?? null;
+  const comoSeLlamaElSujeto = esGrupo ? 'el grupo' : 'la cuenta';
+
+  /* La fecha va con el formato que el backend lee (`LocalDate`): un texto que
+     no sea `AAAA-MM-DD` se para aquí en vez de viajar y volver como un 422 que
+     no dice cuál de los dos campos está mal. */
+  const esFecha = (t: string) => t.trim() === '' || /^\d{4}-\d{2}-\d{2}$/.test(t.trim());
+  const vigenciaCambia =
+    vigDesde.trim() !== (vigenciaDesdeDelSujeto ?? '') || vigHasta.trim() !== (vigenciaHastaDelSujeto ?? '');
+  /* Y la que de verdad importa: la vigencia que ya no incluye hoy **corta el
+     acceso en el acto**. Medido contra el backend: `{"vigenciaHasta":
+     "2020-01-31"}` contesta 200 y lo guarda; no es un descuido, es RF-123 —un
+     contrato que ya terminó—, pero su efecto es el de una baja escrita en un
+     campo que se lee como administrativo. Por eso ésta se confirma. */
+  const vigenciaDejaFueraHoy =
+    (vigDesde.trim() !== '' && vigDesde.trim() > hoy) || (vigHasta.trim() !== '' && vigHasta.trim() < hoy);
+  const vigenciaInvertida =
+    vigDesde.trim() !== '' && vigHasta.trim() !== '' && vigHasta.trim() < vigDesde.trim();
+
+  const impedimentoDelEstado =
+    sujetoHabilitado === null
+      ? 'Todavía no se ha leído el estado de ' + comoSeLlamaElSujeto + '.'
+      : obsDelEstado.trim() === ''
+        ? 'Falta la observación: toda modificación se guarda con el motivo de quien la hace (RNF-052).'
+        : '';
+  const puedeCambiarElEstado = impedimentoDelEstado === '' && !cambiandoEstado;
+
+  const impedimentoDeLaVigencia =
+    sujetoHabilitado === null
+      ? 'Todavía no se ha leído el estado de ' + comoSeLlamaElSujeto + '.'
+      : !esFecha(vigDesde) || !esFecha(vigHasta)
+        ? 'Las fechas se escriben AAAA-MM-DD, o se dejan en blanco: sin «desde» vale desde siempre, sin «hasta» vale indefinidamente.'
+        : vigenciaInvertida
+          ? 'La vigencia terminaría antes de empezar. El backend lo rechaza con un 422, y aquí no hace falta llegar a mandarlo.'
+          : !vigenciaCambia
+            ? 'Las dos fechas son las que ya tiene: no hay nada que cambiar.'
+            : obsDeLaVigencia.trim() === ''
+              ? 'Falta la observación: toda modificación se guarda con el motivo de quien la hace (RNF-052).'
+              : '';
+  const puedeCambiarLaVigencia = impedimentoDeLaVigencia === '' && !cambiandoEstado;
+
+  /* Tocar una fecha DESARMA la confirmación de la vigencia, y teclear otro
+     motivo desarma la que hubiera: lo que se confirmó era otra fecha o por otra
+     razón, y la segunda pulsación aquí es la que corta el acceso. */
+  const alTocarLaVigencia = (que: 'desde' | 'hasta', v: string) => {
+    setConfirmando((c) => (c === 'vigencia' ? null : c));
+    if (que === 'desde') setVigDesde(v);
+    else setVigHasta(v);
+  };
+
+  const cambiarElEstado = async (accion: 'baja' | 'reactivacion') => {
+    if (!puedeCambiarElEstado || sel === null) return;
+    /* La baja se confirma; la reactivación no. No es simetría rota: la baja
+       quita acceso en el acto y la reactivación lo devuelve, y de la segunda se
+       vuelve con la primera. Lo irreversible aquí es el efecto inmediato de
+       quitar, no la fila —que no se borra nunca (RNF-051)—. */
+    if (accion === 'baja' && confirmando !== 'baja') {
+      setConfirmando('baja');
+      return;
+    }
+    setCambiandoEstado(true);
+    setErrorDelEstado(null);
+    try {
+      if (accion === 'baja') {
+        if (esGrupo) await darDeBajaGrupo(sel.id, obsDelEstado.trim());
+        else await darDeBajaUsuario(sel.id, obsDelEstado.trim());
+      } else if (esGrupo) {
+        await reactivarGrupo(sel.id, obsDelEstado.trim());
+      } else {
+        await reactivarUsuario(sel.id, obsDelEstado.trim());
+      }
+      setObsDelEstado('');
+      setConfirmando(null);
+      trasCambiarElEstado();
+      toast(
+        accion === 'baja'
+          ? esGrupo
+            ? 'Grupo dado de baja: deja de conceder lo que concedía a todos sus miembros.'
+            : 'Cuenta dada de baja: deja de poder operar, y sus permisos siguen configurados.'
+          : esGrupo
+            ? 'Grupo reactivado: sus miembros recuperan lo que concedía.'
+            : 'Cuenta reactivada: recupera enteros los permisos que tenía.',
+      );
+    } catch (fallo) {
+      setErrorDelEstado(
+        fallo instanceof ErrorDeApi ? fallo : new ErrorDeApi('ERROR_INTERNO', 'No se pudo cambiar el estado', 0),
+      );
+    } finally {
+      setCambiandoEstado(false);
+    }
+  };
+
+  const cambiarLaVigencia = async () => {
+    if (!puedeCambiarLaVigencia || sel === null) return;
+    if (vigenciaDejaFueraHoy && confirmando !== 'vigencia') {
+      setConfirmando('vigencia');
+      return;
+    }
+    setCambiandoEstado(true);
+    setErrorDelEstado(null);
+    /* Las dos fechas viajan **siempre**, también en blanco: el `PUT` reemplaza
+       la vigencia entera, así que mandar sólo la que se tocó dejaría la otra en
+       nulo sin que nadie lo pidiera. En blanco es nulo a propósito, que es lo
+       que quita ese extremo. */
+    const cambio: CambioDeVigencia = {
+      vigenciaDesde: vigDesde.trim() === '' ? null : vigDesde.trim(),
+      vigenciaHasta: vigHasta.trim() === '' ? null : vigHasta.trim(),
+    };
+    try {
+      if (esGrupo) await fijarVigenciaDeGrupo(sel.id, cambio, obsDeLaVigencia.trim());
+      else await fijarVigenciaDeUsuario(sel.id, cambio, obsDeLaVigencia.trim());
+      setObsDeLaVigencia('');
+      setConfirmando(null);
+      trasCambiarElEstado();
+      toast(
+        vigenciaDejaFueraHoy
+          ? 'Vigencia guardada. Con esas fechas, hoy ya no autoriza nada.'
+          : 'Vigencia guardada. Queda en la auditoría con tu usuario.',
+      );
+    } catch (fallo) {
+      setErrorDelEstado(
+        fallo instanceof ErrorDeApi ? fallo : new ErrorDeApi('ERROR_INTERNO', 'No se pudo cambiar la vigencia', 0),
+      );
+    } finally {
+      setCambiandoEstado(false);
+    }
+  };
+
+  /* Lo que hay que volver a leer después de tocar el estado, que es más de lo
+     que se tocó: el listado del árbol trae `habilitado` y las dos fechas, y la
+     matriz efectiva de una cuenta **cambia sin que nadie la haya tocado**
+     —medido: con el grupo 2 dado de baja, `GET /seguridad/usuarios/4/permisos`
+     pasa de once filas a dos, y las dos que quedan son sus excepciones—. Y los
+     titulares del privilegio también, que es lo que la confirmación cuenta. */
+  function trasCambiarElEstado() {
+    if (esGrupo) {
+      gruposReales.reintentar();
+      permisosReales.reintentar();
+      miembrosDelGrupoElegido.reintentar();
+    } else {
+      usuariosReales.reintentar();
+      efectivosReales.reintentar();
+      gruposDeLaCuenta.reintentar();
+    }
+    administradores.reintentar();
+  }
 
   /* El impedimento se dice entero, y no se reparte: un boton apagado sin
      motivo legible es RNF-082 incumplido. La fecha va con el formato que el
@@ -535,11 +853,47 @@ export default function Seguridad({ dest, onDest }: PantallaProps) {
      la contraseña la gobierna el proveedor de identidad y no este sistema, y
      «restauración sin verificar» no es un campo de `RespaldoResource` (#558).
      Los tres de aquí salen de columnas que las dos lecturas ya traen. */
-  const hoy = new Date().toISOString().slice(0, 10);
-
   const cuentasDeshabilitadas = usuarios.filter((u) => !u.habilitado);
+
+  /* ── Cuál de las deshabilitadas CONSERVA permisos (#583) ────────────────
+     Hasta #693 esto no se podía preguntar: la lectura efectiva aplica la misma
+     regla que el guardia y a una cuenta deshabilitada le contesta la lista
+     vacía, tanto si conserva permisos como si nunca los tuvo. `configurados`
+     contesta la otra pregunta.
+
+     Cuesta UNA petición por cuenta deshabilitada, así que se acota y se dice
+     cuántas quedaron fuera: un padrón con cien cuentas caídas no puede convertir
+     la apertura del panel en cien viajes. El tope es generoso a propósito
+     —quedarse corto es lo corriente, no lo normal—. */
+  const TOPE_DE_SONDEO = 12;
+  const sondeadas = cuentasDeshabilitadas.slice(0, TOPE_DE_SONDEO);
+  const llaveDeLasSondeadas = sondeadas.map((u) => u.id).join(',');
+  const conservan = useRecurso(
+    (s) => Promise.all(sondeadas.map((u) => permisosConfiguradosDelUsuario(u.id, s))),
+    [llaveDeLasSondeadas],
+    enPanel && sondeadas.length > 0,
+  );
   const cuentasVencidas = usuarios.filter((u) => u.vigenciaHasta !== null && u.vigenciaHasta < hoy);
   const gruposDeshabilitados = grupos.filter((g) => !g.habilitado);
+
+  /* ── Quién tiene un privilegio sobre una opción (#583) ──────────────────
+     Es la pregunta INVERSA a la matriz de una cuenta, y hasta #693 costaba una
+     petición por usuario del padrón: en la práctica no se hacía.
+
+     Se pregunta POR OPCIÓN y no del padrón entero, y eso no es una comodidad:
+     la lectura contesta quién tiene un privilegio sobre UNA opción, así que
+     «quién tiene Especial en algo» seguiría costando 134 peticiones. La pantalla
+     lo dice en vez de fingir que contesta la otra pregunta.
+
+     Empieza en `ESPECIAL` porque es el que el diseño pedía: es el que abre las
+     opciones que ningún otro privilegio abre. */
+  const [accesoSondeado, setAccesoSondeado] = useState('');
+  const [privilegioSondeado, setPrivilegioSondeado] = useState<Privilegio>('ESPECIAL');
+  const titulares = useRecurso(
+    (s) => titularesDelPrivilegio(accesoSondeado, privilegioSondeado, { tamano: 50 }, s),
+    [accesoSondeado, privilegioSondeado],
+    enPanel && accesoSondeado !== '',
+  );
 
   const hallazgos = [
     {
@@ -549,10 +903,39 @@ export default function Seguridad({ dest, onDest }: PantallaProps) {
       detalle:
         cuentasDeshabilitadas.length === 0
           ? 'Ninguna cuenta del padrón está deshabilitada.'
-          : 'No pueden entrar, y conservan lo que tuvieran configurado: ' +
-            cuentasDeshabilitadas.map((u) => u.cuenta).join(', ') +
-            '.',
+          : 'No pueden entrar: ' + cuentasDeshabilitadas.map((u) => u.cuenta).join(', ') + '.',
       conteo: String(cuentasDeshabilitadas.length),
+    },
+    /* Este hallazgo lo pedía el diseño y hasta #693 se decía imposible. La
+       redacción no promete lo que no se midió: si el sondeo no ha vuelto o
+       falló, se dice eso y no un cero — un cero aquí se lee como «ninguna
+       conserva permisos», que es la frase tranquilizadora y falsa. */
+    {
+      etiqueta: 'Llave',
+      tono: 'bad' as TonoDeSeguridad,
+      titulo: 'Cuentas deshabilitadas que conservan permisos',
+      detalle: (() => {
+        if (cuentasDeshabilitadas.length === 0) return 'No hay ninguna cuenta deshabilitada que mirar.';
+        if (conservan.cargando) return 'Preguntando qué conserva cada cuenta caída…';
+        if (conservan.error !== null)
+          return 'No se pudo leer lo configurado de las cuentas caídas, así que no se sabe cuáles conservan permisos.';
+        const con = (conservan.datos ?? []).filter((c) => c.permisos.length > 0);
+        const deMas = cuentasDeshabilitadas.length - sondeadas.length;
+        const cola = deMas > 0 ? ' Quedan ' + deMas + ' sin preguntar: se sondean ' + TOPE_DE_SONDEO + ' como mucho.' : '';
+        if (con.length === 0) return 'Ninguna de las caídas conserva ningún permiso configurado.' + cola;
+        return (
+          'Basta rehabilitarlas para que vuelvan a abrir: ' +
+          con.map((c) => c.cuenta + ' (' + c.permisos.length + ')').join(', ') +
+          '.' +
+          cola
+        );
+      })(),
+      conteo:
+        cuentasDeshabilitadas.length === 0
+          ? '0'
+          : conservan.cargando || conservan.error !== null || conservan.datos === null
+            ? SIN_DATO
+            : String((conservan.datos ?? []).filter((c) => c.permisos.length > 0).length),
     },
     {
       etiqueta: 'Vigencia',
@@ -590,12 +973,6 @@ export default function Seguridad({ dest, onDest }: PantallaProps) {
     (gruposReales.datos?.contenido ?? []).forEach((g) => m.set(g.id, g.nombre));
     return m;
   }, [gruposReales.datos]);
-
-  const efectivosPorAcceso = useMemo(() => {
-    const m = new Map<string, PermisoEfectivo>();
-    (efectivosReales.datos ?? []).forEach((e) => m.set(e.acceso, e));
-    return m;
-  }, [efectivosReales.datos]);
 
   /* Los recuentos de la cabecera salen del CATALOGO ENTERO, no de lo filtrado.
      «Con privilegio Especial: 0» bajo el filtro «Sensibles» —que son doce
@@ -643,15 +1020,14 @@ export default function Seguridad({ dest, onDest }: PantallaProps) {
     (usuarioElegido.vigenciaDesde === null || usuarioElegido.vigenciaDesde <= hoy) &&
     (usuarioElegido.vigenciaHasta === null || usuarioElegido.vigenciaHasta >= hoy);
 
+  /* Las filas de la cuenta son las MISMAS que las del grupo —mismo catálogo
+     filtrado, mismas casillas, misma cuenta de lo tocado— más el `efectivo`,
+     que es lo único propio: de dónde viene hoy cada fila. Componerlas aparte
+     dejaría dos sitios donde decidir qué se tocó, y el que se olvidara de
+     actualizarse mandaría otra cosa que la que se ve. */
   const matrizDelUsuario = useMemo(
-    () =>
-      accesosVisibles.map((a) => ({
-        acceso: a,
-        efectivo: efectivosPorAcceso.get(a.codigo),
-        modulo: nombreDelModulo.get(a.moduloId) ?? SIN_DATO,
-        sensible: MUEVEN_DINERO.has(a.codigo),
-      })),
-    [accesosVisibles, efectivosPorAcceso, nombreDelModulo],
+    () => matriz.filas.map((f) => ({ ...f, efectivo: efectivosPorAcceso.get(f.acceso.codigo) })),
+    [matriz, efectivosPorAcceso],
   );
 
   const catalogoCompleto = accesosReales.datos !== null && !accesosReales.datos.hayMas;
@@ -885,7 +1261,15 @@ export default function Seguridad({ dest, onDest }: PantallaProps) {
                 <div style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '13px 16px', borderBottom: '1px solid var(--line)' }}>
                   <h2 style={{ margin: 0, flex: 1, fontFamily: 'var(--font-serif)', fontSize: 16, fontWeight: 600 }}>Lo que hay que revisar</h2>
                   <span style={{ fontFamily: 'var(--font-mono)', fontSize: 11, color: 'var(--ink-3)' }}>
-                    {cuentasDeshabilitadas.length + cuentasVencidas.length + gruposDeshabilitados.length} hallazgos
+                    {/* Se suma lo CONTADO, no las tarjetas: las cuentas que conservan
+                        permisos son un subconjunto de las caídas, así que sumar la
+                        tarjeta entera las contaría dos veces. Y cuando el sondeo no
+                        ha vuelto, ese sumando no existe todavía y no vale cero. */}
+                    {cuentasDeshabilitadas.length +
+                      cuentasVencidas.length +
+                      gruposDeshabilitados.length +
+                      (conservan.datos === null ? 0 : conservan.datos.filter((c) => c.permisos.length > 0).length)}{' '}
+                    hallazgos
                   </span>
                 </div>
                 {(usuariosReales.cargando || gruposReales.cargando) && (
@@ -926,16 +1310,128 @@ export default function Seguridad({ dest, onDest }: PantallaProps) {
                     jquispe, aayca, fruiz» nombraba a tres personas que no existen
                     en ninguna de las dos municipalidades. */}
                 <p style={{ margin: 0, padding: '11px 16px', background: 'var(--bg-elev)', fontSize: 12, lineHeight: 1.5, color: 'var(--ink-3)', textWrap: 'pretty' }}>
-                  Faltan cuatro hallazgos que el diseño pedía y hoy no se pueden calcular. <strong>Quién tiene el privilegio
-                  Especial</strong> ya se puede preguntar de una cuenta —está en su matriz (#543)—, pero no del padrón: haría falta una
-                  petición por usuario y no hay filtro por privilegio (#583). <strong>Qué cuenta deshabilitada conserva permisos</strong>
-                  no se puede ni así, y no por falta de lectura: la de permisos efectivos aplica la misma regla que el guardia y a una
-                  cuenta deshabilitada le contesta la lista <strong>vacía</strong>, tanto si conserva permisos como si nunca los tuvo
-                  (#583). La <strong>caducidad de la contraseña</strong> la gobierna el proveedor de identidad y no este sistema; y la
-                  <strong>última restauración verificada</strong> no es un campo de la consulta de respaldos. Un permiso total sobre un
-                  módulo tributario permite anular recibos y dar de baja deuda: no es una preferencia, es la llave de la caja, y por eso
-                  no se enseña una cifra inventada en su sitio.
+                  Falta <strong>uno</strong> de los cuatro hallazgos que el diseño pedía; los otros tres ya están. <strong>Qué cuenta deshabilitada
+                  conserva permisos</strong> ya está arriba: #693 publicó la lectura de lo <em>configurado</em>, que contesta otra
+                  pregunta que la de permisos efectivos —ésa aplica la misma regla que el guardia y a una cuenta caída le contesta la
+                  lista vacía, conserve permisos o no los haya tenido nunca—. <strong>Quién tiene el privilegio Especial</strong> se
+                  pregunta abajo, y se pregunta <em>por opción</em>: la lectura contesta quién lo tiene sobre una, y hacerlo del padrón
+                  entero seguiría costando una petición por cada una de las 134. Y la <strong>última restauración verificada</strong>
+                  está en la pestaña «Copias»: desde #558 el recurso publica esa columna, y la celda dice el instante o «Nunca», que es lo
+                  que significa el nulo. Sigue sin poder calcularse <strong>una</strong>: la <strong>caducidad de la contraseña</strong>,
+                  que la gobierna el proveedor de identidad y no este sistema. Un permiso total sobre un módulo tributario permite
+                  anular recibos y dar de baja deuda: no es una preferencia, es la llave de la caja, y por eso en su sitio no se enseña una
+                  cifra inventada.
                 </p>
+              </section>
+            )}
+
+            {/* La pregunta inversa (#583, #693). Va en el panel y no en «Accesos»
+                porque la hace quien audita —«¿quién puede anular recibos?»— y no
+                quien configura una cuenta. */}
+            {enPanel && (
+              <section style={{ background: 'var(--bg-card)', border: '1px solid var(--line)', borderRadius: 10, boxShadow: 'var(--shadow-1)', overflow: 'hidden' }}>
+                <div style={{ padding: '13px 16px', borderBottom: '1px solid var(--line)' }}>
+                  <h2 style={{ margin: 0, fontSize: 13.5, fontWeight: 600 }}>Quién tiene un privilegio sobre una opción</h2>
+                  <p style={{ margin: '3px 0 0', fontSize: 11.5, color: 'var(--ink-4)' }}>
+                    GET /api/v1/seguridad/accesos/&#123;codigo&#125;/usuarios
+                  </p>
+                </div>
+                <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap', alignItems: 'center', padding: '11px 16px', borderBottom: '1px solid var(--line)', background: 'var(--bg-elev)' }}>
+                  <label htmlFor="acceso-sondeado" style={{ fontSize: 11.5, color: 'var(--ink-3)' }}>
+                    Opción
+                  </label>
+                  {/* Sin catalogo que ofrecer se APAGA y dice por que. Con
+                      «Elige una opcion del catalogo…» de unica opcion, el sondeo
+                      queda encendido y sin nada que sondear, y las tres causas
+                      —leyendo, la lectura rota, y un catalogo de verdad vacio—
+                      no se distinguen entre si (#718). Es el patron de los
+                      sectores del mapa catastral. */}
+                  <select
+                    id="acceso-sondeado"
+                    value={accesoSondeado}
+                    onChange={(e) => setAccesoSondeado(e.target.value)}
+                    disabled={catalogo.length === 0}
+                    title={
+                      catalogo.length > 0
+                        ? undefined
+                        : accesosReales.cargando
+                          ? 'Leyendo el catálogo de opciones…'
+                          : accesosReales.error !== null
+                            ? 'No se pudo leer el catálogo de opciones, así que no hay ninguna que sondear'
+                            : 'El catálogo de opciones vino vacío: no hay ninguna que sondear'
+                    }
+                    style={{ flex: 1, minWidth: 230, border: '1px solid var(--line-2)', borderRadius: 6, padding: '6px 9px', background: 'var(--bg-card)', fontSize: 12 }}
+                  >
+                    {/* La opción vacía se queda: sin ella la pantalla preguntaría
+                        sola por la primera del catálogo, que es una elección que
+                        nadie hizo y una petición que nadie pidió. */}
+                    <option value="">Elige una opción del catálogo…</option>
+                    {catalogo.map((a) => (
+                      <option key={a.codigo} value={a.codigo}>
+                        {a.nombre} ({a.codigo})
+                      </option>
+                    ))}
+                  </select>
+                  <label htmlFor="privilegio-sondeado" style={{ fontSize: 11.5, color: 'var(--ink-3)' }}>
+                    Privilegio
+                  </label>
+                  <select
+                    id="privilegio-sondeado"
+                    value={privilegioSondeado}
+                    onChange={(e) => setPrivilegioSondeado(e.target.value as Privilegio)}
+                    style={{ border: '1px solid var(--line-2)', borderRadius: 6, padding: '6px 9px', background: 'var(--bg-card)', fontSize: 12 }}
+                  >
+                    {/* Los siete salen del enumerado que la fachada declara, no de
+                        una lista escrita aquí: uno nuevo en el backend aparece
+                        solo, y uno inventado no se puede elegir. */}
+                    {PRIVILEGIOS.map((pv) => (
+                      <option key={pv} value={pv}>
+                        {pv}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+                {accesoSondeado === '' ? (
+                  <p style={{ margin: 0, padding: '13px 16px', fontSize: 12, color: 'var(--ink-4)' }}>
+                    Elige una opción para ver quién tiene ese privilegio sobre ella. Se pregunta por opción y no del padrón entero: la
+                    lectura contesta quién lo tiene sobre <strong>una</strong>, y hacerlo de todas costaría {catalogo.length || 134}{' '}
+                    peticiones.
+                  </p>
+                ) : titulares.cargando ? (
+                  <p style={{ margin: 0, padding: '13px 16px', fontSize: 12, color: 'var(--ink-4)' }}>Preguntando…</p>
+                ) : titulares.error !== null ? (
+                  <FalloDeLectura
+                    error={titulares.error}
+                    que="quién tiene ese privilegio"
+                    acceso="permisos"
+                    alReintentar={titulares.reintentar}
+                  />
+                ) : (
+                  <div style={{ padding: '13px 16px', display: 'flex', flexDirection: 'column', gap: 8 }}>
+                    <p style={{ margin: 0, fontSize: 12, color: 'var(--ink-3)' }}>
+                      {(titulares.datos?.totalElementos ?? 0) === 0
+                        ? 'Nadie tiene ' + privilegioSondeado + ' sobre «' + accesoSondeado + '».'
+                        : titulares.datos!.totalElementos +
+                          (titulares.datos!.totalElementos === 1 ? ' cuenta tiene ' : ' cuentas tienen ') +
+                          privilegioSondeado +
+                          ' sobre «' +
+                          accesoSondeado +
+                          '».'}
+                    </p>
+                    {(titulares.datos?.contenido ?? []).map((t) => (
+                      <div key={t.usuarioId} style={{ display: 'flex', gap: 10, alignItems: 'baseline', fontSize: 12 }}>
+                        <span style={{ fontFamily: 'var(--font-mono)', minWidth: 110 }}>{t.cuenta}</span>
+                        <span style={{ flex: 1, minWidth: 0 }}>{t.nombre}</span>
+                        {/* De dónde le viene, que es la mitad que ningún recorrido
+                            por grupos encontraría: una excepción propia no se ve
+                            mirando a qué grupo pertenece nadie. */}
+                        <span style={{ fontSize: 11, color: 'var(--ink-4)' }}>
+                          {t.origen === 'GRUPO' ? 'por el grupo ' + String(t.grupoId) : 'excepción propia de la cuenta'}
+                        </span>
+                      </div>
+                    ))}
+                  </div>
+                )}
               </section>
             )}
 
@@ -982,7 +1478,7 @@ export default function Seguridad({ dest, onDest }: PantallaProps) {
                   </span>
                   <span style={{ textAlign: 'right', flex: '0 0 auto' }}>
                     <span style={{ display: 'block', fontFamily: 'var(--font-mono)', fontSize: 11.5, color: 'var(--ink-3)' }}>
-                      {r.fecha.replace('T', ' ').slice(0, 16)}
+                      {instante(r.fecha)}
                     </span>
                     <span style={{ display: 'block', fontSize: 11, color: 'var(--ink-4)', marginTop: 2 }}>{r.usuario}</span>
                   </span>
@@ -1212,6 +1708,207 @@ export default function Seguridad({ dest, onDest }: PantallaProps) {
                   </section>
                 )}
 
+                {/* ── El estado del sujeto: baja, reactivación y vigencia (#572) ──
+                    Los tres actos existen en el backend desde #572 y no los
+                    llamaba ninguna pantalla. Van aquí, bajo la cabecera de lo
+                    elegido, porque es donde ya se leen `habilitado` y las dos
+                    fechas: una pantalla propia obligaría a elegir el sujeto dos
+                    veces y a mirar en dos sitios el mismo dato. */}
+                {sel !== null && (
+                  <section style={TARJETA}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap', padding: '13px 16px', borderBottom: '1px solid var(--line)' }}>
+                      <h2 style={{ margin: 0, flex: 1, fontFamily: 'var(--font-serif)', fontSize: 16, fontWeight: 600 }}>
+                        {esGrupo ? 'Estado del grupo' : 'Estado de la cuenta'}
+                      </h2>
+                      <span style={INS[sujetoHabilitado === false ? 'bad' : 'ok']}>
+                        {sujetoHabilitado === null
+                          ? SIN_DATO
+                          : sujetoHabilitado
+                            ? 'Habilitado'
+                            : 'Dado de baja'}
+                      </span>
+                      <span style={INS.neutro}>
+                        {'Vigencia: ' +
+                          (vigenciaDesdeDelSujeto ?? 'desde siempre') +
+                          ' → ' +
+                          (vigenciaHastaDelSujeto ?? 'sin fin')}
+                      </span>
+                    </div>
+
+                    {errorDelEstado !== null && (
+                      <div style={{ padding: '13px 16px', borderBottom: '1px solid var(--line)', background: 'var(--bad-bg)', color: 'var(--bad-fg)', fontSize: 12.5, lineHeight: 1.55 }}>
+                        <strong style={{ display: 'block', fontWeight: 600, marginBottom: 2 }}>No se cambió nada</strong>
+                        {errorDelEstado.mensaje}
+                      </div>
+                    )}
+
+                    {/* ── Baja y reactivación ──
+                        Nunca están las dos: el estado de la fila decide cuál se
+                        dibuja, y por eso comparten la caja del motivo. */}
+                    <div style={{ display: 'flex', alignItems: 'flex-end', gap: 12, flexWrap: 'wrap', padding: '13px 16px' }}>
+                      <label style={{ flex: 1, minWidth: 240 }}>
+                        <span style={{ display: 'block', fontSize: 11.5, fontWeight: 500, color: 'var(--ink-3)', marginBottom: 5 }}>
+                          {(sujetoHabilitado === false ? 'Motivo de la reactivación' : 'Motivo de la baja') + ' · obligatorio'}
+                        </span>
+                        <input
+                          value={obsDelEstado}
+                          onChange={(e) => {
+                            /* Cambiar el motivo desarma la confirmación: lo que
+                               se había confirmado era otra razón. */
+                            setConfirmando((c) => (c === 'baja' ? null : c));
+                            setObsDelEstado(e.target.value);
+                          }}
+                          placeholder="Con qué documento, y por qué"
+                          style={{ ...IN, background: 'var(--bg-card)' }}
+                        />
+                      </label>
+                      <button
+                        onClick={() => void cambiarElEstado(sujetoHabilitado === false ? 'reactivacion' : 'baja')}
+                        disabled={!puedeCambiarElEstado}
+                        title={impedimentoDelEstado || undefined}
+                        aria-describedby="motivo-del-estado"
+                        className={puedeCambiarElEstado ? 'hov-acento-2' : undefined}
+                        style={{
+                          border: 0,
+                          borderRadius: 6,
+                          padding: '9px 18px',
+                          background: sujetoHabilitado === false ? 'var(--accent)' : 'var(--bad-fg)',
+                          color: '#fff',
+                          fontSize: 12.5,
+                          fontWeight: 500,
+                          cursor: puedeCambiarElEstado ? 'pointer' : 'not-allowed',
+                          opacity: puedeCambiarElEstado ? 1 : 0.5,
+                          whiteSpace: 'nowrap',
+                        }}
+                      >
+                        {cambiandoEstado
+                          ? 'Guardando…'
+                          : sujetoHabilitado === false
+                            ? esGrupo
+                              ? 'Reactivar el grupo'
+                              : 'Reactivar la cuenta'
+                            : confirmando === 'baja'
+                              ? esGrupo
+                                ? 'Sí: dar de baja el grupo'
+                                : 'Sí: dar de baja la cuenta'
+                              : esGrupo
+                                ? 'Dar de baja el grupo'
+                                : 'Dar de baja la cuenta'}
+                      </button>
+                    </div>
+                    {/* El pie dice QUÉ se va a hacer, nunca «¿estás seguro?».
+                        Y con la baja armada dice además a quién alcanza y qué
+                        pasa con el privilegio de administrar, que es lo único
+                        de lo que no se vuelve por el sistema. */}
+                    <p id="motivo-del-estado" style={{ margin: 0, padding: '0 16px 13px', fontSize: 12, lineHeight: 1.5, color: 'var(--ink-3)', textWrap: 'pretty' }}>
+                      {impedimentoDelEstado !== ''
+                        ? impedimentoDelEstado
+                        : sujetoHabilitado === false
+                          ? esGrupo
+                            ? 'Se volverá a habilitar el grupo y sus miembros recuperarán lo que concedía. Ninguna afiliación se borró al darlo de baja, así que vuelven los mismos.'
+                            : 'Se volverá a habilitar la cuenta. Recupera enteros los permisos que tenía configurados: deshabilitar no retira ninguno.'
+                          : confirmando === 'baja'
+                            ? (esGrupo
+                                ? 'Se dará de baja el grupo. Deja de conceder lo que concedía' +
+                                  (nMiembros === null ? '' : ' a sus ' + cuantosMiembros(nMiembros).toLowerCase()) +
+                                  ', sus afiliaciones no se borran y reactivarlo lo devuelve todo. '
+                                : 'Se dará de baja la cuenta. Deja de poder operar en el acto —la lectura de permisos efectivos le contestará la lista vacía—, sus permisos siguen configurados y reactivarla se los devuelve. ') +
+                              (administradoresQueSeVan.length === 0
+                                ? 'No es de donde sale el privilegio de administrar permisos. '
+                                : 'ATENCIÓN: de aquí sale el privilegio de administrar permisos para ' +
+                                  administradoresQueSeVan.map((t) => t.cuenta).join(', ') +
+                                  '. Quedarían ' +
+                                  (administradoresQueQuedan === null
+                                    ? SIN_DATO + ' (no se pudo leer quién puede administrarlos)'
+                                    : String(administradoresQueQuedan)) +
+                                  ' con ese privilegio, y el backend NO rechaza este acto aunque no quede ninguno. ') +
+                              'Vuelve a pulsar para confirmar.'
+                            : esGrupo
+                              ? 'Dar de baja un grupo retira el acceso de todos sus miembros a la vez. Se confirma antes de mandarlo.'
+                              : 'Dar de baja una cuenta le quita el acceso en el acto. Se confirma antes de mandarlo.'}
+                    </p>
+
+                    {/* ── La vigencia, que es una fecha y corta como una baja ── */}
+                    <div style={{ display: 'flex', alignItems: 'flex-end', gap: 12, flexWrap: 'wrap', padding: '13px 16px', borderTop: '1px solid var(--line)', background: 'var(--bg-elev)' }}>
+                      <label style={{ minWidth: 150 }}>
+                        <span style={{ display: 'block', fontSize: 11.5, fontWeight: 500, color: 'var(--ink-3)', marginBottom: 5 }}>
+                          Vigencia desde
+                        </span>
+                        <input
+                          value={vigDesde}
+                          onChange={(e) => alTocarLaVigencia('desde', e.target.value)}
+                          placeholder="AAAA-MM-DD · en blanco, siempre"
+                          style={{ ...IN, background: 'var(--bg-card)' }}
+                        />
+                      </label>
+                      <label style={{ minWidth: 150 }}>
+                        <span style={{ display: 'block', fontSize: 11.5, fontWeight: 500, color: 'var(--ink-3)', marginBottom: 5 }}>
+                          Vigencia hasta
+                        </span>
+                        <input
+                          value={vigHasta}
+                          onChange={(e) => alTocarLaVigencia('hasta', e.target.value)}
+                          placeholder="AAAA-MM-DD · en blanco, sin fin"
+                          style={{ ...IN, background: 'var(--bg-card)' }}
+                        />
+                      </label>
+                      <label style={{ flex: 1, minWidth: 220 }}>
+                        <span style={{ display: 'block', fontSize: 11.5, fontWeight: 500, color: 'var(--ink-3)', marginBottom: 5 }}>
+                          Motivo del cambio de vigencia · obligatorio
+                        </span>
+                        <input
+                          value={obsDeLaVigencia}
+                          onChange={(e) => {
+                            setConfirmando((c) => (c === 'vigencia' ? null : c));
+                            setObsDeLaVigencia(e.target.value);
+                          }}
+                          placeholder="Qué contrato o resolución fija estas fechas"
+                          style={{ ...IN, background: 'var(--bg-card)' }}
+                        />
+                      </label>
+                      <button
+                        onClick={() => void cambiarLaVigencia()}
+                        disabled={!puedeCambiarLaVigencia}
+                        title={impedimentoDeLaVigencia || undefined}
+                        aria-describedby="motivo-de-la-vigencia"
+                        className={puedeCambiarLaVigencia ? 'hov-acento-2' : undefined}
+                        style={{
+                          border: 0,
+                          borderRadius: 6,
+                          padding: '9px 18px',
+                          background: vigenciaDejaFueraHoy ? 'var(--bad-fg)' : 'var(--accent)',
+                          color: '#fff',
+                          fontSize: 12.5,
+                          fontWeight: 500,
+                          cursor: puedeCambiarLaVigencia ? 'pointer' : 'not-allowed',
+                          opacity: puedeCambiarLaVigencia ? 1 : 0.5,
+                          whiteSpace: 'nowrap',
+                        }}
+                      >
+                        {cambiandoEstado
+                          ? 'Guardando…'
+                          : confirmando === 'vigencia'
+                            ? 'Sí: dejar fuera de vigencia'
+                            : 'Guardar la vigencia'}
+                      </button>
+                    </div>
+                    <p id="motivo-de-la-vigencia" style={{ margin: 0, padding: '0 16px 13px', background: 'var(--bg-elev)', fontSize: 12, lineHeight: 1.5, color: 'var(--ink-3)', textWrap: 'pretty' }}>
+                      {impedimentoDeLaVigencia !== ''
+                        ? impedimentoDeLaVigencia
+                        : confirmando === 'vigencia'
+                          ? 'Con esas fechas, hoy (' +
+                            hoy +
+                            ') queda FUERA de vigencia: ' +
+                            comoSeLlamaElSujeto +
+                            ' deja de autorizar nada en el acto, igual que una baja, aunque siga marcado como habilitado. Vuelve a pulsar para confirmar.'
+                          : 'Se guardarán las dos fechas de una vez: en blanco es «sin ese extremo», no «déjalo como estaba». ' +
+                            (vigenciaDejaFueraHoy
+                              ? 'Ojo: las fechas escritas dejan hoy fuera.'
+                              : 'Con estas fechas hoy sigue dentro.')}
+                    </p>
+                  </section>
+                )}
+
                 {/* ── La matriz de un USUARIO, del backend (#543) ──
                     Aquí no se reconstruye nada: el servidor manda una fila por
                     acceso con la precedencia YA resuelta, y cada fila dice de
@@ -1326,6 +2023,9 @@ export default function Seguridad({ dest, onDest }: PantallaProps) {
                             deshabilitada o fuera de vigencia le contesta la lista vacía. Vacía no quiere decir «no tiene permisos
                             configurados» —puede tenerlos, y volverían a valer el día que se rehabilite—, quiere decir que hoy no le
                             sirve ninguno. Los permisos de sus grupos se revisan eligiendo el grupo en la lista de la izquierda.
+                            Y por lo mismo <strong>tampoco se le escribe aquí su excepción</strong> (#585): la matriz que se edita es
+                            ésta, y editar sobre una lista vacía escribiría negaciones de accesos que nadie ha mirado. Si hay que
+                            apartarla de su grupo, se reactiva primero —arriba, en «Estado de la cuenta»— y entonces se ve qué tiene.
                           </Aviso>
                         </div>
                       )}
@@ -1348,20 +2048,34 @@ export default function Seguridad({ dest, onDest }: PantallaProps) {
                                       {ROTULO_DEL_PRIVILEGIO[p]}
                                     </th>
                                   ))}
+                                  {/* La columna que dice QUE se va a escribir, que en esta
+                                      matriz no es lo mismo que en la del grupo: aqui lo que
+                                      se guarda es una EXCEPCION, y una fila tocada deja de
+                                      heredar aunque las casillas queden como estaban. */}
+                                  <th style={{ padding: '10px 14px', textAlign: 'left', fontSize: 10.5, fontWeight: 500, textTransform: 'uppercase', letterSpacing: '.1em', color: 'var(--ink-3)', background: 'var(--bg-elev)' }}>
+                                    Estado
+                                  </th>
                                 </tr>
                               </thead>
                               <tbody>
                                 {matrizDelUsuario.length === 0 && (
                                   <tr>
-                                    <td colSpan={PRIVILEGIOS.length + 1} style={{ ...TD, whiteSpace: 'normal', color: 'var(--ink-3)' }}>
+                                    <td colSpan={PRIVILEGIOS.length + 2} style={{ ...TD, whiteSpace: 'normal', color: 'var(--ink-3)' }}>
                                       Ningún acceso del catálogo cae en este filtro.
                                     </td>
                                   </tr>
                                 )}
                                 {matrizDelUsuario.map((f) => {
-                                  const privilegios = f.efectivo?.privilegios ?? [];
-                                  const negado = f.efectivo !== undefined && privilegios.length === 0;
-                                  const origen = origenDeLaFila(f.efectivo, nombreDelGrupo);
+                                  /* Lo que se dibuja es lo que QUEDARIA al guardar, no lo
+                                     que hoy hay: `vigentes` es lo editado si se tocó, y lo
+                                     efectivo si no. Dibujar lo efectivo con la edición
+                                     encima sería enseñar una casilla marcada que el clic
+                                     acaba de desmarcar. */
+                                  const privilegios = f.vigentes;
+                                  const negado = f.tocada
+                                    ? privilegios.length === 0
+                                    : f.efectivo !== undefined && privilegios.length === 0;
+                                  const origen = origenDeLaFila(f.efectivo, nombreDelGrupo, f.tocada);
                                   const fondo = negado
                                     ? 'var(--bad-bg)'
                                     : f.sensible && privilegios.length > 0
@@ -1383,34 +2097,57 @@ export default function Seguridad({ dest, onDest }: PantallaProps) {
                                           {origen.texto}
                                         </span>
                                       </td>
-                                      {PRIVILEGIOS.map((pr) => {
-                                        const on = privilegios.indexOf(pr) >= 0;
+                                      {f.celdas.map((c) => {
+                                        const on = c.on;
                                         return (
-                                          <td key={pr} style={{ padding: '6px 8px', textAlign: 'center' }}>
-                                            <span
-                                              role="img"
-                                              aria-label={ROTULO_DEL_PRIVILEGIO[pr] + (on ? ': sí' : ': no')}
-                                              title={ROTULO_DEL_PRIVILEGIO[pr] + (on ? ': lo tiene' : ': no lo tiene')}
+                                          <td key={c.privilegio} style={{ padding: '6px 8px', textAlign: 'center' }}>
+                                            <button
+                                              onClick={() => alternar(f, c)}
+                                              aria-pressed={on}
+                                              aria-label={ROTULO_DEL_PRIVILEGIO[c.privilegio] + ' en ' + f.acceso.nombre}
+                                              /* El rótulo dice lo que pasa al pulsar, y aquí eso
+                                                 NO es «otorgar» ni «retirar» a secas: escribe una
+                                                 excepción propia que sustituye a lo que su grupo
+                                                 le da en esta fila. */
+                                              title={
+                                                on
+                                                  ? 'Lo tiene: pulsa para escribir una excepción que se lo retire'
+                                                  : 'No lo tiene: pulsa para escribir una excepción que se lo dé'
+                                              }
                                               style={{
-                                                display: 'inline-grid',
+                                                display: 'grid',
                                                 placeItems: 'center',
                                                 width: 26,
                                                 height: 26,
                                                 borderRadius: 6,
+                                                cursor: 'pointer',
                                                 border: `1px solid ${on ? 'var(--accent)' : 'var(--line-2)'}`,
                                                 background: on ? 'var(--accent)' : 'var(--bg-card)',
-                                                color: '#fff',
+                                                color: on ? '#fff' : 'var(--accent-ink)',
                                                 /* Sin fila no hay nada configurado: la casilla se
                                                    apaga para que no se lea como «se le negó». Lo
-                                                   negado se distingue en las dos últimas columnas. */
-                                                opacity: f.efectivo === undefined ? 0.45 : 1,
+                                                   negado se distingue en la columna de estado. */
+                                                opacity: f.efectivo === undefined && !f.tocada ? 0.45 : 1,
                                               }}
                                             >
                                               {on && <Icono d={['M5 12.5l4.5 4.5L19 7']} tam={12} grosor={3} />}
-                                            </span>
+                                            </button>
                                           </td>
                                         );
                                       })}
+                                      <td style={{ padding: '10px 14px', whiteSpace: 'nowrap' }}>
+                                        <span style={INS[f.tocada ? 'warn' : negado ? 'bad' : privilegios.length === 0 ? 'neutro' : 'ok']}>
+                                          {f.tocada
+                                            ? privilegios.length === 0
+                                              ? 'Sin guardar · negará'
+                                              : 'Sin guardar · ' + privilegios.length + ' de 7'
+                                            : negado
+                                              ? 'Negado'
+                                              : privilegios.length === 0
+                                                ? 'Sin configurar'
+                                                : privilegios.length + ' de 7'}
+                                        </span>
+                                      </td>
                                     </tr>
                                   );
                                 })}
@@ -1418,15 +2155,78 @@ export default function Seguridad({ dest, onDest }: PantallaProps) {
                             </table>
                           </div>
 
-                          {/* Aquí no hay «Guardar», y no es un olvido: la excepción de
-                              usuario existe en el dominio y el contrato publica esta
-                              ruta sólo con GET. Dibujar el formulario apagado sería
-                              prometer un acto que no tiene a dónde ir. */}
-                          <p style={{ margin: 0, padding: '12px 16px', borderTop: '1px solid var(--line)', background: 'var(--bg-elev)', fontSize: 12, lineHeight: 1.55, color: 'var(--ink-3)', textWrap: 'pretty' }}>
-                            Esto se lee y no se escribe: los permisos se dan al <strong>grupo</strong>, y la excepción propia de una
-                            cuenta —la que <strong>sustituye</strong> a lo que su grupo le concede, otorgue o niegue— no tiene ruta de
-                            escritura en el contrato. Un acceso que no aparece configurado en ninguna parte sale como{' '}
-                            <em>sin configurar</em>, que no es lo mismo que <em>negado</em>: negar es una excepción, y se ve.
+                          {/* ── Guardar la EXCEPCIÓN de la cuenta (#585) ──
+                              Mismo camino que el de la matriz del grupo —manda sólo
+                              los accesos tocados, con su observación— y otro acto:
+                              lo que se escribe aquí sustituye a lo que sus grupos le
+                              dan en esas filas. Por eso el aviso va ANTES del botón y
+                              no en una ayuda al pasar el ratón: quien lo lea después
+                              de pulsar ya no puede elegir. */}
+                          <div style={{ padding: '13px 16px 0', borderTop: '1px solid var(--line)', background: 'var(--bg-elev)' }}>
+                            <Aviso tono="warn" titulo="Lo que se guarda aquí sustituye a lo que su grupo le da, y no se puede retirar">
+                              Una excepción propia <strong>desplaza</strong> a lo que sus grupos concedan en ese acceso: no se suma a
+                              ello, ni le quita sólo lo desmarcado. Y una vez escrita, ese acceso <strong>deja de heredar del grupo
+                              para siempre</strong> —aquí no se borra nada (regla 4) y el contrato no publica ningún borrado de esta
+                              ruta—; lo más parecido a deshacerlo es volver a escribirla con lo que el grupo concede, que deja los
+                              mismos privilegios y sigue diciendo «Excepción propia». Dejar una fila en cero no es «quitarle la
+                              excepción»: es <strong>negar</strong> ese acceso, que es lo único que distingue «se le negó» de «nunca
+                              lo tuvo». Para cambiar lo que hereda todo el grupo, la matriz es la del grupo.
+                            </Aviso>
+                          </div>
+                          {errorAlGuardar !== null && (
+                            <div style={{ padding: '13px 16px 0', background: 'var(--bg-elev)' }}>
+                              <div style={{ padding: '11px 13px', border: '1px solid var(--line-2)', borderLeft: '3px solid var(--bad-fg)', borderRadius: 8, background: 'var(--bad-bg)', color: 'var(--bad-fg)', fontSize: 12.5, lineHeight: 1.55 }}>
+                                <strong style={{ display: 'block', fontWeight: 600, marginBottom: 2 }}>No se guardó nada</strong>
+                                {errorAlGuardar.mensaje}
+                              </div>
+                            </div>
+                          )}
+                          <div style={{ display: 'flex', alignItems: 'flex-end', gap: 12, flexWrap: 'wrap', padding: '13px 16px', background: 'var(--bg-elev)' }}>
+                            <label style={{ flex: 1, minWidth: 260 }}>
+                              <span style={{ display: 'block', fontSize: 11.5, fontWeight: 500, color: 'var(--ink-3)', marginBottom: 5 }}>
+                                Observación · obligatoria
+                              </span>
+                              <input
+                                value={observacion}
+                                onChange={(e) => setObservacion(e.target.value)}
+                                placeholder="Por qué esta persona se aparta de lo que su grupo le da"
+                                style={{ ...IN, background: 'var(--bg-card)' }}
+                              />
+                            </label>
+                            <button
+                              onClick={() => void guardar()}
+                              disabled={!puedeGuardar}
+                              title={impedimentoAlGuardar || undefined}
+                              aria-describedby="motivo-de-la-excepcion"
+                              className={puedeGuardar ? 'hov-acento-2' : undefined}
+                              style={{
+                                border: 0,
+                                borderRadius: 6,
+                                padding: '9px 18px',
+                                background: 'var(--accent)',
+                                color: '#fff',
+                                fontSize: 12.5,
+                                fontWeight: 500,
+                                cursor: puedeGuardar ? 'pointer' : 'not-allowed',
+                                opacity: puedeGuardar ? 1 : 0.5,
+                                whiteSpace: 'nowrap',
+                              }}
+                            >
+                              {guardando
+                                ? 'Guardando…'
+                                : 'Escribir la excepción de ' + (aGuardar.length === 1 ? '1 acceso' : aGuardar.length + ' accesos')}
+                            </button>
+                          </div>
+                          <p id="motivo-de-la-excepcion" style={{ margin: 0, padding: '0 16px 13px', background: 'var(--bg-elev)', fontSize: 12, lineHeight: 1.55, color: 'var(--ink-3)', textWrap: 'pretty' }}>
+                            {impedimentoAlGuardar !== ''
+                              ? impedimentoAlGuardar
+                              : 'Se escribirá la excepción de ' +
+                                aGuardar.map((n) => n.acceso).join(', ') +
+                                '. Los demás accesos siguen heredando de sus grupos: lo que no viaja se queda como estaba. ' +
+                                (aGuardar.some((n) => n.privilegios.length === 0)
+                                  ? 'Alguno va con los siete retirados, o sea NEGADO: la fila se escribe en cero y ese acceso deja de heredar. '
+                                  : '') +
+                                'El cambio queda en la auditoría como PERMISO, con tu usuario y la observación.'}
                           </p>
                         </>
                       )}
@@ -1684,7 +2484,7 @@ export default function Seguridad({ dest, onDest }: PantallaProps) {
                       )}
                       {filasDeAuditoria.map((r) => (
                         <tr key={r.id} className="hov-elev" style={{ borderTop: '1px solid var(--line)' }}>
-                          <td style={TD1}>{r.fecha.replace('T', ' ').slice(0, 16)}</td>
+                          <td style={TD1}>{instante(r.fecha)}</td>
                           <td style={TD}>{r.usuario}</td>
                           <td style={{ ...TD, fontFamily: 'var(--font-mono)', fontSize: 12.5 }}>{r.tabla}</td>
                           <td style={{ ...TD, fontFamily: 'var(--font-mono)', fontSize: 12.5, whiteSpace: 'normal' }}>
@@ -2123,8 +2923,12 @@ export default function Seguridad({ dest, onDest }: PantallaProps) {
 /**
  * De donde le viene a una cuenta lo que puede hacer sobre un acceso (#543).
  *
- * Son cinco estados y **ninguno se puede fundir con otro**, porque las
+ * Son seis estados y **ninguno se puede fundir con otro**, porque las
  * diferencias son justo las que se leen mal:
+ *
+ * - **Tocada y sin guardar** (#585) ya no viene de donde venia: las casillas
+ *   que se ven son las editadas, y seguir diciendo «Grupo · X» describiria un
+ *   origen que ya no es el de lo dibujado.
  *
  * - **Sin fila** es «no hay nada configurado». La lectura no devuelve una fila
  *   por acceso sino una por acceso configurado: serian 134 vacias por cuenta.
@@ -2142,7 +2946,21 @@ export default function Seguridad({ dest, onDest }: PantallaProps) {
 function origenDeLaFila(
   efectivo: PermisoEfectivo | undefined,
   nombreDelGrupo: Map<number, string>,
+  tocada = false,
 ): { texto: string; tono: TonoDeSeguridad; ayuda: string } {
+  /* Una fila tocada y sin guardar ya no viene de donde venia, y decir «Grupo ·
+     Administracion» sobre casillas que el operador acaba de cambiar seria la
+     mentira mas facil de esta matriz: el origen que se lee no describiria lo que
+     se ve. Va primero, antes que las cinco de abajo, porque gana a todas. */
+  if (tocada) {
+    return {
+      texto: 'Excepción · sin guardar',
+      tono: 'warn',
+      ayuda:
+        'Estas casillas se han cambiado y todavía no se han mandado. Al guardar se escribirá una excepción propia de esta ' +
+        'cuenta sobre este acceso, que sustituirá a lo que sus grupos le den aquí.',
+    };
+  }
   if (efectivo === undefined) {
     return {
       texto: 'Sin configurar',

@@ -80,9 +80,46 @@ export class ErrorDeApi extends Error {
      * ausencia es «este rechazo no publica cifras», nunca un cero.
      */
     readonly detalles?: string[],
+    /**
+     * Lo que hay que publicar, cuando lo que falta es una cifra normativa (#604).
+     *
+     * **Es el discriminador de las dos cosas que salían con el mismo `codigo` y
+     * el mismo `estado`**: «Falta el campo `nroDeCuotas`» lo arregla quien
+     * atiende, en la misma pantalla; «El ejercicio 2027 no tiene un conjunto de
+     * parámetros sellado» **no lo arregla nadie desde la pantalla** — hay que
+     * sellar el conjunto o publicar la cifra (D-02a, D-02b). Los dos son
+     * `422 VALIDACION`, y hasta #604 lo único que los separaba era el texto en
+     * castellano, que se reescribe en cuanto alguien lo lee en voz alta.
+     *
+     * **Si está, no se arregla desde la pantalla.** Ésa es toda la regla, y por
+     * eso se mira su presencia y no su contenido.
+     *
+     * `llave` es `TIPO:CLAVE` cuando falta una fila concreta, el `TIPO` cuando
+     * falta el bloque entero, y **ausente** cuando lo que falta es el conjunto
+     * sellado: entonces no hay ninguna llave que nombrar, porque no hay dónde
+     * publicarla. `ejercicio` viene siempre. Medido contra el backend:
+     * `{"ejercicio":2027}` y `{"ejercicio":2028,"llave":"REDONDEO"}`.
+     *
+     * Hoy sólo lo llevan las tres rutas de convenios de Tesorería, que es lo que
+     * #688 cerró. El mismo 422 de `POST /rentas/predial/calculo-individual` con
+     * un ejercicio sin sellar llega **sin** el miembro: medido, y anotado en
+     * #691.
+     */
+    readonly parametroQueFalta?: { ejercicio: number; llave?: string },
   ) {
     super(mensaje);
     this.name = 'ErrorDeApi';
+  }
+
+  /**
+   * Si lo que falta es una cifra normativa y no un dato de la petición.
+   *
+   * Se pregunta por la **presencia** del miembro y nunca por el texto: clasificar
+   * por subcadena del mensaje deja de funcionar en cuanto alguien reescribe la
+   * frase, y esa reescritura no rompe ninguna compilación.
+   */
+  get faltaUnaCifraNormativa(): boolean {
+    return this.parametroQueFalta !== undefined;
   }
 
   /** Si tiene sentido volver a intentarlo tal cual, sin cambiar nada. */
@@ -248,7 +285,21 @@ function errorDe(estado: number, datos: unknown): ErrorDeApi {
         : 'No se pudo completar la operación';
   const incidencia = typeof cuerpo.incidencia === 'string' ? cuerpo.incidencia : undefined;
   const detalles = Array.isArray(cuerpo.detalles) ? (cuerpo.detalles as string[]) : undefined;
-  return new ErrorDeApi(codigo, mensaje, estado, incidencia, detalles);
+  /* Se exige que `ejercicio` sea un número: un miembro a medias —el objeto sin
+     su ejercicio— diría «falta una cifra» sin poder decir de qué año, y ése es
+     el dato con el que se busca qué publicar. Se prefiere no reconocerlo a
+     reconocerlo vacío. */
+  const p = cuerpo.parametroQueFalta;
+  const parametroQueFalta =
+    typeof p === 'object' && p !== null && typeof (p as Record<string, unknown>).ejercicio === 'number'
+      ? {
+          ejercicio: (p as Record<string, unknown>).ejercicio as number,
+          ...(typeof (p as Record<string, unknown>).llave === 'string'
+            ? { llave: (p as Record<string, unknown>).llave as string }
+            : {}),
+        }
+      : undefined;
+  return new ErrorDeApi(codigo, mensaje, estado, incidencia, detalles, parametroQueFalta);
 }
 
 /**

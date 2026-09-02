@@ -54,7 +54,21 @@ export type TitularesDelPredio = {
     codigo: string | null;
     nombre: string | null;
     condicion: string;
-    porcentaje: number;
+    /**
+     * Una CADENA, «50.0000», y no un número.
+     *
+     * `Porcentaje` se serializa como texto igual que `Dinero` (RNF-055), y aquí
+     * estaba declarado `number` mientras `api/consultas.ts` lo declaraba
+     * `string` para el mismo `TitularesDelPredioResource`. Los dos no podían
+     * tener razón, y la mentira no la caza el compilador: se ve el día que
+     * alguien SUMA la lista, porque `0 + "50.0000" + "50.0000"` concatena y da
+     * `NaN`, mientras que con un solo titular la coerción del `*` lo salva y
+     * parece que funciona.
+     *
+     * Se conserva la escala del padrón: son cuatro decimales, y acortarla al
+     * dibujar cambia una cifra del padrón.
+     */
+    porcentaje: string;
   }[];
 };
 
@@ -76,6 +90,28 @@ export type FiltroDePredios = {
   estado?: EstadoDePredio;
   /** `true` = con ficha; `false` = sin ella; sin declarar, los dos. */
   fichado?: boolean;
+  /**
+   * El estado de saneamiento de la titularidad del predio (#690).
+   *
+   * `SIN_TITULAR` es el predio que **no figura a nombre de nadie** y `INCOMPLETA`
+   * aquel cuyas cuotas vigentes no suman 100 %. Los dos importan por lo mismo:
+   * el `%` de propiedad **pondera la base imponible** (NEG-05), así que un predio
+   * cuyas cuotas suman el 10 % tributa por el 10 % de su valor, y uno sin titular
+   * no tiene a quién cargárselo. Ninguna cifra parece mal en ninguna pantalla: la
+   * determinación sale correcta *para lo registrado*.
+   *
+   * Medido contra el backend, y son las cifras con las que se abrió #690:
+   *
+   * ```
+   *                SIN_TITULAR  INCOMPLETA  COMPLETA
+   * Sullana demo             5           2        25
+   * Catacaos              4 977         304     9 141
+   * ```
+   *
+   * Una palabra que no sea una de las tres es **422 nombrando las tres**, no la
+   * página vacía —que se leería como «no hay ninguno», que es lo contrario—.
+   */
+  titularidad?: 'SIN_TITULAR' | 'INCOMPLETA' | 'COMPLETA';
 };
 
 export type Paginacion = {
@@ -472,6 +508,46 @@ export type FiltroDelPlano = {
  */
 export function planoCatastral(filtro: FiltroDelPlano, senal?: AbortSignal): Promise<PlanoCatastral> {
   return solicitar('/catastro/predios/plano', { parametros: { ...filtro }, senal });
+}
+
+/**
+ * Dónde está la municipalidad: el rectángulo que envuelve lo ya digitalizado
+ * (#612, PR #689). Es `MarcoDelPlanoResource`.
+ *
+ * **`marco` puede venir nulo, y las dos ausencias son distintas** porque se
+ * arreglan distinto:
+ *
+ *   - `lotes: 0` es que **ningún predio que alcancen esos filtros tiene polígono
+ *     cargado**. Lo que falta es la carga cartográfica, y es el estado de hoy en
+ *     las dos municipalidades: medido, `{"marco":null,"lotes":0,…}`.
+ *   - `lotes > 0` con `marco` nulo es que lo levantado **no encuadra**: PostGIS
+ *     admite un `MULTIPOLYGON` de vértices colineales, así que hay geometría y su
+ *     rectángulo es degenerado.
+ *
+ * Nunca llega `0,0,0,0`, y eso importa: ese rectángulo es un punto en el golfo
+ * de Guinea y encuadrar sobre él no se distingue de encuadrar bien cuando no hay
+ * base cartográfica debajo. `notaDelMarco` dice cuál de las dos es.
+ */
+export type MarcoDeLoLevantado = {
+  marco: MarcoDelPlano | null;
+  lotes: number;
+  notaDelMarco: string;
+};
+
+/**
+ * El encuadre inicial del plano.
+ *
+ * Se pide con **los mismos filtros** que el plano y no sin ellos: un marco
+ * calculado sobre otro conjunto de predios encuadraría sobre algo que después no
+ * se dibuja, y sobre un plano sin base cartográfica eso no se ve. Por eso el
+ * parámetro es el `FiltroDelPlano` sin su `bbox` —que es justo lo que esta
+ * lectura viene a averiguar— ni su `limite`, que aquí no significa nada.
+ */
+export function marcoDelPlano(
+  filtro: Omit<FiltroDelPlano, 'bbox' | 'limite'>,
+  senal?: AbortSignal,
+): Promise<MarcoDeLoLevantado> {
+  return solicitar('/catastro/predios/plano/marco', { parametros: { ...filtro }, senal });
 }
 
 /**

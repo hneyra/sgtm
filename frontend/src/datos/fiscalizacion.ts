@@ -3,10 +3,6 @@
    maqueta. El acrónimo de los números de documento es `MDC` —Municipalidad
    Distrital de Catacaos—, que es la entidad del piloto. */
 
-/* `Fiscalizacion.tsx` tiene el suyo: aquí no se exporta para no dejar dos
-   nombres iguales viajando entre los dos archivos. */
-const SIN_DATO = '—';
-
 /** Una columna de tabla: rótulo y si es numérica (alineada a la derecha). */
 export type ColDef = [string, 0 | 1];
 
@@ -80,7 +76,16 @@ export const PASOS_ACTA: PasoDeActa[] = [
 export type Contraste = {
   k: string;
   l: string;
-  /** Lo declarado por el contribuyente, contra lo que se contrasta. */
+  /**
+   * Lo declarado por el contribuyente, contra lo que se contrasta.
+   *
+   * Va **vacia** en las siete, y no es un hueco por rellenar a mano: lo
+   * declarado sale de la ficha catastral vigente del predio que se inspecciona,
+   * y esta pantalla no tiene predio —no hay acta abierta de la que sacarlo
+   * (#702)—. Antes traia las siete cifras de la captura del artboard —210.00 m2
+   * de terreno, 164.50 construidos, «02 - LADRILLO»—, de modo que la columna
+   * «Diferencia» restaba contra un predio que no existe.
+   */
   decl: string;
   /** `n` marca las numéricas: ahí la diferencia se calcula. */
   n?: boolean;
@@ -94,43 +99,70 @@ export type Contraste = {
 /** Las siete características que se contrastan. En las numéricas la diferencia
  *  se calcula; en las demás se compara texto. */
 export const DIFF: Contraste[] = [
-  { k: 'usoV', l: 'Uso del predio', decl: 'CASA HABITACIÓN', t: 'sel', o: ['CASA HABITACIÓN', 'COMERCIO', 'INDUSTRIA', 'SERVICIOS', 'TERRENO SIN CONSTRUIR'] },
-  { k: 'terrenoV', l: 'Área de terreno', decl: '210.00', n: true, u: ' m²' },
-  { k: 'construidaV', l: 'Área construida', decl: '164.50', n: true, u: ' m²' },
-  { k: 'pisosV', l: 'Nº de pisos', decl: '1', n: true, u: '' },
-  { k: 'mepV', l: 'Material predominante', c: 'MEP', decl: '02 — LADRILLO', t: 'sel', o: ['01 — CONCRETO', '02 — LADRILLO', '03 — ADOBE', '04 — QUINCHA', '05 — MADERA'] },
-  { k: 'ecsV', l: 'Estado de conservación', c: 'ECS', decl: '03 — REGULAR', t: 'sel', o: ['01 — MUY BUENO', '02 — BUENO', '03 — REGULAR', '04 — MALO'] },
-  { k: 'serviciosV', l: 'Servicios básicos', decl: 'AGUA Y LUZ', t: 'sel', o: ['AGUA, DESAGÜE Y LUZ', 'AGUA Y LUZ', 'SOLO LUZ', 'NINGUNO'] },
+  { k: 'usoV', l: 'Uso del predio', decl: '', t: 'sel', o: ['CASA HABITACIÓN', 'COMERCIO', 'INDUSTRIA', 'SERVICIOS', 'TERRENO SIN CONSTRUIR'] },
+  { k: 'terrenoV', l: 'Área de terreno', decl: '', n: true, u: ' m²' },
+  { k: 'construidaV', l: 'Área construida', decl: '', n: true, u: ' m²' },
+  { k: 'pisosV', l: 'Nº de pisos', decl: '', n: true, u: '' },
+  { k: 'mepV', l: 'Material predominante', c: 'MEP', decl: '', t: 'sel', o: ['01 — CONCRETO', '02 — LADRILLO', '03 — ADOBE', '04 — QUINCHA', '05 — MADERA'] },
+  { k: 'ecsV', l: 'Estado de conservación', c: 'ECS', decl: '', t: 'sel', o: ['01 — MUY BUENO', '02 — BUENO', '03 — REGULAR', '04 — MALO'] },
+  { k: 'serviciosV', l: 'Servicios básicos', decl: '', t: 'sel', o: ['AGUA, DESAGÜE Y LUZ', 'AGUA Y LUZ', 'SOLO LUZ', 'NINGUNO'] },
 ];
 
-/** Lo que trae el acta ACT-2026-00418 antes de que el fiscalizador toque nada. */
+/**
+ * El acta **vacia**, que es la unica que esta pantalla puede tener hoy.
+ *
+ * Aqui vivia el acta `ACT-2026-00418` entera —su numero, su programa
+ * `PF-2026-014`, su predio `02-014-D-14-01`, «MEDINA MEDINA, RUFINA (SUC.)»,
+ * su fiscalizador, sus cuatro fotos y su croquis georreferenciado—, copiada de
+ * la captura del artboard y presentada como si fuera un acta abierta. Ninguno
+ * de esos valores sale de ninguna lectura: el numero no existe en ninguna
+ * municipalidad, `PF-2026-014` no es ninguno de los programas del padron, el
+ * codigo predial no tiene la forma de un codigo de referencia catastral de este
+ * sistema —23 digitos— y la persona no esta en el padron (#702).
+ *
+ * Y desde que #599 conecto el listado de actas REALES encima, lo de abajo se
+ * leia peor que antes: **una tabla real hace que lo que la acompana parezca
+ * cierto**.
+ *
+ * Asi que el formulario dice lo que le falta en vez de fingir que lo tiene, que
+ * es lo que este repositorio ya decidio para las siete hojas sin superficie
+ * (FRO-06) y para las once de `ACTOS_SIN_CAMPO`. Los cinco campos de solo
+ * lectura salen con el guion largo —vienen de un acta abierta, y aqui no hay
+ * ninguna—, y los desplegables abren en la opcion vacia: elegir la primera por
+ * omision es lo mismo que dibujar un dato que nadie tecleo (#331).
+ *
+ * **No es una lista de valores por omision que haya que rellenar**: mientras la
+ * escritura siga bloqueada —diez campos, tres de ellos identificadores internos
+ * que el formulario no dibuja, y los seis rotulos del hallazgo fuera del
+ * enumerado (#546, #599)— lo que se teclee aqui no viaja a ningun sitio.
+ */
 export const DEFECTOS: Record<string, string | boolean> = {
-  acta: 'ACT-2026-00418',
-  programa: 'PF-2026-014',
-  predio: '02-014-D-14-01',
-  contribuyente: 'MEDINA MEDINA, RUFINA (SUC.) · 00000025673',
-  fecha: '2026-08-12',
-  hora: '10:25',
-  fiscalizador: 'R. MENDOZA CRUZ',
-  atiende: 'MEDINA CHÁVEZ, ROSA',
-  vinculo: 'FAMILIAR',
-  resultado: 'INSPECCIÓN REALIZADA',
-  usoV: 'COMERCIO',
-  terrenoV: '210.00',
-  construidaV: '198.00',
-  pisosV: '2',
-  mepV: '02 — LADRILLO',
-  ecsV: '02 — BUENO',
-  serviciosV: 'AGUA, DESAGÜE Y LUZ',
-  hallazgo: 'AMPLIACIÓN NO DECLARADA',
-  fotos: '4 archivos adjuntos',
-  croquis: '-4.902315, -80.685442',
-  obs: 'Segundo piso construido en 2011 destinado a bodega; no figura en la declaración jurada.',
-  firma: 'Capturada — 10:52',
+  acta: '',
+  programa: '',
+  predio: '',
+  contribuyente: '',
+  fecha: '',
+  hora: '',
+  fiscalizador: '',
+  atiende: '',
+  vinculo: '',
+  resultado: '',
+  usoV: '',
+  terrenoV: '',
+  construidaV: '',
+  pisosV: '',
+  mepV: '',
+  ecsV: '',
+  serviciosV: '',
+  hallazgo: '',
+  fotos: '',
+  croquis: '',
+  obs: '',
+  firma: '',
   sinFirma: false,
-  determina: true,
-  ejercicios: '2022 — 2026',
-  multa: 'ART. 176º — NO PRESENTAR DECLARACIÓN',
+  determina: false,
+  ejercicios: '',
+  multa: '',
 };
 
 /* ══════════ Panel ══════════ */
@@ -222,36 +254,58 @@ export const DET_VEHICULAR: CruceDeDeteccion = {
 /* ══════════ Resolución de determinación ══════════ */
 
 /**
- * La hoja de la resolución, VACÍA.
+ * Las columnas del cuadro de la determinación, con las que el backend publica.
  *
- * Traía la resolución entera del artboard —«000418-2026-SGFT/MDC»,
- * «INVERSIONES DEL NORTE SAC», R.U.C. 20525118447 y seis ejercicios con sus
- * importes al céntimo, 2 680.60 de 2021 al 2 962.00 de 2026— y la pantalla la
- * mandaba a la impresora con su membrete, su artículo 137º y sus dos líneas de
- * firma. Con la red cortada salía **exactamente igual**, que es la prueba de
- * que ninguna de esas cifras venía de ningún sitio: era una resolución de
- * determinación falsa, con un R.U.C. real de por medio, lista para entregar.
+ * <h2>«Interés S/» era una columna que no existe, y ha pasado a «Multa S/»</h2>
  *
- * `sin-red.mjs` no lo veía porque enumera sólo `m.destinos` y este destino es el
- * `documento` del módulo, que sólo mira `mirar.mjs`.
+ * El artboard rotulaba la quinta columna «Interés S/», y `LineaDeterminadaResource`
+ * publica `determinado`, `declarado`, `diferencia`, **`multa`** y `total`: ni un
+ * interés. El PDF que el propio servidor emite imprime su cabecera «Multa S/»
+ * —comprobado leyendo los bytes de `?formato=PDF`—, así que dejar el rótulo del
+ * artboard obligaba a una de dos: pintar la multa del art. 176 bajo una columna
+ * que promete intereses, o dejar la columna vacía para siempre y esconder la
+ * multa. Las dos son la cifra plausible y equivocada; se corrige el rótulo, que
+ * es lo que el papel notificado dice.
  *
- * Se quedan los rótulos —son los que el manual imprime y dicen qué llevará la
- * hoja— y se va el contenido. Conectarla es otra cosa: la resolución la sirve
- * `GET /fiscalizacion/resoluciones/{numero}`, que pide un número que esta
- * pantalla no tiene dónde teclear.
+ * Y se añade «Condición», que el recurso publica y el artboard no dibuja. Es lo
+ * mismo que este módulo ya hizo con la detección de omisos, y por lo mismo: con
+ * D-02a abierta las cinco columnas de dinero salen «—» en todas las filas, y
+ * una fila que sólo dice el ejercicio no deja ver de qué va la determinación.
+ *
+ * <h2>Las dos superficies van aparte, y eso lo decidió medir el ancho</h2>
+ *
+ * Estaban aquí y no caben: con ellas la tabla mide **1 054 px sobre una hoja de
+ * 732**, medido en el navegador, así que las cuatro últimas columnas de dinero
+ * quedaban fuera del papel y la impresión salía cortada. Y el propio PDF que el
+ * servidor emite ya las pone fuera de este cuadro —en su bloque «Inscripción en
+ * el padrón catastral», antes → después—, así que se hace lo que hace el papel:
+ * su propia tabla debajo, con la unidad en la cabecera (#546).
+ *
+ * Aquí ya no vive ninguna fila ni ninguna cabecera con valor: la hoja las
+ * compone de lo que lee `GET /fiscalizacion/resoluciones/{numero}`. Traía la
+ * resolución entera del artboard —«000418-2026-SGFT/MDC», «INVERSIONES DEL
+ * NORTE SAC», R.U.C. 20525118447 y seis ejercicios con sus importes al
+ * céntimo— y la pantalla la mandaba a la impresora con su membrete, su
+ * artículo 137º y sus dos líneas de firma; con la red cortada salía
+ * **exactamente igual**, que es la prueba de que ninguna de esas cifras venía
+ * de ningún sitio.
  */
-export const REP_META: { k: string; v: string }[] = [
-  { k: 'Nº de resolución', v: SIN_DATO },
-  { k: 'Contribuyente', v: SIN_DATO },
-  { k: 'R.U.C.', v: SIN_DATO },
-  { k: 'Predio', v: SIN_DATO },
-  { k: 'Periodo fiscalizado', v: SIN_DATO },
-  { k: 'Tipo de fiscalización', v: SIN_DATO },
+export const REP_COLS: ColDef[] = [
+  ['Ejercicio', 0],
+  ['Condición', 0],
+  ['Determinado S/', 1],
+  ['Declarado S/', 1],
+  ['Diferencia S/', 1],
+  ['Multa S/', 1],
+  ['Total S/', 1],
 ];
 
-export const REP_COLS: ColDef[] = [['Ejercicio', 0], ['Determinado S/', 1], ['Declarado S/', 1], ['Diferencia S/', 1], ['Interés S/', 1], ['Total S/', 1]];
-
-export const REP_FILAS: string[][] = [];
+/** Las superficies que sostienen el hallazgo, en su propio cuadro. */
+export const REP_COLS_AREA: ColDef[] = [
+  ['Ejercicio', 0],
+  ['Superficie declarada (m²)', 1],
+  ['Superficie hallada (m²)', 1],
+];
 
 /* ══════════ Paleta de comandos ══════════ */
 

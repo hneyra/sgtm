@@ -23,8 +23,8 @@ import {
 import { useRebote, useRecurso, type Estado } from '../../api/useRecurso';
 import { Descargas, type FormatoDeDocumento } from '../../api/descarga';
 import { ErrorDeApi, fijarToken } from '../../api/cliente';
-import { causasDelRechazo } from '../../api/Fallo';
-import { cuentaActual, hayPuerta } from '../../api/sesion';
+import { causasDelRechazo, explicacionDelFallo, tituloDelFallo } from '../../api/Fallo';
+import { hayPuerta } from '../../api/sesion';
 import {
   descargarPadronDeNotificaciones,
   descargarRecaudacionAdministrativa,
@@ -238,55 +238,6 @@ function Campo({
 
 /* ══════════ Lo que el backend contesta, dicho en castellano ══════════ */
 
-function tituloDelFallo(error: ErrorDeApi | null, que: string): string {
-  const cuenta = cuentaActual();
-  switch (error?.codigo) {
-    case 'NO_AUTENTICADO':
-      return 'La sesión no vale';
-    case 'SIN_PRIVILEGIO':
-      return cuenta === null ? `Esta sesión no puede ver ${que}` : `La cuenta «${cuenta}» no puede ver ${que}`;
-    case 'SIN_MUNICIPALIDAD':
-      return 'La sesión no dice de qué municipalidad es';
-    case 'NO_ENCONTRADO':
-      return 'No existe';
-    case 'CONFLICTO':
-      return 'El acto choca con algo que ya está registrado';
-    case 'VALIDACION':
-    case 'ORDEN_NO_ADMITIDO':
-      /* No dice «no admite lo que se le mandó»: dictar una resolución de
-         gerencia lee su plazo del conjunto sellado, y desde #562 eso contesta
-         422 nombrando la llave en vez de un 500 opaco. Con aquel titular, quien
-         atiende se pone a corregir un formulario que está bien. */
-      return 'El servidor rechazó la operación';
-    case 'SIN_RESPUESTA':
-      return error.estado === 0 ? 'No se pudo contactar con el servidor' : 'El servidor contestó otra cosa';
-    default:
-      return `No se pudo consultar ${que}`;
-  }
-}
-
-function explicacionDelFallo(error: ErrorDeApi | null, acceso: string): string {
-  switch (error?.codigo) {
-    case 'NO_AUTENTICADO':
-      return 'Vuelve a entrar: el token caducó o no es de este emisor.';
-    case 'SIN_PRIVILEGIO':
-      return (
-        `Hace falta el acceso «${acceso}». Que Keycloak la deje entrar no basta: la cuenta tiene que estar además dada de alta ` +
-        'en esta municipalidad, y el permiso lo concede Seguridad.'
-      );
-    case 'SIN_MUNICIPALIDAD':
-      return 'No hay valor por omisión: sin municipalidad en el token no hay padrón que consultar.';
-    case 'NO_ENCONTRADO':
-    case 'CONFLICTO':
-    case 'VALIDACION':
-    case 'ORDEN_NO_ADMITIDO':
-      return error?.mensaje ?? 'Revisa los criterios.';
-    case 'SIN_RESPUESTA':
-      return error.estado === 0 ? 'El servidor no contestó. Puede estar apagado o no alcanzable desde aquí.' : error.mensaje;
-    default:
-      return 'La consulta falló en el servidor.';
-  }
-}
 
 /** Los cuatro estados de una lectura, dibujados una sola vez. */
 function Lectura<T>({
@@ -359,6 +310,11 @@ function Lectura<T>({
                 estado.reintentar();
               }}
               disabled={tokenPegado.trim() === ''}
+            /* Un boton apagado no recibe el foco, asi que su `title` no lo lee un
+               lector de pantalla — pero SI se ve al pasar el raton, y sin el este
+               es un callejon: quien lo pulsa no sabe que le falta pegar el token.
+               Solo aparece sin sesion, que es como corre el arnes y como corre CI. */
+            title={tokenPegado.trim() === '' ? 'Pega antes un token del emisor en la caja de al lado' : undefined}
               className={tokenPegado.trim() === '' ? undefined : 'hov-acento-2'}
               style={{ border: 0, borderRadius: 6, padding: '8px 17px', background: 'var(--accent)', color: 'var(--accent-contraste)', fontSize: 12.5, fontWeight: 500, cursor: tokenPegado.trim() === '' ? 'not-allowed' : 'pointer', opacity: tokenPegado.trim() === '' ? 0.55 : 1, whiteSpace: 'nowrap' }}
             >

@@ -12,26 +12,97 @@ import type { Paginacion } from './catastro';
  * formatearlos es como se pierde un céntimo en el papel que firma el
  * contribuyente.
  *
- * <h2>Cinco controladores y ninguna ruta de más</h2>
+ * <h2>Seis controladores y ninguna ruta de más</h2>
  *
- * `CajaController` (dos POST), `ConvenioController` (un POST, un GET, un POST de
- * cierre), `ReciboController` (**dos** GET y un POST desde #548), `CierreController`
- * (un POST) y `RecaudacionController` (dos GET). Eso es todo lo que hay: no existe
- * un catálogo de cajas, ni uno de conceptos del TUPA, ni un `GET` del arqueo por su
- * cuenta. Lo que la pantalla no puede pedir se dice en pantalla; no se rellena con
- * el juego de datos del prototipo.
+ * `CajaController` (dos POST), `CatalogoDeCajasController` (un GET desde #618),
+ * `ConvenioController` (un POST, un GET, un POST de cierre), `ReciboController`
+ * (**dos** GET y un POST desde #548), `CierreController` (un POST) y
+ * `RecaudacionController` (dos GET). Eso es todo lo que hay: no existe un catálogo
+ * de conceptos del TUPA, ni un `GET` del arqueo por su cuenta. Lo que la pantalla
+ * no puede pedir se dice en pantalla; no se rellena con el juego de datos del
+ * prototipo.
  *
- * <h2>Lo que #548 cambió aquí</h2>
+ * <h2>Lo que #548 y #618 cambiaron aquí, y es la misma lección dos veces</h2>
  *
  * Hasta #548 este archivo decía que **no existía** un listado de recibos, y era
  * cierto: la única puerta a uno era saber su número impreso, que es justo lo que
  * no tiene quien viene a pedir un duplicado. Ahora existe `GET /tesoreria/recibos`
- * y la pantalla lo lee. La frase se corrige aquí y en la pantalla a la vez: una
- * explicación que se quedó vieja es indistinguible de una que nunca fue cierta.
+ * y la pantalla lo lee. Hasta #618 decía además que no existía un catálogo de
+ * cajas, y también era cierto: quien atiende tenía que saberse de memoria el
+ * código de su ventanilla. Ahora existe `GET /tesoreria/cajas`. Las dos frases se
+ * corrigen aquí y en la pantalla a la vez: una explicación que se quedó vieja es
+ * indistinguible de una que nunca fue cierta.
  */
 
 /** Un importe con la fecha a la que está actualizado. Es `ImporteActualizado`. */
 export type Importe = { importe: string; actualizadoA: string };
+
+
+/* ══════════ El catálogo de ventanillas ══════════ */
+
+/**
+ * Una ventanilla de la municipalidad. Es `CajaEnListaResource`, campo por campo.
+ *
+ * <h2>El área es nula a propósito, y no significa «sin área»</h2>
+ *
+ * `areaCodigo` y `areaNombre` llegan **nulos** en las cajas tributarias —medido
+ * contra el backend: `C-01` y `C-02` los traen nulos y `C-10`…`C-12` no—, y eso
+ * no es un dato que falte: es que esa ventanilla **no cuelga de ninguna área**.
+ * La distinción importa porque el área es la partida a la que se imputa lo que la
+ * caja recauda, y lo tributario no se imputa a ninguna: es lo mismo que
+ * {@link Distribucion} publica del otro lado como `netoSinPartida`. Dibujar ahí
+ * «—» diría que hay un dato que el backend no publica, y sí lo publica: publica
+ * que no hay.
+ *
+ * <h2>Y las dadas de baja salen también</h2>
+ *
+ * `activa` sale de la columna que `caja` tiene desde V3, y el catálogo **no
+ * admite filtro de estado** —no hay ningún parámetro más que la paginación—:
+ * salen todas. No es un descuido del backend sino su decisión, y tiene que serlo,
+ * porque los recibos de una ventanilla cerrada siguen existiendo (RNF-051) y el
+ * filtro «Caja» del duplicado tiene que poder nombrarla. Quién puede **elegir**
+ * una lo decide cada pantalla, y no es el mismo criterio en todas: `AbrirCaja`
+ * lanza `CajaDeBaja` —así que la cobranza la rechaza con 422—, mientras
+ * `CerrarTurno` sólo resuelve el código y no mira `activa`, de modo que el turno
+ * de ayer de una ventanilla cerrada hoy **sí** se puede arquear y cerrar.
+ */
+export type CajaDelCatalogo = {
+  /** El código con que se la nombra en toda la API: es lo que viaja, no el rótulo. */
+  codigo: string;
+  nombre: string;
+  /** El área a la que se imputa lo que recauda; nulo si no cuelga de ninguna. */
+  areaCodigo: string | null;
+  /** Su rótulo; nulo por lo mismo. */
+  areaNombre: string | null;
+  /** Si sigue abierta. Ver arriba: las dadas de baja salen también. */
+  activa: boolean;
+};
+
+/**
+ * Las ventanillas de la municipalidad (#618, RF-080).
+ *
+ * Sólo las suyas: lo garantiza la política RLS con el `SET LOCAL` de la
+ * transacción del caso de uso, no un `WHERE` que alguien tenga que recordar. Una
+ * municipalidad recién implantada y todavía sin cajas cargadas devuelve una
+ * **página vacía** con `totalElementos: 0`, nunca un 404 — que es un estado
+ * normal, no un error, hasta que corre el paso 4 de la siembra.
+ *
+ * El acceso propio es `caja_tributaria` con **lectura**, y las otras cuatro
+ * opciones que necesitan el código llegan por `oTambien`: `caja_tasas`,
+ * `cierre_caja`, `avance_recaudacion` y `duplicado_recibo`. Aun así puede
+ * contestar 403 a quien no tenga ninguna de las cinco, así que quien la llame
+ * tiene que **saber caer de pie**: es lo que hace la pantalla, que vuelve a la
+ * caja de texto con su motivo en vez de dejar un desplegable vacío, que se leería
+ * como «esta municipalidad no tiene ninguna ventanilla».
+ *
+ * Se pide con `tamano: 200` por lo mismo que `listarSectores` del catastro: es un
+ * catálogo que se dibuja entero de una vez, no una tabla que se pagina. Si algún
+ * día no cupiera, `hayMas` lo dice y la pantalla lo advierte en vez de recortar
+ * la lista en silencio.
+ */
+export function listarCajas(senal?: AbortSignal): Promise<RespuestaPaginada<CajaDelCatalogo>> {
+  return solicitar('/tesoreria/cajas', { parametros: { tamano: 200 }, senal });
+}
 
 
 /* ══════════ La deuda que la ventanilla cobra ══════════
@@ -166,7 +237,9 @@ export type Recibo = {
  * cifra sería admitir que el cliente decide cuánto se cobra.
  */
 export type PeticionDeCobranza = {
-  /** El código de la ventanilla. No hay catálogo: se teclea. */
+  /** El código de la ventanilla —el `codigo` de `listarCajas`, nunca su rótulo:
+   *  `AbrirCaja` lo resuelve con `porCodigo` y el de otra abonaría otro turno—.
+   *  Tiene que estar **abierta**: `AbrirCaja` lanza `CajaDeBaja`. */
   caja: string;
   cajero: string;
   codContribuyente: string;
@@ -311,7 +384,8 @@ export type FilaDeRecibo = {
  */
 export type FiltroDeRecibos = {
   codContribuyente?: string;
-  /** El código de la ventanilla que emitió. No hay catálogo: se teclea. */
+  /** El código de la ventanilla que emitió. Lo lista `listarCajas` desde #618,
+   *  **incluidas las dadas de baja**: sus recibos siguen existiendo. */
   caja?: string;
   /** La cuenta de quien cobró, exacta. La pantalla del manual no lo dibuja. */
   cajero?: string;

@@ -6,16 +6,26 @@ import {
   listarOmisos,
   listarProgramas,
   listarMuestra,
+  registrarPrograma,
+  sortearMuestra,
+  listarActas,
   listarResultados,
   listarHistorico,
   leerEstadoDeCuenta,
+  leerResolucion,
+  descargarResolucion,
   type OrdenDeOmisos,
+  type OrdenDeActas,
   type ProgramaDeFiscalizacion,
   type FilaDeMuestra,
+  type ActaDeFiscalizacion,
+  type ResolucionDeDeterminacion,
+  type ResultadoDelSorteo,
 } from '../../api/fiscalizacion';
 import { useRecurso, useRebote } from '../../api/useRecurso';
 import { FalloDeLectura } from '../../api/Fallo';
-import type { ErrorDeApi, RespuestaPaginada } from '../../api/cliente';
+import { Descargas } from '../../api/descarga';
+import { ErrorDeApi, type RespuestaPaginada } from '../../api/cliente';
 import { ICO } from '../../ds/iconos';
 import { Aviso, Insignia, Paginador, PasoAtras, type Tono } from '../../ds/componentes';
 import { moduloDe } from '../../shell/modulos';
@@ -28,8 +38,7 @@ import {
   OPCIONES,
   PASOS_ACTA,
   REP_COLS,
-  REP_FILAS,
-  REP_META,
+  REP_COLS_AREA,
   type CampoDeActa,
   type ColDef,
 } from '../../datos/fiscalizacion';
@@ -424,6 +433,48 @@ function FalloDeLaMuestra({
   return <FalloDeLectura error={error} que="la muestra del programa" acceso="fisc_programa" alReintentar={reintentarMuestra} />;
 }
 
+/**
+ * Cuantos caracteres exige el servidor en una observacion, medido.
+ *
+ * No es «que no este vacia»: el backend contesta «La observacion debe explicar
+ * el cambio: al menos 5 caracteres, y no espacios en blanco (ADR-0008)», asi
+ * que una primaria encendida con «ok» tecleado dentro manda una peticion que ya
+ * se sabe rechazada. Se comprueba aqui con la misma regla —recortada y por
+ * longitud— para que el 422 no sea la forma de enterarse.
+ */
+const OBSERVACION_MINIMA = 5;
+
+/** Un control del alta de programa: todos miden y se ven igual. */
+const CAMPO: CSSProperties = {
+  width: '100%',
+  boxSizing: 'border-box',
+  border: '1px solid var(--line-2)',
+  borderRadius: 6,
+  padding: '9px 10px',
+  background: 'var(--bg-elev)',
+  fontSize: 13.5,
+};
+
+/**
+ * Los dos parrafos a los que apuntan las primarias apagadas de este modulo.
+ *
+ * El motivo de un acto que no se puede hacer se DIBUJA, y el boton lo señala
+ * con `aria-describedby` en vez de repetirlo en un `title`: un boton apagado no
+ * recibe el foco, asi que su `title` no lo lee un lector de pantalla ni lo
+ * descubre quien no pasa el raton (RNF-082). Con el identificador aqui, el
+ * parrafo y el boton no pueden dejar de apuntarse.
+ */
+const MOTIVO_DEL_ALTA = 'fisc-motivo-del-alta';
+const MOTIVO_DEL_SORTEO = 'fisc-motivo-del-sorteo';
+
+/** El rotulo de un control del alta. */
+const ROTULO: CSSProperties = { fontSize: 11.5, fontWeight: 500, color: 'var(--ink-3)' };
+
+/** Si la observacion tecleada cumple lo que el servidor va a exigir. */
+function observacionBastante(texto: string): boolean {
+  return texto.trim().length >= OBSERVACION_MINIMA;
+}
+
 /** Lo que se dibuja en un boton apagado: se ve, no se pulsa, y dice por que. */
 const BOTON_APAGADO: CSSProperties = {
   borderRadius: 6,
@@ -517,6 +568,11 @@ function CampoDelActa({
       {f.t === 'date' && <input type="date" value={texto} onChange={(e) => onCambio(e.target.value)} style={base} />}
       {f.t === 'sel' && (
         <select value={texto} onChange={(e) => onCambio(e.target.value)} style={base}>
+          {/* La opcion vacia va primera y no es adorno: sin ella el desplegable
+              abre en «PROPIETARIO», «INSPECCION REALIZADA» o «AMPLIACION NO
+              DECLARADA» y eso se lee como una eleccion del fiscalizador. Es el
+              defecto que #331 midio en el concepto del alta de deuda. */}
+          <option value="">— sin elegir —</option>
           {(f.o ?? []).map((o) => (
             <option key={o} value={o}>
               {o}
@@ -547,10 +603,14 @@ function CampoDelActa({
             borderRadius: 6,
             fontFamily: 'var(--font-mono)',
             fontSize: 13,
-            color: 'var(--ink-2)',
+            color: texto === '' ? 'var(--ink-4)' : 'var(--ink-2)',
           }}
         >
-          {texto}
+          {/* Vacio significa que no hay acta abierta de la que sacarlo, y eso se
+              dice con el guion largo. Una caja de solo lectura EN BLANCO se lee
+              como un dato que todavia no se ha cargado; el guion dice que no lo
+              hay (#702). El motivo entero esta en el aviso de la barra. */}
+          {texto === '' ? SIN_DATO : texto}
         </span>
       )}
       {f.ayuda && <span style={{ fontSize: 11.5, lineHeight: 1.4, color: 'var(--ink-4)', textWrap: 'pretty' }}>{f.ayuda}</span>}
@@ -773,7 +833,10 @@ export default function Fiscalizacion({ dest, onDest }: PantallaProps) {
   const programas = useRecurso(
     (senal) => listarProgramas({ nDePrograma: buscaPrograma || undefined }, { pagina: 0, tamano: TAMANO_DE_PAGINA }, senal),
     [buscaPrograma],
-    dest === 'programas' || dest === 'panel',
+    /* Tambien en `actas`, y no para dibujarlos: son el desplegable del unico
+       filtro que ese listado tiene, y de paso lo que traduce el `programaId`
+       interno de cada acta al codigo que se lee en el papel. */
+    dest === 'programas' || dest === 'panel' || dest === 'actas',
   );
   const listaDeProgramas: ProgramaDeFiscalizacion[] = programas.datos?.contenido ?? [];
 
@@ -789,6 +852,211 @@ export default function Fiscalizacion({ dest, onDest }: PantallaProps) {
     (senal) => listarMuestra(programaActivo?.id ?? 0, { pagina: paginaMuestra, tamano: TAMANO_DE_PAGINA }, senal),
     [programaActivo?.id, paginaMuestra],
     (dest === 'programas' || dest === 'panel') && programaActivo !== null,
+  );
+
+  /* ── El alta de un programa, contra `POST /fiscalizacion/programas` (#550) ──
+     ────────────────────────────────────────────────────────────────────────
+     Es la mitad de frontend del AC 4. La operacion existia desde antes y no la
+     alcanzaba ninguna pantalla: el unico boton que la nombraba —«+ Nuevo
+     programa»— estaba apagado porque aqui no habia donde teclear sus cuatro
+     campos obligatorios. Sin ella, un programa solo podia nacer por `curl`, y
+     con el no nacia tampoco la muestra ni el acta que cuelgan de el.
+
+     Los cinco campos que el servidor exige y su orden estan medidos en
+     `registrarPrograma`, no leidos del backend. */
+  const [altaAbierta, setAltaAbierta] = useState(false);
+  const [alta, setAlta] = useState<Record<string, string>>({});
+  const campoDelAlta = (k: string): string => alta[k] ?? '';
+  const fijarAlta = (k: string, v: string) => setAlta((s) => ({ ...s, [k]: v }));
+  const [observacionDelAlta, setObservacionDelAlta] = useState('');
+  const [registrando, setRegistrando] = useState(false);
+  const [falloDelAlta, setFalloDelAlta] = useState<string | null>(null);
+
+  /**
+   * Lo que le falta al alta para poder mandarse, y **se dibuja**.
+   *
+   * No vive en el `title` de un boton apagado: un boton deshabilitado no recibe
+   * el foco, asi que su `title` no lo lee un lector de pantalla ni lo descubre
+   * quien no pasa el raton por encima (RNF-082). Esta lista es el motivo, y por
+   * eso quitarla deja la pantalla sin decir por que no se puede registrar.
+   *
+   * Los cuatro primeros son los que el servidor exige. El quinto —ejercicio,
+   * criterio y fiscalizador— **el servidor lo admite en blanco y esta pantalla
+   * no**, y el motivo esta medido: `POST /programas/{id}/muestra` contesta «El
+   * programa no declara 'X', y sin el no se puede sortear su muestra» por cada
+   * uno de los tres, y **no hay ninguna ruta de edicion de un programa**
+   * —«reprogramar es registrar otro»—, de modo que lo que nace sin ellos es una
+   * fila esteril que nadie puede arreglar. Dejar pasar aqui el dato que falta
+   * traslada el fallo a un acto despues y sin vuelta atras.
+   *
+   * Los tres se descubrieron **de uno en uno y operando la pantalla**, que es
+   * lo que este orden de comprobacion obliga a hacer: el 422 nombra el primero
+   * que falta y calla los demas, asi que un programa con ejercicio y criterio
+   * —el que esta pantalla dejaba registrar antes de medirlo— pasaba las dos
+   * comprobaciones y moria en la tercera.
+   */
+  const faltaDelAlta: { que: string; ok: boolean }[] = [
+    { que: 'El código del programa', ok: campoDelAlta('codigo').trim() !== '' },
+    { que: 'La descripción: qué se va a fiscalizar', ok: campoDelAlta('descripcion').trim() !== '' },
+    { que: 'El tipo, predial o vehicular', ok: campoDelAlta('tipo') !== '' },
+    { que: 'La fecha de inicio', ok: campoDelAlta('fechaInicio') !== '' },
+    {
+      que: 'El ejercicio, el criterio de riesgo y el fiscalizador, que son con los que sorteará su muestra',
+      ok:
+        campoDelAlta('ejercicio').trim() !== '' &&
+        campoDelAlta('criterio') !== '' &&
+        campoDelAlta('fiscalizador').trim() !== '',
+    },
+    { que: 'La observación de quien lo registra', ok: observacionBastante(observacionDelAlta) },
+  ];
+  const puedeRegistrarPrograma = faltaDelAlta.every((f) => f.ok);
+
+  const registrarElPrograma = async () => {
+    setRegistrando(true);
+    setFalloDelAlta(null);
+    try {
+      /* Los cuatro opcionales van con `|| undefined` y no con la cadena vacia:
+         `solicitar` no filtra el cuerpo —solo los parametros de consulta—, asi
+         que un `""` viajaria y quedaria guardado como el sector llamado «». */
+      const creado = await registrarPrograma({
+        observacion: observacionDelAlta.trim(),
+        codigo: campoDelAlta('codigo').trim(),
+        descripcion: campoDelAlta('descripcion').trim(),
+        tipo: campoDelAlta('tipo'),
+        fechaInicio: campoDelAlta('fechaInicio'),
+        ejercicio: campoDelAlta('ejercicio').trim() || undefined,
+        sector: campoDelAlta('sector').trim() || undefined,
+        criterio: campoDelAlta('criterio') || undefined,
+        fiscalizador: campoDelAlta('fiscalizador').trim() || undefined,
+      });
+      setAltaAbierta(false);
+      setAlta({});
+      setObservacionDelAlta('');
+      /* Se elige el que acaba de nacer, y se vuelve a pedir la lista: el
+         programa que se registra es sobre el que se va a sortear ahora mismo,
+         y buscarlo a mano en una lista que todavia no lo trae seria el paso
+         que sobra. */
+      setPrograma(creado.id);
+      programas.reintentar();
+      toast(`Programa ${creado.codigo} registrado. Todavía no tiene muestra: se sortea aquí abajo.`);
+    } catch (error) {
+      setFalloDelAlta(error instanceof ErrorDeApi ? error.mensaje : 'no hubo respuesta del servidor');
+    } finally {
+      setRegistrando(false);
+    }
+  };
+
+  /* ── El sorteo de la muestra (#550, ADR-0023) ──────────────────────────
+     El cuerpo lleva SOLO la observacion, y eso no es una omision: a quien se
+     fiscaliza lo deciden los parametros del programa. Por eso este acto vive
+     aqui —donde el programa esta elegido y sus parametros se leen— y no en la
+     deteccion, donde lo que hay marcado son predios que no viajan. */
+  const [observacionDelSorteo, setObservacionDelSorteo] = useState('');
+  const [sorteando, setSorteando] = useState(false);
+  const [falloDelSorteo, setFalloDelSorteo] = useState<string | null>(null);
+  const [ultimoSorteo, setUltimoSorteo] = useState<ResultadoDelSorteo | null>(null);
+  /* El recuento del sorteo es del programa que se sorteo: al cambiar de
+     programa se va, porque si no diria las cifras de otro bajo esta muestra. */
+  useEffect(() => {
+    setUltimoSorteo(null);
+    setFalloDelSorteo(null);
+  }, [programaActivo?.id]);
+
+  /**
+   * Por que NO se puede sortear ahora mismo, o `null` si se puede.
+   *
+   * Las tres primeras causas se saben **antes de pulsar**, porque
+   * `ProgramaResource` publica `ejercicio` y `criterio` y el sobre de la muestra
+   * dice cuantas filas tiene: descubrirlas en el 422 de la respuesta seria
+   * mandar a quien atiende a averiguar por ensayo lo que la pantalla ya sabe.
+   */
+  const motivoParaNoSortear: string | null =
+    programaActivo === null
+      ? 'No hay ningún programa elegido: el sorteo es un acto de un programa concreto.'
+      : programaActivo.ejercicio === null
+        ? `El programa ${programaActivo.codigo} no declara ejercicio, y sin él no hay padrón sobre el que sortear. No se le puede añadir: no existe ninguna ruta de edición de un programa.`
+        : programaActivo.criterio === null
+          ? `El programa ${programaActivo.codigo} no declara criterio de riesgo, y la muestra se sortea por uno. No se le puede añadir: no existe ninguna ruta de edición de un programa.`
+          : programaActivo.fiscalizador === null
+            ? `El programa ${programaActivo.codigo} no declara fiscalizador, y el sorteo lo exige aunque el alta lo admita en blanco. No se le puede añadir: no existe ninguna ruta de edición de un programa.`
+            : (muestra.datos?.totalElementos ?? 0) > 0
+              ? `El programa ${programaActivo.codigo} ya sorteó su muestra, y una muestra no se regenera: hay actas que cuelgan de ella.`
+              : !observacionBastante(observacionDelSorteo)
+                ? 'Falta la observación de quien sortea, de al menos cinco caracteres.'
+                : null;
+
+  const sortearLaMuestraDelPrograma = async () => {
+    if (programaActivo === null) return;
+    setSorteando(true);
+    setFalloDelSorteo(null);
+    try {
+      const resultado = await sortearMuestra(programaActivo.id, observacionDelSorteo.trim());
+      setUltimoSorteo(resultado);
+      setObservacionDelSorteo('');
+      muestra.reintentar();
+      toast(`Muestra sorteada: ${resultado.predios} de ${resultado.detectados} detectados.`);
+    } catch (error) {
+      setFalloDelSorteo(error instanceof ErrorDeApi ? error.mensaje : 'no hubo respuesta del servidor');
+    } finally {
+      setSorteando(false);
+    }
+  };
+
+  /**
+   * Abre el alta con los filtros de la deteccion ya puestos (ADR-0023 §1).
+   *
+   * Es lo unico que la deteccion le pasa al programa, y es la salida (a) del
+   * ADR escrita en un boton: **los predios marcados no viajan**, viajan el
+   * sector y la condicion con los que se encontraron. La condicion vacia es
+   * «Todas», que en un programa no existe —contesta 422 diciendo que no es un
+   * criterio sino la ausencia de filtro—, asi que llega en blanco y el
+   * formulario la pide.
+   */
+  const programarConLosFiltrosDeLaDeteccion = () => {
+    setAlta({ tipo: 'PREDIAL', sector: sectorDet.trim(), criterio: condicionDet, ejercicio: pref.ejercicio });
+    setObservacionDelAlta('');
+    setFalloDelAlta(null);
+    setAltaAbierta(true);
+    onDest('programas');
+  };
+
+  /* ── Las actas levantadas, contra `GET /fiscalizacion/actas` (#599) ── */
+  /**
+   * El filtro del listado: el programa, por su ID interno y vacio para todas.
+   *
+   * No es `programaActivo`, que es el de la derecha del panel y nace en el
+   * primero de la lista: aqui «ninguno elegido» significa **todas las actas de
+   * la municipalidad**, que es la respuesta util cuando lo que se busca es un
+   * acta y no se recuerda de que programa salio.
+   */
+  const [programaActas, setProgramaActas] = useState('');
+  const [paginaActas, setPaginaActas] = useState(0);
+  /** Igual que en la deteccion: nace `null`, y `null` no es «por id, ascendente». */
+  const [ordenActas, setOrdenActas] = useState<{ campo: OrdenDeActas; sentido: 'ASCENDENTE' | 'DESCENDENTE' } | null>(null);
+  const alternarOrdenActas = (campo: OrdenDeActas) =>
+    setOrdenActas((s) =>
+      s !== null && s.campo === campo
+        ? { campo, sentido: s.sentido === 'ASCENDENTE' ? 'DESCENDENTE' : 'ASCENDENTE' }
+        : { campo, sentido: 'ASCENDENTE' },
+    );
+  useEffect(() => setPaginaActas(0), [programaActas, ordenActas]);
+
+  const actas = useRecurso(
+    (senal) =>
+      listarActas(
+        { programa: programaActas || undefined },
+        {
+          pagina: paginaActas,
+          tamano: TAMANO_DE_PAGINA,
+          /* Los dos salen del MISMO estado y viajan juntos, por lo mismo que en
+             la deteccion: `direccion` sin `ordenarPor` no ordena nada. */
+          ordenarPor: ordenActas?.campo,
+          direccion: ordenActas?.sentido,
+        },
+        senal,
+      ),
+    [programaActas, paginaActas, ordenActas],
+    dest === 'actas',
   );
 
   /* ── Resultados, contra `GET /fiscalizacion/resultados` (#49) ── */
@@ -814,6 +1082,31 @@ export default function Fiscalizacion({ dest, onDest }: PantallaProps) {
     [programaActivo?.id],
     dest === 'panel' && programaActivo !== null,
   );
+  /**
+   * «Inspeccionados» del embudo, que hasta #599 no tenia de donde salir.
+   *
+   * Es el `totalElementos` del listado de actas acotado al programa, y **no una
+   * suma**: `MuestraResource.visitado` viaja fila a fila, asi que contarlo aqui
+   * daria las visitadas de la pagina que se trajo y no las del programa
+   * (RNF-083). Por eso se pide con `tamano: 1` —de esta lectura solo se lee el
+   * total del sobre, igual que en las dos de resultados de arriba—.
+   */
+  const inspeccionadas = useRecurso(
+    (senal) => listarActas({ programa: String(programaActivo?.id ?? 0) }, { pagina: 0, tamano: 1 }, senal),
+    [programaActivo?.id],
+    dest === 'panel' && programaActivo !== null,
+  );
+
+  /**
+   * Cuantas actas hay levantadas en la municipalidad, para la franja de
+   * resultados. Sin filtro: esa franja no acota por programa, igual que la
+   * grilla de liquidaciones que tiene debajo.
+   */
+  const actasLevantadas = useRecurso(
+    (senal) => listarActas({}, { pagina: 0, tamano: 1 }, senal),
+    [],
+    dest === 'resultados' && resTab === 0,
+  );
 
   /* ── El estado de cuenta de un contribuyente (RF-056) ────────── */
   const [contribuyenteRes, setContribuyenteRes] = useState('');
@@ -832,6 +1125,47 @@ export default function Fiscalizacion({ dest, onDest }: PantallaProps) {
     dest === 'resultados' && resTab === 2,
   );
 
+  /* ── La resolucion de determinacion, por su numero (#593) ───── */
+  /**
+   * El numero se TECLEA, y no es una comodidad: es que no lo lista nadie.
+   *
+   * `GET /fiscalizacion/resultados` —la grilla de al lado— publica el numero de
+   * la LIQUIDACION (`LIQ-2026-000001`) y no el de la resolucion que la
+   * transfirio (`RDF-2026-000001`); el contrato no declara ninguna otra ruta
+   * bajo `/fiscalizacion/resoluciones`, y la unica respuesta del sistema que
+   * trae ese numero es la del `POST /fiscalizacion/transferencias` que la
+   * dicta, que esta pantalla no puede hacer. Medido con la cadena entera
+   * sembrada en la municipalidad 1.
+   *
+   * De donde sale, entonces: del papel notificado. Es el numero que el
+   * contribuyente trae escrito cuando viene a reclamar dentro de los veinte
+   * dias del art. 137, que es exactamente cuando ventanilla necesita esta hoja.
+   */
+  const [numeroResolucion, setNumeroResolucion] = useState('');
+  const numeroResolucionReposado = useRebote(numeroResolucion.trim());
+  const resolucion = useRecurso(
+    (senal) => leerResolucion(numeroResolucionReposado, senal),
+    [numeroResolucionReposado],
+    /* Con la caja vacia NO se pide nada, y eso es lo que deja la hoja sin una
+       sola cifra: `useRecurso` inactivo deja `datos` en `null`, y de `null` no
+       sale ningun numero que pintar. La guarda no esta en el dibujo, esta en la
+       lectura. */
+    esResolucion && numeroResolucionReposado !== '',
+  );
+  /**
+   * La resolucion leida, y **solo** la que esta escrita ahora mismo.
+   *
+   * No lleva ninguna guarda propia, y **eso se midio antes de quitarla**: la
+   * version anterior era `numeroResolucionReposado === '' ? null :
+   * resolucion.datos`, se muto a `resolucion.datos` a secas y **no cambio
+   * nada** —borrar la caja seguia llevandose la hoja entera—. Quien lo hace es
+   * `useRecurso`: con `activo` en falso su efecto pone `datos` en `null`, y al
+   * cambiar de pregunta lo limpia antes de pedir. Una guarda que no puede
+   * fallar no protege nada, asi que la que sujeta la hoja es la de la lectura,
+   * cinco lineas mas arriba, y es la que hay que mutar para comprobarla.
+   */
+  const laResolucion = resolucion.datos;
+
   /* ── Acta: la tabla de contraste ───────────────────────────── */
   const contraste = useMemo(() => {
     let hayDif = false;
@@ -839,6 +1173,13 @@ export default function Fiscalizacion({ dest, onDest }: PantallaProps) {
       const valor = String(vals[r.k] === undefined ? DEFECTOS[r.k] : vals[r.k]);
       let dif = '—';
       let cambio = false;
+      /* Sin nada declarado no hay diferencia, y decir «sin cambio» seria
+         afirmar que lo verificado coincide con lo declarado cuando lo declarado
+         no se ha leido de ninguna parte. Lo declarado sale de la ficha vigente
+         del predio que se inspecciona, y esta pantalla no tiene predio (#702). */
+      if (r.decl === '') {
+        return { r, valor, dif: SIN_DATO, cambio: false };
+      }
       if (r.n) {
         const a = parseFloat(String(r.decl).replace(/,/g, '')) || 0;
         const b = parseFloat(String(valor).replace(/,/g, '')) || 0;
@@ -871,11 +1212,24 @@ export default function Fiscalizacion({ dest, onDest }: PantallaProps) {
     const ejercicios = String(vals.ejercicios === undefined ? DEFECTOS.ejercicios : vals.ejercicios);
     const construida = String(vals.construidaV === undefined ? DEFECTOS.construidaV : vals.construidaV);
     const uso = String(vals.usoV === undefined ? DEFECTOS.usoV : vals.usoV);
-    const conforme = hallazgo === 'SIN OBSERVACIONES' || !contraste.hayDif;
+    /* `!contraste.hayDif` ya no puede leerse como «coincide con lo declarado»:
+       con la columna «Declarado» vacia no hay con que comparar, y decir «no hay
+       diferencia» seria afirmar que el predio esta conforme sin haber mirado su
+       ficha (#702). Se separan los dos casos. */
+    const sinContraste = DIFF.every((r) => r.decl === '');
+    const conforme = !sinContraste && (hallazgo === 'SIN OBSERVACIONES' || !contraste.hayDif);
     const out: { titulo: string; detalle: string; valor: string; iconoStyle: CSSProperties }[] = [
-      { titulo: 'Se cierra el acta ' + DEFECTOS.acta, detalle: 'Deja de ser editable. Para corregirla habría que anularla y levantar otra.', valor: '', iconoStyle: ICONO_OK },
+      { titulo: 'Se cierra el acta', detalle: 'Deja de ser editable. Para corregirla habría que anularla y levantar otra.', valor: '', iconoStyle: ICONO_OK },
     ];
-    if (conforme) {
+    if (sinContraste) {
+      out.push({
+        titulo: 'No se puede decir si hay diferencia',
+        detalle:
+          'Lo declarado sale de la ficha catastral vigente del predio, y aquí no hay predio elegido: la columna «Declarado» del paso 2 está vacía, así que ni «conforme» ni «hay diferencia» se pueden afirmar.',
+        valor: '',
+        iconoStyle: ICONO_NEU,
+      });
+    } else if (conforme) {
       out.push({
         titulo: 'El acta se cierra como conforme',
         detalle: 'No hay diferencia con lo declarado: no se genera determinación ni multa, y el predio sale de la muestra.',
@@ -885,8 +1239,18 @@ export default function Fiscalizacion({ dest, onDest }: PantallaProps) {
     } else if (determina) {
       out.push({
         titulo: 'Se genera la resolución de determinación',
-        detalle: 'Hallazgo: ' + hallazgo.toLowerCase() + '. Diferencia de impuesto predial y arbitrios de los ejercicios ' + ejercicios + '.',
-        valor: 'S/ 1,842.60',
+        detalle:
+          'Hallazgo: ' +
+          (hallazgo === '' ? 'sin elegir' : hallazgo.toLowerCase()) +
+          '. Diferencia de impuesto predial y arbitrios de los ejercicios ' +
+          (ejercicios === '' ? 'que se elijan' : ejercicios) +
+          '.',
+        /* Decia «S/ 1,842.60». Era la cifra de la captura del artboard,
+           presentada como el resultado de un acto que se acababa de ejecutar
+           (#702). El importe de una determinacion lo calcula el backend al
+           liquidar la fiscalizacion, con los valores del ejercicio sellado; esta
+           pantalla no compone dinero (RNF-083) y ademas no manda el acta. */
+        valor: SIN_DATO,
         iconoStyle: ICONO_OK,
       });
     } else {
@@ -897,7 +1261,7 @@ export default function Fiscalizacion({ dest, onDest }: PantallaProps) {
         iconoStyle: ICONO_NEU,
       });
     }
-    if (!conforme && multa !== 'NO APLICA') {
+    if (!conforme && !sinContraste && multa !== 'NO APLICA' && multa !== '') {
       /* «Código Tributario» va con mayúsculas: es como se cita en la hoja de la
          resolución y en la baja de deuda de Rentas. Solo baja a minúsculas la
          descripción de la infracción, que es la parte variable. */
@@ -907,14 +1271,22 @@ export default function Fiscalizacion({ dest, onDest }: PantallaProps) {
       out.push({
         titulo: 'Se liquida la multa tributaria',
         detalle: 'Artículo ' + numero + ' del Código Tributario: ' + descripcion + '.',
-        valor: 'S/ 267.50',
+        /* Y esta decia «S/ 267.50», por lo mismo: la multa del art. 176 se
+           calcula sobre un porcentaje de la UIT del ejercicio, que es un valor
+           normativo sellado (regla 5). */
+        valor: SIN_DATO,
         iconoStyle: ICONO_OK,
       });
     }
-    if (!conforme) {
+    if (!conforme && !sinContraste) {
       out.push({
         titulo: 'Se actualiza la ficha catastral del predio',
-        detalle: 'Área construida verificada ' + construida + ' m² y uso ' + uso + '. Queda como versión nueva.',
+        detalle:
+          'Área construida verificada ' +
+          (construida === '' ? SIN_DATO : construida + ' m²') +
+          ' y uso ' +
+          (uso === '' ? SIN_DATO : uso) +
+          '. Queda como versión nueva.',
         valor: '',
         iconoStyle: ICONO_NEU,
       });
@@ -926,27 +1298,38 @@ export default function Fiscalizacion({ dest, onDest }: PantallaProps) {
   /* ── Cabecera ──────────────────────────────────────────────── */
   const destino = m.destinos.find((x) => x.k === dest);
   const miga = esActa
-    ? ['Fiscalización', 'Actas', String(DEFECTOS.acta)]
+    ? ['Fiscalización', 'Actas']
     : esResolucion
       ? ['Fiscalización', 'Documentos']
       : ['Fiscalización', destino?.label ?? 'Fiscalización'];
+  /* Decia «Acta ACT-2026-00418», un numero que no existe en ninguna
+     municipalidad. El h1 de una pantalla sin acta abierta no puede nombrar
+     ninguna (#702). */
   const titulo = esActa
-    ? 'Acta ' + DEFECTOS.acta
+    ? 'Acta de inspección'
     : esResolucion
       ? 'Resolución de determinación'
       : (destino?.label ?? 'Fiscalización');
 
   const paleta = OPCIONES.map((o) => ({ label: o[0], nota: 'Fiscalización', ir: () => onDest(o[1]) }));
 
+  /**
+   * Avanza el asistente, y **nada mas**.
+   *
+   * En el ultimo paso hacia tres cosas y las tres eran falsas: se daba el
+   * formulario por limpio (`setSucio(false)`), se navegaba a «Resultados» como
+   * si el acta hubiera quedado registrada, y se anunciaba «Acta cerrada.
+   * Determinacion por S/ 1,842.60 lista para emitir» — **una cifra de dinero de
+   * la maqueta presentada como el resultado de un acto que se acababa de
+   * ejecutar** (#702). Ninguna peticion salia al servidor.
+   *
+   * Ahora el ultimo paso no tiene boton que llame aqui: «Cerrar acta» esta
+   * apagado con su motivo, como sus dos vecinos.
+   */
   const adelante = () => {
-    if (pasoIdx >= PASOS_ACTA.length - 1) {
-      setSucio(false);
-      onDest('resultados');
-      toast('Acta cerrada. Determinación por S/ 1,842.60 lista para emitir.');
-    } else {
-      setPaso(pasoIdx + 1);
-      setSucio(true);
-    }
+    if (pasoIdx >= PASOS_ACTA.length - 1) return;
+    setPaso(pasoIdx + 1);
+    setSucio(true);
   };
 
   const filtroDe = (label: string, porOmision: string) => filtros[detTab + ':' + label] ?? porOmision;
@@ -963,11 +1346,28 @@ export default function Fiscalizacion({ dest, onDest }: PantallaProps) {
         esActa
           ? {
               volver: { label: 'Muestra', onClick: () => onDest('programas') },
-              codigo: String(DEFECTOS.predio),
-              titular: 'MEDINA MEDINA, RUFINA (SUC.)',
-              ubic: 'CALLE SANTA ROSA 116 · programa PF-2026-014 · riesgo alto',
-              estado: sucio ? 'Borrador sin guardar' : 'Borrador guardado 10:52',
-              estadoColor: sucio ? 'var(--warn-fg)' : 'var(--ok-fg)',
+              /* El sujeto tambien era de la captura: el predio
+                 `02-014-D-14-01`, «MEDINA MEDINA, RUFINA (SUC.)» y «CALLE SANTA
+                 ROSA 116 · programa PF-2026-014 · riesgo alto». Un acta se
+                 levanta sobre un predio de la muestra, y a esta pantalla no
+                 llega ninguno todavia: no hay lectura de un acta abierta
+                 —`GET /fiscalizacion/actas` lista, no abre— ni la muestra
+                 enlaza aqui con su fila. Asi que la cabecera dice de que carece
+                 en vez de nombrar a alguien del artboard (#702). */
+              codigo: SIN_DATO,
+              titular: 'Sin predio elegido',
+              ubic: 'El acta se levanta sobre un predio de la muestra, y aquí todavía no llega ninguno',
+              /* Decia «Borrador guardado 10:52» EN VERDE, que es un acuse de
+                 exito de algo que no ha pasado nunca: nada de esta pantalla se
+                 guarda en ningun sitio —el propio boton «Guardar borrador»
+                 esta apagado dos secciones mas abajo diciendo exactamente
+                 eso—, y la hora salia de la captura del artboard. Con el aviso
+                 de #599 al lado la contradiccion queda a la vista, asi que la
+                 insignia pasa a decir lo que hay: hay algo escrito y no esta
+                 guardado, o no hay nada escrito y el acta no esta registrada.
+                 Ni verde, ni hora. */
+              estado: sucio ? 'Borrador sin guardar' : 'Acta sin registrar',
+              estadoColor: sucio ? 'var(--warn-fg)' : 'var(--ink-3)',
             }
           : undefined
       }
@@ -1033,7 +1433,12 @@ export default function Fiscalizacion({ dest, onDest }: PantallaProps) {
                 <Icono d={ICO.flechaDer} tam={14} grosor={1.8} style={FLECHA} />
               </button>
 
-              {etapasDelEmbudo(muestra.datos?.totalElementos ?? null, liquidadas.datos?.totalElementos ?? null, notificadas.datos?.totalElementos ?? null).map(
+              {etapasDelEmbudo(
+                muestra.datos?.totalElementos ?? null,
+                inspeccionadas.datos?.totalElementos ?? null,
+                liquidadas.datos?.totalElementos ?? null,
+                notificadas.datos?.totalElementos ?? null,
+              ).map(
                 (e, i) => (
                   <button
                     key={e.etapa}
@@ -1094,11 +1499,15 @@ export default function Fiscalizacion({ dest, onDest }: PantallaProps) {
               <div style={{ padding: '11px 16px' }}>
                 <Aviso tono="warn" titulo="El embudo se lee a trozos, y hay que decir cuáles">
                   {/* #505: «el embudo pide nueve cifras y el contrato publica
-                      dos». Aqui se leen tres —el tamaño de la muestra y los dos
-                      totales de resultados— y las demas se dicen «—». */}
-                  «Inspeccionados» no lo cuenta ninguna operación: la muestra publica <code>visitado</code> fila a fila y nadie publica su
-                  recuento. «Detectados» tampoco se trae: sería repetir una consulta que en el padrón real tarda 8,5 s (#561). Lo que sí se
-                  lee es el tamaño de la muestra y los dos totales de resultados, cada uno de su propia consulta. Issues #505 y #546.
+                      dos». Con #599 son cuatro las que se leen —la muestra, las
+                      actas y los dos totales de resultados—, y las cuatro
+                      etapas del embudo quedan cubiertas. Lo que sigue fuera es
+                      «Detectados», que no es una etapa sino la cabecera. */}
+                  Las cuatro etapas son cuatro consultas distintas, cada una leída del total de su sobre y ninguna compuesta aquí.
+                  «Inspeccionados» cuenta <strong>actas</strong> del programa, que desde <code>V76</code> se pueden listar (#599): no es lo
+                  mismo que «predios visitados» —la muestra publica <code>visitado</code> fila a fila y sigue sin recuento—, y un predio
+                  revisitado tiene dos actas, así que la barra puede pasar del 100 %. «Detectados» no se trae: sería repetir una consulta
+                  que en el padrón real tarda 8,5 s (#561). Issues #505, #546 y #599.
                 </Aviso>
               </div>
             </section>
@@ -1416,52 +1825,58 @@ export default function Fiscalizacion({ dest, onDest }: PantallaProps) {
               </p>
             </section>
 
-            {/* Las dos acciones estan APAGADAS, y el motivo se lee en pantalla
-                —no en un `title` que nadie abre (RNF-082)—.
+            {/* Lo que sale de esta pantalla son sus FILTROS, no sus marcas
+                (ADR-0023 §1).
 
-                «Programar fiscalizacion»: el backend NO tiene ninguna operacion
-                que reciba una seleccion de predios. Lo que hay es `POST
-                /fiscalizacion/programas`, que registra un programa con su
-                codigo, su descripcion, su tipo y su fecha de inicio —cuatro
-                campos que esta pantalla no dibuja—, y `POST
-                /fiscalizacion/programas/{id}/muestra`, que SORTEA la muestra a
-                partir de los parametros del programa y cuyo cuerpo lleva solo
-                la observacion: su javadoc dice, con todas las letras, que a
-                quien se fiscaliza lo deciden los parametros del programa y no
-                la peticion. Asi que la seleccion no tiene a donde ir, y el
-                toast anterior —«N registros añadidos a la muestra del
-                PF-2026-014»— afirmaba un acto que nunca salio de la pantalla,
-                sobre un programa que es del prototipo.
+                La muestra se sortea: la fila de `programa_muestra` copia la
+                condicion del dia del sorteo y con eso contesta sola «¿por que
+                me toco a mi?». Una seleccion a mano contesta «porque alguien te
+                marco», que en una fiscalizacion de oficio no es una respuesta.
+                Asi que las casillas se quedan —marcar sigue siendo util para
+                revisar la pagina— y no viajan, y el boton lleva al alta del
+                programa con el sector y la condicion ya puestos, que son dos de
+                los tres parametros con los que ese programa sorteara.
 
-                «Notificar esquela»: no tenia ni `onClick`, y no hay ninguna
-                ruta de esquela en el contrato. */}
-            <Aviso tono="warn" titulo="Desde aquí todavía no se programa nada">
-              La selección se queda en esta pantalla. Para que salga de ella el backend tendría que aceptar una lista de predios, y hoy no
-              hay ninguna operación que la reciba: un programa se registra con su código, su descripción, su tipo y su fecha de inicio
-              —cuatro datos que esta pantalla no pide— y su muestra se <em>sortea</em> a partir del sector, la condición y el ejercicio que
-              el propio programa declara. Mientras tanto, la muestra se genera desde «Programas». Issue #550.
+                «Notificar esquela» SE HA RETIRADO, y no por descuido: ningun
+                requisito la pide, el catalogo de opciones no la nombra, el
+                contrato no declara ninguna ruta con esa palabra y el sistema no
+                modela el acto —no hay tipo de documento para ella ni plazo suyo
+                transcrito en el corpus, y este proyecto no inventa plazos
+                (regla 5)—. Un boton apagado dice «esto llegara»; aqui no hay
+                nada que llegue, asi que lo que quedaba era un rotulo del
+                prototipo sin acto detras. Se nombra en el aviso para que su
+                ausencia no se lea como un descuido, que es la leccion de #608
+                con las columnas que el manual propone y no se pueden ordenar. */}
+            <Aviso tono="neutro" titulo="Lo que se lleva de aquí son los filtros, no los predios marcados">
+              La muestra de un programa se <em>sortea</em>: se aplica al padrón el ejercicio, el sector y el criterio que el propio programa
+              declara, y la fila que sale copia la condición de ese día, que es lo que contesta «por qué me tocó a mí». Por eso los predios
+              marcados no viajan —marcar sirve para revisar esta página— y lo que el botón se lleva son el sector y la condición de arriba,
+              al formulario que registra el programa. «Notificar esquela» ya no está: no hay ninguna operación de esquela en el contrato, ni
+              tipo de documento, ni plazo transcrito con el que decir para cuándo, así que era un rótulo sin acto detrás. ADR-0023, issue
+              #550.
             </Aviso>
 
             <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>
               <p style={{ margin: 0, flex: 1, minWidth: 180, fontSize: 12.5, color: 'var(--ink-3)', textWrap: 'pretty' }}>
                 {marcadasN === 0
                   ? 'Marca los registros que quieras anotar. La marca no sale de esta pantalla.'
-                  : marcadasN + (marcadasN === 1 ? ' registro marcado' : ' registros marcados') + ' en esta página.'}
+                  : marcadasN + (marcadasN === 1 ? ' registro marcado' : ' registros marcados') + ' en esta página. La marca no viaja.'}
               </p>
-              <button
-                disabled
-                title="No hay ninguna operación de esquela en el contrato de la API."
-                style={{ ...BOTON_APAGADO, border: '1px solid var(--line-2)', background: 'var(--bg-card)', padding: '10px 18px', fontSize: 13 }}
-              >
-                Notificar esquela
-              </button>
-              <button
-                disabled
-                title="Ninguna operación del backend recibe una selección de predios."
-                style={{ ...BOTON_APAGADO, border: 0, background: 'var(--accent)', color: '#fff', padding: '11px 22px', fontSize: 13.5, fontWeight: 500 }}
-              >
-                Programar fiscalización
-              </button>
+              {/* Solo en el predial: el cruce vehicular no tiene lectura, asi
+                  que sus dos desplegables estan bloqueados y no hay ningun
+                  filtro que llevarse. */}
+              {detTab === 0 && (
+                <button
+                  onClick={programarConLosFiltrosDeLaDeteccion}
+                  style={{ border: 0, borderRadius: 7, background: 'var(--accent)', color: '#fff', padding: '11px 22px', fontSize: 13.5, fontWeight: 500, cursor: 'pointer' }}
+                >
+                  {/* El rotulo dice lo que hace. «Programar fiscalizacion» a
+                      secas, con N marcados al lado, se lee como «programa estos
+                      N» — que es exactamente lo que el toast anterior afirmaba
+                      sin mandar una sola peticion. */}
+                  Programar con estos filtros
+                </button>
+              )}
             </div>
           </div>
         )}
@@ -1509,8 +1924,8 @@ export default function Fiscalizacion({ dest, onDest }: PantallaProps) {
                           PF-2025-032, con sus «96 predios», «618 vehiculos» y
                           «1,412 predios»— no existen: `programa_fiscalizacion`
                           tiene cero filas en las dos municipalidades (#546). */}
-                      La consulta contestó sin ninguno. Un programa se registra con <code>POST /fiscalizacion/programas</code> —código,
-                      descripción, tipo y fecha de inicio— y esta pantalla todavía no dibuja ese formulario. Issue #550.
+                      La consulta contestó sin ninguno. Se registra el primero con «+ Nuevo programa», aquí abajo: pide código,
+                      descripción, tipo y fecha de inicio, más el ejercicio y el criterio con los que sorteará su muestra.
                     </Aviso>
                   </div>
                 )}
@@ -1553,21 +1968,198 @@ export default function Fiscalizacion({ dest, onDest }: PantallaProps) {
                 })}
 
                 <div style={{ padding: '11px 14px' }}>
-                  {/* `POST /fiscalizacion/programas` existe, pero pide codigo,
-                      descripcion, tipo y fecha de inicio, y aqui no hay ningun
-                      campo donde teclearlos —ni el de observacion que toda
-                      escritura exige (regla 10)—. Apagado, con el motivo. */}
+                  {/* Ya no esta apagado: el formulario del alta existe y vive a
+                      la derecha, donde hay sitio para sus ocho campos y su
+                      observacion (#550, AC 4). Este boton solo lo abre y lo
+                      cierra, asi que no escribe nada y no necesita motivo. */}
                   <button
-                    disabled
-                    title="El alta pide código, descripción, tipo y fecha de inicio, y esta pantalla no dibuja ningún campo."
-                    style={{ ...BOTON_APAGADO, width: '100%', border: '1px dashed var(--line-2)', borderRadius: 7, padding: 9, background: 'transparent', fontSize: 12.5, color: 'var(--ink-3)' }}
+                    onClick={() => {
+                      setAltaAbierta((x) => !x);
+                      setFalloDelAlta(null);
+                    }}
+                    aria-expanded={altaAbierta}
+                    style={{ width: '100%', border: '1px dashed var(--line-2)', borderRadius: 7, padding: 9, background: 'transparent', fontSize: 12.5, color: 'var(--ink-3)', cursor: 'pointer' }}
                   >
-                    + Nuevo programa
+                    {altaAbierta ? 'Cerrar el alta' : '+ Nuevo programa'}
                   </button>
                 </div>
               </section>
 
               <div style={{ display: 'flex', flexDirection: 'column', gap: 14, minWidth: 0 }}>
+                {/* ── El alta de un programa (#550, AC 4) ──────────────────
+                    `POST /fiscalizacion/programas` existia desde antes y no lo
+                    alcanzaba ninguna pantalla. Aqui estan sus cinco campos
+                    exigidos —codigo, descripcion, tipo, fecha de inicio y la
+                    observacion— y los cuatro que el servidor llama opcionales,
+                    de los que dos no lo son de hecho: sin ejercicio y sin
+                    criterio el programa no puede sortear su muestra nunca, y no
+                    hay ruta de edicion que se los añada despues. */}
+                {altaAbierta && (
+                  <section style={TARJETA}>
+                    <div style={{ ...CABECERA, flexWrap: 'wrap' }}>
+                      <h2 style={H2}>Nuevo programa</h2>
+                      <span style={META}>{puedeRegistrarPrograma ? 'listo' : faltaDelAlta.filter((f) => !f.ok).length + ' sin llenar'}</span>
+                    </div>
+
+                    <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit,minmax(190px,1fr))', gap: 12, padding: '14px 16px', borderBottom: '1px solid var(--line)' }}>
+                      <label style={{ display: 'flex', flexDirection: 'column', gap: 5, minWidth: 0 }}>
+                        <span style={ROTULO}>Código · obligatorio</span>
+                        <input value={campoDelAlta('codigo')} onChange={(e) => fijarAlta('codigo', e.target.value)} placeholder="PF-2026-001" style={CAMPO} />
+                      </label>
+                      <label style={{ display: 'flex', flexDirection: 'column', gap: 5, minWidth: 0, gridColumn: 'span 2' }}>
+                        <span style={ROTULO}>Descripción · obligatoria</span>
+                        <input
+                          value={campoDelAlta('descripcion')}
+                          onChange={(e) => fijarAlta('descripcion', e.target.value)}
+                          placeholder="Qué se va a fiscalizar y por qué"
+                          style={CAMPO}
+                        />
+                      </label>
+                      <label style={{ display: 'flex', flexDirection: 'column', gap: 5, minWidth: 0 }}>
+                        <span style={ROTULO}>Tipo · obligatorio</span>
+                        {/* Los DOS que `TipoDePrograma` declara, y ninguno mas:
+                            otro valor contesta «Tipo de programa desconocido».
+                            La opcion vacia esta a proposito, para que el tipo
+                            sea una eleccion y no lo que quedo dibujado. */}
+                        <select value={campoDelAlta('tipo')} onChange={(e) => fijarAlta('tipo', e.target.value)} style={CAMPO}>
+                          <option value="">Elegir…</option>
+                          <option value="PREDIAL">PREDIAL</option>
+                          <option value="VEHICULAR">VEHICULAR</option>
+                        </select>
+                      </label>
+                      <label style={{ display: 'flex', flexDirection: 'column', gap: 5, minWidth: 0 }}>
+                        <span style={ROTULO}>Fecha de inicio · obligatoria</span>
+                        <input type="date" value={campoDelAlta('fechaInicio')} onChange={(e) => fijarAlta('fechaInicio', e.target.value)} style={CAMPO} />
+                      </label>
+                    </div>
+
+                    <div style={{ padding: '12px 16px 4px' }}>
+                      <p style={{ margin: 0, fontSize: 12, fontWeight: 600, color: 'var(--ink-2)' }}>Con qué va a sortear su muestra</p>
+                      <p style={{ margin: '4px 0 0', fontSize: 11.5, lineHeight: 1.5, color: 'var(--ink-4)', textWrap: 'pretty' }}>
+                        El servidor admite los cuatro en blanco. Esta pantalla pide los tres primeros de todas formas: un programa al que
+                        le falte cualquiera de ellos <strong>no puede sortear su muestra nunca</strong> —contesta «El programa no declara
+                        &apos;ejercicio&apos;, y sin él no se puede sortear su muestra», y lo mismo del criterio y del fiscalizador— y no hay
+                        ninguna ruta de edición que se los añada después: reprogramar es registrar otro. Sólo el sector es de verdad
+                        opcional: en blanco, el sorteo mira el distrito entero.
+                      </p>
+                    </div>
+
+                    <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit,minmax(190px,1fr))', gap: 12, padding: '12px 16px 14px', borderBottom: '1px solid var(--line)' }}>
+                      <label style={{ display: 'flex', flexDirection: 'column', gap: 5, minWidth: 0 }}>
+                        <span style={ROTULO}>Ejercicio</span>
+                        <input value={campoDelAlta('ejercicio')} onChange={(e) => fijarAlta('ejercicio', e.target.value)} placeholder="2026" style={CAMPO} />
+                      </label>
+                      <label style={{ display: 'flex', flexDirection: 'column', gap: 5, minWidth: 0 }}>
+                        <span style={ROTULO}>Criterio de riesgo</span>
+                        {/* Los cinco de `CondicionFiscalizada`, y **ninguna
+                            opcion «Todas»**: en la deteccion «Todas» es «sin
+                            filtro», y aqui el servidor la rechaza diciendo que
+                            no es un criterio sino la ausencia de uno
+                            (ADR-0023 §2). Ofrecerla seria dibujar un 422 de ida
+                            y vuelta. */}
+                        <select value={campoDelAlta('criterio')} onChange={(e) => fijarAlta('criterio', e.target.value)} style={CAMPO}>
+                          <option value="">Elegir…</option>
+                          {CONDICIONES.map((c) => (
+                            <option key={c.valor} value={c.valor}>
+                              {c.valor}
+                            </option>
+                          ))}
+                        </select>
+                      </label>
+                      <label style={{ display: 'flex', flexDirection: 'column', gap: 5, minWidth: 0 }}>
+                        <span style={ROTULO}>Fiscalizador</span>
+                        <input value={campoDelAlta('fiscalizador')} onChange={(e) => fijarAlta('fiscalizador', e.target.value)} style={CAMPO} />
+                      </label>
+                      <label style={{ display: 'flex', flexDirection: 'column', gap: 5, minWidth: 0 }}>
+                        <span style={ROTULO}>Sector · opcional</span>
+                        <input value={campoDelAlta('sector')} onChange={(e) => fijarAlta('sector', e.target.value)} placeholder="Todos" style={CAMPO} />
+                      </label>
+                    </div>
+
+                    {/* Lo que falta, DIBUJADO. Un boton apagado no recibe el
+                        foco, asi que su `title` no lo lee un lector de pantalla
+                        (RNF-082): quitar esta lista deja la pantalla sin decir
+                        por que no se puede registrar. */}
+                    <div style={{ ...CABECERA, flexWrap: 'wrap' }}>
+                      <p style={{ ...H2, margin: 0, fontSize: 14 }}>Qué falta para poder registrarlo</p>
+                    </div>
+                    {faltaDelAlta.map((r) => (
+                      <div key={r.que} style={{ display: 'flex', alignItems: 'center', gap: 11, padding: '10px 16px', borderTop: '1px solid var(--line)' }}>
+                        <span
+                          style={{
+                            display: 'grid',
+                            placeItems: 'center',
+                            width: 20,
+                            height: 20,
+                            borderRadius: '50%',
+                            flex: '0 0 auto',
+                            background: r.ok ? 'var(--ok-bg)' : 'var(--warn-bg)',
+                            color: r.ok ? 'var(--ok-fg)' : 'var(--warn-fg)',
+                          }}
+                        >
+                          <Icono d={r.ok ? ['M5 12.5l4.5 4.5L19 7'] : ['M12 7.5V13M12 16.5h.02']} tam={12} grosor={2.4} />
+                        </span>
+                        <span style={{ flex: 1, minWidth: 0, fontSize: 13 }}>{r.que}</span>
+                      </div>
+                    ))}
+
+                    <div style={{ padding: '14px 16px', borderTop: '1px solid var(--line)' }}>
+                      <label style={{ display: 'block' }}>
+                        <span style={{ display: 'block', ...ROTULO, marginBottom: 5 }}>Observación · obligatoria</span>
+                        <textarea
+                          value={observacionDelAlta}
+                          onChange={(e) => setObservacionDelAlta(e.target.value)}
+                          rows={2}
+                          placeholder="Por qué se abre este programa y con qué documento"
+                          style={{ ...CAMPO, background: 'var(--bg-card)', resize: 'vertical' }}
+                        />
+                      </label>
+                      <p style={{ margin: '5px 0 0', fontSize: 11.5, color: 'var(--ink-4)', textWrap: 'pretty' }}>
+                        Queda en la bitácora junto a quién lo hizo y cuándo. Sin ella no se guarda, y el servidor pide al menos cinco
+                        caracteres que no sean espacios (regla 10, RNF-052).
+                      </p>
+                    </div>
+
+                    {falloDelAlta !== null && (
+                      <p style={{ margin: 0, padding: '11px 16px', borderTop: '1px solid var(--line)', background: 'var(--bad-bg)', color: 'var(--bad-fg)', fontSize: 12.5, lineHeight: 1.5, textWrap: 'pretty' }}>
+                        No se registró: {falloDelAlta}
+                      </p>
+                    )}
+
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap', padding: '12px 16px 14px', borderTop: '1px solid var(--line)' }}>
+                      {/* Cuando no se puede registrar, este parrafo ES el
+                          motivo —el mismo que la lista de arriba, resumido en
+                          una linea— y el boton lo señala con `aria-describedby`.
+                          Cuando si se puede, dice lo que el alta NO pide: la
+                          fecha de fin no viaja —un campo que el servidor no lee
+                          se descarta en silencio y contesta 201 igual—, asi que
+                          dibujarla seria un control que se teclea y no llega
+                          (#331). El programa nace sin plazo de cierre y el
+                          resumen lo enseña con el guion. */}
+                      <p
+                        id={MOTIVO_DEL_ALTA}
+                        style={{ margin: 0, flex: 1, minWidth: 180, fontSize: 12, lineHeight: 1.5, color: puedeRegistrarPrograma ? 'var(--ink-3)' : 'var(--warn-fg)', textWrap: 'pretty' }}
+                      >
+                        {puedeRegistrarPrograma
+                          ? 'El programa nace abierto y sin fecha de fin: el alta no admite el plazo de cierre, así que el resumen lo dirá con un guion hasta que exista una operación que lo declare.'
+                          : 'Todavía no se puede registrar. Falta ' + faltaDelAlta.filter((f) => !f.ok).map((f) => f.que.replace(/^El |^La /, (x) => x.toLowerCase())).join('; ') + '.'}
+                      </p>
+                      <button
+                        onClick={() => void registrarElPrograma()}
+                        disabled={!puedeRegistrarPrograma || registrando}
+                        aria-describedby={MOTIVO_DEL_ALTA}
+                        style={
+                          puedeRegistrarPrograma && !registrando
+                            ? { border: 0, borderRadius: 7, background: 'var(--accent)', color: '#fff', padding: '11px 22px', fontSize: 13.5, fontWeight: 500, cursor: 'pointer' }
+                            : { ...BOTON_APAGADO, border: 0, background: 'var(--accent)', color: '#fff', padding: '11px 22px', fontSize: 13.5, fontWeight: 500 }
+                        }
+                      >
+                        {registrando ? 'Registrando…' : 'Registrar programa'}
+                      </button>
+                    </div>
+                  </section>
+                )}
+
                 <section style={TARJETA}>
                   <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit,minmax(150px,1fr))', gap: 0, background: 'var(--bg-card)' }}>
                     {resumenDelPrograma(programaActivo, muestra.datos?.totalElementos ?? null).map((r) => (
@@ -1661,9 +2253,9 @@ export default function Fiscalizacion({ dest, onDest }: PantallaProps) {
                           en uno de los dos era falso. Desde #546 el programa que
                           no está contesta 404, y lo dice `FalloDeLaMuestra`. */}
                       <Aviso tono="neutro" titulo="Este programa no ha sorteado su muestra">
-                        El programa existe —si no, la consulta contestaría que no—: lo que no tiene todavía es muestra. Se sortea con{' '}
-                        <code>POST /fiscalizacion/programas/{'{id}'}/muestra</code> a partir del sector, la condición y el ejercicio que el
-                        programa declara, y esta pantalla no dibuja esa acción ni su campo de observación. Issue #550.
+                        El programa existe —si no, la consulta contestaría que no—: lo que no tiene todavía es muestra. Se sortea aquí
+                        abajo, a partir del sector, la condición y el ejercicio que el propio programa declara: no se elige a mano a quién
+                        se fiscaliza, y por eso la fila que salga podrá contestar por qué le tocó (ADR-0023).
                       </Aviso>
                     </div>
                   ) : null}
@@ -1671,6 +2263,90 @@ export default function Fiscalizacion({ dest, onDest }: PantallaProps) {
                   {muestra.datos !== null && (
                     <Paginador pagina={muestra.datos.pagina} totalPaginas={muestra.datos.totalPaginas} hayMas={muestra.datos.hayMas} ir={setPaginaMuestra} />
                   )}
+
+                  {/* ── El sorteo de la muestra (#550, ADR-0023) ───────────
+                      El cuerpo lleva SOLO la observacion: a quien se fiscaliza
+                      lo deciden los parametros del programa, no esta peticion.
+                      Va aqui, debajo de la muestra que va a llenar, y no en la
+                      deteccion: alli lo marcado son predios, y los predios no
+                      viajan.
+
+                      El motivo por el que no se puede sortear se DIBUJA, no se
+                      esconde en el `title` de un boton apagado: un boton
+                      deshabilitado no recibe el foco y su `title` no lo lee un
+                      lector de pantalla (RNF-082). Y se sabe antes de pulsar,
+                      porque las tres causas estructurales —sin ejercicio, sin
+                      criterio, ya sorteada— salen de lo que la pantalla ya ha
+                      leido. */}
+                  <div style={{ padding: '14px 16px', borderTop: '1px solid var(--line)', background: 'var(--bg-elev)' }}>
+                    <p style={{ margin: '0 0 4px', fontSize: 12, fontWeight: 600, color: 'var(--ink-2)' }}>Sortear la muestra</p>
+                    <p style={{ margin: '0 0 10px', fontSize: 11.5, lineHeight: 1.5, color: 'var(--ink-4)', textWrap: 'pretty' }}>
+                      Se aplica al padrón el ejercicio, el sector y el criterio que el programa declara. <strong>El orden importa</strong>:
+                      no se sortea un predio que otro programa abierto ya se llevó ni uno ya fiscalizado en el ejercicio, así que el primero
+                      que se genere se los lleva y el siguiente sale más corto.
+                    </p>
+
+                    <label style={{ display: 'block' }}>
+                      <span style={{ display: 'block', ...ROTULO, marginBottom: 5 }}>Observación · obligatoria</span>
+                      <textarea
+                        value={observacionDelSorteo}
+                        onChange={(e) => setObservacionDelSorteo(e.target.value)}
+                        rows={2}
+                        placeholder="Por qué se sortea ahora y con qué documento"
+                        style={{ ...CAMPO, background: 'var(--bg-card)', resize: 'vertical' }}
+                      />
+                    </label>
+
+                    {falloDelSorteo !== null && (
+                      <p style={{ margin: '10px 0 0', padding: '10px 12px', borderRadius: 6, background: 'var(--bad-bg)', color: 'var(--bad-fg)', fontSize: 12.5, lineHeight: 1.5, textWrap: 'pretty' }}>
+                        No se sorteó: {falloDelSorteo}
+                      </p>
+                    )}
+
+                    {/* Lo que el sorteo contesto, entero. Un «se sortearon N» a
+                        secas no deja distinguir «no hay ninguno con ese
+                        criterio» de «se los llevo el programa de al lado», y lo
+                        segundo se arregla cerrando aquel (#586). */}
+                    {ultimoSorteo !== null && (
+                      <p style={{ margin: '10px 0 0', padding: '10px 12px', borderRadius: 6, background: 'var(--ok-bg)', color: 'var(--ok-fg)', fontSize: 12.5, lineHeight: 1.5, textWrap: 'pretty' }}>
+                        Sorteada el {ultimoSorteo.fechaSorteo}: la detección vio {ultimoSorteo.detectados}
+                        {ultimoSorteo.detectados === 1 ? ' predio' : ' predios'} y entraron {ultimoSorteo.predios}. Quedaron fuera{' '}
+                        {ultimoSorteo.excluidosPorOtroPrograma} porque otro programa abierto ya se los llevó y{' '}
+                        {ultimoSorteo.excluidosPorActaDelEjercicio} por tener acta del ejercicio. De los que entraron,{' '}
+                        {ultimoSorteo.sinTitular === 1
+                          ? '1 no tiene titular vigente: hay que averiguar en la visita quién lo ocupa'
+                          : `${ultimoSorteo.sinTitular} no tienen titular vigente: hay que averiguar en la visita quién los ocupa`}
+                        .
+                      </p>
+                    )}
+
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap', marginTop: 11 }}>
+                      <p
+                        id={MOTIVO_DEL_SORTEO}
+                        style={{ margin: 0, flex: 1, minWidth: 200, fontSize: 12, lineHeight: 1.5, color: motivoParaNoSortear === null ? 'var(--ink-3)' : 'var(--warn-fg)', textWrap: 'pretty' }}
+                      >
+                        {motivoParaNoSortear ?? 'Al sortear, los predios entran en la muestra y quedan reservados para este programa.'}
+                      </p>
+                      <button
+                        onClick={() => void sortearLaMuestraDelPrograma()}
+                        disabled={motivoParaNoSortear !== null || sorteando}
+                        /* Apunta al parrafo de al lado, que es donde el motivo
+                           se LEE. No es un `title`: un boton apagado no recibe
+                           el foco, asi que el `title` no lo alcanza ni el raton
+                           ni un lector de pantalla (RNF-082). Asi la misma
+                           frase sirve a quien mira y a quien escucha, y no hay
+                           dos textos que puedan discrepar. */
+                        aria-describedby={MOTIVO_DEL_SORTEO}
+                        style={
+                          motivoParaNoSortear === null && !sorteando
+                            ? { border: 0, borderRadius: 7, background: 'var(--accent)', color: '#fff', padding: '10px 20px', fontSize: 13, fontWeight: 500, cursor: 'pointer' }
+                            : { ...BOTON_APAGADO, border: 0, background: 'var(--accent)', color: '#fff', padding: '10px 20px', fontSize: 13, fontWeight: 500 }
+                        }
+                      >
+                        {sorteando ? 'Sorteando…' : 'Sortear la muestra'}
+                      </button>
+                    </div>
+                  </div>
 
                   <p style={{ ...PIE, borderTop: '1px solid var(--line)' }}>
                     «Uso declarado» y «Riesgo» salen «—»: la muestra publica el predio, su titular, las áreas y si ya se visitó, y ninguna
@@ -1685,6 +2361,159 @@ export default function Fiscalizacion({ dest, onDest }: PantallaProps) {
         {/* ══════════ ACTA DE INSPECCIÓN ══════════ */}
         {esActa && (
           <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
+            {/* ── Las actas ya levantadas (#599) ──
+                Hasta V76 un acta se registraba y no se podía volver a leer: el
+                único sitio donde asomaba era `MuestraResource.visitado`, que
+                dice SI un predio de la muestra tiene acta y nada más. Va
+                delante del formulario porque es lo que hay de verdad; el
+                formulario de abajo sigue sin poder mandarse, y eso lo dice él.
+
+                No se dibuja en «Levantar acta» —el destino `acta` del
+                lanzador—: allí lo que se pide es un acta nueva, y una lista de
+                las anteriores no es lo que se ha ido a buscar. */}
+            {dest === 'actas' && (
+              <section style={TARJETA}>
+                <div style={{ ...CABECERA, flexWrap: 'wrap' }}>
+                  <h2 style={H2}>Actas levantadas</h2>
+                  {/* El ÚNICO filtro que la operación tiene, y por eso es el
+                      único que se dibuja: `?estado=`, `?hallazgo=`,
+                      `?contribuyente=` y `?predio=` contestan los cuatro 422
+                      «Se admiten: direccion, ordenarPor, pagina, programa,
+                      tamano» (medido). Un filtro que se teclea y no acota es
+                      peor que no tenerlo (#322, #398, #431). */}
+                  <label style={{ display: 'flex', alignItems: 'center', gap: 7, fontSize: 12, color: 'var(--ink-3)' }}>
+                    Programa
+                    {/* Sin programas que ofrecer, el desplegable se APAGA y
+                        dice por que. Encendido y con «Todos» de unica opcion se
+                        lee como «esta municipalidad no tiene ningun programa»,
+                        que es la lectura plausible y equivocada por la que este
+                        repositorio se ha negado varias veces a conectar una
+                        pantalla (#78, #80, #430, #431) — y las tres causas
+                        —cargando, la lectura rota, y ninguno registrado— dejan
+                        de distinguirse entre si. Es el patron que el mapa
+                        catastral ya usa con sus sectores (#718).
+
+                        Y la nota de fallo que hay al lado NO sirve de aviso:
+                        habla de la lectura de las ACTAS, no de la de los
+                        programas, asi que un desplegable mudo debajo de un
+                        aviso ajeno sigue siendo mudo. Medido. */}
+                    <select
+                      value={programaActas}
+                      onChange={(e) => setProgramaActas(e.target.value)}
+                      disabled={listaDeProgramas.length === 0}
+                      title={
+                        listaDeProgramas.length > 0
+                          ? undefined
+                          : programas.cargando
+                            ? 'Leyendo los programas de fiscalización de esta municipalidad…'
+                            : programas.error !== null
+                              ? 'No se pudieron leer los programas de fiscalización, así que no se puede acotar por ninguno'
+                              : 'Esta municipalidad no tiene ningún programa de fiscalización registrado, así que no hay por cuál acotar'
+                      }
+                      style={{ border: '1px solid var(--line-2)', borderRadius: 6, padding: '6px 9px', background: 'var(--bg-card)', fontSize: 12.5 }}
+                    >
+                      {/* «Todas» manda el filtro VACÍO, que es no mandarlo: el
+                          valor viaja como el id interno del programa, y una
+                          palabra ahí sería un 422 —`?programa=PF-2026-014` da
+                          «El programa se identifica por su numero interno»—. */}
+                      <option value="">Todos</option>
+                      {listaDeProgramas.map((prog) => (
+                        <option key={prog.id} value={String(prog.id)}>
+                          {prog.codigo}
+                        </option>
+                      ))}
+                    </select>
+                  </label>
+                  <span style={META}>
+                    {actas.datos === null ? SIN_DATO : `${actas.datos.contenido.length} de ${actas.datos.totalElementos}`}
+                  </span>
+                </div>
+
+                {actas.error !== null && (
+                  <div style={{ padding: '12px 16px' }}>
+                    {/* El acceso que se nombra es `fisc_predial`, que es el que
+                        `ActasController` exige primero; la lectura la comparte
+                        con `fisc_vehicular` —`oTambien`— para que un perfil de
+                        fiscalización vehicular no acabe registrando actas que
+                        no puede volver a ver. */}
+                    <FalloDeLectura error={actas.error} que="las actas de inspección" acceso="fisc_predial" alReintentar={actas.reintentar} />
+                  </div>
+                )}
+
+                <div style={{ overflowX: 'auto' }}>
+                  <table style={{ width: '100%', borderCollapse: 'collapse', minWidth: 1180 }}>
+                    <thead>
+                      <tr>
+                        <Cabeceras cols={COLUMNAS_DE_ACTAS} orden={{ activo: ordenActas, alternar: alternarOrdenActas }} />
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {(actas.datos?.contenido ?? []).map((a) => (
+                        <tr key={a.id} className="hov-elev" style={{ borderTop: '1px solid var(--line)' }}>
+                          <td style={TDN}>{a.id}</td>
+                          <td style={TD1}>{a.fechaVisita}</td>
+                          <td style={TD}>{codigoDelPrograma(listaDeProgramas, a.programaId)}</td>
+                          <td style={TD}>{unidadDelActa(a)}</td>
+                          <td style={TD}>{a.fiscalizador}</td>
+                          <td style={{ padding: '11px 14px' }}>
+                            {/* La columna admite nulos y el nulo NO es
+                                «conforme»: `RegistrarActaFiscalizacion` rechaza
+                                desde #481 el acta sin hallazgo, pero no se puede
+                                afirmar que no haya históricas sin él, así que la
+                                celda dice que no lo trae. */}
+                            {a.hallazgo === null ? (
+                              SIN_DATO
+                            ) : (
+                              <Insignia tono={tonoDelHallazgo(a.hallazgo)}>{etiquetaDelHallazgo(a.hallazgo)}</Insignia>
+                            )}
+                          </td>
+                          <td style={TDN}>{areaEnMetros(a.areaHallada)}</td>
+                          {/* Lo que #599 construyó. Nulo es «no se anotó», que
+                              NO es «coincide con lo declarado»: por eso «—» y no
+                              el uso de la ficha, que sería afirmar que la visita
+                              lo comprobó. En un acta vehicular es nulo siempre y
+                              por construcción: un vehículo no tiene uso
+                              declarado contra el que contrastar. */}
+                          <td style={TD}>{a.usoHallado ?? SIN_DATO}</td>
+                          <td style={{ ...TD, whiteSpace: 'normal', minWidth: 200 }}>{a.detalle ?? SIN_DATO}</td>
+                          <td style={TDN}>{a.version}</td>
+                          <td style={{ padding: '11px 14px' }}>
+                            <Insignia tono={tonoDelEstadoDelActa(a.estado)}>{etiquetaDelEstadoDelActa(a.estado)}</Insignia>
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+
+                {actas.cargando ? (
+                  <p style={{ ...PIE, borderTop: '1px solid var(--line)' }}>Consultando las actas…</p>
+                ) : actas.error === null && (actas.datos?.contenido.length ?? 0) === 0 ? (
+                  <div style={{ padding: '11px 16px', borderTop: '1px solid var(--line)' }}>
+                    <Aviso tono="neutro" titulo="Ninguna acta">
+                      {programaActas === ''
+                        ? 'Todavía no se ha levantado ninguna acta en esta municipalidad.'
+                        : 'Ese programa no tiene ninguna acta levantada.'}{' '}
+                      Un acta se registra con <code>POST /fiscalizacion/predial/actas</code> o <code>POST /fiscalizacion/vehicular</code>, y
+                      el formulario de abajo todavía no puede mandarlas.
+                    </Aviso>
+                  </div>
+                ) : null}
+
+                {actas.datos !== null && (
+                  <Paginador pagina={actas.datos.pagina} totalPaginas={actas.datos.totalPaginas} hayMas={actas.datos.hayMas} ir={setPaginaActas} />
+                )}
+
+                <p style={{ ...PIE, borderTop: '1px solid var(--line)' }}>
+                  «Nº interno», «Programa» y «Unidad» son identificadores de fila, no el número del acta ni el código predial:{' '}
+                  <code>ActaFiscalizacionResource</code> no publica ninguno de los tres —el código del programa se resuelve con la lista de
+                  arriba, y si no está en ella se queda el número—. «Uso hallado» en «{SIN_DATO}» significa que la visita no lo anotó, no
+                  que coincida con lo declarado. Y filtrar por estado, contribuyente o predio no se puede: la operación admite el programa y
+                  nada más. Issue #599.
+                </p>
+              </section>
+            )}
+
             <div style={{ display: 'flex', alignItems: 'center', gap: 12, flexWrap: 'wrap' }}>
               <p style={{ margin: 0, flex: 1, minWidth: 220, fontFamily: 'var(--font-serif)', fontSize: 17, lineHeight: 1.6, color: 'var(--ink-2)', textWrap: 'pretty' }}>
                 El acta se levanta en el predio, con una tablet y a veces de pie. Cuatro pasos, uno por pantalla, y cada uno se guarda al
@@ -1793,7 +2622,9 @@ export default function Fiscalizacion({ dest, onDest }: PantallaProps) {
                         return (
                           <tr key={r.k} style={{ borderTop: '1px solid var(--line)', background: cambio ? 'var(--warn-bg)' : 'transparent' }}>
                             <td style={{ padding: '11px 14px', fontSize: 13, fontWeight: 500, color: 'var(--ink)', whiteSpace: 'nowrap' }}>{r.l}</td>
-                            <td style={{ padding: '11px 14px', fontSize: 13, color: 'var(--ink-3)', whiteSpace: 'nowrap' }}>{r.decl}</td>
+                            <td style={{ padding: '11px 14px', fontSize: 13, color: r.decl === '' ? 'var(--ink-4)' : 'var(--ink-3)', whiteSpace: 'nowrap' }}>
+                              {r.decl === '' ? SIN_DATO : r.decl}
+                            </td>
                             <td style={{ padding: '9px 14px', minWidth: 190 }}>
                               {r.t === 'sel' ? (
                                 <select value={valor} onChange={(e) => set(r.k, e.target.value)} style={control}>
@@ -1885,50 +2716,115 @@ export default function Fiscalizacion({ dest, onDest }: PantallaProps) {
               </section>
             )}
 
+            {/* Lo que le falta al acta para poder mandarse, escrito y no sólo
+                en el `title` de un botón apagado: un botón deshabilitado no
+                recibe el foco, así que su `title` no lo lee un lector de
+                pantalla (RNF-082). Y las tres cifras están medidas, no
+                supuestas. */}
+            <div id="acta-por-que-no">
+              <Aviso tono="warn" titulo="Esta acta todavía no se puede mandar, y ya no es por el hallazgo">
+                <code>POST /fiscalizacion/predial/actas</code> admite <strong>diez</strong> campos desde <code>V76</code> —el décimo es{' '}
+                <code>usoHallado</code>, que es lo que #599 construyó— y esta pantalla dibuja veintitrés controles y siete filas de
+                contraste. De esos diez, <strong>tres son identificadores internos</strong> —<code>programaId</code>,{' '}
+                <code>contribuyenteId</code> y <code>predioId</code>— y el formulario dibuja en su lugar el código del programa, el nombre
+                del contribuyente y el código predial, que no son lo mismo.
+                <br />
+                <br />
+                Por eso los cinco campos de solo lectura del paso 1 salen con el guion largo, y con él la columna «Declarado» del paso 2:
+                un acta se levanta sobre un predio de la muestra, y a esta pantalla no llega ninguno —<code>GET /fiscalizacion/actas</code>{' '}
+                lista actas, no abre una, y la muestra no enlaza aquí con su fila—. Hasta #702 los cinco traían un acta entera copiada del
+                artboard, con su número, su programa y su contribuyente, y «Cerrar acta» anunciaba un importe de determinación que no
+                existía. Ninguno de esos valores se repite aquí: citarlos para explicarlos volvería a ponerlos en la pantalla.
+                <br />
+                <br />
+                El desplegable «Hallazgo principal» ofrece seis rótulos y <strong>los seis contestan 422</strong> «Hallazgo
+                desconocido», medido uno a uno contra el backend: el enumerado publica <code>CONFORME</code>, <code>OMISO</code>,{' '}
+                <code>SUBVALUADOR</code>, <code>USO_DISTINTO</code> y <code>NO_UBICADO</code>, y ninguno coincide letra por letra con
+                ninguno de los seis. No se traduce ninguno —parecerse no es serlo (#427, #546)—, así que lo que se elija aquí no viajaría
+                aunque hubiera dónde mandarlo. Lo que <code>V76</code> desbloqueó es la lectura de arriba, no esta escritura.
+              </Aviso>
+            </div>
+
             <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>
               <PasoAtras
                 paso={pasoIdx}
                 atras={() => setPaso(pasoIdx - 1)}
                 style={grande ? { padding: '13px 20px' } : undefined}
               />
+              {/* Decia «Lo del paso se guarda al continuar, tambien sin
+                  senal», y no se guarda nada en ningun sitio: el asistente solo
+                  cambia de paso, y lo tecleado vive en el estado de React hasta
+                  que se recargue la pagina (#702). */}
               <p style={{ margin: 0, flex: 1, minWidth: 170, fontSize: 12, color: 'var(--ink-3)', textWrap: 'pretty' }}>
                 {pasoIdx >= PASOS_ACTA.length - 1
-                  ? 'Cerrar el acta es el punto sin retorno del procedimiento.'
-                  : 'Lo del paso se guarda al continuar, también sin señal.'}
+                  ? 'Cerrar el acta sería el punto sin retorno del procedimiento, y todavía no se puede.'
+                  : 'Continuar solo cambia de paso: lo tecleado no se guarda en ningún sitio.'}
               </p>
               {/* Decia «Borrador guardado en el dispositivo» y no guardaba en
                   ninguna parte, que es el acto deshonesto de esta revision en
                   su forma mas barata: un aviso de exito sin nada detras. Y aqui
                   no basta con implementarlo, porque el acta entera no se puede
-                  mandar todavia (#546): un borrador de algo que no tiene a
-                  donde ir es papel guardado que nadie va a recoger. */}
+                  mandar todavia: un borrador de algo que no tiene a donde ir es
+                  papel guardado que nadie va a recoger. El motivo entero esta
+                  en el aviso de arriba, que si lo lee un lector de pantalla. */}
               <button
                 disabled
-                title="El acta todavía no se puede enviar, así que no hay borrador que guardar: la operación de registro pide nueve campos y esta pantalla dibuja veintitrés (#546)."
+                title="El acta todavía no se puede enviar, así que no hay borrador que guardar: la operación de registro pide diez campos —tres de ellos identificadores internos— y esta pantalla dibuja veintitrés (#546, #599)."
                 style={{ border: '1px solid var(--line-2)', borderRadius: 6, padding: grande ? '13px 20px' : '10px 18px', background: 'var(--bg-card)', fontSize: 13, cursor: 'not-allowed', opacity: 0.5 }}
               >
                 Guardar borrador
               </button>
-              <button
-                onClick={adelante}
-                className="hov-acento-2"
-                style={{
-                  display: 'flex',
-                  alignItems: 'center',
-                  gap: 7,
-                  border: 0,
-                  borderRadius: 6,
-                  padding: grande ? '14px 26px' : '11px 22px',
-                  background: 'var(--accent)',
-                  color: '#fff',
-                  fontSize: grande ? 15 : 13.5,
-                  fontWeight: 500,
-                  cursor: 'pointer',
-                }}
-              >
-                {pasoIdx >= PASOS_ACTA.length - 1 ? 'Cerrar acta' : 'Guardar y continuar'}
-                <Icono d={ICO.flechaDer} tam={14} grosor={1.8} />
-              </button>
+              {/* «Cerrar acta» estaba ENCENDIDO, no mandaba nada, y su acuse
+                  anunciaba una determinacion de S/ 1,842.60 que no existe
+                  (#702). Se apaga con su motivo, como sus dos vecinos: el acta
+                  entera no se puede mandar todavia, asi que cerrarla tampoco.
+                  El motivo completo esta en el aviso de arriba, que si lee un
+                  lector de pantalla; el `title` lo repite en corto para quien
+                  pase el raton (RNF-082). */}
+              {pasoIdx >= PASOS_ACTA.length - 1 ? (
+                <button
+                  disabled
+                  aria-describedby="acta-por-que-no"
+                  title="Cerrar el acta la registraría, y el registro está bloqueado: POST /fiscalizacion/predial/actas pide diez campos —tres de ellos identificadores internos que esta pantalla no dibuja— y ninguno de los seis rótulos del hallazgo está en el enumerado (#546, #599)."
+                  style={{
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: 7,
+                    border: '1px solid var(--line-2)',
+                    borderRadius: 6,
+                    padding: grande ? '14px 26px' : '11px 22px',
+                    background: 'var(--bg-card)',
+                    color: 'var(--ink-3)',
+                    fontSize: grande ? 15 : 13.5,
+                    fontWeight: 500,
+                    cursor: 'not-allowed',
+                    opacity: 0.5,
+                  }}
+                >
+                  Cerrar acta
+                </button>
+              ) : (
+                <button
+                  onClick={adelante}
+                  className="hov-acento-2"
+                  style={{
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: 7,
+                    border: 0,
+                    borderRadius: 6,
+                    padding: grande ? '14px 26px' : '11px 22px',
+                    background: 'var(--accent)',
+                    color: '#fff',
+                    fontSize: grande ? 15 : 13.5,
+                    fontWeight: 500,
+                    cursor: 'pointer',
+                  }}
+                >
+                  Continuar
+                  <Icono d={ICO.flechaDer} tam={14} grosor={1.8} />
+                </button>
+              )}
             </div>
           </div>
         )}
@@ -1971,15 +2867,17 @@ export default function Fiscalizacion({ dest, onDest }: PantallaProps) {
               <>
                 <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit,minmax(160px,1fr))', gap: 0, background: 'var(--bg-card)', border: '1px solid var(--line)', borderRadius: 10, overflow: 'hidden' }}>
                   {/* De las cuatro cifras del artboard —96 actas cerradas, 61
-                      con diferencia, S/ 214,882.40 y 63.5 % de efectividad—
-                      solo UNA se puede leer: cuantas liquidaciones devuelve la
-                      consulta. Las actas no las cuenta ningun endpoint (#546),
-                      el importe es D-02a —`LiquidacionResource` no lleva ni un
-                      `Dinero` (#198)— y la efectividad es un cociente que nadie
-                      publica ni define. Las tres salen «—» con su motivo. */}
+                      con diferencia, S/ 214,882.40 y 63.5 % de efectividad— ya
+                      se pueden leer DOS: las liquidaciones que devuelve la
+                      consulta y, desde #599, las actas que devuelve la suya.
+                      Lo que sigue sin poder darse es el recorte «cerradas» —el
+                      listado de actas no acota por estado—, el importe (D-02a:
+                      `LiquidacionResource` no lleva ni un `Dinero`, #198) y la
+                      efectividad, que es un cociente que nadie publica ni
+                      define. Los tres salen «—» con su motivo. */}
                   {[
                     ['Liquidaciones', resultados.datos === null ? SIN_DATO : String(resultados.datos.totalElementos), 0],
-                    ['Actas cerradas', SIN_DATO, 0],
+                    ['Actas levantadas', actasLevantadas.datos === null ? SIN_DATO : String(actasLevantadas.datos.totalElementos), 0],
                     ['Deuda determinada', SIN_DATO, 0],
                     ['Efectividad', SIN_DATO, 1],
                   ].map((t) => (
@@ -1989,10 +2887,13 @@ export default function Fiscalizacion({ dest, onDest }: PantallaProps) {
                     </div>
                   ))}
                 </div>
-                <Aviso tono="warn" titulo="Tres de las cuatro cifras no se pueden dar">
-                  «Actas cerradas» no la cuenta ninguna operación: no hay lectura de actas (#546). «Deuda determinada» y «Efectividad»
-                  esperan a <strong>D-02a</strong>: la liquidación viaja sin un solo importe —insoluto omitido y multa llegan en blanco a
-                  propósito—, y un cero ahí se lee como «no debe nada» (#198).
+                <Aviso tono="warn" titulo="Dos de las cuatro cifras no se pueden dar, y una cambió de rótulo">
+                  El rótulo del artboard era «Actas cerradas» y lo que se puede contar son las <strong>levantadas</strong>: desde #599 hay
+                  listado de actas, pero su único filtro es el programa —<code>?estado=ABIERTA</code> contesta «Se admiten: direccion,
+                  ordenarPor, pagina, programa, tamano», medido—, así que el recorte por estado no se puede pedir y contar la página traída
+                  daría el número de la página. «Deuda determinada» y «Efectividad» esperan a <strong>D-02a</strong>: la liquidación viaja
+                  sin un solo importe —insoluto omitido y multa llegan en blanco a propósito—, y un cero ahí se lee como «no debe nada»
+                  (#198).
                 </Aviso>
               </>
             )}
@@ -2275,104 +3176,314 @@ export default function Fiscalizacion({ dest, onDest }: PantallaProps) {
         {/* ══════════ RESOLUCIÓN ══════════ */}
         {esResolucion && (
           <div style={{ display: 'flex', flexDirection: 'column', gap: 16, alignItems: 'center' }}>
-            {/* Los dos botones nacen apagados, y no por precaución: no hay
-                resolución que emitir. «Descargar PDF» estaba encendido y era
-                INERTE —ni petición, ni navegación, ni aviso: se pulsaba y no
-                pasaba nada—, y «Imprimir» sí funcionaba, que era peor: sacaba
-                por la impresora una resolución de determinación entera con las
-                cifras del artboard. */}
-            <div data-noprint="1" style={{ width: '100%', maxWidth: 820, display: 'flex', gap: 8, justifyContent: 'flex-end' }}>
-              <button
-                disabled
-                aria-disabled="true"
-                title="El contrato no publica ningún formato para esta resolución: GET /fiscalizacion/resoluciones/{numero} devuelve JSON y no admite ?formato."
-                style={{ border: '1px solid var(--line-2)', borderRadius: 6, padding: '9px 16px', background: 'var(--bg-card)', fontSize: 13, cursor: 'not-allowed', opacity: 0.5 }}
-              >
-                Descargar PDF
-              </button>
-              <button
-                disabled
-                aria-disabled="true"
-                title="No hay ninguna resolución leída: no hay qué imprimir."
-                style={{ border: 0, borderRadius: 6, padding: '9px 20px', background: 'var(--accent)', color: '#fff', fontSize: 13, fontWeight: 500, cursor: 'not-allowed', opacity: 0.5 }}
-              >
-                Imprimir
-              </button>
+            {/* ── De qué resolución se habla ────────────────────────
+                Antes esta hoja no lo preguntaba, y por eso estaba vacía: un
+                destino de documento que no sabe CUÁL documento no puede leer
+                nada. Y antes de vaciarla enseñaba la resolución entera del
+                artboard —«000418-2026-SGFT/MDC», un R.U.C. real y seis
+                ejercicios al céntimo— y la imprimía igual con la red cortada. */}
+            <section data-noprint="1" style={{ ...TARJETA, width: '100%', maxWidth: 820 }}>
+              <div style={CABECERA}>
+                <h2 style={H2}>Qué resolución</h2>
+                <span style={META}>GET …/resoluciones/{'{numero}'}</span>
+              </div>
+              <div style={{ padding: '14px 16px 4px' }}>
+                <label style={{ display: 'flex', flexDirection: 'column', gap: 5, maxWidth: 320 }}>
+                  <span style={{ fontSize: 11.5, fontWeight: 500, color: 'var(--ink-3)' }}>Nº de resolución</span>
+                  <input
+                    value={numeroResolucion}
+                    onChange={(e) => setNumeroResolucion(e.target.value)}
+                    placeholder="RDF-2026-000001"
+                    style={{
+                      width: '100%',
+                      border: '1px solid var(--line-2)',
+                      borderRadius: 6,
+                      padding: '9px 10px',
+                      background: 'var(--bg-elev)',
+                      fontFamily: 'var(--font-mono)',
+                      fontSize: 13.5,
+                    }}
+                  />
+                  <span style={{ fontSize: 11.5, lineHeight: 1.4, color: 'var(--ink-4)', textWrap: 'pretty' }}>
+                    Tal como está impreso en el papel notificado. Es lo único que identifica la resolución.
+                  </span>
+                </label>
+              </div>
+              {/* Por qué se teclea, en vez de elegirse de una lista. No es una
+                  comodidad: es que no la lista nadie. `GET
+                  /fiscalizacion/resultados` —la grilla de «Resultados»— publica
+                  el número de la LIQUIDACIÓN y no el de la resolución que la
+                  transfirió, y el contrato no declara ninguna otra ruta bajo
+                  `/fiscalizacion/resoluciones`. Medido con la cadena entera
+                  sembrada: la grilla dice `LIQ-2026-000001` y la resolución es
+                  `RDF-2026-000001`. */}
+              <p style={PIE}>
+                No hay lista de resoluciones que ofrecer: «Resultados» publica el número de la liquidación
+                (<code style={{ fontFamily: 'var(--font-mono)' }}>LIQ-…</code>) y no el de la resolución que la transfirió
+                (<code style={{ fontFamily: 'var(--font-mono)' }}>RDF-…</code>). El número sale del papel, que es lo que el
+                contribuyente trae cuando viene a reclamar dentro de los veinte días del artículo 137º.
+              </p>
+            </section>
+
+            {/* Los tres estados de la lectura, antes de cualquier cifra. */}
+            {numeroResolucionReposado === '' && (
+              <p data-noprint="1" style={{ margin: 0, width: '100%', maxWidth: 820, fontSize: 13, color: 'var(--ink-3)' }}>
+                Teclea el número de la resolución para verla.
+              </p>
+            )}
+            {resolucion.cargando && (
+              <p data-noprint="1" style={{ margin: 0, width: '100%', maxWidth: 820, fontSize: 13, color: 'var(--ink-3)' }}>
+                Buscando la resolución…
+              </p>
+            )}
+            {!resolucion.cargando && resolucion.error !== null && (
+              <div data-noprint="1" style={{ width: '100%', maxWidth: 820 }}>
+                <FalloDeLectura
+                  error={resolucion.error}
+                  que="la resolución de determinación"
+                  acceso="resolucion_determinacion_fisc"
+                  alReintentar={resolucion.reintentar}
+                />
+              </div>
+            )}
+
+            {/* ── Los dos actos, y los dos apagados sin resolución leída ──
+                «Descargar» estaba encendido y era INERTE —ni petición, ni
+                navegación, ni aviso— e «Imprimir» sí funcionaba, que era peor:
+                sacaba por la impresora una resolución entera con las cifras del
+                artboard. Ahora los cuatro botones nacen apagados y siguen
+                apagados ante un 404 y ante un 403, porque lo que los enciende no
+                es haber tecleado algo sino que `laResolucion` no sea `null`, y
+                un fallo de lectura deja `datos` en `null`.
+
+                Los dos motivos son DISTINTOS a propósito, y cada uno se dibuja
+                junto a su control (RNF-082): sin número no hay a quién pedirle
+                el archivo, y sin hoja dibujada no hay qué mandar a la
+                impresora. Un `title` no basta —un botón apagado no recibe el
+                foco, así que nadie lo lee—. */}
+            <div
+              data-noprint="1"
+              style={{ width: '100%', maxWidth: 820, display: 'flex', gap: 20, justifyContent: 'flex-end', alignItems: 'flex-start', flexWrap: 'wrap' }}
+            >
+              <Descargas
+                traer={(f) => descargarResolucion(laResolucion?.numero ?? numeroResolucionReposado, f)}
+                que="la resolución de determinación"
+                acceso="resolucion_determinacion_fisc"
+                /* `lectura` y no `impresion`, y está comprobado en el
+                   controlador: el documento es la misma hoja que está aquí
+                   debajo, así que pedir un segundo privilegio negaría el
+                   archivo a quien ya tiene el contenido delante. */
+                privilegio="lectura"
+                impedimento={
+                  laResolucion === null
+                    ? 'No hay ninguna resolución leída: no hay número al que pedirle el archivo. Teclea el suyo arriba.'
+                    : undefined
+                }
+              />
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 9, alignItems: 'flex-end' }}>
+                <button
+                  onClick={() => window.print()}
+                  disabled={laResolucion === null}
+                  aria-describedby={laResolucion === null ? 'fisc-resolucion-sin-hoja' : undefined}
+                  title={laResolucion === null ? 'La hoja está vacía: no hay nada que mandar a la impresora.' : undefined}
+                  className={laResolucion === null ? undefined : 'hov-acento-2'}
+                  style={{
+                    border: 0,
+                    borderRadius: 6,
+                    padding: '9px 20px',
+                    background: 'var(--accent)',
+                    color: 'var(--accent-contraste)',
+                    fontSize: 13,
+                    fontWeight: 500,
+                    ...(laResolucion === null ? { cursor: 'not-allowed', opacity: 0.5 } : { cursor: 'pointer' }),
+                  }}
+                >
+                  Imprimir
+                </button>
+                {laResolucion === null && (
+                  <p
+                    id="fisc-resolucion-sin-hoja"
+                    style={{ margin: 0, maxWidth: 260, fontSize: 11.5, lineHeight: 1.5, color: 'var(--ink-3)', textAlign: 'right', textWrap: 'pretty' }}
+                  >
+                    La hoja está vacía: no hay nada que mandar a la impresora.
+                  </p>
+                )}
+              </div>
             </div>
 
-            <div data-noprint="1" style={{ width: '100%', maxWidth: 820 }}>
-              <Aviso tono="warn" titulo="Esta hoja está vacía a propósito">
-                Traía la resolución completa del prototipo —número, contribuyente, R.U.C. y seis ejercicios con sus importes al céntimo— y
-                se imprimía igual con la red cortada: ninguna de esas cifras venía del servidor. La resolución de verdad la sirve{' '}
-                <code style={{ fontFamily: 'var(--font-mono)' }}>GET /fiscalizacion/resoluciones/{'{numero}'}</code>, que exige un número
-                que esta pantalla no tiene dónde teclear, y ese endpoint <strong style={{ fontWeight: 600 }}>no emite documento</strong>:
-                no declara <code style={{ fontFamily: 'var(--font-mono)' }}>?formato</code>, al revés que la ficha del contribuyente o los
-                padrones de tránsito. Lo que falta es de las dos partes, y está en el issue #593.
-              </Aviso>
-            </div>
-            <section style={{ width: '100%', maxWidth: 820, background: '#fff', borderRadius: 6, boxShadow: 'var(--shadow-2)', padding: '40px 44px' }}>
-              <div style={{ display: 'flex', alignItems: 'flex-start', gap: 20, paddingBottom: 12, borderBottom: '2px solid var(--ink)' }}>
-                <div style={{ flex: 1 }}>
-                  <p style={{ margin: 0, fontFamily: 'var(--font-serif)', fontSize: 15, fontWeight: 600 }}>{pref.entidad}</p>
-                  <p style={{ margin: '3px 0 0', fontSize: 11, color: 'var(--ink-3)' }}>Sub Gerencia de Fiscalización Tributaria</p>
-                </div>
-                {/* El número y la fecha eran del artboard, y son lo que
-                    identifica un acto administrativo: un número de resolución
-                    inventado sobre un membrete es peor que ninguno. */}
-                <div style={{ textAlign: 'right', fontFamily: 'var(--font-mono)', fontSize: 11, color: 'var(--ink-3)' }}>
-                  <p style={{ margin: 0 }}>{SIN_DATO}</p>
-                  <p style={{ margin: '3px 0 0' }}>{SIN_DATO}</p>
-                </div>
-              </div>
-              <div style={{ borderTop: '1px solid var(--ink)', marginTop: 2, paddingTop: 26, textAlign: 'center' }}>
-                <h2 style={{ margin: 0, fontFamily: 'var(--font-serif)', fontSize: 23, fontWeight: 600, letterSpacing: '-.01em' }}>Resolución de determinación</h2>
-                <p style={{ margin: '5px 0 0', fontSize: 12, color: 'var(--ink-3)' }}>Procedimiento de fiscalización tributaria — impuesto predial y arbitrios</p>
-              </div>
-              <div
-                style={{
-                  display: 'grid',
-                  gridTemplateColumns: 'repeat(auto-fit,minmax(186px,1fr))',
-                  gap: '14px 20px',
-                  margin: '24px 0',
-                  padding: '16px 0',
-                  borderTop: '1px solid var(--line)',
-                  borderBottom: '1px solid var(--line)',
-                }}
-              >
-                {REP_META.map((x) => (
-                  <div key={x.k}>
-                    <p style={{ margin: '0 0 3px', fontSize: 10, textTransform: 'uppercase', letterSpacing: '.1em', color: 'var(--ink-3)' }}>{x.k}</p>
-                    <p style={{ margin: 0, fontSize: 13, color: 'var(--ink)' }}>{x.v}</p>
+            {/* ── La hoja, sólo con una resolución leída ──────────────
+                Todo lo que hay dentro sale de `ResolucionResource`. Ninguna
+                cifra se recompone aquí: `total` lo suma el servidor —y sólo
+                cuando conoce las dos partes—, y restar «determinado −
+                declarado» para llenar la diferencia sería componer dinero en la
+                pantalla (RNF-083) sobre un valor que se notifica. */}
+            {laResolucion !== null && (
+              /* Los 38 px de margen lateral —y no los 44 del artboard— salen de
+                 medir: el cuadro de la determinacion mide 735 px con sus siete
+                 columnas, y con 44 la hoja solo deja 732, asi que «Total S/»
+                 quedaba 3 px fuera y la impresion salia cortada por el borde. */
+              <section style={{ width: '100%', maxWidth: 820, background: '#fff', borderRadius: 6, boxShadow: 'var(--shadow-2)', padding: '40px 38px' }}>
+                <div style={{ display: 'flex', alignItems: 'flex-start', gap: 20, paddingBottom: 12, borderBottom: '2px solid var(--ink)' }}>
+                  <div style={{ flex: 1 }}>
+                    <p style={{ margin: 0, fontFamily: 'var(--font-serif)', fontSize: 15, fontWeight: 600 }}>{pref.entidad}</p>
+                    <p style={{ margin: '3px 0 0', fontSize: 11, color: 'var(--ink-3)' }}>Sub Gerencia de Fiscalización Tributaria</p>
                   </div>
-                ))}
-              </div>
-              <table style={{ width: '100%', borderCollapse: 'collapse' }}>
-                <thead>
-                  <tr>
-                    <Cabeceras cols={sinOrden(REP_COLS)} />
-                  </tr>
-                </thead>
-                <tbody>
-                  {REP_FILAS.map((f) => (
-                    <tr key={f[0]} style={{ borderTop: '1px solid var(--line)' }}>
-                      {f.map((c, j) => (
-                        <td key={j} style={estiloDeCelda(j, REP_COLS)}>
-                          {c}
-                        </td>
-                      ))}
-                    </tr>
+                  <div style={{ textAlign: 'right', fontFamily: 'var(--font-mono)', fontSize: 11, color: 'var(--ink-3)' }}>
+                    <p style={{ margin: 0 }}>{laResolucion.numero}</p>
+                    <p style={{ margin: '3px 0 0' }}>{laResolucion.fecha}</p>
+                  </div>
+                </div>
+                <div style={{ borderTop: '1px solid var(--ink)', marginTop: 2, paddingTop: 26, textAlign: 'center' }}>
+                  <h2 style={{ margin: 0, fontFamily: 'var(--font-serif)', fontSize: 23, fontWeight: 600, letterSpacing: '-.01em' }}>Resolución de determinación</h2>
+                  <p style={{ margin: '5px 0 0', fontSize: 12, color: 'var(--ink-3)' }}>
+                    Procedimiento de fiscalización tributaria — liquidación {laResolucion.nLiquidacion}, versión{' '}
+                    {laResolucion.versionDeLaLiquidacion}
+                  </p>
+                </div>
+                <div
+                  style={{
+                    display: 'grid',
+                    gridTemplateColumns: 'repeat(auto-fit,minmax(186px,1fr))',
+                    gap: '14px 20px',
+                    margin: '24px 0',
+                    padding: '16px 0',
+                    borderTop: '1px solid var(--line)',
+                    borderBottom: '1px solid var(--line)',
+                  }}
+                >
+                  {metaDeLaResolucion(laResolucion).map((x) => (
+                    <div key={x.k}>
+                      <p style={{ margin: '0 0 3px', fontSize: 10, textTransform: 'uppercase', letterSpacing: '.1em', color: 'var(--ink-3)' }}>{x.k}</p>
+                      <p style={{ margin: 0, fontSize: 13, color: 'var(--ink)' }}>{x.v}</p>
+                    </div>
                   ))}
-                </tbody>
-              </table>
-              <p style={{ margin: '22px 0 0', fontFamily: 'var(--font-serif)', fontSize: 14, lineHeight: 1.65, color: 'var(--ink-2)', textWrap: 'pretty' }}>
-                Notifíquese al contribuyente el importe determinado. Contra la presente resolución procede recurso de reclamación dentro de
-                los veinte días hábiles siguientes a su notificación, conforme al artículo 137º del Código Tributario.
-              </p>
-              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 40, marginTop: 56 }}>
-                <div style={{ borderTop: '1px solid var(--ink)', paddingTop: 7, fontSize: 11, color: 'var(--ink-3)', textAlign: 'center' }}>Sub Gerente de Fiscalización Tributaria</div>
-                <div style={{ borderTop: '1px solid var(--ink)', paddingTop: 7, fontSize: 11, color: 'var(--ink-3)', textAlign: 'center' }}>Notificado — contribuyente</div>
+                </div>
+                {/* Regla 9: la fecha a la que están las cifras, dicha una vez y
+                    para todas. Van juntas porque se congelaron juntas —el día
+                    de la resolución— y el papel no se recompone nunca con datos
+                    vivos: el valor que arranca el plazo del artículo 137º es el
+                    que se notificó, no el que saldría hoy. */}
+                <p style={{ margin: '0 0 8px', fontSize: 12, color: 'var(--ink-3)' }}>Determinación al {laResolucion.aLaFecha}</p>
+                <div style={{ overflowX: 'auto' }}>
+                  <table style={{ width: '100%', borderCollapse: 'collapse' }}>
+                    <thead>
+                      <tr>
+                        <Cabeceras cols={sinOrden(REP_COLS)} />
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {laResolucion.lineas.map((l) => (
+                        <tr key={l.ejercicio} style={{ borderTop: '1px solid var(--line)' }}>
+                          {[
+                            String(l.ejercicio),
+                            l.condicion,
+                            l.determinado ?? SIN_DATO,
+                            l.declarado ?? SIN_DATO,
+                            l.diferencia ?? SIN_DATO,
+                            l.multa ?? SIN_DATO,
+                            l.total ?? SIN_DATO,
+                          ].map((c, j) => (
+                            <td key={j} style={estiloDeCelda(j, REP_COLS)}>
+                              {c}
+                            </td>
+                          ))}
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+                {/* La misma frase que el PDF emitido imprime al pie de su
+                    cuadro, y por el mismo motivo: un «—» en un valor
+                    notificable tiene que decir que es una determinación
+                    pendiente, porque leído como cero afirma que no se debe
+                    nada. Las cinco columnas de dinero salen «—» hoy en todas
+                    las filas: valorar un predio exige el cuadro de valores
+                    unitarios, la depreciación y el arancel (D-02a). */}
+                <p style={{ margin: '12px 0 0', fontSize: 11.5, lineHeight: 1.55, color: 'var(--ink-3)', textWrap: 'pretty' }}>
+                  Los importes marcados «{SIN_DATO}» están pendientes de determinación: no significan deuda cero.
+                </p>
+                {/* Las superficies, en su propio cuadro y no en el de arriba.
+                    No es una preferencia: con las dos columnas dentro la tabla
+                    medía 1 054 px sobre una hoja de 732 —medido en el
+                    navegador—, así que las cuatro últimas columnas de dinero se
+                    salían del papel y la impresión salía cortada. Y es además lo
+                    que hace el PDF que el servidor emite, que las lleva a su
+                    bloque «Inscripción en el padrón catastral».
+
+                    Sólo se dibuja si alguna línea trae alguna: un cuadro entero
+                    de «—» afirmaría que el acta midió y no halló nada, y lo que
+                    pasa es que esa resolución no versionó ninguna superficie. */}
+                {laResolucion.lineas.some((l) => l.areaDeclarada !== null || l.areaHallada !== null) && (
+                  <div style={{ marginTop: 20, overflowX: 'auto' }}>
+                    <p style={{ margin: '0 0 8px', fontSize: 12, color: 'var(--ink-3)' }}>Superficies que sostienen el hallazgo</p>
+                    <table style={{ width: '100%', borderCollapse: 'collapse' }}>
+                      <thead>
+                        <tr>
+                          <Cabeceras cols={sinOrden(REP_COLS_AREA)} />
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {laResolucion.lineas.map((l) => (
+                          <tr key={l.ejercicio} style={{ borderTop: '1px solid var(--line)' }}>
+                            {[String(l.ejercicio), l.areaDeclarada ?? SIN_DATO, l.areaHallada ?? SIN_DATO].map((c, j) => (
+                              <td key={j} style={estiloDeCelda(j, REP_COLS_AREA)}>
+                                {c}
+                              </td>
+                            ))}
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                )}
+                <div style={{ margin: '22px 0 0', display: 'flex', flexDirection: 'column', gap: 6 }}>
+                  <p style={{ margin: 0, fontSize: 12.5, lineHeight: 1.6, color: 'var(--ink-2)', textWrap: 'pretty' }}>
+                    <strong style={{ fontWeight: 600 }}>Sustento documental:</strong> {laResolucion.documentoSustento}
+                  </p>
+                  <p style={{ margin: 0, fontSize: 12.5, lineHeight: 1.6, color: 'var(--ink-2)', textWrap: 'pretty' }}>
+                    <strong style={{ fontWeight: 600 }}>Sustento:</strong> {laResolucion.sustento}
+                  </p>
+                  <p style={{ margin: 0, fontSize: 12.5, lineHeight: 1.6, color: 'var(--ink-2)', textWrap: 'pretty' }}>
+                    <strong style={{ fontWeight: 600 }}>Base legal:</strong> {laResolucion.baseLegal}
+                  </p>
+                </div>
+                <p style={{ margin: '18px 0 0', fontFamily: 'var(--font-serif)', fontSize: 14, lineHeight: 1.65, color: 'var(--ink-2)', textWrap: 'pretty' }}>
+                  Notifíquese al contribuyente el importe determinado. Contra la presente resolución procede recurso de reclamación dentro de
+                  los veinte días hábiles siguientes a su notificación, conforme al artículo 137º del Código Tributario.
+                </p>
+                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 40, marginTop: 56 }}>
+                  <div style={{ borderTop: '1px solid var(--ink)', paddingTop: 7, fontSize: 11, color: 'var(--ink-3)', textAlign: 'center' }}>Sub Gerente de Fiscalización Tributaria</div>
+                  <div style={{ borderTop: '1px solid var(--ink)', paddingTop: 7, fontSize: 11, color: 'var(--ink-3)', textAlign: 'center' }}>Notificado — contribuyente</div>
+                </div>
+              </section>
+            )}
+
+            {/* Lo que el recurso publica y el papel emitido NO imprime: queda
+                fuera de la hoja para que lo que salga por la impresora sea el
+                papel, y no el papel más lo que esta pantalla sabe.
+
+                Las dos referencias de ficha son identificadores de FILA, no
+                números de versión: el PDF imprime «versión de la ficha 2 → 3» y
+                el JSON trae 24 → 14473, que son otra cosa. Se dicen como lo que
+                son. */}
+            {laResolucion !== null && (
+              <div data-noprint="1" style={{ width: '100%', maxWidth: 820 }}>
+                <Aviso tono="neutro" titulo="Lo que queda registrado del acto, y no va en el papel">
+                  La registró <strong style={{ fontWeight: 600 }}>{laResolucion.usuarioRegistro ?? SIN_DATO}</strong> con la observación
+                  «{laResolucion.observacion}» (RNF-052). Versionó la ficha catastral{' '}
+                  {laResolucion.fichaAnteriorId === null ? SIN_DATO : laResolucion.fichaAnteriorId} →{' '}
+                  {laResolucion.fichaNuevaId === null ? SIN_DATO : laResolucion.fichaNuevaId}, identificadores de fila y no números de
+                  versión. Descargarla no la vuelve a emitir ni la marca «duplicado»: ya está numerada desde que se transfirió, y el
+                  servidor entrega el modelo guardado comprobando su SHA-256.
+                  <br />
+                  <br />
+                  El <strong style={{ fontWeight: 600 }}>R.U.C.</strong> y el <strong style={{ fontWeight: 600 }}>tipo de
+                  fiscalización</strong> salen «{SIN_DATO}» arriba porque esta respuesta no los trae: el documento de identidad lo
+                  compone el servidor al dibujar el papel —el PDF sí lo imprime— y el tipo de fiscalización es de la liquidación{' '}
+                  {laResolucion.nLiquidacion}, no de la resolución.
+                </Aviso>
               </div>
-            </section>
+            )}
           </div>
         )}
 
@@ -2415,7 +3526,7 @@ export default function Fiscalizacion({ dest, onDest }: PantallaProps) {
             </button>
             <button
               disabled
-              title="El acta todavía no se puede enviar, así que no hay borrador que guardar (#546)."
+              title="El acta todavía no se puede enviar, así que no hay borrador que guardar (#546, #599)."
               style={{ border: 0, borderRadius: 6, padding: '10px 22px', background: 'var(--accent)', color: '#fff', fontSize: 13.5, fontWeight: 500, cursor: 'not-allowed', opacity: 0.5 }}
             >
               Guardar borrador
@@ -2648,6 +3759,138 @@ function tonoDelEstadoDeLiquidacion(valor: string): Tono {
 }
 
 /**
+ * Los CINCO valores de `Hallazgo`, letra por letra, y por que no son los de
+ * `CONDICIONES` aunque hoy se escriban igual.
+ *
+ * El backend lo dice de si mismo: son «los mismos nombres y no el mismo
+ * concepto». `Hallazgo` es lo que una PERSONA anota en el acta;
+ * `CondicionFiscalizada` es lo que el sistema DERIVA comparando lo declarado
+ * con lo hallado. Uno puede equivocarse y el otro no —un acta puede decir
+ * CONFORME sobre un predio cuya area hallada supera la declarada, y la
+ * liquidacion lo clasificara SUBVALUADOR igual—. Reusar aqui `CONDICIONES`
+ * ahorraria cinco lineas y ataria dos vocabularios distintos: renombrar el
+ * rotulo de una condicion cambiaria en silencio lo que dice un acta.
+ *
+ * `USO_DISTINTO` es el quinto, y llego con #599: hasta `V76` el acta guardaba
+ * el area y ninguna columna de uso, asi que ese valor habria sido un hallazgo
+ * que el acta no podia sustentar.
+ *
+ * **Ninguno de los seis rotulos del desplegable del manual es uno de estos.**
+ * Medido contra el `POST` del acta predial, los seis contestan 422 «Hallazgo
+ * desconocido»; ver `ActaDeFiscalizacion` en la fachada. Al leer se dibuja el
+ * valor del enumerado con su etiqueta, y uno que no conozcamos sale tal cual.
+ */
+const HALLAZGOS: { valor: string; etiqueta: string; tono: Tono }[] = [
+  { valor: 'CONFORME', etiqueta: 'Conforme', tono: 'ok' },
+  { valor: 'OMISO', etiqueta: 'Omiso', tono: 'bad' },
+  { valor: 'SUBVALUADOR', etiqueta: 'Subvaluador', tono: 'warn' },
+  { valor: 'USO_DISTINTO', etiqueta: 'Uso distinto', tono: 'warn' },
+  { valor: 'NO_UBICADO', etiqueta: 'No ubicado', tono: 'neutro' },
+];
+
+function etiquetaDelHallazgo(valor: string): string {
+  return HALLAZGOS.find((h) => h.valor === valor)?.etiqueta ?? valor;
+}
+
+function tonoDelHallazgo(valor: string): Tono {
+  return HALLAZGOS.find((h) => h.valor === valor)?.tono ?? 'neutro';
+}
+
+/**
+ * Los CINCO estados de `EstadoDeActa`. No son los de la liquidacion aunque
+ * cuatro nombres se repitan: un acta pasa a `RELIQUIDADA` y una liquidacion a
+ * `NOTIFICADA`, y ninguno de los dos enumerados tiene el valor del otro.
+ */
+const ESTADOS_DE_ACTA: { valor: string; etiqueta: string; tono: Tono }[] = [
+  { valor: 'ABIERTA', etiqueta: 'Abierta', tono: 'neutro' },
+  { valor: 'LIQUIDADA', etiqueta: 'Liquidada', tono: 'warn' },
+  { valor: 'RELIQUIDADA', etiqueta: 'Reliquidada', tono: 'warn' },
+  { valor: 'TRANSFERIDA', etiqueta: 'Transferida', tono: 'ok' },
+  { valor: 'ANULADA', etiqueta: 'Anulada', tono: 'bad' },
+];
+
+function etiquetaDelEstadoDelActa(valor: string): string {
+  return ESTADOS_DE_ACTA.find((e) => e.valor === valor)?.etiqueta ?? valor;
+}
+
+function tonoDelEstadoDelActa(valor: string): Tono {
+  return ESTADOS_DE_ACTA.find((e) => e.valor === valor)?.tono ?? 'neutro';
+}
+
+/**
+ * Las once columnas del listado de actas, y cuales de ellas se dejan ordenar.
+ *
+ * Las cinco con `orden` son exactamente las cinco que `OrdenDeActas` declara
+ * —las cinco que el backend admite, medidas—, y `columnasQueOfrecenTodo` no
+ * deja que sean menos: ampliar la lista blanca del backend sin darle cabecera a
+ * la columna que ensena ese dato **no compila**.
+ *
+ * <h2>«Nº interno» no es el numero del acta, y se dice</h2>
+ *
+ * El manual rotula esa caja «Nº de acta» y escribe `ACT-2026-00418`.
+ * `ActaFiscalizacionResource` no publica ningun numero de ese estilo: publica
+ * `id`, que es el identificador de la FILA. Se dibuja como lo que es —igual que
+ * la hoja de la resolucion hace con `predioId`— porque cambiarlo por un codigo
+ * que la respuesta no trae seria afirmar un dato que nadie leyo, y dejarlo sin
+ * columna quitaria el unico orden estable que la lista tiene.
+ *
+ * <h2>Lo que no tiene columna, y por que</h2>
+ *
+ * `contribuyenteId` y `fichaId` son identificadores internos que no llevan a
+ * ninguna parte desde aqui: el padron de Rentas busca por CODIGO municipal y
+ * esta respuesta no lo trae, asi que una columna «Contribuyente 1» no serviria
+ * para encontrar a nadie. `vehiculoId` no es una columna sino la otra mitad de
+ * «Unidad»: cual de las dos familias es el acta lo dice cual de `predioId` y
+ * `vehiculoId` viene con valor.
+ */
+const COLUMNAS_DE_ACTAS: readonly ColumnaDeTabla<OrdenDeActas>[] = columnasQueOfrecenTodo<OrdenDeActas>()([
+  { rotulo: 'Nº interno', numerica: 1, orden: 'id' },
+  { rotulo: 'Fecha de visita', numerica: 0, orden: 'fechaVisita' },
+  { rotulo: 'Programa', numerica: 0 },
+  { rotulo: 'Unidad', numerica: 0 },
+  { rotulo: 'Fiscalizador', numerica: 0 },
+  { rotulo: 'Hallazgo', numerica: 0, orden: 'hallazgo' },
+  /* Numerica y con la unidad en la cabecera, por lo mismo que en omisos y en la
+     muestra (#546): `AreaM2` ya no trae « m2» dentro. */
+  { rotulo: 'Área hallada m²', numerica: 1 },
+  { rotulo: 'Uso hallado', numerica: 0 },
+  { rotulo: 'Detalle', numerica: 0 },
+  { rotulo: 'Versión', numerica: 1, orden: 'version' },
+  { rotulo: 'Estado', numerica: 0, orden: 'estado' },
+]);
+
+
+/**
+ * El codigo del programa del que salio el acta, si esta en la lista traida.
+ *
+ * `ActaFiscalizacionResource` publica `programaId`, que es el identificador de
+ * la fila; el codigo que se lee en el papel —`PF-593-01`— lo publica
+ * `ProgramaResource`, y esa lista la trae la misma pantalla para el desplegable
+ * del filtro. Se cruzan por id exacto, asi que no hay forma de escribir el
+ * codigo equivocado; lo que si puede pasar es que el programa no este en la
+ * pagina traida, y entonces se queda el numero dicho como lo que es. Inventarle
+ * un codigo, o dejar la celda en blanco, seria peor que enseñar el numero.
+ */
+function codigoDelPrograma(programas: ProgramaDeFiscalizacion[], id: number): string {
+  return programas.find((p) => p.id === id)?.codigo ?? 'Programa ' + String(id);
+}
+
+/**
+ * Cual es la unidad fiscalizada del acta, dicha como lo que el recurso trae.
+ *
+ * Son identificadores de FILA —no el codigo de referencia catastral ni la
+ * placa—, asi que se rotulan «Predio 2» y «Vehículo 7» y no se disfrazan de un
+ * codigo que esta respuesta no publica. Las dos nulas a la vez no deberian
+ * darse —`acta_fiscalizacion` exige una u otra—, y si se dieran la celda lo
+ * dice en vez de quedarse en blanco: un blanco se lee como «se cargo y no hay».
+ */
+function unidadDelActa(acta: ActaDeFiscalizacion): string {
+  if (acta.predioId !== null) return 'Predio ' + String(acta.predioId);
+  if (acta.vehiculoId !== null) return 'Vehículo ' + String(acta.vehiculoId);
+  return SIN_DATO + ' sin unidad';
+}
+
+/**
  * Las cuatro etapas del embudo, con la cifra que cada una PUEDE leer.
  *
  * El artboard traia 96 / 84 / 61 / 38 sobre una base de 96, y ninguna de las
@@ -2661,6 +3904,7 @@ function tonoDelEstadoDeLiquidacion(valor: string): Tono {
  */
 function etapasDelEmbudo(
   muestra: number | null,
+  inspeccionadas: number | null,
   liquidadas: number | null,
   notificadas: number | null,
 ): { etapa: string; detalle: string; valor: number | null; parte: number | null; dest: string }[] {
@@ -2669,11 +3913,18 @@ function etapasDelEmbudo(
   return [
     { etapa: 'Programados', detalle: 'Predios sorteados en la muestra', valor: muestra, parte: proporcion(muestra), dest: 'programas' },
     {
+      /* La que faltaba, y desde #599 sale de una lectura: el total del sobre de
+         `GET /fiscalizacion/actas?programa=‹id›`. Sigue sin haber recuento de
+         «visitados» —`visitado` viaja fila a fila en la muestra—, y esto no es
+         lo mismo aunque hoy se parezca: cuenta ACTAS, y un predio revisitado
+         tiene dos, asi que puede pasar de los programados. Por eso la barra
+         puede llegar a mas del 100 %, y es lo que hay que enseñar en vez de
+         recortarla. */
       etapa: 'Inspeccionados',
-      detalle: 'Nadie publica su recuento: «visitado» viaja fila a fila',
-      valor: null,
-      parte: null,
-      dest: 'programas',
+      detalle: 'Actas levantadas en este programa',
+      valor: inspeccionadas,
+      parte: proporcion(inspeccionadas),
+      dest: 'actas',
     },
     { etapa: 'Con liquidación', detalle: 'Actas del programa que llegaron a liquidarse', valor: liquidadas, parte: proporcion(liquidadas), dest: 'resultados' },
     { etapa: 'Notificadas', detalle: 'Las mismas, con estado NOTIFICADA', valor: notificadas, parte: proporcion(notificadas), dest: 'resultados' },
@@ -2687,6 +3938,55 @@ function pendientesDeVisita(filas: FilaDeMuestra[]): FilaDeMuestra[] {
 
 /** Lo que se dibuja donde el backend no publica cifra. */
 const SIN_DATO = '—';
+
+/**
+ * La cabecera del papel de la resolucion, con lo que el recurso publica.
+ *
+ * <h2>Dos rotulos del artboard que el recurso NO sostiene</h2>
+ *
+ * El artboard dibuja seis y `ResolucionResource` sostiene cuatro:
+ *
+ * <ul>
+ *   <li><b>R.U.C.</b> no viaja. El PDF que el servidor emite SI lo imprime
+ *       —«Documento: DNI 00000001»—, porque lo compone del padron al dibujar el
+ *       papel, y el JSON no lleva ningun campo de documento. Se queda el rotulo
+ *       con «—» y se dice donde si esta, que es la unica forma de que quien lo
+ *       necesita sepa que hacer.
+ *   <li><b>Tipo de fiscalizacion</b> tampoco: es de la LIQUIDACION
+ *       —`LiquidacionResource.tipoDeFiscalizacion`, «CIERTA», «PRESUNTA»…— y no
+ *       de la resolucion. Rellenarlo con lo que se parezca es lo que #427 se
+ *       nego a hacer con «ACTIVA»: la resolucion nombra su liquidacion, y de
+ *       ahi sale, pero eso es OTRA lectura y componerla aqui seria afirmar en
+ *       un valor notificable un dato que esta respuesta no trae.
+ * </ul>
+ *
+ * <h2>«Predio» pasa a «Unidad fiscalizada»</h2>
+ *
+ * Porque tambien puede ser un vehiculo: `ResolucionResource` publica
+ * `predioId` y `vehiculoId`, y son excluyentes. El rotulo es el que el propio
+ * PDF emitido imprime, y el valor tambien —«Predio 1»—: son los
+ * identificadores INTERNOS de la unidad, no el codigo de referencia catastral
+ * ni la placa, y ninguno de los dos viaja en esta respuesta. Se dibujan como lo
+ * que son en vez de cambiarse por un codigo que nadie leyo.
+ */
+function metaDeLaResolucion(r: ResolucionDeDeterminacion): { k: string; v: string }[] {
+  const unidad =
+    r.predioId !== null
+      ? `Predio ${r.predioId}`
+      : r.vehiculoId !== null
+        ? `Vehiculo ${r.vehiculoId}`
+        : SIN_DATO;
+  return [
+    { k: 'Nº de resolución', v: r.numero },
+    { k: 'Contribuyente', v: r.contribuyente ?? SIN_DATO },
+    { k: 'Cód. de contribuyente', v: r.codContribuyente ?? SIN_DATO },
+    { k: 'R.U.C.', v: SIN_DATO },
+    { k: 'Unidad fiscalizada', v: unidad },
+    { k: 'Periodo fiscalizado', v: `${r.periodoDesde} — ${r.periodoHasta}` },
+    { k: 'Tipo de fiscalización', v: SIN_DATO },
+    { k: 'Liquidación', v: `${r.nLiquidacion} · v${r.versionDeLaLiquidacion}` },
+  ];
+}
 
 /**
  * Una superficie, con separador de miles y SIN pasar por `Number`.

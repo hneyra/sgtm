@@ -109,9 +109,11 @@ export type Usuario = {
  * Desde #543 el recurso declara `usuarioId` y su `grupoId` dejo de ser
  * primitivo. Antes valia `0L` cuando la fila no tenia grupo —o sea, cuando era
  * la excepcion de un usuario— y salia por HTTP **indistinguible de un permiso
- * del grupo 0**. Esta lectura solo devuelve los del grupo que se pide, asi que
- * hoy `usuarioId` llega siempre nulo por ella; se declara porque es el campo
- * que separa las dos clases de fila, no porque esta pantalla lo use.
+ * del grupo 0**. La lectura del grupo devuelve siempre `usuarioId` nulo, y el
+ * `PUT` de la excepcion (#585) devuelve el par al reves —`grupoId` nulo y
+ * `usuarioId` puesto—: el mismo recurso sirve a las dos, y cual de los dos
+ * identificadores viene es lo que dice de quien es la fila. Medido:
+ * `{"id":292,"acceso":"respaldo","grupoId":null,"usuarioId":4,"privilegios":[]}`.
  *
  * Y **no es lo mismo que el permiso EFECTIVO de un usuario**: esto es lo que se
  * configura y se guarda con el `PUT` de la misma ruta; aquello es lo que una
@@ -175,9 +177,10 @@ export type OrigenDelPermiso = 'EXCEPCION' | 'GRUPO';
  *    lista vacia. Comprobado cruzado: el usuario 2 —que existe en la
  *    municipalidad 9— es 404 desde la 1.
  *
- * Y **no se escribe**: el contrato publica esta ruta solo con `GET`. La
- * excepcion de usuario existe en el dominio (`AdministrarPermisos.fijarParaUsuario`)
- * y no tiene endpoint.
+ * Y **ya se escribe** (#585): el mismo camino que la matriz de un grupo, con
+ * `fijarPermisosDelUsuario`. Hasta ese issue la ruta solo tenia `GET` y la
+ * unica forma de negarle un privilegio a alguien sin sacarlo de su grupo era el
+ * SQL directo, que no deja fila de auditoria con quien lo decidio.
  */
 export type PermisoEfectivo = {
   acceso: string;
@@ -303,6 +306,91 @@ export const permisosEfectivosDelUsuario = (usuarioId: number, s?: AbortSignal) 
   solicitar<PermisoEfectivo[]>(`/seguridad/usuarios/${usuarioId}/permisos`, { senal: s });
 
 /**
+ * Lo CONFIGURADO de una cuenta, que no es lo mismo que lo efectivo (#583).
+ *
+ * <h2>La pregunta que esto contesta y la otra no</h2>
+ *
+ * {@link permisosEfectivosDelUsuario} aplica la misma regla que el guardia, y a
+ * una cuenta deshabilitada le contesta la lista **vacía**. Eso está bien: es lo
+ * que esa persona puede hacer hoy, que es nada. Pero deja dos situaciones
+ * distintas con la misma respuesta — la cuenta que **conserva** permisos y la
+ * que nunca tuvo ninguno—, y son las dos que quien administra necesita separar:
+ * la primera es una llave que sigue existiendo y que basta rehabilitar para que
+ * vuelva a abrir.
+ *
+ * Medido contra el backend, municipalidad 1:
+ *
+ * ```
+ * jperez    habilitada      surtenEfectoHoy=true    configurados=134  efectivos=134
+ * avilchez  deshabilitada   surtenEfectoHoy=false   configurados=134  efectivos=0
+ * ccruz     deshabilitada   surtenEfectoHoy=false   configurados= 11  efectivos=0
+ * ```
+ *
+ * Antes de #583 las dos últimas eran `[]` y no había forma de distinguirlas.
+ *
+ * **`surtenEfectoHoy` es el discriminador y se lee, no se deduce.** Deducirlo de
+ * `usuario.habilitado` funcionaría hoy y dejaría de funcionar en cuanto la
+ * vigencia o cualquier otra condición entre en la regla del guardia: la
+ * respuesta la da quien aplica esa regla.
+ */
+export type PermisosConfigurados = {
+  usuarioId: number;
+  cuenta: string;
+  /** Si lo configurado surte efecto hoy. Con `false`, la cuenta no puede operar. */
+  surtenEfectoHoy: boolean;
+  permisos: PermisoEfectivo[];
+};
+
+export const permisosConfiguradosDelUsuario = (usuarioId: number, s?: AbortSignal) =>
+  solicitar<PermisosConfigurados>(`/seguridad/usuarios/${usuarioId}/permisos/configurados`, { senal: s });
+
+/**
+ * Una fila de «quién tiene este privilegio sobre esta opción». Es
+ * `TitularDelPrivilegioResource`.
+ *
+ * `origen` dice de dónde le viene: `GRUPO` con su `grupoId`, o `EXCEPCION`
+ * cuando es una excepción propia de la cuenta. Esa segunda mitad es la que
+ * ningún recorrido por grupos encontraría, y es justo la que importa —una
+ * excepción propia no se ve mirando a qué grupo pertenece nadie—.
+ */
+export type TitularDelPrivilegio = {
+  usuarioId: number;
+  cuenta: string;
+  nombre: string;
+  origen: OrigenDelPermiso;
+  grupoId: number | null;
+};
+
+/**
+ * Quién tiene un privilegio sobre una opción (#583).
+ *
+ * Es **la pregunta inversa** a la matriz de una cuenta, y hasta #693 costaba una
+ * petición por usuario del padrón: en la práctica no se hacía.
+ *
+ * El vocabulario se admite en cualquier caja —`especial` y `ESPECIAL` son la
+ * misma palabra, medido: 200 las dos— y cualquier otra palabra es **422
+ * enumerando los siete**, no una página vacía: «nadie tiene Especial» es la
+ * lectura plausible y equivocada por la que #427 se negó a traducir vocabularios
+ * (medido: `?privilegio=TOTAL` → «Privilegio desconocido: 'TOTAL'. Los siete son
+ * [EJECUCION, LECTURA, REGISTRO, MODIFICACION, ELIMINACION, IMPRESION,
+ * ESPECIAL]»).
+ *
+ * **Es por opción, no del padrón entero.** Preguntar «quién tiene Especial en
+ * algo» seguiría costando una petición por acceso —134—, así que la pantalla
+ * pregunta por la opción que se elija y lo dice.
+ */
+export const titularesDelPrivilegio = (
+  codigoDeAcceso: string,
+  privilegio: Privilegio,
+  paginacion: { pagina?: number; tamano?: number },
+  s?: AbortSignal,
+) =>
+  solicitar<RespuestaPaginada<TitularDelPrivilegio>>(`/seguridad/accesos/${codigoDeAcceso}/usuarios`, {
+    parametros: { privilegio, ...paginacion },
+    senal: s,
+  });
+
+/**
  * La bitacora.
  *
  * `ejercicio` es OBLIGATORIO —sin el, 422— porque la tabla esta particionada
@@ -420,6 +508,42 @@ export function identidadDeLaSesion(senal?: AbortSignal): Promise<IdentidadDeLaS
 }
 
 /**
+ * Lo que ESTA sesion puede hacer, acceso por acceso (#592).
+ *
+ * <h2>La forma, medida contra el servidor y no supuesta</h2>
+ *
+ * Es un objeto plano: la clave es el acceso del catalogo y el valor la lista de
+ * privilegios **en minuscula**, que no es como los escribe `PRIVILEGIOS` aqui
+ * arriba —el dominio los declara en mayuscula— ni como los dibuja la matriz.
+ *
+ * ```json
+ * {"cambiar_direccion_ref":["ejecucion","lectura","registro","modificacion",
+ *                           "eliminacion","impresion","especial"],
+ *  "transferencia_vehiculo":["ejecucion","lectura"]}
+ * ```
+ *
+ * <h2>Un acceso que falta no es un acceso sin privilegios</h2>
+ *
+ * Es un acceso que la sesion **no tiene**: el servidor no publica una clave con
+ * la lista vacia, sencillamente no la publica. Por eso el tipo es un
+ * `Record<string, string[]>` y no una lista de pares con su `privilegios: []`:
+ * la ausencia significa algo, y un mapa la expresa sin inventar una fila.
+ *
+ * <h2>Sin ningun parametro, como sus dos hermanas</h2>
+ *
+ * El sujeto sale del token. Pedirlo por identificador seria la matriz de otro,
+ * que es {@link permisosEfectivosDelUsuario} y vive detras del permiso de
+ * administracion; esta la lee cualquier sesion valida, porque preguntar que
+ * puede uno mismo no revela nada que el guardia no vaya a contestar igual al
+ * primer intento (ADR-0013).
+ */
+export type PermisosDeLaSesion = Record<string, string[]>;
+
+export function permisosDeLaSesion(senal?: AbortSignal): Promise<PermisosDeLaSesion> {
+  return solicitar('/seguridad/sesion/permisos', { senal });
+}
+
+/**
  * Lo que contesta el cambio de clave: quien la gestiona y a donde hay que ir.
  *
  * `destino` es una ruta RELATIVA del proveedor —hoy `/account/password`—, no una
@@ -463,6 +587,193 @@ export function fijarPermisosDelGrupo(
   return solicitar(`/seguridad/grupos/${grupoId}/permisos`, {
     metodo: 'PUT',
     cuerpo: { niveles, observacion },
+  });
+}
+
+/**
+ * La **excepcion propia** de una cuenta sobre uno o varios accesos (#585).
+ *
+ * <h2>Mismo cuerpo que el del grupo, y una sola diferencia que lo cambia todo</h2>
+ *
+ * `PUT /seguridad/usuarios/{id}/permisos` recibe el mismo `{niveles,
+ * observacion}` que {@link fijarPermisosDelGrupo} y hace el mismo *upsert* por
+ * acceso: **lo que no viaja se queda como estaba**. Lo que cambia es lo que
+ * significa `privilegios: []`. En el grupo es «este grupo no otorga nada aqui»;
+ * en la cuenta es una **negacion**, y la fila se escribe en cero en vez de
+ * borrarse —si se borrara, el acceso volveria a heredar del grupo y «se le nego
+ * expresamente» y «nunca lo tuvo» volverian a leerse igual, que es justo lo que
+ * el `GET` de esta misma ruta existe para distinguir (#543)—.
+ *
+ * <h2>Lo que se escribe SUSTITUYE a lo del grupo, no se suma</h2>
+ *
+ * Una excepcion sobre un acceso desplaza entero lo que sus grupos le den ahi.
+ * Medido el 2026-09-02 contra este ambiente, sobre `lpena` (usuario 4, del
+ * grupo 2):
+ *
+ * ```
+ * PUT .../usuarios/4/permisos  {"niveles":[{"acceso":"respaldo","privilegios":[]}], ...}
+ *   -> [{"id":292,"acceso":"respaldo","grupoId":null,"usuarioId":4,"privilegios":[]}]
+ * GET .../usuarios/4/permisos  -> respaldo  {"privilegios":[],"origen":"EXCEPCION","grupoId":null}
+ *
+ * POST .../grupos/2/baja       (el grupo del que lo heredaba TODO)
+ * GET  .../usuarios/4/permisos -> 2 filas, y las dos son sus excepciones
+ * ```
+ *
+ * Esa segunda medicion es la demostracion de que sustituye: con el grupo caido
+ * la cuenta pierde las nueve filas heredadas y **conserva** las dos propias.
+ *
+ * <h2>Una excepcion escrita no se puede retirar</h2>
+ *
+ * Aqui no se borra nada (regla 4) y el contrato no publica ningun `DELETE` de
+ * esta ruta: escrita la fila, ese acceso deja de heredar del grupo **para
+ * siempre**. Lo mas parecido a deshacerlo es volver a escribir la excepcion con
+ * lo que el grupo concede, que deja los mismos privilegios y **no** devuelve el
+ * origen a `GRUPO`. Quien lo dibuje tiene que decirlo antes de escribir la
+ * primera, porque despues ya no hay eleccion.
+ *
+ * <h2>Los dos 422 y el 409</h2>
+ *
+ * Medidos, con su mensaje literal:
+ *
+ * - sin `observacion` — «Toda modificacion exige la observacion del usuario:
+ *   sin ella no se guarda» (regla 10, RNF-052).
+ * - con el nivel **sin la clave `privilegios`** — «El nivel de 'respaldo' no
+ *   trae 'privilegios'. Para retirarlos todos hay que mandar la lista vacia,
+ *   que es explicito». La clave ausente **no** es la lista vacia: retirar siete
+ *   privilegios no puede ser el resultado de un campo olvidado.
+ * - **409** por la guarda del ultimo administrador: negarle por excepcion
+ *   `permisos`/`REGISTRO` al unico que podia administrarlos deja la
+ *   municipalidad sin nadie que administre, y de ahi no se sale por el sistema.
+ *   La comprobacion corre **despues** de guardar y dentro de la misma
+ *   transaccion, asi que lo que deshace el cambio es el rollback: un 409 aqui
+ *   significa que no se escribio nada.
+ */
+export function fijarPermisosDelUsuario(
+  usuarioId: number,
+  niveles: { acceso: string; privilegios: Privilegio[] }[],
+  observacion: string,
+): Promise<PermisoDeGrupo[]> {
+  return solicitar(`/seguridad/usuarios/${usuarioId}/permisos`, {
+    metodo: 'PUT',
+    cuerpo: { niveles, observacion },
+  });
+}
+
+/**
+ * Baja de una cuenta: **deja de poder entrar**, y no se borra (#572, RNF-051).
+ *
+ * Su fila sigue ahi para que la bitacora pueda seguir diciendo quien hizo que,
+ * y sus permisos siguen configurados: `permisosConfiguradosDelUsuario` los
+ * enseña, y `permisosEfectivosDelUsuario` contesta la lista vacia porque aplica
+ * la misma regla que el guardia. Rehabilitarla se los devuelve **enteros**, sin
+ * volver a otorgar ninguno — que es lo que hace que una baja no sea una forma
+ * de retirar permisos.
+ *
+ * **No toca la cuenta del proveedor de identidad** (ADR-0005): esa persona
+ * seguira autenticando y el guardia le negara todo. Es la mitad que esta
+ * pantalla no puede tocar.
+ *
+ * <h2>Aqui NO hay guarda del ultimo administrador</h2>
+ *
+ * Medido: `usuariosQuePuedenAdministrarPermisos` se consulta en un solo sitio
+ * del backend —`AdministrarPermisos.guardarYComprobar`—, o sea en los dos `PUT`
+ * de permisos y en ninguna otra escritura. Dar de baja a la unica cuenta que
+ * podia administrar permisos **no se rechaza**, y el resultado es el mismo
+ * callejon del que el 409 de los permisos protege. Quien lo dibuje tiene que
+ * decirlo antes de mandarlo; comprobarlo aqui seria reimplementar la
+ * precedencia, que es lo que #543 existe para no hacer. Lo que si se puede es
+ * **preguntarlo**: {@link titularesDelPrivilegio} sobre `permisos`/`REGISTRO` lo
+ * contesta con la precedencia ya resuelta por el servidor.
+ */
+export function darDeBajaUsuario(usuarioId: number, observacion: string): Promise<Usuario> {
+  return solicitar(`/seguridad/usuarios/${usuarioId}/baja`, {
+    metodo: 'POST',
+    cuerpo: { observacion },
+  });
+}
+
+/** Reactiva una cuenta: recupera **todos** los permisos que tenia, sin repetirlos. */
+export function reactivarUsuario(usuarioId: number, observacion: string): Promise<Usuario> {
+  return solicitar(`/seguridad/usuarios/${usuarioId}/reactivacion`, {
+    metodo: 'POST',
+    cuerpo: { observacion },
+  });
+}
+
+/**
+ * La vigencia de una cuenta o de un grupo (RF-123).
+ *
+ * Los dos extremos admiten nulo y **significan cosas distintas**: sin `desde`
+ * vale desde siempre, sin `hasta` vale indefinidamente, y mandar los dos nulos
+ * es **quitar** la vigencia, no dejarla como estaba —el `PUT` reemplaza las dos
+ * fechas de una vez—.
+ *
+ * <h2>Una fecha pasada se admite, y corta el acceso hoy</h2>
+ *
+ * Medido el 2026-09-02: `{"vigenciaHasta":"2020-01-31"}` contesta **200** con
+ * esa fecha guardada. No es un descuido del backend sino lo que RF-123 pide
+ * —el contrato que ya termino—, pero su efecto es inmediato y es el mismo que
+ * una baja: `Usuario.autorizaEn(hoy)` pasa a falso y el guardia niega todo. Una
+ * pantalla que lo mande sin decirlo estaria dando de baja a alguien con un
+ * campo que se lee como administrativo.
+ *
+ * La vigencia invertida es **422** nombrando las dos fechas —«La vigencia
+ * termina antes de empezar: 2026-12-01 a 2026-01-01»— y una fecha que no sea
+ * `AAAA-MM-DD` tambien, porque el cuerpo declara `LocalDate`.
+ */
+export type CambioDeVigencia = { vigenciaDesde?: string | null; vigenciaHasta?: string | null };
+
+export function fijarVigenciaDeUsuario(
+  usuarioId: number,
+  vigencia: CambioDeVigencia,
+  observacion: string,
+): Promise<Usuario> {
+  return solicitar(`/seguridad/usuarios/${usuarioId}/vigencia`, {
+    metodo: 'PUT',
+    cuerpo: { ...vigencia, observacion },
+  });
+}
+
+/**
+ * Baja de un grupo: **retira el acceso de todos sus miembros de golpe** (#572).
+ *
+ * No borra ninguna relacion (RNF-051): las filas de `miembro` siguen ahi y
+ * reactivarlo devuelve el acceso a los mismos. Lo que cambia mientras tanto es
+ * el alcance, y por eso es el acto mas caro de esta pantalla: no afecta a una
+ * persona sino a todas las que pertenecen.
+ *
+ * Medido sobre el grupo 2 de este ambiente, que tiene un miembro: con el grupo
+ * dado de baja, `GET /seguridad/usuarios/4/permisos` pasa de **11 filas a 2**, y
+ * las dos que quedan son sus excepciones propias. Reactivandolo vuelve a 11.
+ *
+ * Tampoco aqui hay guarda del ultimo administrador: dar de baja el grupo del
+ * que salia el privilegio `permisos` deja la municipalidad sin quien administre
+ * y el backend no lo rechaza. Ver {@link darDeBajaUsuario}.
+ */
+export function darDeBajaGrupo(grupoId: number, observacion: string): Promise<Grupo> {
+  return solicitar(`/seguridad/grupos/${grupoId}/baja`, {
+    metodo: 'POST',
+    cuerpo: { observacion },
+  });
+}
+
+/** Reactiva un grupo: sus miembros recuperan el acceso que tenian. */
+export function reactivarGrupo(grupoId: number, observacion: string): Promise<Grupo> {
+  return solicitar(`/seguridad/grupos/${grupoId}/reactivacion`, {
+    metodo: 'POST',
+    cuerpo: { observacion },
+  });
+}
+
+/** La vigencia de un grupo. Mismas reglas que la de una cuenta: ver {@link fijarVigenciaDeUsuario}. */
+export function fijarVigenciaDeGrupo(
+  grupoId: number,
+  vigencia: CambioDeVigencia,
+  observacion: string,
+): Promise<Grupo> {
+  return solicitar(`/seguridad/grupos/${grupoId}/vigencia`, {
+    metodo: 'PUT',
+    cuerpo: { ...vigencia, observacion },
   });
 }
 

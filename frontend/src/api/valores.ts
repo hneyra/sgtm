@@ -334,3 +334,76 @@ export type PeticionDePrescripcion = {
 export function declararPrescripcion(peticion: PeticionDePrescripcion): Promise<Prescripcion> {
   return solicitar('/coactiva/prescripcion', { metodo: 'POST', cuerpo: peticion });
 }
+
+/**
+ * Una fila del listado de solicitudes de prescripción. Es
+ * `PrescripcionEnListaResource` (#674).
+ *
+ * **`ejerciciosPrescritos` es una lista y no un booleano**, y ésa es la mitad de
+ * para qué existe la lectura: una solicitud pide un RANGO y el cómputo se
+ * resuelve año por año, así que «procede en parte» es el caso corriente y decir
+ * sólo que procedió dejaría sin contestar la única pregunta que importa — cuál
+ * de los seis años sigue siendo exigible.
+ *
+ * **Ninguna cifra de dinero, y no es un olvido**: la prescripción no extingue un
+ * importe, deja sin acción su cobro (art. 43 del TUO). Publicar una obligaría
+ * además a decir a qué fecha (regla 9), y esa fecha no es un dato de esta fila
+ * sino del libro.
+ *
+ * `codContribuyente` y `contribuyente` pueden venir **nulos**: es la solicitud
+ * cuyo identificador el padrón ya no resuelve, y la fila sale igual porque es
+ * justo la que hay que revisar.
+ */
+export type PrescripcionEnLista = {
+  id: number;
+  codContribuyente: string | null;
+  contribuyente: string | null;
+  tributo: string;
+  ejercicioDesde: number;
+  ejercicioHasta: number;
+  fechaDePresentacion: string;
+  plazoAplicable: string;
+  plazo: string;
+  resultado: string;
+  nDeResolucion: string | null;
+  ejerciciosPrescritos: number[];
+  usuario: string;
+  observacion: string;
+};
+
+/** Los cuatro filtros que `PrescripcionController` admite, y ni uno más. */
+export type FiltroDePrescripciones = {
+  codContribuyente?: string;
+  tributo?: string;
+  /**
+   * Acota por el rango RESUELTO, **no** por lo que prescribió.
+   *
+   * Es deliberado del backend y conviene no «arreglarlo» aquí: filtrar por «los
+   * que prescribieron» escondería las `NO_PROCEDE`, que son justamente las que
+   * dicen que ese ejercicio **sigue siendo exigible**.
+   */
+  ejercicio?: number;
+  /** `PROCEDE`, `PROCEDE_EN_PARTE` o `NO_PROCEDE`. Otra cosa es 422 diciendo cuáles hay. */
+  resultado?: string;
+};
+
+/**
+ * Las solicitudes de prescripción declaradas (#674).
+ *
+ * Es la contrapartida de la decisión que ese issue tomó: **una deuda cuya acción
+ * de cobro prescribió sigue siendo cartera pendiente y emisión del ejercicio**,
+ * y la declaración no escribe un solo asiento. Sin esta lectura, la deuda
+ * inexigible no se podría ver en ninguna parte y la decisión sería
+ * indistinguible de un descuido.
+ *
+ * Un `codContribuyente` que no está en el padrón es **404 nombrándolo**, no una
+ * página vacía: esa respuesta se lee como «esta persona no tiene ninguna
+ * declaración», que es lo contrario de lo que pasa (#622).
+ */
+export function listarPrescripciones(
+  filtro: FiltroDePrescripciones,
+  paginacion: Paginacion,
+  senal?: AbortSignal,
+): Promise<RespuestaPaginada<PrescripcionEnLista>> {
+  return solicitar('/coactiva/prescripcion', { parametros: { ...filtro, ...paginacion }, senal });
+}

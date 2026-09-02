@@ -147,6 +147,19 @@ export const NOTAS: Record<Vista, string> = {
     'Toda alta o baja de deuda con su documento, su fecha y su motivo. Es la bitácora que se mira cuando el contribuyente dice que ya pagó. Los cobros y los cargos de la emisión no salen: son del libro, no de esta pestaña. Las bajas anteriores a la migración que empezó a marcar el acto tampoco, y no se pueden recuperar.',
 };
 
+/**
+ * La misma pestana, leida por cuota (#551).
+ *
+ * Va aparte y no dentro de `NOTAS` porque `NOTAS` esta llaveado por `Vista` y
+ * esto no es otra vista: es el mismo `GET /consultas/deuda` con `porPeriodo`,
+ * o sea otro corte de la misma tabla. Se dice entero y no como apendice de la
+ * nota agregada porque las dos afirmaciones que importan —que cada fila es una
+ * cuota y que el desglose es el suyo— dejan de ser ciertas al cambiar de corte,
+ * y una nota que valga para las dos no dice ninguna de las dos.
+ */
+export const NOTA_DEUDA_POR_CUOTA =
+  'Una fila por cuota, con el desglose que el servidor calculó para esa cuota a la fecha de corte: es la única lectura que dice cuánto se debe de la cuota 1 y cuánto de la 2, porque la vista por obligación publica un solo desglose para todo el grupo. La cuota «Anual» es la obligación que no se divide —la tasa de una licencia, la de un anuncio, una costa—, no la cuota cero. La fase también es la de cada cuota: la vista por obligación publica la más avanzada del grupo, que puede no ser la de las cuotas que deben.';
+
 /* ══════════ Buscar ══════════ */
 
 /** Cómo se escribe cada identificador. Es la forma, no un dato de nadie. */
