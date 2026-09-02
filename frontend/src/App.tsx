@@ -23,15 +23,64 @@ const PANTALLAS: Record<string, React.LazyExoticComponent<React.ComponentType<Pa
   seguridad: lazy(() => import('./modulos/seguridad/Seguridad')),
 };
 
-export type PantallaProps = { dest: string; onDest: (k: string) => void };
+export type PantallaProps = {
+  dest: string;
+  onDest: (k: string) => void;
+  /**
+   * El sujeto que la pantalla tiene abierto: el tercer tramo de la ruta.
+   *
+   * `#/catastro/predios/2001…` es la ficha de ESE predio. Sin él, lo que se
+   * abre al pulsar una fila vive sólo en el estado de React (#685): la URL no lo
+   * dice, así que no se puede compartir —la otra pestaña enseña la lista—, se
+   * pierde al recargar, y «Atrás» no vuelve a la lista sino un nivel más arriba,
+   * porque nunca hubo una entrada de historial para la ficha.
+   *
+   * Va **en la ruta y no en un parámetro** porque es lo que se está mirando, no
+   * cómo se está filtrando; y como tercer tramo y no como cuarto módulo porque
+   * las 134 opciones no cambian: sigue siendo el destino `predios` de catastro.
+   *
+   * Llega decodificado. Vacío cuando la pantalla no tiene ninguno abierto.
+   */
+  sujeto: string;
+  /** Abre un sujeto —o lo cierra con `''`— dejando entrada en el historial. */
+  onSujeto: (s: string) => void;
+  /**
+   * Lo que la pantalla tiene tecleado en su búsqueda, leído de la consulta.
+   *
+   * `#/catastro/predios?q=COMERCIO`. Va aparte del sujeto porque es otra cosa:
+   * el sujeto es **qué se está mirando** y esto es **cómo se llegó a la lista**.
+   * Sin él, recargar con una ficha abierta la deja abierta y vacía el filtro, de
+   * modo que al volver hay que teclear otra vez sobre 14 422 predios (#685).
+   *
+   * Es un mapa y no una cadena para que una pantalla con dos filtros no tenga
+   * que inventarse un separador.
+   */
+  filtros: Record<string, string>;
+  /** Reescribe la consulta **sin** dejar entrada en el historial. */
+  onFiltros: (f: Record<string, string>) => void;
+};
 
 /** La ruta vive en el hash: `#/catastro/predios`. No hay servidor que la sirva
  *  y así una pantalla concreta se puede compartir por su URL. */
-function leerRuta(): { modulo: string; dest: string } {
-  const h = window.location.hash.replace(/^#\/?/, '');
-  const [modulo = 'inicio', dest = ''] = h.split('/');
+function leerRuta(): { modulo: string; dest: string; sujeto: string; filtros: Record<string, string> } {
+  const bruto = window.location.hash.replace(/^#\/?/, '');
+  const corte = bruto.indexOf('?');
+  const h = corte < 0 ? bruto : bruto.slice(0, corte);
+  const filtros: Record<string, string> = {};
+  if (corte >= 0) for (const [k, v] of new URLSearchParams(bruto.slice(corte + 1))) filtros[k] = v;
+  /* Sólo los DOS primeros separadores: un sujeto puede llevar barras —un número
+     de expediente, una placa— y partirlo entero lo dejaría truncado. */
+  const [modulo = 'inicio', dest = '', ...resto] = h.split('/');
   const m = MODULOS.find((x) => x.k === modulo) ? modulo : 'inicio';
-  return { modulo: m, dest: dest || (moduloDe(m).destinos[0]?.k ?? 'panel') };
+  let sujeto = '';
+  try {
+    sujeto = decodeURIComponent(resto.join('/'));
+  } catch {
+    /* Un `%` suelto en la barra de direcciones no puede tumbar la aplicación:
+       se queda sin sujeto, que es lo mismo que no haberlo puesto. */
+    sujeto = '';
+  }
+  return { modulo: m, dest: dest || (moduloDe(m).destinos[0]?.k ?? 'panel'), sujeto, filtros };
 }
 
 export function App() {
@@ -93,12 +142,34 @@ export function App() {
      queda flotando sobre la matriz de permisos de Seguridad. */
   useEffect(() => setToast({ texto: '', malo: false }), [ruta.modulo, ruta.dest]);
 
-  const ir = useCallback((modulo: string, dest?: string) => {
+  const ir = useCallback((modulo: string, dest?: string, sujeto?: string, filtros?: Record<string, string>) => {
     const d = dest ?? moduloDe(modulo).destinos[0]?.k ?? 'panel';
-    window.location.hash = `#/${modulo}/${d}`;
+    const s = sujeto !== undefined && sujeto !== '' ? '/' + encodeURIComponent(sujeto) : '';
+    const q = new URLSearchParams(Object.entries(filtros ?? {}).filter(([, v]) => v !== '')).toString();
+    window.location.hash = `#/${modulo}/${d}${s}${q === '' ? '' : '?' + q}`;
   }, []);
 
+  /* Cambiar de destino cierra el sujeto: el predio abierto no significa nada en
+     «Territorio», y arrastrarlo dejaría una URL que dice lo que no se mira. */
   const onDest = useCallback((k: string) => ir(ruta.modulo, k), [ir, ruta.modulo]);
+  /* El sujeto CONSERVA los filtros: se abre una ficha desde una lista filtrada y
+     al volver la lista tiene que seguir filtrada. */
+  const onSujeto = useCallback(
+    (s: string) => ir(ruta.modulo, ruta.dest, s, ruta.filtros),
+    [ir, ruta.modulo, ruta.dest, ruta.filtros],
+  );
+  /* Teclear NO deja entrada en el historial: con una por pulsación, «Atrás»
+     tendría que pulsarse una vez por letra para salir de la pantalla. */
+  const onFiltros = useCallback(
+    (f: Record<string, string>) => {
+      const d = ruta.dest;
+      const su = ruta.sujeto !== '' ? '/' + encodeURIComponent(ruta.sujeto) : '';
+      const q = new URLSearchParams(Object.entries(f).filter(([, v]) => v !== '')).toString();
+      window.history.replaceState(null, '', `#/${ruta.modulo}/${d}${su}${q === '' ? '' : '?' + q}`);
+      setRuta(leerRuta());
+    },
+    [ruta.modulo, ruta.dest, ruta.sujeto],
+  );
 
   const ctx = useMemo(
     () => ({ pref, fijar: (p: Partial<Preferencias>) => setPref((v) => ({ ...v, ...p })), toast: avisar, ir }),
@@ -110,7 +181,7 @@ export function App() {
   return (
     <PreferenciasCtx.Provider value={ctx}>
       <Suspense fallback={<Cargando />}>
-        <Pantalla dest={ruta.dest} onDest={onDest} />
+        <Pantalla dest={ruta.dest} onDest={onDest} sujeto={ruta.sujeto} onSujeto={onSujeto} filtros={ruta.filtros} onFiltros={onFiltros} />
       </Suspense>
       {toast.texto && (
         <div

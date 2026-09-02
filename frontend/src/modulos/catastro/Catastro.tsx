@@ -392,13 +392,17 @@ function escalaDelPlano(anchoEnGrados: number, latitudMedia: number): string {
 const COLORES_DE_GRUPO = ['#6f8cb0', '#9db3cd', '#c4d2e2', '#a8b89a', '#d4bfa0', '#b9a8c4', '#8fa8a0', '#cbb8a8'];
 
 
-export default function Catastro({ dest, onDest }: PantallaProps) {
+export default function Catastro({ dest, onDest, sujeto, onSujeto, filtros, onFiltros }: PantallaProps) {
   const { pref, toast } = usarPreferencias();
   const m = moduloDe('catastro');
 
   /* `alta` es la ficha nueva; dentro de `predios`, un código abierto es la
      ficha de un predio existente. Los dos son la misma pantalla. */
-  const [predio, setPredio] = useState<string | null>(null);
+  /* El predio abierto sale de la RUTA y no de un estado propio (#685). Con un
+     `useState` la ficha no estaba en la URL: no se podía compartir —la otra
+     pestaña enseñaba la lista—, se perdía al recargar, y «Atrás» no volvía a la
+     lista sino un nivel más arriba, porque nunca hubo entrada de historial. */
+  const predio = dest === 'predios' && sujeto !== '' ? sujeto : null;
   /* La fila que se abrió, guardada. No se busca en `filas`: al abrir un predio
      la consulta del padrón se apaga —no hay listado que enseñar— y con ella se
      iría la fila, de modo que la ficha volvería a los datos del prototipo sin
@@ -412,7 +416,12 @@ export default function Catastro({ dest, onDest }: PantallaProps) {
   const [vals, setVals] = useState<ValoresDeFicha>({});
   const [sucio, setSucio] = useState(false);
   const [filtrosAbiertos, setFiltrosAbiertos] = useState(false);
-  const [q, setQ] = useState('');
+  /* Lo tecleado en la búsqueda del padrón vive en la CONSULTA de la ruta (#685):
+     abrir una ficha y recargar dejaba la lista sin filtro, y con 14 422 predios
+     eso es teclearlo otra vez. No deja entrada de historial —una por pulsación
+     obligaría a pulsar «Atrás» una vez por letra—. */
+  const q = filtros.q ?? '';
+  const setQ = (v: string) => onFiltros({ ...filtros, q: v });
   /* Los cuatro filtros que `PredioController` admite, y ni uno más. */
   const [fSector, setFSector] = useState('');
   const [fEstado, setFEstado] = useState<'' | EstadoDePredio>('');
@@ -561,7 +570,6 @@ export default function Catastro({ dest, onDest }: PantallaProps) {
     setVals({});
     setCerradas({});
     setSucio(false);
-    setPredio(null);
     /* El titular de la ficha anterior no se arrastra a la siguiente: declararle
        a un predio nuevo el dueño del anterior es el error que ninguna pantalla
        desmiente después. Y con él se va el aviso de lo que quedó a medias, que
@@ -584,13 +592,13 @@ export default function Catastro({ dest, onDest }: PantallaProps) {
       nuevaFicha();
       return;
     }
-    setPredio(null);
+    /* Cerrar la ficha es irse a otro destino, y el sujeto se va con él: lo hace
+       `onDest`, que reescribe la ruta sin tercer tramo (#685). */
     setAbierto(null);
     onDest(k);
   };
 
   const abrirPredio = (fila: PredioDelCatastro | null, codigo: string) => {
-    setPredio(codigo);
     setAbierto(fila);
     setPaso(0);
     setSucio(false);
@@ -600,7 +608,10 @@ export default function Catastro({ dest, onDest }: PantallaProps) {
        corrección se guarda—. Los datos del acto se limpian con la ficha, en el
        efecto que la siembra. */
     setVals({});
-    onDest('predios');
+    /* Una sola escritura del hash: `onSujeto` ya fija el destino, y llamar
+       además a `onDest` dejaría DOS entradas de historial por cada predio
+       abierto —y «Atrás» tendría que pulsarse dos veces para volver a la lista—. */
+    onSujeto(codigo);
   };
 
   /* Las trece opciones del manual, tal cual las lista la paleta del artboard.
@@ -1204,6 +1215,20 @@ export default function Catastro({ dest, onDest }: PantallaProps) {
   /* La ficha vigente, con su histórico: las versiones anteriores son la mitad
      de lo que hay que enseñar —quién cambió qué y por qué—, y pedirlas cuesta
      el mismo viaje. */
+  /* Al llegar por la URL —recarga, o el enlace pegado en otra pestaña— hay
+     código y no hay fila: la fila la trae el listado, y ahí no se ha pasado.
+     Se resuelve por su código, que es filtro exacto, y **sólo entonces**: con la
+     ficha abierta desde el listado, `abierto` ya está y no se pide nada (#685). */
+  const predioDeLaRuta = useRecurso(
+    (senal) => listarPredios({ codRefCatastral: predio! }, { tamano: 2 }, senal),
+    [predio],
+    dest === 'predios' && predio !== null && abierto === null,
+  );
+  useEffect(() => {
+    const fila = predioDeLaRuta.datos?.contenido.find((x) => x.codRefCatastral === predio);
+    if (fila !== undefined) setAbierto(fila);
+  }, [predioDeLaRuta.datos, predio]);
+
   const lecturaDeLaFicha = useRecurso(
     (senal) => leerFicha(modalidadDeLaFicha!, abierto!.codRefCatastral, { historico: true }, senal),
     [modalidadDeLaFicha, abierto?.codRefCatastral],
