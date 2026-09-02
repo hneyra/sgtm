@@ -371,7 +371,6 @@ class AltaDePredioFronteraTest {
             if (sembrado) {
                 return;
             }
-            sembrado = true;
             long contribuyente = crearContribuyente(municipalidadA, "C-690", "40690690");
             long conyuge = crearContribuyente(municipalidadA, "C-691", "40690691");
             long completo = inscribirYDevolverId(COMPLETO, "AV. COMPLETA 1");
@@ -392,6 +391,15 @@ class AltaDePredioFronteraTest {
             crearTitularidad(municipalidadA, completo, conyuge, "40");
             // Y el que se queda corto, que es el caso que este censo existe para encontrar.
             crearTitularidad(municipalidadA, aMedias, contribuyente, "60");
+
+            // La marca se pone AQUI y no al entrar, y no es cosmetico: puesta al principio, una
+            // siembra que revienta a medias deja a las pruebas siguientes corriendo sobre un
+            // padron incompleto y fallando POR OTRA CAUSA. Es lo que hizo ilegible el fallo de
+            // #725: el `INSERT` rechazado era el de la segunda cuota, y lo que se leia en CI era
+            // que el censo devolvia como «sin titular» un predio que si debia tener la suya —o
+            // sea el fallo apuntando al filtro, que estaba bien, en vez de a la siembra—. Con la
+            // marca al final, la siguiente prueba vuelve a intentarlo y falla por lo que es.
+            sembrado = true;
         }
 
         @Test
