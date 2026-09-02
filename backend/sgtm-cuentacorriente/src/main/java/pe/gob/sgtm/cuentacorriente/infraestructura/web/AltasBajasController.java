@@ -9,6 +9,7 @@ import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 import pe.gob.sgtm.autorizacion.Privilegio;
 import pe.gob.sgtm.autorizacion.RequiereAcceso;
+import pe.gob.sgtm.cuentacorriente.CausalDeBaja;
 import pe.gob.sgtm.cuentacorriente.aplicacion.ConsultasDelLibro;
 import pe.gob.sgtm.cuentacorriente.dominio.CriterioDeAltasBajas;
 import pe.gob.sgtm.cuentacorriente.dominio.SentidoDelMovimiento;
@@ -38,6 +39,14 @@ import pe.gob.sgtm.web.RespuestaPaginada;
  * (#50, RF-064). Es una baja de deuda como la de RF-044 —los mismos asientos y las mismas
  * causales—, y hasta entonces no aparecia aqui: la pantalla del control se saltaba la via por la
  * que se extingue deuda con mas consecuencias.
+ *
+ * <p><b>Desde #684 se puede filtrar por causal.</b> Es la pregunta de quien audita como se extingue
+ * deuda del municipio —«ensename las bajas por prescripcion»— y hasta entonces no tenia respuesta:
+ * la causal viajaba dentro del texto de la observacion, que es del usuario (regla 10) y no se puede
+ * filtrar ni contar. Ahora es una columna con vocabulario cerrado ({@link CausalDeBaja}, V77), y un
+ * valor que no sea una de las seis se rechaza con 422 nombrandolo en vez de ignorarse. Las bajas
+ * <b>anteriores a V77</b> tienen la causal en nulo —no se pueden reparar, por lo mismo que las
+ * anteriores a V68—, asi que al filtrar por una concreta no aparecen; sin filtro salen todas.
  *
  * <p><b>{@code autoManual} sigue siendo un filtro que el contrato declara y esta pantalla no
  * resuelve.</b> Lo que el manual llama «automatica» es un alta o una baja que produjo un proceso
@@ -78,6 +87,7 @@ public class AltasBajasController {
             @RequestParam(required = false) @Nullable String ano,
             @RequestParam(required = false) @Nullable String tributo,
             @RequestParam(required = false) @Nullable String altaBaja,
+            @RequestParam(required = false) @Nullable String causal,
             ParametrosDePaginacion paginacion) {
 
         String codigo = exigirContribuyente(codContribuyente, codigoCont, "codigoCont");
@@ -86,7 +96,8 @@ public class AltasBajasController {
         }
 
         CriterioDeAltasBajas criterio =
-                new CriterioDeAltasBajas(codigo, ejercicioDe(ano), tributo, sentidoDe(altaBaja));
+                new CriterioDeAltasBajas(
+                        codigo, ejercicioDe(ano), tributo, sentidoDe(altaBaja), causalDe(causal));
 
         return RespuestaPaginada.de(
                 consulta.altasYBajas(criterio, paginacion.aPaginacion(ORDEN_POR_OMISION)),
@@ -101,6 +112,31 @@ public class AltasBajasController {
             return new Ejercicio(Integer.parseInt(texto.strip()));
         } catch (NumberFormatException noEsNumero) {
             throw new ProblemaDeNegocio(CodigoDeError.VALIDACION, "El año no es un numero");
+        }
+    }
+
+    /**
+     * La causal por la que se filtra, si la peticion la trae (#684).
+     *
+     * <p>Vocabulario cerrado: lo que no es una de las seis se rechaza con 422 <b>nombrando lo
+     * recibido y lo admitido</b>, no se ignora. Ignorarlo devolveria la relacion entera bajo el
+     * filtro que quien audita cree haber aplicado —«todas las bajas» leidas como «las bajas por
+     * prescripcion»—, que es exactamente el defecto que #539 midio en {@code GET
+     * /rentas/contribuyentes} y #544 en la bitacora.
+     */
+    private static @Nullable CausalDeBaja causalDe(@Nullable String texto) {
+        if (texto == null || texto.isBlank()) {
+            return null;
+        }
+        try {
+            return CausalDeBaja.de(texto);
+        } catch (IllegalArgumentException desconocida) {
+            throw new ProblemaDeNegocio(
+                    CodigoDeError.VALIDACION,
+                    "El filtro «Causal» no admite ese valor: '"
+                            + texto
+                            + "'. Las causales de baja son "
+                            + CausalDeBaja.admitidas());
         }
     }
 

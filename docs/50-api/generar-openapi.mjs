@@ -529,6 +529,27 @@ const DEL_BACKEND = {
       tras: 'ano',
       descripcion: 'Filtro «Tributo» de la pantalla, dentro de «Filtros del detalle»',
     },
+    // El filtro que #684 abrio, y que ninguna pantalla dibuja todavia: hasta V77
+    // la causal de una baja viajaba DENTRO de la observacion —texto libre de
+    // quien atiende— y no habia forma de preguntar «ensename las bajas por
+    // prescripcion», que es lo que hace quien audita como se extingue deuda del
+    // municipio. Va detras de «Alta / Baja» porque acota a las bajas.
+    {
+      nombre: 'causal',
+      ejemplo: 'PRESCRIPCION_DECLARADA',
+      tras: 'altaBaja',
+      esquema:
+        '{ type: string, enum: [PRESCRIPCION_DECLARADA, RESOLUCION_QUE_DEJA_SIN_EFECTO,' +
+        ' ERROR_MATERIAL, COMPENSACION, DEUDA_DE_COBRANZA_DUDOSA, CONDONACION_POR_ORDENANZA] }',
+      descripcion: bloque(`
+        Por que se dio de baja la deuda. El vocabulario es el del desplegable «Causal» de la
+        pantalla de baja de deuda, letra por letra salvo la tilde y el espacio, que ningun
+        identificador lleva; cualquier otra palabra se rechaza con 422 nombrando lo admitido en
+        vez de devolver la relacion entera bajo un filtro que no acota. Acota a las bajas —un
+        alta no tiene causal— y deja fuera las anteriores a la migracion que estampa la
+        columna, que la tienen vacia y no se pueden reparar.
+      `),
+    },
   ],
   // La granularidad de la fila, que es lo que decide si la fila se puede dar de
   // baja (#551).

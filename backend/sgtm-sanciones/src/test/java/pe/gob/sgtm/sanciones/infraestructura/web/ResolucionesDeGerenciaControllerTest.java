@@ -25,6 +25,7 @@ import pe.gob.sgtm.compartido.Pagina;
 import pe.gob.sgtm.compartido.Paginacion;
 import pe.gob.sgtm.contribuyentes.DirectorioDeContribuyentes;
 import pe.gob.sgtm.contribuyentes.ResumenDeContribuyente;
+import pe.gob.sgtm.cuentacorriente.CausalDeBaja;
 import pe.gob.sgtm.cuentacorriente.ConsultaDeDeudaPublica;
 import pe.gob.sgtm.cuentacorriente.ExtincionDeDeuda;
 import pe.gob.sgtm.cuentacorriente.MovimientoAsentado;
@@ -648,6 +649,7 @@ class ResolucionesDeGerenciaControllerTest {
                 LocalDate fecha,
                 String documentoOrigen,
                 @Nullable String referenciaExterna,
+                CausalDeBaja causal,
                 Observacion observacion) {
             throw new UnsupportedOperationException(
                     "sin fallo no hay baja: ninguna resolucion de esta prueba extingue deuda");

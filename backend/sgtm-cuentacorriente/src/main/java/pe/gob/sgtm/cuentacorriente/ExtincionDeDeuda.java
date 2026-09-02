@@ -47,6 +47,10 @@ public interface ExtincionDeDeuda {
      * el libro la trate como lo que es: sale en la relacion de altas y bajas (RF-045), deja de
      * contar como emision del ejercicio y <b>no</b> se publica como recaudacion.
      *
+     * <p>Desde #684 nace ademas con su {@link CausalDeBaja}. Sin ella, la via por la que se
+     * extingue deuda con mas consecuencias seria la unica que la relacion de RF-045 no puede
+     * encontrar al filtrar —el mismo agujero que #662 cerro con el acto, un escalon mas abajo—.
+     *
      * <p>Una obligacion que ya no deba nada <b>no produce ningun asiento</b> y devuelve un
      * movimiento vacio: la deuda pudo pagarse mientras el recurso se tramitaba, y en ese caso lo
      * que corresponde no es una baja sino una devolucion, que es otro procedimiento.
@@ -57,7 +61,13 @@ public interface ExtincionDeDeuda {
      * @param documentoOrigen el papel que la ordena; en {@code sanciones}, el numero de la
      *     resolucion de gerencia
      * @param referenciaExterna como entra la referencia del contexto que pide la baja, si la hay
-     * @param observacion por que se extingue (regla 10); queda como {@code motivo} de cada asiento
+     * @param causal el sustento juridico de la baja, con vocabulario cerrado (#684). <b>La declara
+     *     quien llama</b>, no la adivina esta implementacion: hoy el unico camino es la resolucion
+     *     de gerencia que deja la multa sin efecto —y quien llama acaba de comprobarlo—, pero un
+     *     puerto que lo dedujera de su unico caller de hoy afirmaria manana lo que ya no es cierto
+     * @param observacion por que se extingue (regla 10); queda como {@code motivo} de cada asiento.
+     *     <b>No es la causal</b>: una es el sustento y la otra el relato de quien firma, y
+     *     componerlas en una sola cadena fue el defecto que #684 cerro
      * @return lo que de verdad se dio de baja, con su fecha
      */
     MovimientoAsentado extinguir(
@@ -66,5 +76,6 @@ public interface ExtincionDeDeuda {
             LocalDate fecha,
             String documentoOrigen,
             @Nullable String referenciaExterna,
+            CausalDeBaja causal,
             Observacion observacion);
 }
