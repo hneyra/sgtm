@@ -527,8 +527,18 @@ export default function Catastro({ dest, onDest }: PantallaProps) {
     const vaciados: ValoresDeFicha = {};
     GRUPOS.forEach((g) => g.bloques.forEach((b) => b.campos.forEach((f) => (vaciados[f.k] = f.t === 'chk' ? false : ''))));
     TRAMOS.forEach((t) => (vaciados[t[1]] = ''));
-    return { ...vaciados, ...DEFECTOS_DE_FICHA_NUEVA };
-  }, []);
+    /* Los valores por omisión son **del alta**, que es lo que su nombre dice, y
+       hasta #686 se mezclaban también sobre una ficha que ya existe. Uno de
+       ellos es `fuente: 'INSPECCIÓN DE CAMPO'`, un literal del artboard, y el
+       contador de la sección sólo mira `vals`/`d`: como esa clave no salía
+       vacía, «Uso y ocupación» contaba `faltan = 0` y el índice le ponía el ✓
+       verde **sobre una sección con todos sus campos vacíos**.
+
+       Sobre una ficha leída no se aplica ninguno: lo que la ficha publica lo
+       pone `leido` campo por campo, y lo que no publica nadie sale «—» con su
+       motivo. */
+    return esNuevo ? { ...vaciados, ...DEFECTOS_DE_FICHA_NUEVA } : vaciados;
+  }, [esNuevo]);
 
   const valor = (k: string): string | boolean => {
     const v = vals[k];

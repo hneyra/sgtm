@@ -193,7 +193,15 @@ export const GRUPOS: GrupoDeFicha[] = [
         ],
       },
       {
-        titulo: 'Piso en edición — 02',
+        /* Sin el «— 02» del artboard (#686). Ese número era el `nPiso` del predio
+           de la maqueta escrito en el rótulo, y afirmaba de todas las fichas que
+           se estaba editando su piso 02: medido, sale igual sobre un predio con
+           un solo piso, sobre los 14 422 de Catacaos —que no declaran ninguna
+           construcción— y sobre un alta en blanco. Y no había ningún piso en
+           edición: los quince campos del bloque salen «—», porque ninguno viaja.
+           La lista real es la tabla «Pisos declarados», que sí sale de
+           `construcciones[]`. */
+        titulo: 'Piso de la edificación',
         nota: 'Las siete partidas de acabados llevan una categoría de la A a la J. La letra es la categoría, no una nota. Van de la A a la J y no de la A a la G desde que se leyeron los cuatro anexos: el cuadro de la Costa tiene nueve y el de la Selva diez —la J es «CAÑA GUAYAQUIL PONA O PINTOC»—, y con el rango corto una municipalidad de la Selva no podía fichar una construcción de ese material (#436).',
         campos: [
           { k: 'nPiso', l: 'Nº de piso', t: 'text' },
