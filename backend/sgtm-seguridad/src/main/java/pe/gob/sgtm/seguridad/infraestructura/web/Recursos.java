@@ -184,5 +184,53 @@ public final class Recursos {
     /** Cuerpo de {@code POST /seguridad/grupos/{grupo}/miembros}. */
     public record CambioDeMiembro(long usuarioId, boolean activo, String observacion) {}
 
+    /**
+     * El cuerpo del alta de un grupo (#572).
+     *
+     * <p>La observacion es obligatoria y viaja en el cuerpo: si viene vacia, el constructor de
+     * {@code Observacion} la rechaza y la peticion es 422 (regla 10, RNF-052).
+     */
+    public record AltaDeGrupo(
+            String nombre,
+            @Nullable String descripcion,
+            @Nullable LocalDate vigenciaDesde,
+            @Nullable LocalDate vigenciaHasta,
+            String observacion) {}
+
+    /**
+     * El cuerpo del alta de un usuario (#572, ADR-0012 §5).
+     *
+     * <p><b>No hay campo de clave, y no puede haberlo</b>: la credencial vive en el proveedor de
+     * identidad y este sistema no la recibe nunca (ADR-0005). Tampoco hay campo para {@code
+     * sujetoOidc}: seria pedirle a quien atiende un identificador del proveedor que no tiene por
+     * que tener, y tecleado mal enlaza esta fila con nadie (ADR-0012 §5.4).
+     *
+     * <p>Lo que esta alta escribe es <b>la fila del padron</b>. La cuenta del proveedor la crea el
+     * archivo declarativo de {@code despliegue/identidad/}, y sin ella esta persona figura en los
+     * listados y no puede entrar.
+     */
+    public record AltaDeUsuario(
+            String cuenta,
+            String nombre,
+            @Nullable String correo,
+            @Nullable LocalDate vigenciaDesde,
+            @Nullable LocalDate vigenciaHasta,
+            String observacion) {}
+
+    /** El cuerpo de una baja o una reactivacion: solo su motivo (regla 10). */
+    public record MotivoDelCambio(String observacion) {}
+
+    /**
+     * El cuerpo de un cambio de vigencia (RF-123).
+     *
+     * <p>Los dos extremos admiten nulo y significan cosas distintas: sin {@code desde} vale desde
+     * siempre, sin {@code hasta} vale indefinidamente. Mandar los dos nulos es <b>quitar</b> la
+     * caducidad, no «no cambiar nada»: este cuerpo declara la vigencia entera.
+     */
+    public record CambioDeVigencia(
+            @Nullable LocalDate vigenciaDesde,
+            @Nullable LocalDate vigenciaHasta,
+            String observacion) {}
+
     public record MiembroResource(long grupoId, long usuarioId, boolean activo) {}
 }

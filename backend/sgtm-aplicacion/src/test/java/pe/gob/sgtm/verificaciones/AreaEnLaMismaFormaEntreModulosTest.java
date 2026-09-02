@@ -82,9 +82,17 @@ class AreaEnLaMismaFormaEntreModulosTest {
      * de zonificacion, texto libre por ordenanza (#427). Ninguno es un {@code AreaM2} ni puede
      * serlo.
      *
-     * <p>Se nombran por componente y no por clase ni por paquete para que anadir un cuarto sea una
-     * linea visible en el diff: la salida comoda ante un rojo aqui es apuntar el campo en la lista,
-     * y hay que verla al revisar.
+     * <p>Los dos de {@code CajaEnListaResource} son <b>la misma oficina</b> que la de {@code
+     * FilaDePartida}, vista desde el otro lado (#618): {@code caja.area_id} apunta al area a la que
+     * se imputa lo que la ventanilla recauda, y el catalogo la publica legible —codigo y nombre— en
+     * vez del numero, que fuera del servidor no lo puede leer nadie. Se conserva la palabra {@code
+     * area} porque es como la nombran la tabla, la pantalla «Recaudacion por area» y el resto del
+     * modulo; inventarle aqui un sinonimo para esquivar esta regla dejaria el mismo concepto con
+     * dos nombres, que es el defecto que #607 cerro con las superficies.
+     *
+     * <p>Se nombran por componente y no por clase ni por paquete para que anadir uno sea una linea
+     * visible en el diff: la salida comoda ante un rojo aqui es apuntar el campo en la lista, y hay
+     * que verla al revisar.
      *
      * <p>El escaner de fuentes (#607, {@code RevisorDeCodigoFuente.revisarAreas}) tiene el mismo
      * limite y hoy no le hace falta lista: ninguna de las tres se convierte a texto a mano en
@@ -95,7 +103,9 @@ class AreaEnLaMismaFormaEntreModulosTest {
             Set.of(
                     "FilaDePartida.area",
                     "FilaDePartida.areaNombre",
-                    "CertificadoResource.areaLibreMinima");
+                    "CertificadoResource.areaLibreMinima",
+                    "CajaEnListaResource.areaCodigo",
+                    "CajaEnListaResource.areaNombre");
 
     /** El predio del issue, con la plantilla de 23 posiciones del manual. */
     private static final String CODIGO = "20010500000026010101001";

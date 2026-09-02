@@ -9,21 +9,23 @@ import pe.gob.sgtm.autorizacion.RequiereAcceso;
 import pe.gob.sgtm.web.ParametrosDePaginacion;
 
 /**
- * Las dos lecturas de #543 declaran su acceso <b>en el metodo</b>, y cual.
+ * Las lecturas de un usuario —y desde #585 tambien su escritura— declaran su acceso <b>en el
+ * metodo</b>, y cual.
  *
  * <h2>Por que esto no lo cubre ArchUnit</h2>
  *
  * <p>La regla de {@code verificarArquitectura} exige la anotacion «en la clase <b>o</b> en cada
- * endpoint». {@link PermisosDeUsuarioController} declara un {@code @RequestMapping} de clase y hoy
- * un solo metodo: si mañana alguien le añade una escritura sin anotarla, heredaria el {@code
- * LECTURA} de esta y ArchUnit seguiria en verde. Es el hueco que #431 encontro en {@code
- * ProgramasController} y #489 en el alta de predio, aqui puesto por delante.
+ * endpoint». {@link PermisosDeUsuarioController} declara un {@code @RequestMapping} de clase y
+ * anota cada metodo: si alguien le añadiera una escritura sin anotarla, heredaria el {@code
+ * LECTURA} de las lecturas y ArchUnit seguiria en verde. Es el hueco que #431 encontro en {@code
+ * ProgramasController} y #489 en el alta de predio, aqui puesto por delante — y lo que #585 vino a
+ * añadir es justo esa escritura, asi que la prevision dejo de ser hipotetica.
  *
  * <p>Y sobre {@link SeguridadController} la comprobacion dice otra cosa: <b>que acceso</b> exige la
  * lectura nueva. Elegir uno u otro no es un detalle de estilo —decide quien puede abrir la pantalla
  * que la consume— y no hay ninguna otra prueba que lo fije.
  */
-@DisplayName("El acceso de las dos lecturas de un usuario (#543)")
+@DisplayName("El acceso de las lecturas de un usuario, y de su escritura (#543, #585)")
 class AccesoDeLasLecturasDeUsuarioTest {
 
     @Test
@@ -85,6 +87,32 @@ class AccesoDeLasLecturasDeUsuarioTest {
                                 + " ArchUnit no ve CUAL es")
                 .isEqualTo("permisos");
         assertThat(enElMetodo.privilegio()).isEqualTo(Privilegio.LECTURA);
+    }
+
+    @Test
+    @DisplayName("y la escritura de la excepcion exige REGISTRO sobre «permisos» (#585)")
+    void laEscrituraExigeRegistroSobrePermisos() throws Exception {
+        RequiereAcceso enElMetodo =
+                PermisosDeUsuarioController.class
+                        .getMethod("fijar", long.class, PermisosController.CambioDePermisos.class)
+                        .getAnnotation(RequiereAcceso.class);
+
+        assertThat(enElMetodo)
+                .as(
+                        "la clase no declara ninguna, asi que sin esta ArchUnit SI se pondria rojo;"
+                                + " lo que no puede ver es lo que comprueban las dos lineas de"
+                                + " abajo")
+                .isNotNull();
+        assertThat(enElMetodo.acceso())
+                .as("la misma opcion del catalogo que la matriz de un grupo")
+                .isEqualTo("permisos");
+        assertThat(enElMetodo.privilegio())
+                .as(
+                        "REGISTRO y no LECTURA: es lo unico que impide que quien solo puede MIRAR la"
+                                + " matriz de una cuenta pueda ademas negarle un privilegio. Cambiar"
+                                + " el enumerado aqui deja verificarArquitectura en VERDE (#431,"
+                                + " #543, #555, #559)")
+                .isEqualTo(Privilegio.REGISTRO);
     }
 
     @Test
