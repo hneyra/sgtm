@@ -1310,14 +1310,15 @@ export default function Seguridad({ dest, onDest }: PantallaProps) {
                     jquispe, aayca, fruiz» nombraba a tres personas que no existen
                     en ninguna de las dos municipalidades. */}
                 <p style={{ margin: 0, padding: '11px 16px', background: 'var(--bg-elev)', fontSize: 12, lineHeight: 1.5, color: 'var(--ink-3)', textWrap: 'pretty' }}>
-                  Faltan <strong>dos</strong> hallazgos que el diseño pedía, y ya no son cuatro. <strong>Qué cuenta deshabilitada
+                  Falta <strong>uno</strong> de los cuatro hallazgos que el diseño pedía; los otros tres ya están. <strong>Qué cuenta deshabilitada
                   conserva permisos</strong> ya está arriba: #693 publicó la lectura de lo <em>configurado</em>, que contesta otra
                   pregunta que la de permisos efectivos —ésa aplica la misma regla que el guardia y a una cuenta caída le contesta la
                   lista vacía, conserve permisos o no los haya tenido nunca—. <strong>Quién tiene el privilegio Especial</strong> se
                   pregunta abajo, y se pregunta <em>por opción</em>: la lectura contesta quién lo tiene sobre una, y hacerlo del padrón
-                  entero seguiría costando una petición por cada una de las 134. Siguen sin poder calcularse la <strong>caducidad de la
-                  contraseña</strong>, que la gobierna el proveedor de identidad y no este sistema, y la <strong>última restauración
-                  verificada</strong>, que no es un campo de la consulta de respaldos. Un permiso total sobre un módulo tributario permite
+                  entero seguiría costando una petición por cada una de las 134. Y la <strong>última restauración verificada</strong>
+                  está en la pestaña «Copias»: desde #558 el recurso publica esa columna, y la celda dice el instante o «Nunca», que es lo
+                  que significa el nulo. Sigue sin poder calcularse <strong>una</strong>: la <strong>caducidad de la contraseña</strong>,
+                  que la gobierna el proveedor de identidad y no este sistema. Un permiso total sobre un módulo tributario permite
                   anular recibos y dar de baja deuda: no es una preferencia, es la llave de la caja, y por eso en su sitio no se enseña una
                   cifra inventada.
                 </p>
