@@ -151,7 +151,7 @@ class GenerarMuestraTest {
 
         // Desde #545 la deteccion los enseña —son el predio que nadie reclama, el candidato de
         // primer orden—, y hasta #586 `GenerarMuestra` los apartaba EN SILENCIO porque
-        // `programa_muestra.contribuyente_id` era NOT NULL (V60). V71 lo relajo.
+        // `programa_muestra.contribuyente_id` era NOT NULL (V60). V73 lo relajo.
         ResultadoDelSorteo resultado =
                 servicio(new TitularesDeMentira().con(OMISO_DOS, 100L + OMISO_DOS))
                         .generar(programaId, OBSERVACION);

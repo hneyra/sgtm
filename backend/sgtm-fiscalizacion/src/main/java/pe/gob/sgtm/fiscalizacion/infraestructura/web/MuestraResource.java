@@ -24,7 +24,7 @@ import pe.gob.sgtm.fiscalizacion.dominio.MuestraDelPrograma;
  *
  * <h2>Los tres campos del titular van en {@code null} cuando el predio no tiene ninguno (#586)</h2>
  *
- * <p>Desde {@code V71} la muestra admite el predio <b>sin titularidad vigente</b> —el que nadie
+ * <p>Desde {@code V73} la muestra admite el predio <b>sin titularidad vigente</b> —el que nadie
  * reclama, el candidato de primer orden—, así que {@code contribuyenteId}, {@code codContribuyente}
  * y {@code titular} salen nulos los tres. Es la misma convención que {@code OmisoResource} usa
  * desde #545 para la misma situación y por el mismo motivo: sale así, y sale en la lista.

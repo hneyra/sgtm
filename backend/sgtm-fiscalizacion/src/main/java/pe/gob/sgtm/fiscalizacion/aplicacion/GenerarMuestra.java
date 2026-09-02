@@ -223,7 +223,7 @@ public class GenerarMuestra {
      * vigente—, y era la que hacía daño: desde #545 la detección los enseña porque un predio que
      * nadie reclama es exactamente el que hay que fiscalizar, y eran el 34,5 % del padrón de
      * Catacaos. Se apartaban porque {@code programa_muestra.contribuyente_id} era {@code NOT NULL},
-     * y {@code V71} lo relajó: estar en la muestra no le cobra nada a nadie, y la visita es lo que
+     * y {@code V73} lo relajó: estar en la muestra no le cobra nada a nadie, y la visita es lo que
      * resuelve quién ocupa. Lo que la fila lleva es la columna nula, no un titular inventado.
      *
      * <p><b>Cada predio cae en exactamente una casilla.</b> Un predio puede cumplir los dos motivos

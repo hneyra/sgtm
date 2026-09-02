@@ -228,7 +228,7 @@ public class MuestraController {
      * programa abierto se lo llevó» de «ya se fiscalizó este ejercicio», que se arreglan de maneras
      * distintas.
      *
-     * @param sinTitular cuántos de los sorteados no tienen titular vigente. Desde {@code V71}
+     * @param sinTitular cuántos de los sorteados no tienen titular vigente. Desde {@code V73}
      *     entran, y salen contados: quien visita va sabiendo que ahí tiene que averiguar quién
      *     ocupa
      * @param fechaSorteo el día al que se resolvió el padrón. La muestra es una foto y estas cifras

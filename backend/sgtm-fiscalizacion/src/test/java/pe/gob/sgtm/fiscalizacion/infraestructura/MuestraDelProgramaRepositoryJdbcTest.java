@@ -213,7 +213,7 @@ class MuestraDelProgramaRepositoryJdbcTest {
             long programaId = crearPrograma(municipalidadA, "PM-0008");
 
             // Por SQL directo y no por el caso de uso: lo que se mide aqui es la guarda de la
-            // BASE, aparte de la de Java. Devolviendo el NOT NULL en V71 esto vuelve a dar 23502
+            // BASE, aparte de la de Java. Devolviendo el NOT NULL en V73 esto vuelve a dar 23502
             // y ninguna otra prueba del archivo se entera (la leccion de #188 y #435).
             try (Connection app = base.conexion(BaseDeDatosDePrueba.APP)) {
                 ContextoDeTenant.fijar(app, municipalidadA);

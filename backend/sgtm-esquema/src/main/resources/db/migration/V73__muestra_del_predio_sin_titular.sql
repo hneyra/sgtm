@@ -1,5 +1,5 @@
 -- ============================================================================
---  V71 — La muestra admite el predio SIN TITULAR, que es el que hay que
+--  V73 — La muestra admite el predio SIN TITULAR, que es el que hay que
 --        fiscalizar (#586, sale de #545)
 --
 --  ---------------------------------------------------------------------------
