@@ -270,7 +270,14 @@ class ParametrosDeLaConsultaTest {
                     // que siga sin declararlo: un filtro nuevo ahi tendria que leerlo
                     // alguien.
                     "GET /seguridad/accesos/{codigo}/usuarios",
-                    "GET /seguridad/usuarios/{id}/permisos/configurados");
+                    "GET /seguridad/usuarios/{id}/permisos/configurados",
+                    // #618 — el catalogo de ventanillas. Estrena controlador, y su promesa es la
+                    // mas estrecha que hay: NO declara ningun parametro propio, solo el dialecto
+                    // de la paginacion, y su controlador lee exactamente esos cuatro. Comprometer
+                    // las dos direcciones cuando la operacion nace no cuesta nada, y lo que fija
+                    // es que un filtro nuevo ahi —«activa», «codigo»— tenga que leerlo alguien:
+                    // desde #539 uno declarado y no leido no se ignora, se contesta con 422.
+                    "GET /tesoreria/cajas");
 
     /**
      * Cuantas operaciones arrastran hoy cada mitad del desajuste. Medido, no estimado (#544).

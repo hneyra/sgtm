@@ -2882,6 +2882,22 @@
       }
     ]
   },
+  "GET /tesoreria/cajas": {
+    "contenido": [
+      {
+        "codigo": "texto",
+        "nombre": "texto",
+        "areaCodigo": "texto",
+        "areaNombre": "texto",
+        "activa": "booleano"
+      }
+    ],
+    "pagina": "entero",
+    "tamano": "entero",
+    "totalElementos": "entero",
+    "totalPaginas": "entero",
+    "hayMas": "booleano"
+  },
   "GET /tesoreria/convenios": {
     "contenido": [
       {

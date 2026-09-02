@@ -274,6 +274,12 @@ class ContratoDeApiTest {
                     // en ninguna parte y la decision no se distingue de un descuido.
                     "GET /coactiva/prescripcion",
                     "POST /valores/{numero}/movimientos",
+                    // #618: el catalogo de ventanillas. Cinco opciones de Tesoreria piden el
+                    // codigo de la caja antes de poder pedir nada —dos en el cuerpo del cobro,
+                    // dos para resolver el turno y una como filtro— y ninguna lectura lo
+                    // publicaba: `GET /tesoreria/cajas` contestaba 404 porque no estaba en el
+                    // contrato, y la interfaz ponia una caja de texto.
+                    "GET /tesoreria/cajas",
                     "POST /tesoreria/caja/cobranza",
                     "POST /tesoreria/caja/tasas",
                     // #548: el listado de recibos emitidos. Hasta aqui la unica puerta a

@@ -50,6 +50,18 @@ class AccesosCompartidosTest {
      */
     private static final Map<String, Set<String>> LO_QUE_DOS_OPCIONES_CUBREN =
             Map.of(
+                    // #618 — el catalogo de ventanillas. Es la lectura de `caja_tributaria` y las
+                    // otras cuatro opciones son, exactamente, las del catalogo cuya operacion
+                    // EXIGE el codigo de una caja y que sin esta lectura no lo pueden ofrecer:
+                    // `caja_tasas` y `cierre_caja` lo llevan en el cuerpo, `avance_recaudacion` y
+                    // `duplicado_recibo` como parametro de consulta. La alternativa a compartirlo
+                    // es otorgar `caja_tributaria` entera —o sea la ventanilla de cobro— a quien
+                    // solo tiene que cerrar su turno o buscar un recibo, en cada implantacion y a
+                    // mano; y lo que se olvida no avisa: el desplegable contesta 403 y la pantalla
+                    // parece rota por otro motivo. Lo que se comparte no es dinero ni datos de
+                    // nadie: son cuatro filas con el codigo y el rotulo de las ventanillas.
+                    "GET /tesoreria/cajas",
+                    Set.of("caja_tasas", "cierre_caja", "avance_recaudacion", "duplicado_recibo"),
                     // #548 — la grilla de deuda de la caja tributaria. `POST
                     // /tesoreria/caja/cobranza` exige `obligaciones[]` con tributo, ejercicio y
                     // unidad una a una, y esta es la UNICA lectura que las publica asi: sin ella,
@@ -57,7 +69,8 @@ class AccesosCompartidosTest {
                     // `consulta_deuda` en la implantacion porque no hay ningun grupo de cajero que
                     // otorgar —`ImplantarMunicipalidad` deja dos grupos, y ninguno es ese— y
                     // porque es estructural: quien puede cobrar tiene que poder ver la deuda.
-                    "GET /consultas/deuda", Set.of("caja_tributaria"));
+                    "GET /consultas/deuda",
+                    Set.of("caja_tributaria"));
 
     @Test
     @DisplayName("todo endpoint que comparte su acceso esta censado, y el censo no miente")
