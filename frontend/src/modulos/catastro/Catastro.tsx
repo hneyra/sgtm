@@ -746,12 +746,27 @@ export default function Catastro({ dest, onDest }: PantallaProps) {
     dest === 'predios' && predio === null,
   );
 
-  /* Los sectores. Los usan el filtro del padrón y el árbol de Territorio, así
-     que se piden en los dos destinos y no dependen de la búsqueda. */
+  /* Los sectores. Los usan el filtro del padrón, el árbol de Territorio y —desde
+     #687— la «Zona de arbitrios» de la ficha, que vive en `sector.zona`.
+
+     El `activo` deja de mirar `predio === null`, y eso pide MENOS y no más: con
+     la condición anterior, abrir una ficha los descartaba y volver a la lista los
+     volvía a pedir, o sea dos peticiones por cada ciclo de abrir y cerrar. Con la
+     del destino entero se piden una vez al entrar. */
   const sectores = useRecurso(
     (senal) => listarSectores(senal),
     [],
-    dest === 'territorio' || (dest === 'predios' && predio === null),
+    dest === 'territorio' || dest === 'predios',
+  );
+
+  /* El tipo de la vía del predio abierto (#687).
+     Cuesta UNA petición y no el catálogo entero: `codigoDeVia` es filtro exacto.
+     Se pide sólo con un predio abierto que traiga código —un predio sin vía
+     resuelta no tiene nada que preguntar—. */
+  const viaDelPredio = useRecurso(
+    (senal) => listarVias({ codigoDeVia: abierto!.codigoDeVia! }, { tamano: 1 }, senal),
+    [abierto?.codigoDeVia],
+    dest === 'predios' && abierto !== null && (abierto.codigoDeVia ?? '') !== '',
   );
 
   /* Las manzanas del sector abierto (#537).
@@ -1261,8 +1276,26 @@ export default function Catastro({ dest, onDest }: PantallaProps) {
           : leida.economico.actividades.length === 0
             ? 'Sin actividad declarada'
             : leida.economico.sinLicencia + ' de ' + leida.economico.actividades.length + ' sin licencia',
+      /* El catálogo vial contesta por código exacto, así que o hay una fila o no
+         hay ninguna; con dos, ninguna es «la» vía y se prefiere no decir nada. */
+      'via.tipo': viaDelPredio.datos?.totalElementos === 1 ? (viaDelPredio.datos.contenido[0]?.tipo ?? null) : null,
+      /* La zona sale del sector del predio, cruzando por su código. Nula cuando
+         el sector no la declara —los seis de Catacaos—, y ahí el guion es la
+         verdad y no una falta de esta pantalla. */
+      'sector.zona':
+        abierto === null
+          ? null
+          : (sectores.datos?.contenido.find((x) => x.codigo === abierto.codigoDeSector)?.zona ?? null),
     }),
-    [abierto, leida, titulares.cargando, titulares.error, titulares.datos],
+    [
+      abierto,
+      leida,
+      titulares.cargando,
+      titulares.error,
+      titulares.datos,
+      viaDelPredio.datos,
+      sectores.datos,
+    ],
   );
 
   /* Mientras la ficha viaja, un «—» se leería como «este predio no lo declara»,
