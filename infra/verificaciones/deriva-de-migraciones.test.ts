@@ -7,6 +7,7 @@ import {
   derivaDeMigraciones,
   loQueFalta,
   REVISION_DE_REFERENCIA,
+  loQueNoEncaja,
   type DerivaDeMigraciones,
 } from "./deriva-de-migraciones";
 
@@ -43,6 +44,27 @@ describe("los ambientes declaran la version que trae las migraciones de main", (
     expect(deriva.declaraLaReferencia).toBeGreaterThan(0);
     expect(deriva.version).toMatch(/^[0-9a-f]{40}$/);
   });
+
+  /**
+   * Y el `sha` declarado tiene que ser de `main` (issue #720).
+   *
+   * La comprobacion de forma de arriba **no basta, y se midio por las malas**: al
+   * preparar #719 se tecleo a mano un `sha` inventado de cuarenta caracteres
+   * hexadecimales, y la forma lo admite. Lo que ahi lo habria cazado es `migracionesDe`,
+   * porque esa revision no esta en el clon — pero solo por eso.
+   *
+   * El que **no** cazaba nadie es el de una rama: existe, se cuenta sin protestar, puede
+   * traer exactamente las mismas migraciones que `main` y dejar `loQueFalta` en blanco.
+   * Y no tiene imagenes: `publicar-imagenes.yml` las publica al integrar en `main`, nunca
+   * desde una rama, asi que el Job de migracion pediria una etiqueta que nadie construyo
+   * y el sintoma llegaria en el despliegue, no aqui.
+   *
+   * *Mutacion:* declarar en `Pulumi.stg.yaml` la cabeza de cualquier rama sin integrar.
+   */
+  it.each(ENVIRONMENTS)("y el sha de %s esta en la historia de main", (ambiente) => {
+    const deriva = derivaDeMigraciones(ambiente);
+    expect(loQueNoEncaja(deriva), loQueNoEncaja(deriva)).toBe("");
+  });
 });
 
 /**
@@ -61,6 +83,7 @@ describe("cuando hay deriva, el rojo nombra las dos cifras", () => {
     traeLaVersion: 48,
     declaraLaReferencia: 61,
     faltan: ["V58__una.sql", "V59__otra.sql"],
+    enLaHistoria: true,
   };
 
   it("dice cuantas trae la version y cuantas declara la referencia", () => {
@@ -81,6 +104,22 @@ describe("cuando hay deriva, el rojo nombra las dos cifras", () => {
 
   it("y calla cuando no falta ninguna", () => {
     expect(loQueFalta({ ...inventada, faltan: [] })).toBe("");
+  });
+
+  /**
+   * El otro rojo, que tiene otro remedio: aqui no falta una migracion, falta que el
+   * `sha` sea de `main`. Van separados por eso — «sube la version» y «esa version no es
+   * de main» se arreglan de dos maneras distintas.
+   */
+  it("y el de la historia dice que las imagenes se publican al integrar", () => {
+    const mensaje = loQueNoEncaja({ ...inventada, enLaHistoria: false });
+    expect(mensaje).toContain("no esta en la historia");
+    expect(mensaje).toContain("publicar-imagenes.yml");
+    expect(mensaje).toContain("git rev-parse");
+  });
+
+  it("y calla cuando el sha si esta en la historia", () => {
+    expect(loQueNoEncaja(inventada)).toBe("");
   });
 });
 

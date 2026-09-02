@@ -138,7 +138,9 @@ config:
   # siguiente, **no se ha ejecutado nunca contra producción**. Por eso ese guion pasa a
   # correr también en `deteccion-de-deriva`, que sí corre a diario.
   #
-  # `cb4c1482` (2026-09-02T05:49Z, `success` en los tres jobs de imagen) trae las 62.
+  # Lo llevaba una persona hasta el 2026-09-02, y ese dia se midio lo que costaba:
+  # **cuatro** PR de dos lineas en hora y media (#705, #715, #717, #719), y el tercero
+  # obsoleto durante su propio CI porque otra migracion entro mientras corria.
   sgtm:applicationBootstrapVersion: c755de2149344b8033736958ee8ae6f643c90281
   # La municipalidad que se implanta. D-01 —municipalidad piloto— se decidió el
   # 2026-08-24: Municipalidad Distrital de Catacaos (`decisiones-abiertas.md`), en
