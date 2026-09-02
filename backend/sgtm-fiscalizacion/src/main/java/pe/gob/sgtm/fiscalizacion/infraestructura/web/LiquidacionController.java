@@ -190,7 +190,6 @@ public class LiquidacionController {
                             ejercicioDe(peticion.periodoHasta(), "periodoHasta"),
                             tipoDe(peticion.tipoDeFiscalizacion()),
                             exigir(peticion.motivoDeterminante(), "motivoDeterminante"),
-                            vacioAnulo(peticion.usoHallado()),
                             fecha,
                             observacion);
         } catch (LiquidarFiscalizacion.ActaInexistente noExiste) {

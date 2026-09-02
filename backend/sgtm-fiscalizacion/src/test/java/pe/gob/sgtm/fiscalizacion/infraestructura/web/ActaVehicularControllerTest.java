@@ -61,11 +61,19 @@ class ActaVehicularControllerTest {
                                             acta.fiscalizador(),
                                             acta.hallazgo(),
                                             acta.areaHallada(),
+                                            acta.usoHallado(),
                                             acta.detalle(),
                                             acta.estado(),
                                             acta.observacion());
                             guardadas.add(guardada);
                             return guardada;
+                        }
+
+                        @Override
+                        public pe.gob.sgtm.compartido.Pagina<ActaFiscalizacion> consultar(
+                                pe.gob.sgtm.fiscalizacion.dominio.CriterioDeActas criterio,
+                                pe.gob.sgtm.compartido.Paginacion paginacion) {
+                            return pe.gob.sgtm.compartido.Pagina.vacia(paginacion);
                         }
 
                         @Override
@@ -263,6 +271,29 @@ class ActaVehicularControllerTest {
                         .andReturn();
 
         assertThat(resultado.getResponse().getStatus()).isEqualTo(422);
+        assertThat(guardadas).isEmpty();
+    }
+
+    @Test
+    @DisplayName("#599 — USO_DISTINTO en un acta VEHICULAR es 422, y no guarda nada")
+    void usoDistintoEnUnActaVehicularEs422() throws Exception {
+        // El vocabulario del contrato es el enumerado entero, letra por letra (#427), asi que la
+        // palabra se reconoce y llega al dominio; lo que la para es que un vehiculo no declara
+        // uso, y el acta vehicular no puede consignar el uso observado que este hallazgo exige.
+        String cuerpo =
+                "{\"observacion\":\"Se fiscaliza para la prueba\",\"programaId\":2,"
+                        + "\"contribuyenteId\":10,\"vehiculoId\":30,\"fechaVisita\":\"2026-03-15\","
+                        + "\"fiscalizador\":\"J. Perez\",\"hallazgo\":\"USO_DISTINTO\"}";
+
+        MvcResult resultado =
+                mvc.perform(
+                                post("/api/v1/fiscalizacion/vehicular")
+                                        .contentType(MediaType.APPLICATION_JSON)
+                                        .content(cuerpo))
+                        .andReturn();
+
+        assertThat(resultado.getResponse().getStatus()).isEqualTo(422);
+        assertThat(resultado.getResponse().getContentAsString()).contains("USO_DISTINTO");
         assertThat(guardadas).isEmpty();
     }
 

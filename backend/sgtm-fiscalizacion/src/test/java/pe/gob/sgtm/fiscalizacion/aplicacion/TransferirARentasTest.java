@@ -477,6 +477,7 @@ class TransferirARentasTest {
                                 Hallazgo.SUBVALUADOR,
                                 AreaM2.de("300.00"),
                                 null,
+                                null,
                                 PORQUE));
         Liquidacion guardada =
                 liquidaciones.insertar(
