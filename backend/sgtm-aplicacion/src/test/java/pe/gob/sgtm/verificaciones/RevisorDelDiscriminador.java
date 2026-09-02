@@ -9,9 +9,9 @@ import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
 /**
- * La guarda de #691: un {@code catch} que convierte «falta publicar una cifra normativa» en un
- * {@code 422} tiene que hacerlo con {@link pe.gob.sgtm.parametros.FaltaPublicar}, o sea <b>con el
- * discriminador dentro</b>.
+ * La guarda de #691: un {@code catch} que convierte «falta publicar una cifra normativa» en una
+ * respuesta de error tiene que hacerlo con {@link pe.gob.sgtm.parametros.FaltaPublicar}, o sea
+ * <b>con el discriminador dentro</b>. Sea 422 o 404 (#723).
  *
  * <h2>Por que hace falta una guarda y no basta el tipo</h2>
  *
@@ -38,12 +38,19 @@ import java.util.regex.Pattern;
  *
  * <h2>Que NO mira</h2>
  *
- * <p>Solo los {@code catch} que producen un {@code CodigoDeError.VALIDACION}. Un {@code catch} de
- * la familia que devuelva un valor —el resumen anual de licencias cuenta lo que puede contar y dice
- * por que falta la cifra—, que la vuelva a lanzar, que la envuelva, o que conteste otro codigo —los
- * tres cuadros de catastro contestan {@code NO_ENCONTRADO}, porque ahi lo que se pide es una tabla
- * publicada y no una operacion— se dejan pasar. El criterio es el del issue, literal: «todo {@code
- * catch} que hoy traduce estas excepciones <b>a un 422</b>».
+ * <p>Solo los {@code catch} que <b>componen un {@code ProblemaDeNegocio}</b>. Uno que devuelva un
+ * valor —el resumen anual de licencias cuenta lo que puede contar y dice por que falta la cifra—,
+ * que la vuelva a lanzar o que la envuelva en otra excepcion de la familia se dejan pasar: ahi no
+ * hay ninguna respuesta que quedarse sin miembro.
+ *
+ * <p><b>El codigo de estado dejo de ser el criterio en #723.</b> #691 lo escribio literal —«todo
+ * {@code catch} que hoy traduce estas excepciones a un 422»— y con eso las tres lecturas de cuadro
+ * de catastro, que contestan {@code NO_ENCONTRADO} porque piden una tabla publicada y no una
+ * operacion, quedaban fuera de la guarda: eran las <b>unicas tres</b> del backend con esa forma, y
+ * las tres estaban mudas. Lo que le falta a esa respuesta no depende del numero —el miembro es lo
+ * unico que un programa lee—, asi que la guarda mira si se compone la respuesta y no con que
+ * codigo. Cual toca lo sigue decidiendo quien traduce, con los dos metodos de {@code
+ * FaltaPublicar}.
  *
  * <p>Y mira el cuerpo <b>sin comentarios</b>. Con ellos, un comentario que mencionara el ayudante
  * dejaria pasar un catch mudo, que es exactamente el modo de fallo que la guarda existe para
@@ -62,6 +69,18 @@ public final class RevisorDelDiscriminador {
 
     /** Lo que tiene que aparecer en el cuerpo del {@code catch}: el unico traductor. */
     public static final String EL_TRADUCTOR = "FaltaPublicar";
+
+    /**
+     * Lo que hace del {@code catch} una respuesta de error, y no otra cosa.
+     *
+     * <p>Hasta #723 el criterio era «produce un {@code CodigoDeError.VALIDACION}», literal del
+     * enunciado de #691. Con el, las <b>tres</b> lecturas de cuadro de catastro —las unicas del
+     * backend que traducian esta familia a otro codigo— se quedaban fuera de la guarda por
+     * contestar 404, de modo que la primera que naciera muda no la veria nadie. El hecho que
+     * importa no es el numero sino que se este componiendo la respuesta: lo que un programa lee es
+     * el miembro, y el miembro falta igual en un 404 que en un 422.
+     */
+    public static final String EL_PROBLEMA = "ProblemaDeNegocio";
 
     private static final Pattern DECLARACION =
             Pattern.compile(
@@ -138,7 +157,7 @@ public final class RevisorDelDiscriminador {
             }
             int fin = cierreDe(contenido, llave, '{', '}');
             String cuerpo = sinComentarios(contenido.substring(llave, fin < 0 ? llave + 1 : fin));
-            if (!cuerpo.contains("CodigoDeError.VALIDACION")) {
+            if (!cuerpo.contains(EL_PROBLEMA)) {
                 continue;
             }
             if (cuerpo.contains(EL_TRADUCTOR)) {
@@ -147,9 +166,12 @@ public final class RevisorDelDiscriminador {
             hallazgos.add(
                     new RevisorDeCodigoFuente.Hallazgo(
                             archivo,
-                            "#691 — un 422 de «falta publicar» sin su discriminador: traducelo con "
+                            "#691, #723 — una respuesta de «falta publicar» sin su"
+                                    + " discriminador: traducela con "
                                     + EL_TRADUCTOR
-                                    + ".problema(...)",
+                                    + ".problema(...) si es un 422, o con "
+                                    + EL_TRADUCTOR
+                                    + ".noEncontrado(...) si es un 404",
                             clase
                                     + "."
                                     + metodoQueContiene(contenido, captura.start())

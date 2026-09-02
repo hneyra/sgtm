@@ -14,6 +14,7 @@ import pe.gob.sgtm.dominio.AreaM2;
 import pe.gob.sgtm.dominio.Ejercicio;
 import pe.gob.sgtm.dominio.Observacion;
 import pe.gob.sgtm.dominio.ValorNormativo;
+import pe.gob.sgtm.parametros.ParametroSinPublicar;
 
 /**
  * #48 — Lo que se puede comprobar <b>sin base de datos y sin reloj</b>: el estado derivado, las
@@ -31,6 +32,7 @@ import pe.gob.sgtm.dominio.ValorNormativo;
 @DisplayName("#48 — El FUE, su estado y la valorizacion de obra")
 class FueYValorizacionTest {
 
+    private static final Ejercicio EJERCICIO = new Ejercicio(2026);
     private static final LocalDate DECLARADO = LocalDate.of(2026, 3, 2);
     private static final Instant AHORA = Instant.parse("2026-03-02T10:00:00Z");
     private static final Observacion PORQUE = Observacion.de("Se registra para la prueba");
@@ -49,6 +51,7 @@ class FueYValorizacionTest {
                             List.of(
                                     celda("MUROS", 'A', "100.000000"),
                                     celda("TECHOS", 'B', "50.000000")),
+                            EJERCICIO,
                             2026);
 
             ValorizacionDeObra.Valorizacion obra =
@@ -70,7 +73,8 @@ class FueYValorizacionTest {
                 "no aplica el 5 % ni deprecia: los dos son de otra regla y uno no tiene fuente")
         void ningunFactorDeMas() {
             TablaDeValoresUnitarios tabla =
-                    TablaDeValoresUnitarios.de(List.of(celda("MUROS", 'A', "10.000000")), 2026);
+                    TablaDeValoresUnitarios.de(
+                            List.of(celda("MUROS", 'A', "10.000000")), EJERCICIO, 2026);
 
             ValorizacionDeObra.Valorizacion obra =
                     ValorizacionDeObra.valorizar(
@@ -88,7 +92,8 @@ class FueYValorizacionTest {
         @DisplayName("no redondea: D-03 sigue abierta en sus tres partes")
         void noRedondea() {
             TablaDeValoresUnitarios tabla =
-                    TablaDeValoresUnitarios.de(List.of(celda("PUERTAS", 'C', "33.333333")), 2026);
+                    TablaDeValoresUnitarios.de(
+                            List.of(celda("PUERTAS", 'C', "33.333333")), EJERCICIO, 2026);
 
             ValorizacionDeObra.Valorizacion obra =
                     ValorizacionDeObra.valorizar(
@@ -105,7 +110,8 @@ class FueYValorizacionTest {
         @DisplayName("una celda que falta NO vale cero: falla nombrando la llave")
         void celdaQueFalta() {
             TablaDeValoresUnitarios tabla =
-                    TablaDeValoresUnitarios.de(List.of(celda("MUROS", 'A', "100.000000")), 2026);
+                    TablaDeValoresUnitarios.de(
+                            List.of(celda("MUROS", 'A', "100.000000")), EJERCICIO, 2026);
 
             assertThatThrownBy(
                             () ->
@@ -126,14 +132,77 @@ class FueYValorizacionTest {
                                                     ((TablaDeValoresUnitarios
                                                                             .ValorUnitarioSinParametrizar)
                                                                     fallo)
-                                                            .llave())
+                                                            .celda())
+                                            .as(
+                                                    "lo que la pantalla del FUE enseña desde #48, y"
+                                                            + " sigue igual byte a byte tras #723")
                                             .isEqualTo("TECHOS:D"));
+        }
+
+        @Test
+        @DisplayName("#723 — la celda que falta dice, por programa, QUE hay que publicar")
+        void laCeldaQueFaltaDeclaraLaInterfaz() {
+            // Tenia llave() desde #48 y no declaraba ParametroSinPublicar, asi que la guarda de
+            // #691 no la contaba dentro de su familia. Hoy no la traduce nadie a una respuesta
+            // —ValorizacionDelFue la caza y devuelve un Resultado—, y por eso la trampa solo
+            // saltaba al pisarla: el dia que alguien la tradujera, la guarda no la habria visto.
+            TablaDeValoresUnitarios tabla =
+                    TablaDeValoresUnitarios.de(
+                            List.of(celda("MUROS", 'A', "100.000000")), EJERCICIO, 2026);
+
+            assertThatThrownBy(() -> tabla.valorPorM2(PartidaDeEdificacion.TECHOS, 'D'))
+                    .isInstanceOf(ParametroSinPublicar.class)
+                    .satisfies(
+                            fallo -> {
+                                ParametroSinPublicar falta = (ParametroSinPublicar) fallo;
+                                assertThat(falta.ejercicio())
+                                        .as(
+                                                "el del conjunto sellado del que salio el cuadro,"
+                                                        + " que es donde hay que publicar la celda")
+                                        .isEqualTo(EJERCICIO);
+                                assertThat(falta.llave())
+                                        .as(
+                                                "y TIPO:CLAVE, con el tipo del cuadro delante: sin"
+                                                        + " el, «MUROS:C» no dice que cuadro hay que"
+                                                        + " publicar, y MUROS no es ningun tipo de"
+                                                        + " parametro")
+                                        .contains("VALOR_UNITARIO:TECHOS:D");
+                            });
+        }
+
+        @Test
+        @DisplayName("#723 — el ejercicio del cuadro NO se deriva del anio de construccion")
+        void elEjercicioNoEsElAnioDeConstruccion() {
+            // Hoy los dos llamadores pasan el mismo numero, porque el anio de construccion de una
+            // obra que se autoriza es el del acto. Derivar uno del otro «porque coinciden» dejaria
+            // la respuesta nombrando un ejercicio que nadie sello en cuanto dejen de coincidir —y
+            // ademas un adobe de 1979 no es un Ejercicio: el tipo va de 1990 a 2100—.
+            TablaDeValoresUnitarios tabla =
+                    TablaDeValoresUnitarios.de(
+                            List.of(
+                                    new TablaDeValoresUnitarios.Celda(
+                                            "MUROS", 'A', 1990, 2100, ValorNormativo.de("7.5"))),
+                            EJERCICIO,
+                            1995);
+
+            assertThat(tabla.anioDeConstruccion()).isEqualTo(1995);
+            assertThat(tabla.ejercicio()).isEqualTo(EJERCICIO);
+            assertThatThrownBy(() -> tabla.valorPorM2(PartidaDeEdificacion.TECHOS, 'D'))
+                    .isInstanceOf(ParametroSinPublicar.class)
+                    .satisfies(
+                            fallo ->
+                                    assertThat(((ParametroSinPublicar) fallo).ejercicio())
+                                            .as(
+                                                    "la obra es de 1995 y el cuadro es del conjunto"
+                                                            + " sellado de 2026")
+                                            .isEqualTo(EJERCICIO))
+                    .hasMessageContaining("1995");
         }
 
         @Test
         @DisplayName("una tabla vacia no valoriza nada, y ninguna cifra sale de esta clase")
         void tablaVacia() {
-            TablaDeValoresUnitarios tabla = TablaDeValoresUnitarios.de(List.of(), 2026);
+            TablaDeValoresUnitarios tabla = TablaDeValoresUnitarios.de(List.of(), EJERCICIO, 2026);
 
             assertThat(tabla.tamano()).isZero();
             assertThatThrownBy(
@@ -160,6 +229,7 @@ class FueYValorizacionTest {
                             List.of(
                                     new TablaDeValoresUnitarios.Celda(
                                             "MUROS", 'A', 1990, 2000, ValorNormativo.de("7.5"))),
+                            EJERCICIO,
                             2026);
 
             assertThat(tabla.tamano()).as("la celda es de 1990-2000 y la obra es de 2026").isZero();
@@ -173,7 +243,9 @@ class FueYValorizacionTest {
                                     ValorizacionDeObra.valorizar(
                                             List.of(),
                                             TablaDeValoresUnitarios.de(
-                                                    List.of(celda("MUROS", 'A', "1.0")), 2026)))
+                                                    List.of(celda("MUROS", 'A', "1.0")),
+                                                    EJERCICIO,
+                                                    2026)))
                     .isInstanceOf(ValorizacionDeObra.SinEstructuras.class)
                     .hasMessageContaining("no vale nada");
         }
