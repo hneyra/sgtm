@@ -61,23 +61,31 @@ import pe.gob.sgtm.verificaciones.RevisorDeCodigoFuente.Hallazgo;
  *       que dio origen a #724 no se veria.
  * </ol>
  *
- * <p><b>Y la ambiguedad de {@code llave} no es teorica, se midio.</b> Diecinueve clases lo declaran
- * {@code Optional<String>} —las de {@code ParametroSinPublicar}— y <b>cuatro no</b>: {@code
- * TablaDeValoresUnitarios.ValorUnitarioSinParametrizar} lo declara {@code String}, {@code
+ * <p><b>Y la ambiguedad de {@code llave} no es teorica, se midio.</b> Veintidos clases lo declaran
+ * {@code Optional<String>} —las de {@code ParametroSinPublicar}— y <b>tres no</b>: {@code
  * FilaDelManifiesto} y {@code FilaPublicable} lo declaran {@code LlaveDeParametro}, y {@code
  * ParametroQueFalta} —la proyeccion HTTP del propio discriminador de #691— lo lleva como componente
- * {@code String} anulable. Las dos formas conviven hoy en {@code sgtm-licencias}, a cuatro archivos
- * de distancia, y las dos se escriben con un cast:
+ * {@code String} <b>anulable</b>, y a proposito: el miembro <b>desaparece</b> del cuerpo cuando no
+ * hay llave, porque un {@code null} en un {@code problem+json} es un valor y el cliente que
+ * pregunte por el lo vera presente. Las dos formas se escriben con un cast:
  *
  * <pre>{@code
  * // Correcto: DerechoSinParametrizar.llave() es Optional.
  * assertThat(((...DerechoSinParametrizar) fallo).llave()).contains("TUPA:...");
- * // Correcto tambien: ValorUnitarioSinParametrizar.llave() es String.
- * assertThat(((...ValorUnitarioSinParametrizar) fallo).llave()).isEqualTo("TECHOS:D");
+ * // Correcto tambien: ParametroQueFalta.llave() es un String anulable.
+ * assertThat(((ParametroQueFalta) miembro).llave()).isEqualTo("REDONDEO:CUOTA");
  * }</pre>
  *
  * <p>Meter {@code llave} en el censo por nombre marcaria la segunda, que esta bien. El censo por
  * clase distingue las dos, y por eso vale las treinta lineas que cuesta.
+ *
+ * <p><b>Las cifras de arriba se miden, no se razonan, y ya se movieron una vez.</b> Cuando esta
+ * regla se escribio eran diecinueve y cuatro, y el cuarto era {@code
+ * TablaDeValoresUnitarios.ValorUnitarioSinParametrizar}, que declaraba {@code llave()} como {@code
+ * String}; #723 lo hizo declarar {@code ParametroSinPublicar} y con eso paso al otro lado. La
+ * conclusion no cambio —{@code llave} sigue siendo ambiguo, y sin el ancla del cast la regla
+ * seguiria sin ver el caso que la origino—, pero el ejemplo si, y lo destapo la prueba que lo
+ * afirma contra el arbol real en vez de contra un comentario.
  *
  * <h2>Solo se marca lo que <b>no puede</b> ser un Optional</h2>
  *

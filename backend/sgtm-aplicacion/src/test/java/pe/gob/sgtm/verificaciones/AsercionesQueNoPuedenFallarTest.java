@@ -234,8 +234,13 @@ class AsercionesQueNoPuedenFallarTest {
     @DisplayName("el censo separa los dos llave() que conviven hoy en sgtm-licencias")
     void elCensoSeparaLosDosLlaveDeLicencias() throws IOException {
         // Lo que sostiene la decision de #724, medido contra el arbol real y no razonado: el
-        // mismo nombre con dos tipos, en dos clases que se comparan a cuatro archivos de
-        // distancia. Si alguien unificara los dos, esta prueba lo diria.
+        // mismo nombre con dos tipos. Si alguien unificara los dos, esta prueba lo diria.
+        //
+        // Y ya dijo una vez: el ejemplo del lado NO-Optional era
+        // `TablaDeValoresUnitarios.ValorUnitarioSinParametrizar`, que declaraba `llave()` como
+        // String; #723 le hizo declarar `ParametroSinPublicar` y esta prueba se puso roja al
+        // mezclar. La conclusion no cambio —`llave` sigue siendo ambiguo— y el ejemplo si, que es
+        // exactamente para lo que sirve afirmarlo contra el arbol y no contra un comentario.
         Censo censo = censarDelDisco(fuentesJava(raizDelBackend()));
 
         assertThat(censo.nombresInequivocos())
@@ -244,7 +249,10 @@ class AsercionesQueNoPuedenFallarTest {
         assertThat(censo.clasesConOptional("llave"))
                 .as("las de la familia `ParametroSinPublicar` lo declaran Optional")
                 .contains("ParametroAusente", "DerechoSinParametrizar")
-                .doesNotContain("ValorUnitarioSinParametrizar");
+                .as(
+                        "y `ParametroQueFalta` —la proyeccion HTTP del mismo discriminador— lo"
+                                + " lleva como componente String anulable, que es el otro lado")
+                .doesNotContain("ParametroQueFalta");
     }
 
     @Test

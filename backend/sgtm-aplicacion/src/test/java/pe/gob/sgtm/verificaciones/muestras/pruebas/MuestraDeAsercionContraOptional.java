@@ -26,10 +26,10 @@ import java.util.OptionalInt;
  *
  * <p><b>El detalle que hace dificil la regla</b> es {@link #laLlaveEsUnTexto()} frente a {@link
  * #laLlaveEsUnOptional()}: el <b>mismo nombre</b> devuelve {@code Optional<String>} en una clase y
- * {@code String} en otra, que es exactamente lo que pasa hoy en {@code sgtm-licencias} con {@code
- * llave()} —{@code DerechoSinParametrizar} lo declara {@code Optional} y {@code
- * ValorUnitarioSinParametrizar} lo declara {@code String}, y las dos se comparan con un cast a
- * cuatro archivos de distancia—. Por el nombre no se pueden distinguir; por el cast, si.
+ * {@code String} en otra, que es exactamente lo que pasa hoy con {@code llave()} —{@code
+ * DerechoSinParametrizar} lo declara {@code Optional} y {@code ParametroQueFalta}, la proyeccion
+ * HTTP del mismo discriminador, lo lleva como componente {@code String} anulable—. Por el nombre no
+ * se pueden distinguir; por el cast, si.
  *
  * <p>Vive en {@code src/test} y el escaner <b>salta el directorio de muestras</b>, asi que no puede
  * romper el build por accidente. La revisa {@link
