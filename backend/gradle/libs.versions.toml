@@ -1,5 +1,10 @@
 [versions]
 spring-boot = "4.1.0"
+# Tomcat NO lo fija normalmente este catalogo: lo trae el BOM de Spring Boot. Esta
+# linea es una correccion TEMPORAL al BOM (#744) y se retira en cuanto sobre; el
+# porque, la fecha y la condicion exacta estan en `sgtm-aplicacion/build.gradle.kts`,
+# junto a la restriccion que la usa.
+tomcat = "11.0.25"
 spring-modulith = "2.1.0"
 flyway = "13.2.0"
 postgresql = "42.7.13"
@@ -14,6 +19,9 @@ errorprone = "2.50.0"
 [libraries]
 spring-boot-bom = { module = "org.springframework.boot:spring-boot-dependencies", version.ref = "spring-boot" }
 spring-modulith-bom = { module = "org.springframework.modulith:spring-modulith-bom", version.ref = "spring-modulith" }
+
+# Solo para la restriccion de #744; no se declara como dependencia de nadie.
+tomcat-embed-core = { module = "org.apache.tomcat.embed:tomcat-embed-core", version.ref = "tomcat" }
 
 flyway-core = { module = "org.flywaydb:flyway-core", version.ref = "flyway" }
 flyway-postgresql = { module = "org.flywaydb:flyway-database-postgresql", version.ref = "flyway" }
