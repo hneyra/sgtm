@@ -1,12 +1,11 @@
-import { useMemo, useState } from 'react';
+import { useState } from 'react';
 import { Icono } from '../../ds/Icono';
 import { ICONOS, ICO } from '../../ds/iconos';
-import { Aviso, Esqueleto, Insignia, tonoDe, type Tono } from '../../ds/componentes';
+import { Aviso, Esqueleto, Insignia } from '../../ds/componentes';
 import { MODULOS } from '../../shell/modulos';
 import { personaDeLaSesion } from '../../shell/persona';
 import { hayPuerta, salir } from '../../api/sesion';
-import { ejerciciosCon, miles, soles, usarPreferencias } from '../../shell/preferencias';
-import { DEUDA, PAGOS, UNIDADES } from '../../datos/inicio';
+import { ejerciciosCon, miles, usarPreferencias } from '../../shell/preferencias';
 import { indicadores, trabajoParado, type ImporteConFecha } from '../../api/rentas';
 import { useRecurso } from '../../api/useRecurso';
 import { FalloDeLectura } from '../../api/Fallo';
@@ -95,31 +94,16 @@ export default function Inicio() {
   const [rol, setRol] = useState<'muni' | 'contrib'>('muni');
   const [navOpen, setNavOpen] = useState(false);
   const esMuni = rol === 'muni';
-  const fechaHoy = `13 de agosto de ${pref.ejercicio}`;
+  /* `fechaHoy` se ha ido: decia «13 de agosto de {ejercicio}», una fecha
+     ESCRITA A MANO del artboard, y rotulaba «Su cuenta al …» y «Los importes
+     estan calculados al …» — o sea le ponia fecha de corte a unas cifras que
+     ademas eran de la maqueta (regla 9 al reves: la fecha tambien se inventaba). */
 
-  const cuenta = useMemo(() => {
-    let insoluto = 0,
-      interes = 0,
-      gastos = 0;
-    DEUDA.forEach((d) => {
-      insoluto += d.insoluto;
-      interes += d.interes;
-      gastos += d.gastos;
-    });
-    const debe = insoluto + interes + gastos;
-    const predios = UNIDADES.filter((u) => u.predio);
-    const vehiculos = UNIDADES.filter((u) => !u.predio);
-    return {
-      debe,
-      conBeneficio: debe - interes,
-      vencidas: DEUDA.filter((d) => d.estado !== 'Por vencer'),
-      predios,
-      vehiculos,
-      /* La deducción de 50 UIT exige predio único destinado a vivienda: la marca
-         de la tarjeta se deriva de eso, no de un literal. */
-      predioUnico: predios.length === 1 && predios[0].pct === 100,
-    };
-  }, []);
+  /* `cuenta` se ha ido con la maqueta. Sumaba `DEUDA` —insoluto + interes +
+     gastos— para pintar «Debe hoy» y «Con el beneficio vigente», o sea componia
+     dinero en la pantalla (RNF-083) sobre cifras que ademas eran del artboard.
+     Y derivaba `predioUnico` para marcar la deduccion de 50 UIT del
+     pensionista, que es una regla tributaria (regla 6) y no vive aqui. */
 
   /* ── El panel de recaudacion, contra `GET /indicadores/recaudacion` ──
      Es la unica lectura de indicadores del sistema (ARQ-01 §3.13). Sus cuatro
@@ -907,210 +891,77 @@ export default function Inicio() {
           {/* ══════════ PANEL DEL CONTRIBUYENTE ══════════ */}
           {!esMuni && (
             <div style={{ maxWidth: 880, margin: '0 auto', display: 'flex', flexDirection: 'column', gap: 16 }}>
-              {/* Esta cara es UNA MUESTRA, y hasta hoy nada lo decia.
-                  El ciudadano no entra por aqui: tiene realm propio
-                  —`sgtm-ciudadano`, otro emisor y su propia sesion (ADR-0020)—
-                  y su situacion sale de `GET /portal/situacion`, sin teclear
-                  ningun documento. Lo que se ve debajo son cifras de la maqueta,
-                  y sin este aviso se leen como la deuda de alguien. */}
-              <Aviso tono="warn" titulo="Esto es una muestra de la cara del contribuyente">
-                Las cifras de abajo son del prototipo, no de nadie. El contribuyente entra por el portal, con su propia
-                sesión y sin teclear su documento.
+              {/* Aqui vivia la cuenta entera de una persona del artboard: su
+                  nombre, cuatro obligaciones con sus importes, tres unidades con
+                  su autovaluo —«S/ 132 196,75»—, tres pagos con su numero de
+                  recibo, y botones de «Pagar en linea» y «Fraccionar la deuda».
+                  Tenia encima un aviso que decia «las cifras de abajo son del
+                  prototipo, no de nadie», y **ese es exactamente el arreglo que
+                  este repositorio rechaza en todas partes**: una cifra que el
+                  backend no publica sale con el guion largo y su motivo, nunca
+                  con la de la maqueta. Un aviso encima no la desmiente; #702
+                  midio lo contrario —lo que rodea a un dato hace que el dato
+                  parezca cierto—.
+
+                  Y no lo veia ningun arnes: el conmutador que trae aqui lleva
+                  `aria-pressed` y vive FUERA de `<main>`, y `sin-red` solo
+                  visitaba los pasos de un asistente y `role="tab"` —que en este
+                  producto sale 0—. Con la red cortada, esta cara ensenaba doce
+                  importes y dos codigos catastrales y el arnes informaba
+                  «ninguna ensena una cifra». Ahora los visita (#735, #702).
+
+                  Lo que hace falta para llenarla NO es conectar una lectura:
+                  `GET /portal/deuda` es la UNICA operacion del contrato que
+                  ningun controlador sirve **y ninguno va a servir** (ADR-0016
+                  §3), y `GET /portal/situacion` —que si existe— contesta 401
+                  con el token del funcionario, medido: es del realm del
+                  ciudadano (`sgtm-ciudadano`, ADR-0020), otro emisor y otra
+                  sesion. */}
+              <Aviso tono="warn" titulo="Esta cara no tiene de dónde leer, y no es que falte conectarla">
+                El contribuyente <strong style={{ fontWeight: 600 }}>no entra por aquí</strong>: tiene realm propio
+                —<code>sgtm-ciudadano</code>, otro emisor y su propia sesión— y su situación sale de{' '}
+                <code>GET /portal/situacion</code> sin teclear ningún documento (ADR-0020). Esa lectura contesta{' '}
+                <strong style={{ fontWeight: 600 }}>401 con la sesión de un funcionario</strong>, así que desde el back-office no
+                se puede pedir.
+                <br />
+                <br />
+                Y la operación que sí sería de esta pantalla, <code>GET /portal/deuda</code>, es la{' '}
+                <strong style={{ fontWeight: 600 }}>única de las 225 del contrato que ningún controlador sirve — y ninguno va a
+                servirla</strong> (ADR-0016 §3). Hasta que eso se decida, aquí no hay cifra que enseñar, así que no se enseña
+                ninguna: las que había eran de la maqueta.
               </Aviso>
-              <section style={{ background: 'var(--accent)', borderRadius: 12, padding: '26px 26px 24px', color: '#fff' }}>
-                <p style={{ margin: '0 0 9px', fontSize: 10, fontWeight: 500, textTransform: 'uppercase', letterSpacing: '.14em', opacity: 0.72 }}>
-                  Su cuenta al {fechaHoy}
-                </p>
-                <p style={{ margin: 0, fontFamily: 'var(--font-serif)', fontSize: 29, fontWeight: 400, letterSpacing: '-.025em', lineHeight: 1.2, textWrap: 'pretty' }}>
-                  María Elena, tiene {cuenta.vencidas.length} obligaciones vencidas y una por vencer.
-                </p>
-                <div style={{ display: 'flex', alignItems: 'flex-end', gap: 22, flexWrap: 'wrap', marginTop: 18 }}>
-                  <span style={{ display: 'flex', flexDirection: 'column', gap: 3 }}>
-                    <span style={{ fontSize: 10.5, textTransform: 'uppercase', letterSpacing: '.1em', opacity: 0.72 }}>Debe hoy</span>
-                    <span style={{ fontFamily: 'var(--font-mono)', fontSize: 30, letterSpacing: '-.02em' }}>{soles(cuenta.debe)}</span>
-                  </span>
-                  <span style={{ display: 'flex', flexDirection: 'column', gap: 3 }}>
-                    <span style={{ fontSize: 10.5, textTransform: 'uppercase', letterSpacing: '.1em', opacity: 0.72 }}>Con el beneficio vigente</span>
-                    <span style={{ fontFamily: 'var(--font-mono)', fontSize: 20 }}>{soles(cuenta.conBeneficio)}</span>
-                  </span>
-                  <span style={{ flex: 1, minWidth: 20 }} />
-                  <button
-                    onClick={() => toast(`Abriría el pago en línea por ${soles(cuenta.conBeneficio)}.`)}
-                    style={{ border: 0, borderRadius: 8, padding: '13px 24px', background: '#fff', color: 'var(--accent-ink)', fontSize: 14.5, fontWeight: 600, cursor: 'pointer', flex: '0 0 auto' }}
-                  >
-                    Pagar en línea
-                  </button>
-                </div>
-                <p style={{ margin: '14px 0 0', fontSize: 12, lineHeight: 1.55, opacity: 0.82, maxWidth: '64ch', textWrap: 'pretty' }}>
-                  La cifra está calculada al {fechaHoy} y cambia cada día: el interés corre. Con la Ordenanza 012-2026-MDC, vigente hasta el
-                  31 de diciembre, se condona el 100 % del interés moratorio.
-                </p>
-              </section>
 
               <section style={{ background: 'var(--bg-card)', border: '1px solid var(--line)', borderRadius: 10, boxShadow: 'var(--shadow-1)', overflow: 'hidden' }}>
                 <div style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '13px 16px', borderBottom: '1px solid var(--line)' }}>
-                  <h2 style={{ margin: 0, flex: 1, fontFamily: 'var(--font-serif)', fontSize: 16, fontWeight: 600 }}>Lo que debe, por concepto</h2>
-                  <span style={{ fontFamily: 'var(--font-mono)', fontSize: 11, color: 'var(--ink-3)' }}>{DEUDA.length} conceptos</span>
+                  <h2 style={{ margin: 0, flex: 1, fontFamily: 'var(--font-serif)', fontSize: 16, fontWeight: 600 }}>Lo que enseñaría esta cara</h2>
+                  <span style={{ fontFamily: 'var(--font-mono)', fontSize: 11, color: 'var(--ink-3)' }}>{SIN_DATO}</span>
                 </div>
-                {DEUDA.map((d) => (
-                  <div key={d.concepto} style={{ display: 'flex', alignItems: 'center', gap: 14, padding: '13px 16px', borderBottom: '1px solid var(--line)' }}>
-                    <Insignia tono={tonoDe(d.estado) as Tono}>{d.estado}</Insignia>
+                {/* La FORMA se queda —es la opcion `portal` del catalogo, y las
+                    134 siguen siendo 134—; lo que se va es el dato. Cada linea
+                    dice de donde saldria, que es lo que separa «todavia no» de
+                    «nunca». */}
+                {[
+                  ['Su deuda por concepto', 'Insoluto, interés y gastos de cada obligación, con su fecha de vencimiento.'],
+                  ['Sus predios y vehículos', 'Con el porcentaje de propiedad, que es lo que pondera la base imponible.'],
+                  ['Sus pagos', 'Con el número de recibo de cada uno, para poder descargarlo.'],
+                  ['El beneficio vigente', 'Cuánto del interés condona la ordenanza del ejercicio (D-02b).'],
+                ].map(([que, detalle]) => (
+                  <div key={que} style={{ display: 'flex', alignItems: 'center', gap: 14, padding: '13px 16px', borderBottom: '1px solid var(--line)' }}>
                     <span style={{ flex: 1, minWidth: 0 }}>
-                      <span style={{ display: 'block', fontSize: 13.5, color: 'var(--ink)' }}>{d.concepto}</span>
-                      <span style={{ display: 'block', fontSize: 12, color: 'var(--ink-3)', marginTop: 2, textWrap: 'pretty' }}>
-                        Unidad {d.unidad}
-                        {d.interes > 0 && ` · incluye ${soles(d.interes)} de interés`}
-                        {d.gastos > 0 && ` y ${soles(d.gastos)} de gastos`}
-                      </span>
+                      <span style={{ display: 'block', fontSize: 13.5, color: 'var(--ink)' }}>{que}</span>
+                      <span style={{ display: 'block', fontSize: 12, color: 'var(--ink-3)', marginTop: 2, textWrap: 'pretty' }}>{detalle}</span>
                     </span>
-                    <span style={{ textAlign: 'right', flex: '0 0 auto' }}>
-                      <span style={{ display: 'block', fontFamily: 'var(--font-mono)', fontSize: 14, color: 'var(--ink)' }}>
-                        {soles(d.insoluto + d.interes + d.gastos)}
-                      </span>
-                      <span style={{ display: 'block', fontSize: 10.5, color: 'var(--ink-4)', marginTop: 2 }}>{d.vence}</span>
-                    </span>
-                  </div>
-                ))}
-                <div style={{ display: 'flex', alignItems: 'center', gap: 12, flexWrap: 'wrap', padding: '13px 16px', background: 'var(--bg-elev)' }}>
-                  <span style={{ flex: 1, minWidth: 170, fontSize: 12.5, color: 'var(--ink-3)', textWrap: 'pretty' }}>
-                    Puede pagar todo, una cuota o acogerse a un fraccionamiento desde el 20 % de inicial. Lo que está en cobranza coactiva se
-                    paga igual, pero además tiene costas.
-                  </span>
-                  <button
-                    onClick={() => toast('Abriría la simulación del fraccionamiento.')}
-                    className="hov-linea"
-                    style={{ border: '1px solid var(--line-2)', borderRadius: 6, padding: '9px 16px', background: 'var(--bg-card)', fontSize: 13, cursor: 'pointer' }}
-                  >
-                    Fraccionar la deuda
-                  </button>
-                </div>
-              </section>
-
-              <section style={{ background: 'var(--bg-card)', border: '1px solid var(--line)', borderRadius: 10, boxShadow: 'var(--shadow-1)', overflow: 'hidden' }}>
-                <div style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '13px 16px', borderBottom: '1px solid var(--line)' }}>
-                  <h2 style={{ margin: 0, flex: 1, fontFamily: 'var(--font-serif)', fontSize: 16, fontWeight: 600 }}>Sus predios y vehículos</h2>
-                  <span style={{ fontFamily: 'var(--font-mono)', fontSize: 11, color: 'var(--ink-3)' }}>
-                    {cuenta.predios.length} {cuenta.predios.length === 1 ? 'predio' : 'predios'} · {cuenta.vehiculos.length}{' '}
-                    {cuenta.vehiculos.length === 1 ? 'vehículo' : 'vehículos'}
-                  </span>
-                </div>
-                {UNIDADES.map((u) => (
-                  <div key={u.codigo} style={{ display: 'flex', alignItems: 'center', gap: 14, padding: '13px 16px', borderBottom: '1px solid var(--line)' }}>
-                    <span style={{ fontFamily: 'var(--font-mono)', fontSize: 12.5, color: 'var(--accent-ink)', background: 'var(--accent-soft)', borderRadius: 5, padding: '4px 9px', flex: '0 0 auto' }}>
-                      {u.codigo}
-                    </span>
-                    <span style={{ flex: 1, minWidth: 0 }}>
-                      <span style={{ display: 'block', fontSize: 13.5, color: 'var(--ink)' }}>{u.titulo}</span>
-                      <span style={{ display: 'block', fontSize: 12, color: 'var(--ink-3)', marginTop: 2, textWrap: 'pretty' }}>{u.detalle}</span>
-                    </span>
-                    <span style={{ fontFamily: 'var(--font-mono)', fontSize: 12.5, color: 'var(--ink-2)', flex: '0 0 auto' }}>{u.valor}</span>
+                    <span style={{ fontFamily: 'var(--font-mono)', fontSize: 14, color: 'var(--ink-4)', flex: '0 0 auto' }}>{SIN_DATO}</span>
                   </div>
                 ))}
                 <p style={{ margin: 0, padding: '11px 16px', background: 'var(--bg-elev)', fontSize: 12, lineHeight: 1.5, color: 'var(--ink-3)', textWrap: 'pretty' }}>
-                  Si algún dato no coincide con la realidad de su predio, puede pedir su rectificación: el impuesto se calcula sobre estos
-                  datos.
-                </p>
-              </section>
-
-              <section style={{ background: 'var(--bg-card)', border: '1px solid var(--line)', borderRadius: 10, boxShadow: 'var(--shadow-1)', overflow: 'hidden' }}>
-                <div style={{ padding: '13px 16px', borderBottom: '1px solid var(--line)' }}>
-                  <h2 style={{ margin: 0, fontFamily: 'var(--font-serif)', fontSize: 16, fontWeight: 600 }}>Qué puede hacer sin venir a la municipalidad</h2>
-                </div>
-                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit,minmax(248px,1fr))', gap: 0, background: 'var(--bg-card)' }}>
-                  {[
-                    { label: 'Pagar en línea', detalle: 'Con tarjeta o banca por internet. El recibo se emite al instante y la deuda se descuenta el mismo día.', icon: ICO.tarjeta, marca: '', tono: 'warn' as Tono, msj: 'Abriría el pago en línea.' },
-                    { label: 'Constancia de no adeudo', detalle: 'Se emite solo si no debe nada. Ahora mismo saldría como constancia de deuda.', icon: ICO.sello, marca: 'No disponible', tono: 'bad' as Tono, msj: 'Con deuda pendiente la constancia sale como constancia de deuda.' },
-                    { label: 'Fraccionar la deuda', detalle: 'Desde el 20 % de inicial y hasta 24 cuotas. Dos cuotas impagas quiebran el convenio.', icon: ICO.reloj, marca: '', tono: 'warn' as Tono, msj: 'Abriría la simulación del fraccionamiento.' },
-                    { label: 'Declaración jurada', detalle: 'Si compró, vendió, amplió o demolió, tiene que declararlo. El plazo es hasta el último día hábil de febrero.', icon: ICO.hoja, marca: '', tono: 'warn' as Tono, msj: 'Abriría el formulario de declaración.' },
-                    { label: 'Ver mi predio en el mapa', detalle: 'Compruebe que los linderos y el área que figuran son los de su predio.', icon: ICO.mapa, marca: '', tono: 'warn' as Tono, msj: 'Abriría el visor catastral.' },
-                    {
-                      label: 'Solicitar beneficio de pensionista',
-                      detalle: cuenta.predioUnico
-                        ? 'Deducción de 50 UIT si es pensionista o adulto mayor. Su único predio es de vivienda, así que cumple ese requisito; falta acreditar la condición de pensionista.'
-                        : `Deducción de 50 UIT para pensionistas y adultos mayores. Exige predio único de vivienda y usted tiene ${cuenta.predios.length} predios registrados, así que hoy no cumple el requisito.`,
-                      icon: ICO.aviso,
-                      /* Marca corta: la insignia es inflexible y con `nowrap`, así que
-                         una etiqueta larga le quita el ancho al título. El motivo va
-                         en el detalle. */
-                      marca: cuenta.predioUnico ? 'Puede aplicar' : 'No procede',
-                      tono: (cuenta.predioUnico ? 'ok' : 'warn') as Tono,
-                      msj: cuenta.predioUnico
-                        ? 'Abriría la solicitud de beneficio.'
-                        : `Con ${cuenta.predios.length} predios registrados la deducción de 50 UIT no procede.`,
-                    },
-                  ].map((t) => (
-                    <button
-                      key={t.label}
-                      onClick={() => toast(t.msj)}
-                      className="hov-acento"
-                      style={{
-                        display: 'block',
-                        width: '100%',
-                        textAlign: 'left',
-                        border: 0,
-                        borderLeft: '1px solid var(--line)',
-                        borderTop: '1px solid var(--line)',
-                        margin: '-1px 0 0 -1px',
-                        padding: '15px 16px 17px',
-                        cursor: 'pointer',
-                        background: 'var(--bg-card)',
-                      }}
-                    >
-                      <span style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-                        <span
-                          style={{
-                            display: 'grid',
-                            placeItems: 'center',
-                            width: 30,
-                            height: 30,
-                            borderRadius: 8,
-                            flex: '0 0 auto',
-                            border: '1px solid var(--line-2)',
-                            background: 'var(--bg-elev)',
-                            color: 'var(--ink-3)',
-                          }}
-                        >
-                          <Icono d={t.icon} tam={16} />
-                        </span>
-                        <span style={{ flex: 1, minWidth: 0, fontSize: 13.5, fontWeight: 500, color: 'var(--ink)' }}>{t.label}</span>
-                        {t.marca && <Insignia tono={t.tono}>{t.marca}</Insignia>}
-                      </span>
-                      <span style={{ display: 'block', fontSize: 12, lineHeight: 1.5, color: 'var(--ink-3)', marginTop: 8, textWrap: 'pretty' }}>
-                        {t.detalle}
-                      </span>
-                    </button>
-                  ))}
-                </div>
-              </section>
-
-              <section style={{ background: 'var(--bg-card)', border: '1px solid var(--line)', borderRadius: 10, boxShadow: 'var(--shadow-1)', overflow: 'hidden' }}>
-                <div style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '13px 16px', borderBottom: '1px solid var(--line)' }}>
-                  <h2 style={{ margin: 0, flex: 1, fontFamily: 'var(--font-serif)', fontSize: 16, fontWeight: 600 }}>Sus últimos pagos</h2>
-                  <span style={{ fontFamily: 'var(--font-mono)', fontSize: 11, color: 'var(--ink-3)' }}>3 de 38</span>
-                </div>
-                {PAGOS.map((p) => (
-                  <div key={p.recibo} style={{ display: 'flex', alignItems: 'center', gap: 14, padding: '12px 16px', borderBottom: '1px solid var(--line)' }}>
-                    <span style={{ fontFamily: 'var(--font-mono)', fontSize: 12, color: 'var(--ink-3)', flex: '0 0 auto' }}>{p.fecha}</span>
-                    <span style={{ flex: 1, minWidth: 0, fontSize: 13, color: 'var(--ink-2)', textWrap: 'pretty' }}>{p.concepto}</span>
-                    <span style={{ fontFamily: 'var(--font-mono)', fontSize: 13, color: 'var(--ink)', flex: '0 0 auto' }}>{soles(p.monto)}</span>
-                    <button
-                      onClick={() => toast(`Descargaría el recibo ${p.recibo}.`)}
-                      className="hov-linea"
-                      style={{ border: '1px solid var(--line-2)', borderRadius: 6, padding: '6px 12px', background: 'var(--bg-card)', fontSize: 12, cursor: 'pointer', flex: '0 0 auto', whiteSpace: 'nowrap' }}
-                    >
-                      Recibo
-                    </button>
-                  </div>
-                ))}
-                <p style={{ margin: 0, padding: '11px 16px', background: 'var(--bg-elev)', fontSize: 12, lineHeight: 1.5, color: 'var(--ink-3)', textWrap: 'pretty' }}>
-                  Un pago aplicado ya descontó la cuota. Si pagó y sigue apareciendo la deuda, traiga el recibo: se resuelve en ventanilla el
-                  mismo día.
+                  Ninguna de las cuatro se compone aquí aunque hubiera de dónde: sumar importes en la pantalla daría una cifra que no
+                  es la que acabaría impresa (RNF-083).
                 </p>
               </section>
 
               <p style={{ margin: 0, fontSize: 11.5, lineHeight: 1.55, color: 'var(--ink-4)', textAlign: 'center', textWrap: 'pretty' }}>
-                Los importes están calculados al {fechaHoy}. Si algo no coincide con sus recibos, acuda a la Unidad de Rentas con el
-                comprobante: se corrige el mismo día.
+                Quien atiende ve la misma deuda, y con cifras de verdad, en «Consulta de deuda» y en la ficha del contribuyente.
               </p>
             </div>
           )}
