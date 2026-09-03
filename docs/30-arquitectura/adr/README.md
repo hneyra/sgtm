@@ -29,6 +29,20 @@ historial de por qué se hizo algo vale más que la coherencia del documento.
 | [0021](ADR-0021-la-geometria-del-predio.md) | La base modela la geometría del predio, en `geography(MultiPolygon, 4326)` porque una instalación atiende zonas UTM distintas — y esa geometría **no** valoriza | Aceptado |
 | [0022](ADR-0022-el-visor-del-plano-catastral.md) | El visor del plano: el polígono entero en 4326, acotado por marco y **negándose** antes que recortarse; los predios sin geometría se cuentan, y de las cinco capas del diseño sólo los lotes tienen con qué dibujarse | Aceptado |
 | [0023](ADR-0023-la-muestra-se-sortea.md) | La muestra de fiscalización se **sortea** a partir de los parámetros del programa; «Omisos y subvaluadores» aporta sus **filtros**, no una lista de predios — y la esquela no existe | Aceptado |
+| [0024](ADR-0024-la-frontera-del-calculo.md) | La frontera del cálculo: catastro valoriza el predio, rentas determina la obligación; cada regla declara su ámbito | Propuesto |
+| [0025](ADR-0025-normativa-servicio-y-libreria.md) | La normativa es un servicio de datos y una librería de reglas, y **no** está en el camino caliente del cálculo | Propuesto |
+| [0026](ADR-0026-el-camino-del-dinero.md) | El camino del dinero: dos transacciones, un outbox, y la imputación en rentas — con conciliación diaria a cero | Propuesto |
+| [0027](ADR-0027-la-valuacion-es-un-hecho-sellado.md) | La valuación es un hecho sellado del ejercicio, con la identidad de todos sus insumos, no un estado del predio | Propuesto |
+| [0028](ADR-0028-el-tenant-no-cruza-por-http.md) | El contexto de municipalidad no cruza por HTTP: token delegado, jamás una cabecera | Propuesto |
+| [0029](ADR-0029-cuatro-sistemas-separados.md) | Cuatro sistemas separados: `catastro`, `rentas`, `normativa` y `caja`. **Reemplazaría a ADR-0003** | Propuesto |
+| [0030](ADR-0030-cuatro-interfaces-una-sesion.md) | Cuatro interfaces, una sesión, y las librerías comunes. **Reemplazaría a ADR-0009** en «una sola aplicación por ahora» | Propuesto |
+| [0031](ADR-0031-infraestructura-comun-y-propia.md) | La infraestructura: un repositorio `infrastructure` con la plataforma y las convenciones, y una carpeta `infrastructure/` por sistema. **Extiende ADR-0011**, que no se reemplaza | Propuesto |
+| [0032](ADR-0032-el-esquema-nace-en-baseline.md) | El esquema de cada sistema nace en un `V1__baseline.sql`; la historia `V1..V78` se queda en `sgtm`. **Flyway se conserva**, y el motivo no es la migración de datos | Propuesto |
+
+> **Los nueve `Propuesto` (0024–0032) son un bloque**: describen la separación del SGTM en cuatro
+> sistemas y se aceptan o se rechazan juntos. Mientras estén en `Propuesto`, **ADR-0003 y ADR-0009
+> siguen vigentes** y el sistema sigue siendo un monolito modular con una sola interfaz y su `infra/` dentro. El
+> documento que los compone y explica el orden de extracción está fuera del repositorio.
 
 Decisiones **pendientes**: [GOB-02](../../00-gobierno/decisiones-abiertas.md).
 
