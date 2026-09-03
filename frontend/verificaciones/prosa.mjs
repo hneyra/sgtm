@@ -195,6 +195,21 @@ const LO_QUE_NADIE_PUBLICA = [
     ],
   },
   {
+    /* El acta de inspección resuelve su programa por el CÓDIGO y no por el
+       identificador interno, y esta ausencia es la mitad del motivo: sin una
+       lectura de un programa suelto, un id en la ruta habría que buscarlo en la
+       página que la lista traiga, y el programa puede no estar en ella. El día
+       que exista, el sujeto del acta se puede replantear — y ése es justo el día
+       en que hay que releer el bloque que esta entrada ancla. */
+    operacion: 'GET /fiscalizacion/programas/{id}',
+    issue: '#431',
+    queSeDiceQueFalta:
+      'la lectura de un programa suelto, por la que el acta de inspección lleva en su ruta el código del programa y no su identificador interno',
+    dondeSeAfirma: [
+      ['src/modulos/fiscalizacion/Fiscalizacion.tsx', 'no publica ninguna lectura de un programa suelto'],
+    ],
+  },
+  {
     /* `GET /transito/codigos` sí existe: lo que no existe es con qué llenarlo.
        Por eso la entrada vigila el POST y no la ruta. */
     operacion: 'POST /transito/codigos',

@@ -72,7 +72,16 @@ export const PreferenciasCtx = createContext<{
    * (#547). Con `mal` sale el aspa y el color de error.
    */
   toast: (t: string, tono?: 'bien' | 'mal') => void;
-  ir: (modulo: string, dest?: string) => void;
+  /**
+   * Lleva a otro modulo, destino y —desde #431— sujeto.
+   *
+   * El tercer argumento existe porque `onDest` de `PantallaProps` **borra** el
+   * sujeto a proposito y `onSujeto` **conserva** el destino: ninguno de los dos
+   * sirve para el salto que abre un sujeto EN OTRO destino, que es lo que hace
+   * la muestra al llevar una de sus filas al acta. `App.ir` ya lo aceptaba;
+   * lo que faltaba era declararlo aqui, y sin declararlo la llamada no compila.
+   */
+  ir: (modulo: string, dest?: string, sujeto?: string) => void;
 }>({
   pref: { entidad: 'Municipalidad', acento: '#1F3A5F', densidad: 'Normal', tema: 'claro', ejercicio: '2026' },
   fijar: () => {},

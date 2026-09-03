@@ -252,6 +252,30 @@ export type FilaDeMuestra = {
 };
 
 /**
+ * Lo unico que la muestra deja acotar, y **existe para el acta** (#431 AC 2).
+ *
+ * `predio` es el identificador INTERNO de la fila, no el codigo de referencia
+ * catastral, y el propio controlador lo dice al rechazarlo:
+ *
+ * ```
+ * ?predio=6                        → 200, esa fila y solo esa (totalElementos 1)
+ * ?predio=999999                   → 200 con la lista VACIA
+ * ?predio=20010401003001000000000  → 422 «El predio de la muestra es un identificador»
+ * ```
+ *
+ * El 200 vacio de un predio que no esta en la muestra de ESE programa no se
+ * disimula y no es lo mismo que el 404 del programa inexistente: son dos cosas
+ * que el acta tiene que poder distinguir —«ese programa no existe» se arregla
+ * volviendo a la lista, «ese predio no salio en su muestra» se arregla
+ * eligiendo otra fila—.
+ *
+ * Y viaja por la CONSULTA, no por el cuerpo (#425): es como el acta pide su
+ * propia fila, y una fila que no cabe en la URL no se puede compartir ni
+ * recargar.
+ */
+export type FiltroDeMuestra = { predio?: string };
+
+/**
  * La muestra de un programa. **Un programa que no existe contesta 404** (#546).
  *
  * Antes devolvia 200 con la lista vacia, que es exactamente lo mismo que
@@ -268,11 +292,12 @@ export type FilaDeMuestra = {
  */
 export function listarMuestra(
   programaId: number,
+  filtro: FiltroDeMuestra,
   paginacion: Paginacion,
   senal?: AbortSignal,
 ): Promise<RespuestaPaginada<FilaDeMuestra>> {
   return solicitar(`/fiscalizacion/programas/${String(programaId)}/muestra`, {
-    parametros: { ...paginacion },
+    parametros: { ...filtro, ...paginacion },
     senal,
   });
 }
@@ -604,6 +629,127 @@ export function listarActas(
   senal?: AbortSignal,
 ): Promise<RespuestaPaginada<ActaDeFiscalizacion>> {
   return solicitar('/fiscalizacion/actas', { parametros: { ...filtro, ...paginacion }, senal });
+}
+
+/* ══════════ El registro de un acta predial (#431 AC 2, #481, #506) ══════════ */
+
+/**
+ * El cuerpo de un acta predial, con los diez campos que el servidor admite y
+ * **ni uno mas**: es una lista blanca, y lo que no este aqui no entra.
+ *
+ * <h2>Los seis obligatorios, medidos y en su orden</h2>
+ *
+ * No se leyeron del controlador: se midieron mandando el cuerpo vacio y
+ * añadiendo de uno en uno lo que el 422 pedia. El mensaje nombra **el primero
+ * que falta y calla los demas**, asi que descubrirlos por ensayo cuesta seis
+ * viajes; por eso la pantalla los comprueba antes de encender su primaria.
+ *
+ * ```
+ * {}                                → «Toda modificacion exige la observacion del usuario: sin ella no se guarda»
+ * {observacion}                     → «Falta el campo 'programaId'»
+ * {…,programaId}                    → «Falta el campo 'contribuyenteId'»
+ * {…,contribuyenteId}               → «Falta el campo 'predioId'»
+ * {…,predioId}                      → «Falta el campo 'fechaVisita'»
+ * {…,fechaVisita}                   → «Falta el campo 'fiscalizador'»
+ * {…,fiscalizador}                  → «Falta el campo 'hallazgo': un acta sin el se liquidaria
+ *                                      como CONFORME, que es decir que la visita no encontro nada»
+ * ```
+ *
+ * El septimo —`hallazgo`— es el unico que el `record` declara **anulable** y el
+ * caso de uso exige igual (`RegistrarActaFiscalizacion.exigirHallazgo`, #481):
+ * un acta sin hallazgo se liquidaba como conforme, o sea una inspeccion sin
+ * conclusion indistinguible de la que no encontro nada.
+ *
+ * <h2>`areaHallada` es el area de TERRENO, no la construida</h2>
+ *
+ * Esto no se puede deducir del nombre ni del javadoc del dominio —que solo dice
+ * «el area que el fiscalizador midio en campo»—, y equivocarlo escribe el
+ * numero que no es en el acta que sustenta una determinacion. Esta medido:
+ * `DeteccionRepositoryJdbc` selecciona `f.area_terreno AS area_catastral`,
+ * `LectorDeFichas.areaDeLaVersion` devuelve `ficha.areaTerreno()`, y
+ * `ComparacionHalladoDeclarado` compara **eso** contra lo que llega aqui. El
+ * propio `MuestraDelPrograma` lo deja escrito: «Las dos superficies son de
+ * TERRENO […] guardar aqui un area construida haria incomparables las dos
+ * mitades sin que ninguna cifra pareciera mal».
+ *
+ * Va como texto y no como `number` por lo mismo que las areas que se leen: es
+ * un decimal exacto de `numeric(_,2)` y pasarlo por `Number` es como se pierde
+ * un decimal (RNF-055). Un texto que no es un numero contesta «El area hallada
+ * no es un numero valido».
+ *
+ * <h2>`usoHallado`, y por que no es un desplegable</h2>
+ *
+ * Es texto libre de hasta 60 caracteres, del mismo largo que
+ * `ficha_catastral.uso`, que es el lado declarado contra el que se compara —y
+ * la comparacion es `equalsIgnoreCase`, asi que las mayusculas dan igual y las
+ * tildes no—. **No hay ningun enumerado del que sacar una lista**: el uso es
+ * texto libre por municipalidad, y medido en el padron de la 1 los valores son
+ * «Casa habitacion», «Panaderia y pasteleria», «Taller de ceramica» y «Tienda
+ * de artesania» — ninguno de los cinco rotulos que el desplegable del manual
+ * ofrece. Ofrecer esa lista cerrada haria que toda acta que la usara saliera
+ * `USO_DISTINTO`, que es el hallazgo plausible y equivocado.
+ *
+ * Es el mismo hueco que #541 midio en los filtros `zona` y `uso` de
+ * `GET /rentas/arbitrios`, y aqui no hay la salida que alli hubo —rechazar—:
+ * el uso observado **es** un dato del acta, asi que se teclea.
+ *
+ * <h2>`hallazgo` son los CINCO del enumerado, letra por letra</h2>
+ *
+ * `Hallazgo.valueOf(texto.strip().toUpperCase())`, asi que solo entran
+ * `CONFORME`, `OMISO`, `SUBVALUADOR`, `USO_DISTINTO` y `NO_UBICADO`. Los seis
+ * rotulos del manual contestan los seis 422, medido:
+ *
+ * ```
+ * USO DISTINTO AL DECLARADO → 422 «Hallazgo desconocido: 'USO DISTINTO AL DECLARADO'»
+ * PREDIO SUBVALUADO         → 422 «Hallazgo desconocido: 'PREDIO SUBVALUADO'»
+ * ```
+ *
+ * **No se traduce ninguno** —#427 al negarse a leer «ACTIVA» como `VIGENTE`,
+ * #546 y #431 parte B con este mismo desplegable—: la pantalla ofrece los cinco
+ * del enumerado y nombra los del manual que quedan fuera.
+ *
+ * Y `USO_DISTINTO` **exige** el uso observado: sin el, «Un acta que anota
+ * USO_DISTINTO tiene que decir cual es el uso observado: sin el afirma un
+ * hallazgo que no puede sustentar» (`ActaFiscalizacion`, y otra vez en la base
+ * con `acta_fisc_uso_distinto_ck`, V76).
+ */
+export type PeticionDeActaPredial = {
+  /** Regla 10: al menos 5 caracteres y no espacios en blanco (ADR-0008). */
+  observacion: string;
+  programaId: number;
+  contribuyenteId: number;
+  predioId: number;
+  /** ISO `AAAA-MM-DD`. Otro formato: «La fecha va en formato AAAA-MM-DD». */
+  fechaVisita: string;
+  /** De 1 a 60 caracteres. Sale del programa, que es donde el manual lo declara. */
+  fiscalizador: string;
+  /** Uno de los cinco de `Hallazgo`. Obligatorio aunque el `record` lo admita nulo. */
+  hallazgo: string;
+  /** El area de TERRENO medida en campo, en m2 y sin la unidad dentro. */
+  areaHallada?: string;
+  /** El uso observado, texto libre. Obligatorio si el hallazgo es `USO_DISTINTO`. */
+  usoHallado?: string;
+  /** Las notas de la inspeccion, hasta 1000 caracteres. */
+  detalle?: string;
+};
+
+/**
+ * Registra el acta de inspeccion predial. **Es irreversible** (regla 4): un
+ * acta no se edita ni se borra, se anula y se levanta otra.
+ *
+ * Devuelve el acta ya escrita —con su `id`, su `version` y la `fichaId` de la
+ * version de ficha vigente el dia de la visita—, no lo que se mando.
+ *
+ * Lo que puede contestar, ademas de los siete 422 de arriba:
+ *
+ * <ul>
+ *   <li>`422` si el programa no existe o es de otro tipo —una vehicular no
+ *       levanta actas prediales—.
+ *   <li>`403` si la sesion no tiene `fisc_predial` con privilegio de registro.
+ * </ul>
+ */
+export function registrarActaPredial(peticion: PeticionDeActaPredial): Promise<ActaDeFiscalizacion> {
+  return solicitar('/fiscalizacion/predial/actas', { metodo: 'POST', cuerpo: peticion });
 }
 
 /**
