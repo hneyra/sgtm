@@ -42,7 +42,6 @@ done
 AQUI=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
 INFRA=$(cd "$AQUI/.." && pwd)
 TRABAJO=$(mktemp -d)
-PUERTO=${SGTM_PUERTO_MOTOR:-55434}
 
 trap 'motor_detener 2>/dev/null || true; rm -rf "$TRABAJO"' EXIT
 
