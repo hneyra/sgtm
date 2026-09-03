@@ -12,9 +12,9 @@ import java.util.List;
 import java.util.Map;
 import java.util.Set;
 import java.util.stream.Stream;
+import kamayuk.comun.verificaciones.RevisorDeCodigoFuente.Hallazgo;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
-import pe.gob.sgtm.verificaciones.RevisorDeCodigoFuente.Hallazgo;
 
 /**
  * #691 — Todo 422 de «falta publicar una cifra normativa» lleva su discriminador.

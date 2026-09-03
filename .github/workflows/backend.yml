@@ -36,10 +36,25 @@ jobs:
 
     defaults:
       run:
-        working-directory: backend
+        working-directory: sgtm/backend
 
     steps:
-      - uses: actions/checkout@v4
+      - name: Este repositorio
+        uses: actions/checkout@v4
+        with:
+          path: sgtm
+
+      # Las barreras —ArchUnit, el escaner de fuentes, el de aserciones y la frontera de sistema—
+      # viven en `infrastructure/librerias-backend` desde la etapa P3 del corte, y se consumen como
+      # composite build: `backend/settings.gradle.kts` las busca en
+      # `../../infrastructure/librerias-backend`. Sin este checkout el build se para diciendo que
+      # falta, que es mejor que un fallo de Gradle sobre un directorio inexistente — pero se para
+      # igual, asi que este paso no es opcional.
+      - name: Las librerias comunes de backend
+        uses: actions/checkout@v4
+        with:
+          repository: hneyra/infrastructure
+          path: infrastructure
 
       # ADR-0001 fija Java 25. La propiedad `sgtm.java.version` existe para poder
       # construir en una maquina que todavia no lo tenga; aqui se usa el valor por
@@ -111,7 +126,7 @@ jobs:
         with:
           name: informes-de-prueba
           path: |
-            backend/**/build/reports/tests/**
-            backend/**/build/reports/checkstyle/**
+            sgtm/backend/**/build/reports/tests/**
+            sgtm/backend/**/build/reports/checkstyle/**
           if-no-files-found: ignore
           retention-days: 7

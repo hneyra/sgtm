@@ -1,3 +1,24 @@
+// Las barreras —ArchUnit, el escaner de fuentes, el de aserciones y la frontera de sistema— viven
+// en `infrastructure/librerias-backend` y las comparten los cinco repositorios.
+//
+// Se consume como *composite build* y no como artefacto publicado, y el motivo es el modo de
+// fallo: un jar publicado a mano se queda viejo sin que nada se ponga rojo, y una verificacion
+// vieja que pasa en verde es exactamente lo que este proyecto lleva doscientos issues evitando
+// (#192 §2, y el `verde rancio` de #399). Con `includeBuild`, Gradle recompila la libreria desde
+// el fuente en cada build del backend: no puede quedarse vieja.
+//
+// LO QUE CUESTA, dicho aqui y no descubierto mas tarde: este backend YA NO COMPILA sin tener
+// `infrastructure` clonado al lado. Es una dependencia nueva de la maquina de quien construye, y
+// por eso se comprueba antes con un mensaje que dice que hacer, en vez de dejar que Gradle falle
+// con «project directory does not exist».
+val libreriasComunes = file("../../infrastructure/librerias-backend")
+require(libreriasComunes.isDirectory) {
+    "No esta ${libreriasComunes.canonicalPath}. El backend consume comun-verificaciones como" +
+        " composite build, asi que `infrastructure` tiene que estar clonado al lado de `sgtm`:" +
+        " git clone https://github.com/hneyra/infrastructure ../../infrastructure"
+}
+includeBuild(libreriasComunes)
+
 rootProject.name = "sgtm-backend"
 
 // Compartido: objetos de valor y contexto de tenant. No depende de ningun

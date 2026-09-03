@@ -7,6 +7,7 @@ import java.util.Map;
 import java.util.Set;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
+import kamayuk.comun.verificaciones.RevisorDeCodigoFuente;
 
 /**
  * La guarda de #691: un {@code catch} que convierte «falta publicar una cifra normativa» en una

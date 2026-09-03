@@ -55,7 +55,9 @@ dependencies {
     // sgtm_app, que no tiene DDL (ARQ-03 §4).
     runtimeOnly(libs.postgresql)
 
-    testImplementation(libs.archunit)
+    // Las barreras, compartidas con los otros cuatro repositorios (composite build; ver
+    // settings.gradle.kts). Trae ArchUnit consigo como `api`, junto con JUnit y AssertJ.
+    testImplementation("kamayuk.comun:comun-verificaciones")
 
     // La muestra de caso de uso que viola la regla 10 lleva @Transactional: sin
     // spring-tx no compilaria, y sin ella la regla no tendria como demostrarse.
