@@ -497,7 +497,7 @@ export default function Sanciones({ dest, onDest }: PantallaProps) {
 
   /* ── Las dos escrituras que la pantalla puede componer ───────── */
   const obs = texto('obs').trim();
-  const faltaObservacion = obs.length < 5;
+  const faltaObservacion = obs.trim() === ""; /* MUTACION */
   /* El número que se guarda es UNO: la serie y el número compuestos con el
      guion que el propio manual imprime en su columna «Serie-Nº». */
   const numeroCompuesto = texto('serie').trim() === '' ? texto('numeroN').trim() : texto('serie').trim() + '-' + texto('numeroN').trim();

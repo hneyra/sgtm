@@ -12,6 +12,9 @@ import {
   registrarActaPredial,
   listarResultados,
   listarHistorico,
+  liquidarFiscalizacion,
+  reliquidarFiscalizacion,
+  cambiarEstadoDeLaLiquidacion,
   leerEstadoDeCuenta,
   leerResolucion,
   descargarResolucion,
@@ -20,8 +23,11 @@ import {
   type ProgramaDeFiscalizacion,
   type FilaDeMuestra,
   type ActaDeFiscalizacion,
+  type LiquidacionDeFiscalizacion,
+  type CorreccionDeLineaDeLiquidacion,
   type ResolucionDeDeterminacion,
   type ResultadoDelSorteo,
+  type VersionDeLiquidacion,
 } from '../../api/fiscalizacion';
 import { useRecurso, useRebote } from '../../api/useRecurso';
 import { FalloDeLectura } from '../../api/Fallo';
@@ -36,8 +42,10 @@ import {
   DET_PREDIAL,
   DET_VEHICULAR,
   DIFF,
+  ESTADOS_DE_LIQUIDACION_DEL_BACKEND,
   HALLAZGOS_DEL_MANUAL_QUE_NO_EXISTEN,
   OPCIONES,
+  TIPOS_DE_FISCALIZACION,
   PASOS_ACTA,
   REP_COLS,
   REP_COLS_AREA,
@@ -469,6 +477,9 @@ const CAMPO: CSSProperties = {
 const MOTIVO_DEL_ALTA = 'fisc-motivo-del-alta';
 const MOTIVO_DEL_SORTEO = 'fisc-motivo-del-sorteo';
 const MOTIVO_DEL_ACTA = 'fisc-motivo-del-acta';
+const MOTIVO_DE_LA_LIQUIDACION = 'fisc-motivo-de-la-liquidacion';
+const MOTIVO_DE_LA_RELIQUIDACION = 'fisc-motivo-de-la-reliquidacion';
+const MOTIVO_DEL_ESTADO = 'fisc-motivo-del-estado';
 
 /** El rotulo de un control del alta. */
 const ROTULO: CSSProperties = { fontSize: 11.5, fontWeight: 500, color: 'var(--ink-3)' };
@@ -548,6 +559,145 @@ function EstadoDeLaDeteccion({
         </Aviso>
       )}
     </div>
+  );
+}
+
+
+/* ══════════ Las tres piezas que comparten los actos de la liquidacion ══════════
+ *
+ * Existen porque los tres actos de la liquidacion —emitirla, reliquidarla y
+ * moverla de estado— dibujan lo mismo: lo que falta, la observacion de la regla
+ * 10 y una primaria que se señala con su motivo. Escrito tres veces son unas
+ * doscientas lineas repetidas, y **lo peligroso no es el tamaño**: es que la
+ * proxima vez que alguien arregle uno de los tres —el `aria-describedby` que
+ * falta, el `title` que sobra— lo arregle en una copia y deje las otras dos.
+ * Es el mismo motivo por el que `@sgtm/lectura` existia en la interfaz anterior.
+ */
+
+/**
+ * Lo que le falta a un acto para poder mandarse, **dibujado**.
+ *
+ * No vive en el `title` de un boton apagado: un boton deshabilitado no recibe
+ * el foco, asi que su `title` no lo lee un lector de pantalla ni lo descubre
+ * quien no pasa el raton por encima (RNF-082).
+ */
+function QueFalta({ titulo, filas }: { titulo: string; filas: { que: string; ok: boolean }[] }) {
+  return (
+    <>
+      <div style={{ ...CABECERA, flexWrap: 'wrap' }}>
+        <p style={{ ...H2, margin: 0, fontSize: 14 }}>{titulo}</p>
+        <span style={META}>{filas.every((f) => f.ok) ? 'listo' : filas.filter((f) => !f.ok).length + ' sin llenar'}</span>
+      </div>
+      {filas.map((r) => (
+        <div key={r.que} style={{ display: 'flex', alignItems: 'center', gap: 11, padding: '10px 16px', borderTop: '1px solid var(--line)' }}>
+          <span
+            style={{
+              display: 'grid',
+              placeItems: 'center',
+              width: 20,
+              height: 20,
+              borderRadius: '50%',
+              flex: '0 0 auto',
+              background: r.ok ? 'var(--ok-bg)' : 'var(--warn-bg)',
+              color: r.ok ? 'var(--ok-fg)' : 'var(--warn-fg)',
+            }}
+          >
+            <Icono d={r.ok ? ['M5 12.5l4.5 4.5L19 7'] : ['M12 7.5V13M12 16.5h.02']} tam={12} grosor={2.4} />
+          </span>
+          <span style={{ flex: 1, minWidth: 0, fontSize: 13 }}>{r.que}</span>
+        </div>
+      ))}
+    </>
+  );
+}
+
+/** La observacion de la regla 10, con la nota que dice lo que el servidor exige. */
+function CampoDeObservacion({
+  valor,
+  onCambio,
+  placeholder,
+}: {
+  valor: string;
+  onCambio: (v: string) => void;
+  placeholder: string;
+}) {
+  return (
+    <div style={{ padding: '14px 16px', borderTop: '1px solid var(--line)' }}>
+      <label style={{ display: 'block' }}>
+        <span style={{ display: 'block', ...ROTULO, marginBottom: 5 }}>Observación · obligatoria</span>
+        <textarea
+          value={valor}
+          onChange={(e) => onCambio(e.target.value)}
+          rows={2}
+          placeholder={placeholder}
+          style={{ ...CAMPO, background: 'var(--bg-card)', resize: 'vertical' }}
+        />
+      </label>
+      <p style={{ margin: '5px 0 0', fontSize: 11.5, color: 'var(--ink-4)', textWrap: 'pretty' }}>
+        Queda en la bitácora junto a quién lo hizo y cuándo. Sin ella no se guarda, y el servidor pide al menos cinco caracteres que no
+        sean espacios (regla 10, RNF-052).
+      </p>
+    </div>
+  );
+}
+
+/**
+ * La barra de un acto: el motivo escrito y la primaria que lo señala.
+ *
+ * `motivo` es `null` cuando el acto se puede hacer, y entonces el parrafo dice
+ * lo que va a pasar —que en los tres es irreversible—. Cuando no, el parrafo ES
+ * el motivo y el boton lo apunta con `aria-describedby`, de modo que el parrafo
+ * y el boton no pueden dejar de apuntarse.
+ */
+function BarraDelActo({
+  id,
+  motivo,
+  cuandoSePuede,
+  etiqueta,
+  etiquetaOcupado,
+  ocupado,
+  onClick,
+}: {
+  id: string;
+  motivo: string | null;
+  cuandoSePuede: string;
+  etiqueta: string;
+  etiquetaOcupado: string;
+  ocupado: boolean;
+  onClick: () => void;
+}) {
+  const sePuede = motivo === null && !ocupado;
+  return (
+    <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap', padding: '12px 16px 14px', borderTop: '1px solid var(--line)' }}>
+      <p
+        id={id}
+        style={{ margin: 0, flex: 1, minWidth: 180, fontSize: 12, lineHeight: 1.5, color: motivo === null ? 'var(--ink-3)' : 'var(--warn-fg)', textWrap: 'pretty' }}
+      >
+        {motivo ?? cuandoSePuede}
+      </p>
+      <button
+        onClick={onClick}
+        disabled={!sePuede}
+        aria-describedby={id}
+        style={
+          sePuede
+            ? { border: 0, borderRadius: 7, background: 'var(--accent)', color: '#fff', padding: '11px 22px', fontSize: 13.5, fontWeight: 500, cursor: 'pointer' }
+            : { ...BOTON_APAGADO, border: 0, background: 'var(--accent)', color: '#fff', padding: '11px 22px', fontSize: 13.5, fontWeight: 500 }
+        }
+      >
+        {ocupado ? etiquetaOcupado : etiqueta}
+      </button>
+    </div>
+  );
+}
+
+/** Lo que el servidor contesto y no se pudo hacer, en la franja roja de siempre. */
+function FalloDelActo({ que, fallo }: { que: string; fallo: string | null }) {
+  if (fallo === null) return null;
+  return (
+    <p style={{ margin: 0, padding: '11px 16px', borderTop: '1px solid var(--line)', background: 'var(--bad-bg)', color: 'var(--bad-fg)', fontSize: 12.5, lineHeight: 1.5, textWrap: 'pretty' }}>
+      {que}: {fallo}
+    </p>
   );
 }
 
@@ -1425,14 +1575,24 @@ export default function Fiscalizacion({ dest, onDest, sujeto }: PantallaProps) {
     dest === 'panel' && programaActivo !== null,
   );
 
+  /** La pagina del listado de actas del que se elige la que se liquida (#49). */
+  const [paginaActasLiq, setPaginaActasLiq] = useState(0);
+
   /**
-   * Cuantas actas hay levantadas en la municipalidad, para la franja de
-   * resultados. Sin filtro: esa franja no acota por programa, igual que la
-   * grilla de liquidaciones que tiene debajo.
+   * Las actas levantadas en la municipalidad. Sin filtro: ni la franja ni la
+   * grilla de liquidaciones que tiene debajo acotan por programa.
+   *
+   * <h2>Una sola lectura para las dos cosas, y por eso ya no pide `tamano: 1`</h2>
+   *
+   * De aqui salen la cifra de la franja —el `totalElementos` del sobre, que es
+   * el del padron y no el de la pagina (RNF-083)— y **la lista de la que se
+   * elige el acta que se liquida**. Pedirla dos veces —una con `tamano: 1` para
+   * el total y otra entera para el desplegable— serian dos viajes al mismo
+   * endpoint por pantalla y dos respuestas que podrian no coincidir.
    */
   const actasLevantadas = useRecurso(
-    (senal) => listarActas({}, { pagina: 0, tamano: 1 }, senal),
-    [],
+    (senal) => listarActas({}, { pagina: paginaActasLiq, tamano: TAMANO_DE_PAGINA, ordenarPor: 'id', direccion: 'DESCENDENTE' }, senal),
+    [paginaActasLiq],
     dest === 'resultados' && resTab === 0,
   );
 
@@ -1445,13 +1605,402 @@ export default function Fiscalizacion({ dest, onDest, sujeto }: PantallaProps) {
     dest === 'resultados' && resTab === 1 && contribuyenteReposado.trim() !== '',
   );
 
+  /* ══════════════════════════════════════════════════════════════════════
+     LAS TRES ESCRITURAS DE LA LIQUIDACION (#49, RF-053, RF-056)
+     ══════════════════════════════════════════════════════════════════════
+
+     El eslabon del medio del procedimiento, que estaba vivo en el contrato y no
+     lo nombraba ni una linea de esta interfaz. Se levantaba el acta (#431) y no
+     habia por donde liquidarla: esta misma pantalla del acta mandaba aqui —«se
+     hace en «Resultados»»— y aqui no habia formulario ninguno.
+
+     Los tres actos NO van juntos, y el reparto no es de gusto: `liquidar` y
+     `reliquidar` piden `fisc_resultados` con privilegio de REGISTRO, y el
+     cambio de estado pide `fisc_historico` con MODIFICACION. Por eso los dos
+     primeros viven en la pestaña «Por acta» y el tercero en «Histórico de
+     versiones»: un perfil que solo tenga uno de los dos accesos ve la pestaña
+     que puede operar y no la que le contestaria 403 al pulsar. */
+
+  /**
+   * La liquidacion elegida en la grilla: el sujeto de los otros dos actos.
+   *
+   * <h2>Se guarda la FILA, no su numero, y eso lo decidio operar la pantalla</h2>
+   *
+   * La primera version guardaba el numero y buscaba la fila en
+   * `resultados.datos`. **No funcionaba, y el sintoma era mudo**: `useRecurso`
+   * pone `datos` a `null` en cuanto su `activo` pasa a falso, y el de la grilla
+   * es `resTab === 0`, asi que al abrir «Histórico de versiones» —donde vive el
+   * cambio de estado— la fila desaparecia y el formulario no se dibujaba nunca.
+   * No hay error, no hay aviso: la pestaña se abre y el acto no esta. Se
+   * descubrio pulsando, no leyendo.
+   */
+  const [liquidacionElegida, setLiquidacionElegida] = useState<LiquidacionDeFiscalizacion | null>(null);
+  const elegida = liquidacionElegida?.numero ?? null;
+  /* Si se cambia de pagina, la eleccion se va: los dos formularios de abajo se
+     prellenan con lo que la fila trae, y dejarla elegida cuando su fila ya no
+     esta en pantalla dejaria un formulario apuntando a un numero que no se ve
+     por ninguna parte. De pestaña SI sobrevive, que es de lo que se trata. */
+  useEffect(() => setLiquidacionElegida(null), [paginaRes]);
+  /* Y la copia se refresca cuando la grilla vuelve a traer su fila: guardar la
+     fila tiene el precio de que envejece, y lo que decide si un acto se puede
+     hacer —`estado`, `version`— es justo lo que cambia. Se comparan esos dos y
+     no el objeto entero: la respuesta trae uno nuevo en cada lectura, asi que
+     comparar por identidad seria un bucle. */
+  useEffect(() => {
+    const filas = resultados.datos?.contenido;
+    if (filas === undefined || liquidacionElegida === null) return;
+    const fresca = filas.find((l) => l.numero === liquidacionElegida.numero);
+    if (fresca !== undefined && (fresca.estado !== liquidacionElegida.estado || fresca.version !== liquidacionElegida.version)) {
+      setLiquidacionElegida(fresca);
+    }
+  }, [resultados.datos, liquidacionElegida]);
+
+  /* ── 1. Liquidar un acta ─────────────────────────────────────────────── */
+
+  const [actaALiquidar, setActaALiquidar] = useState('');
+  const [liq, setLiq] = useState<Record<string, string>>({});
+  const campoDeLiq = (k: string): string => liq[k] ?? '';
+  const fijarLiq = (k: string, v: string) => setLiq((s) => ({ ...s, [k]: v }));
+  const [observacionDeLiq, setObservacionDeLiq] = useState('');
+  const [liquidando, setLiquidando] = useState(false);
+  const [falloDeLiq, setFalloDeLiq] = useState<string | null>(null);
+
+  const actasDeLaPagina = actasLevantadas.datos?.contenido ?? [];
+  const actaElegida = actasDeLaPagina.find((a) => String(a.id) === actaALiquidar) ?? null;
+
+  /**
+   * Que actas se sabe que YA tienen liquidacion, y hasta donde llega ese saber.
+   *
+   * `GET /fiscalizacion/resultados` publica el `actaId` de la ULTIMA version de
+   * cada acta, asi que la pagina que la grilla acaba de traer dice, de esas
+   * filas, cual acta esta liquidada y con que numero. Es conocimiento
+   * **positivo y parcial**: lo que esta aqui es cierto, lo que no esta puede
+   * estarlo en otra pagina. Por eso marcarlas y apagarlas es seguro —no puede
+   * apagar una que se pudiera liquidar— y por eso el 409 sigue siendo la ultima
+   * palabra, dicho al lado del desplegable.
+   *
+   * Y no hay una fuente mejor: `acta_fiscalizacion.estado` **nace `ABIERTA` y no
+   * la mueve nadie** —el unico `EstadoDeActa` que se escribe en todo `src/main`
+   * es el `ABIERTA` de `ActaFiscalizacion.nueva`—, de modo que la columna
+   * «Estado» de un acta liquidada sigue diciendo «Abierta»: medido contra el
+   * backend, el acta 1 tiene `LIQ-2026-000001` y su estado es `ABIERTA`.
+   */
+  const yaLiquidadas = new Map<number, string>();
+  for (const l of resultados.datos?.contenido ?? []) yaLiquidadas.set(l.actaId, l.numero);
+
+  /** Un ejercicio del formulario: cuatro digitos, que es lo que el servidor lee. */
+  const esEjercicio = (v: string): boolean => /^\d{4}$/.test(v.trim());
+
+  /**
+   * Lo que le falta a la liquidacion para poder mandarse, y **se dibuja**.
+   *
+   * El orden es el que el servidor comprueba, medido campo a campo mandando el
+   * cuerpo vacio y añadiendo de uno en uno lo que el 422 pedia: el mensaje
+   * nombra el primero que falta y calla los demas, asi que descubrirlos por
+   * ensayo cuesta seis viajes. Aqui se ven los seis a la vez, y no en el `title`
+   * de un boton apagado, que un boton deshabilitado no recibe el foco (RNF-082).
+   */
+  const faltaDeLaLiquidacion: { que: string; ok: boolean }[] = [
+    { que: 'El acta levantada que se liquida: la liquidación es de un acta, no de un predio', ok: actaElegida !== null },
+    {
+      que: 'El periodo fiscalizado: los dos ejercicios, de cuatro dígitos y sin ir al revés',
+      ok:
+        esEjercicio(campoDeLiq('periodoDesde')) &&
+        esEjercicio(campoDeLiq('periodoHasta')) &&
+        Number(campoDeLiq('periodoDesde')) <= Number(campoDeLiq('periodoHasta')),
+    },
+    { que: 'El tipo de fiscalización, que es lo que dice con qué se sustenta lo hallado', ok: campoDeLiq('tipoDeFiscalizacion') !== '' },
+    { que: 'El motivo determinante: por qué se fiscalizó', ok: campoDeLiq('motivoDeterminante').trim() !== '' },
+    { que: 'La observación de quien registra, de al menos cinco caracteres', ok: observacionBastante(observacionDeLiq) },
+  ];
+
+  const motivoParaNoLiquidar: string | null =
+    actasLevantadas.error !== null
+      ? 'No se pudo leer el listado de actas, así que no hay ninguna de la que elegir.'
+      : actasLevantadas.cargando
+        ? 'Leyendo las actas levantadas…'
+        : actaElegida !== null && yaLiquidadas.has(actaElegida.id)
+          ? `El acta ${String(actaElegida.id)} ya se liquidó con ${String(yaLiquidadas.get(actaElegida.id))}. Una segunda liquidación de la misma acta es una reliquidación, que se hace abajo.`
+          : (faltaDeLaLiquidacion.find((f) => !f.ok)?.que ?? null);
+
+  /**
+   * Emite la liquidacion. **Es irreversible** (regla 4): no se edita ni se
+   * borra —`liquidacion_fiscalizacion` no admite `UPDATE` desde V39—, se
+   * reliquida emitiendo otra version.
+   *
+   * El cuerpo lleva los siete campos que el servidor lee y ni uno mas. `fecha`
+   * va con `|| undefined` y no con la cadena vacia: el cuerpo no se filtra
+   * —solo se filtran los parametros de consulta—, y una fecha en blanco que
+   * viajara no seria «pon la tuya» sino un formato invalido.
+   */
+  const liquidarElActa = async () => {
+    if (motivoParaNoLiquidar !== null || actaElegida === null) return;
+    setLiquidando(true);
+    setFalloDeLiq(null);
+    try {
+      const fecha = campoDeLiq('fecha');
+      const emitida = await liquidarFiscalizacion({
+        observacion: observacionDeLiq.trim(),
+        actaId: String(actaElegida.id),
+        periodoDesde: campoDeLiq('periodoDesde').trim(),
+        periodoHasta: campoDeLiq('periodoHasta').trim(),
+        tipoDeFiscalizacion: campoDeLiq('tipoDeFiscalizacion'),
+        motivoDeterminante: campoDeLiq('motivoDeterminante').trim(),
+        fecha: fecha === '' ? undefined : fecha,
+      });
+      setLiq({});
+      setObservacionDeLiq('');
+      setActaALiquidar('');
+      /* La grilla vuelve a pedirse: la liquidacion que acaba de nacer es una
+         fila mas, y dejarla como estaba diria que el acta sigue sin liquidar. */
+      resultados.reintentar();
+      toast(`Liquidación ${emitida.numero} emitida sobre el acta ${String(emitida.actaId)}, versión ${String(emitida.version)}.`);
+    } catch (error) {
+      setFalloDeLiq(error instanceof ErrorDeApi ? error.mensaje : 'no hubo respuesta del servidor');
+    } finally {
+      setLiquidando(false);
+    }
+  };
+
+  /* ── 2. Reliquidar la elegida ────────────────────────────────────────── */
+
+  const [rel, setRel] = useState<Record<string, string>>({});
+  const campoDeRel = (k: string): string => rel[k] ?? '';
+  const fijarRel = (k: string, v: string) => setRel((s) => ({ ...s, [k]: v }));
+  /** Las correcciones por linea, con la clave `‹ejercicio›|‹campo›`. */
+  const [correcciones, setCorrecciones] = useState<Record<string, string>>({});
+  const correccion = (ejercicio: number, campo: string): string => correcciones[String(ejercicio) + '|' + campo] ?? '';
+  const fijarCorreccion = (ejercicio: number, campo: string, v: string) =>
+    setCorrecciones((s) => ({ ...s, [String(ejercicio) + '|' + campo]: v }));
+  const [observacionDeRel, setObservacionDeRel] = useState('');
+  const [reliquidando, setReliquidando] = useState(false);
+  const [falloDeRel, setFalloDeRel] = useState<string | null>(null);
+  const [ultimaVersion, setUltimaVersion] = useState<VersionDeLiquidacion | null>(null);
+
+  /* ── 3. Mover de estado ──────────────────────────────────────────────── */
+
+  const [est, setEst] = useState<Record<string, string>>({});
+  const campoDeEst = (k: string): string => est[k] ?? '';
+  const fijarEst = (k: string, v: string) => setEst((s) => ({ ...s, [k]: v }));
+  const [observacionDeEst, setObservacionDeEst] = useState('');
+  const [moviendo, setMoviendo] = useState(false);
+  const [falloDeEst, setFalloDeEst] = useState<string | null>(null);
+
+  /**
+   * Elige una liquidacion de la grilla y prellena los dos formularios que
+   * cuelgan de ella.
+   *
+   * Se prellena **aqui y no en un efecto**: con un efecto atado a los datos, el
+   * refresco de la grilla —que ocurre en cuanto se emite algo— pisaria lo que
+   * quien atiende acabara de teclear. Y los cuatro valores que se copian son
+   * los de la version anterior porque una reliquidacion **exige los cuatro** y
+   * lo normal es que cambie uno: obligar a teclear los otros tres invita a
+   * teclearlos distintos sin querer.
+   */
+  const elegirLiquidacion = (l: LiquidacionDeFiscalizacion) => {
+    setLiquidacionElegida(l);
+    setRel({
+      periodoDesde: String(l.periodoDesde),
+      periodoHasta: String(l.periodoHasta),
+      tipoDeFiscalizacion: l.tipoDeFiscalizacion,
+      motivoDeterminante: l.motivoDeterminante,
+      fecha: '',
+    });
+    setCorrecciones({});
+    setObservacionDeRel('');
+    setFalloDeRel(null);
+    setUltimaVersion(null);
+    setEst({});
+    setObservacionDeEst('');
+    setFalloDeEst(null);
+  };
+
+  /**
+   * Los ejercicios del periodo nuevo que la version anterior no cubre.
+   *
+   * `ReliquidarFiscalizacion` los rechaza uno a uno —«no se puede inventar: se
+   * rechaza nombrandolo. Rellenarlo con una linea vacia diria que se fiscalizo
+   * y no se encontro nada»—, y la pantalla los sabe antes de pulsar porque
+   * `LiquidacionResource.lineas` viaja en la fila: descubrirlo en el 422 seria
+   * mandar a averiguar por ensayo lo que ya esta en la respuesta.
+   */
+  const ejerciciosSinLinea: number[] = (() => {
+    if (liquidacionElegida === null) return [];
+    const desde = Number(campoDeRel('periodoDesde'));
+    const hasta = Number(campoDeRel('periodoHasta'));
+    if (!esEjercicio(campoDeRel('periodoDesde')) || !esEjercicio(campoDeRel('periodoHasta')) || desde > hasta) return [];
+    const tiene = new Set(liquidacionElegida.lineas.map((l) => l.ejercicio));
+    const faltan: number[] = [];
+    for (let e = desde; e <= hasta; e++) if (!tiene.has(e)) faltan.push(e);
+    return faltan;
+  })();
+
+  /** Un area corregida: numero con punto o coma decimal, o nada. */
+  const areaBastante = (v: string): boolean => v.trim() === '' || /^\d+([.,]\d+)?$/.test(v.trim());
+
+  const areasCorregidasMalEscritas: boolean = (liquidacionElegida?.lineas ?? []).some(
+    (l) => !areaBastante(correccion(l.ejercicio, 'areaDeclarada')) || !areaBastante(correccion(l.ejercicio, 'areaHallada')),
+  );
+
+  const faltaDeLaReliquidacion: { que: string; ok: boolean }[] = [
+    {
+      que: 'El periodo fiscalizado: los dos ejercicios, de cuatro dígitos y sin ir al revés',
+      ok:
+        esEjercicio(campoDeRel('periodoDesde')) &&
+        esEjercicio(campoDeRel('periodoHasta')) &&
+        Number(campoDeRel('periodoDesde')) <= Number(campoDeRel('periodoHasta')),
+    },
+    {
+      que:
+        ejerciciosSinLinea.length === 0
+          ? 'Cada ejercicio del periodo tiene línea en la versión anterior'
+          : `Los ejercicios ${ejerciciosSinLinea.join(', ')} no tienen línea en la versión anterior, y una línea vacía no se inventa: o se acota el periodo, o se liquida otra acta que los cubra`,
+      ok: ejerciciosSinLinea.length === 0,
+    },
+    { que: 'El tipo de fiscalización', ok: campoDeRel('tipoDeFiscalizacion') !== '' },
+    { que: 'El motivo determinante', ok: campoDeRel('motivoDeterminante').trim() !== '' },
+    { que: 'Las áreas corregidas, si se escribió alguna, tienen que ser números', ok: !areasCorregidasMalEscritas },
+    { que: 'La observación de quien registra, de al menos cinco caracteres', ok: observacionBastante(observacionDeRel) },
+  ];
+
+  const motivoParaNoReliquidar: string | null =
+    liquidacionElegida === null
+      ? 'No hay ninguna liquidación elegida: se reliquida una concreta, y se elige con «Elegir» en su fila de la grilla de arriba.'
+      : (faltaDeLaReliquidacion.find((f) => !f.ok)?.que ?? null);
+
+  /**
+   * Reliquida: emite **otra version**, y tambien es irreversible. La anterior no
+   * cambia ni una columna.
+   *
+   * Solo viajan las lineas que alguien toco: `CorreccionDeLinea` conserva lo que
+   * no nombra, asi que mandar las cuatro claves de todas las lineas con lo que
+   * ya decian seria repetir el contraste entero para corregir un area — y
+   * cualquier redondeo distinto al escribirlo lo cambiaria sin querer.
+   */
+  const reliquidarLaElegida = async () => {
+    if (motivoParaNoReliquidar !== null || liquidacionElegida === null) return;
+    setReliquidando(true);
+    setFalloDeRel(null);
+    try {
+      const lista: CorreccionDeLineaDeLiquidacion[] = [];
+      for (const linea of liquidacionElegida.lineas) {
+        const areaDeclarada = correccion(linea.ejercicio, 'areaDeclarada').trim().replace(',', '.');
+        const areaHallada = correccion(linea.ejercicio, 'areaHallada').trim().replace(',', '.');
+        const usoDeclarado = correccion(linea.ejercicio, 'usoDeclarado').trim();
+        const usoHallado = correccion(linea.ejercicio, 'usoHallado').trim();
+        if (areaDeclarada === '' && areaHallada === '' && usoDeclarado === '' && usoHallado === '') continue;
+        lista.push({
+          ejercicio: String(linea.ejercicio),
+          areaDeclarada: areaDeclarada === '' ? undefined : areaDeclarada,
+          areaHallada: areaHallada === '' ? undefined : areaHallada,
+          usoDeclarado: usoDeclarado === '' ? undefined : usoDeclarado,
+          usoHallado: usoHallado === '' ? undefined : usoHallado,
+        });
+      }
+      const fecha = campoDeRel('fecha');
+      const nueva = await reliquidarFiscalizacion(liquidacionElegida.numero, {
+        observacion: observacionDeRel.trim(),
+        periodoDesde: campoDeRel('periodoDesde').trim(),
+        periodoHasta: campoDeRel('periodoHasta').trim(),
+        tipoDeFiscalizacion: campoDeRel('tipoDeFiscalizacion'),
+        motivoDeterminante: campoDeRel('motivoDeterminante').trim(),
+        correcciones: lista.length === 0 ? undefined : lista,
+        fecha: fecha === '' ? undefined : fecha,
+      });
+      setUltimaVersion(nueva);
+      setObservacionDeRel('');
+      setCorrecciones({});
+      /* La elegida se va: la version que se acaba de corregir ya no es la
+         ultima de su acta, y reliquidarla otra vez contesta 409 nombrando a la
+         nueva. Quien quiera seguir corrigiendo elige la nueva de la grilla. */
+      setLiquidacionElegida(null);
+      resultados.reintentar();
+      toast(`Reliquidación ${nueva.version.numero} emitida: versión ${String(nueva.version.version)} del acta ${String(nueva.version.actaId)}.`);
+    } catch (error) {
+      setFalloDeRel(error instanceof ErrorDeApi ? error.mensaje : 'no hubo respuesta del servidor');
+    } finally {
+      setReliquidando(false);
+    }
+  };
+
+  /**
+   * Por que NO se puede mover de estado, o `null` si se puede.
+   *
+   * Los dos 409 que el caso de uso tiene se saben **antes de pulsar**, porque
+   * `LiquidacionResource.estado` viaja en la fila: una anulada no se mueve mas,
+   * y al estado que ya tiene no hay movimiento que registrar. No hay ninguna
+   * otra transicion prohibida —comprobado leyendo `CambiarEstadoDeLaLiquidacion`
+   * entero: solo tiene esas dos guardas—, asi que el desplegable ofrece los
+   * otros cuatro y no un camino.
+   */
+  const motivoParaNoMover: string | null =
+    liquidacionElegida === null
+      ? 'No hay ninguna liquidación elegida: el estado se mueve en una concreta, y se elige con «Elegir» en su fila de «Por acta».'
+      : liquidacionElegida.estado === 'ANULADA'
+        ? `${liquidacionElegida.numero} está anulada y no se mueve más. Corregir una anulada es reliquidar —otra versión—: si volviera a estar abierta, el papel que el contribuyente tiene en la mano diría una cosa y el sistema otra.`
+        : campoDeEst('nuevoEstado') === ''
+          ? 'Falta a qué estado pasa.'
+          : campoDeEst('motivo').trim() === ''
+            ? 'Falta el motivo del movimiento, que es lo que el historial enseña al lado de este paso. No es la observación.'
+            : !observacionBastante(observacionDeEst)
+              ? 'Falta la observación de quien registra, de al menos cinco caracteres.'
+              : null;
+
+  /**
+   * Mueve la liquidacion de estado. **`PATCH` y aun asi no actualiza nada**:
+   * inserta un movimiento, y el estado se DERIVA del ultimo. Por eso no es una
+   * excepcion a la regla 4.
+   */
+  const moverDeEstado = async () => {
+    if (motivoParaNoMover !== null || liquidacionElegida === null) return;
+    setMoviendo(true);
+    setFalloDeEst(null);
+    try {
+      const fecha = campoDeEst('fecha');
+      const movida = await cambiarEstadoDeLaLiquidacion(liquidacionElegida.numero, {
+        observacion: observacionDeEst.trim(),
+        nuevoEstado: campoDeEst('nuevoEstado'),
+        motivo: campoDeEst('motivo').trim(),
+        fecha: fecha === '' ? undefined : fecha,
+      });
+      setEst({});
+      setObservacionDeEst('');
+      /* La copia elegida se refresca con lo que el servidor devuelve, no con lo
+         que se pidio: el estado es lo que se DERIVA del historial, y leerlo de
+         la respuesta es lo unico que garantiza que el desplegable de al lado
+         deje de ofrecer el que ya tiene. */
+      setLiquidacionElegida(movida);
+      /* Las dos lecturas de esta pantalla cambian con el movimiento: la grilla
+         enseña el estado derivado y el historico enseña el movimiento nuevo. */
+      resultados.reintentar();
+      historico.reintentar();
+      toast(`${movida.numero} pasa a ${etiquetaDelEstadoDeLiquidacion(movida.estado)}.`);
+    } catch (error) {
+      setFalloDeEst(error instanceof ErrorDeApi ? error.mensaje : 'no hubo respuesta del servidor');
+    } finally {
+      setMoviendo(false);
+    }
+  };
+
   /* ── El historico del proceso (AC 5 de #49) ─────────────────── */
   const [paginaHist, setPaginaHist] = useState(0);
+  /**
+   * Con una liquidacion elegida, el **proceso entero de su acta**; sin ella, la
+   * grilla paginada de todas las versiones.
+   *
+   * Las dos las sirve el mismo endpoint y la diferencia la hace `nLiquidacion`,
+   * que es exactamente lo que el controlador dice de si mismo: con el numero
+   * devuelve «todas sus versiones en orden, cada una con lo que cambio respecto
+   * de la anterior»; sin el, «cada fila es una version suelta y su diferencia se
+   * pide abriendo el proceso». Por eso `cambios` sale vacio en el listado y con
+   * contenido al elegir una: no es que falte el dato, es que son dos preguntas.
+   */
   const historico = useRecurso(
-    (senal) => listarHistorico({}, { pagina: paginaHist, tamano: TAMANO_DE_PAGINA }, senal),
-    [paginaHist],
+    (senal) => listarHistorico({ nLiquidacion: elegida ?? undefined }, { pagina: paginaHist, tamano: TAMANO_DE_PAGINA }, senal),
+    [paginaHist, elegida],
     dest === 'resultados' && resTab === 2,
   );
+  useEffect(() => setPaginaHist(0), [elegida]);
 
   /* ── La resolucion de determinacion, por su numero (#593) ───── */
   /**
@@ -1613,8 +2162,18 @@ export default function Fiscalizacion({ dest, onDest, sujeto }: PantallaProps) {
            acto que se acababa de ejecutar (#702). Los importes los calcula el
            backend al liquidar, con los valores del ejercicio sellado; esta
            pantalla no compone dinero (RNF-083). */
+        /* Decia «Liquidar y emitir la resolucion de determinacion … se hace
+           en «Resultados»», y de las dos mitades **la primera era falsa y la
+           segunda lo sigue siendo**: en «Resultados» no habia ningun formulario
+           de liquidacion —las tres escrituras del contrato no las nombraba ni
+           una linea de esta interfaz—, asi que el acta mandaba a un sitio donde
+           no se podia hacer nada. Liquidar ya se puede; emitir la resolucion es
+           `POST /fiscalizacion/transferencias`, que sigue sin pantalla porque
+           pide cuatro campos —nº de liquidacion, documento de sustento,
+           sustento y base legal— que ningun catalogo dibuja. Se dicen por
+           separado, que es lo que las hace comprobables. */
         detalle:
-          'Liquidar y emitir la resolución de determinación es otro acto y otra pantalla: se hace en «Resultados». Los importes salen de allí, no de aquí.',
+          'Liquidar es otro acto y otra pantalla: se hace en «Resultados», eligiendo esta acta y su periodo fiscalizado. Emitir la resolución de determinación todavía no se puede desde ninguna pantalla. Los importes no salen de aquí.',
         valor: SIN_DATO,
         iconoStyle: ICONO_NEU,
       },
@@ -3272,7 +3831,8 @@ export default function Fiscalizacion({ dest, onDest, sujeto }: PantallaProps) {
                       {actaRegistrada.fichaId === null
                         ? 'El predio no tenía ninguna versión de ficha vigente el día de la visita, así que el acta queda sin ella.'
                         : 'Queda copiada la versión de ficha que regía el día de la visita.'}{' '}
-                      Liquidarla y emitir la determinación se hace en «Resultados».
+                      Liquidarla se hace en «Resultados», eligiéndola en «Liquidar un acta». Emitir la resolución de determinación
+                      todavía no se puede desde ninguna pantalla.
                     </p>
                   )}
                 </div>
@@ -3490,7 +4050,12 @@ export default function Fiscalizacion({ dest, onDest, sujeto }: PantallaProps) {
                           <td style={TD}>{'v' + String(l.version)}</td>
                           <td style={TD}>{String(l.periodoDesde) + ' — ' + String(l.periodoHasta)}</td>
                           <td style={TD}>{l.tipoDeFiscalizacion}</td>
-                          <td style={TD}>{l.motivoDeterminante}</td>
+                          {/* El motivo envuelve: es texto libre de hasta mil
+                              caracteres, y con `nowrap` empujaba la novena
+                              columna —la del boton que elige— fuera del ancho
+                              visible, de modo que el unico control de la fila
+                              habia que buscarlo desplazando. */}
+                          <td style={{ ...TD, whiteSpace: 'normal', maxWidth: 280 }}>{l.motivoDeterminante}</td>
                           <td style={TD}>{l.numeroNotificacion ?? SIN_DATO}</td>
                           {/* Nunca una cifra: `esperaSusCifras` dice que las
                               lineas siguen sin importes, y `insolutoOmitido` es
@@ -3498,6 +4063,30 @@ export default function Fiscalizacion({ dest, onDest, sujeto }: PantallaProps) {
                           <td style={TD}>{SIN_DATO}</td>
                           <td style={{ padding: '11px 14px' }}>
                             <Insignia tono={tonoDelEstadoDeLiquidacion(l.estado)}>{etiquetaDelEstadoDeLiquidacion(l.estado)}</Insignia>
+                          </td>
+                          <td style={{ padding: '11px 14px' }}>
+                            {/* `aria-pressed` y no una casilla: es un conmutador
+                                de cual es el sujeto, y solo puede haber uno. El
+                                rotulo dice el numero para que fuera de contexto
+                                —un lector de pantalla leyendo la fila— se sepa
+                                cual se elige. */}
+                            <button
+                              onClick={() => elegirLiquidacion(l)}
+                              aria-pressed={elegida === l.numero}
+                              aria-label={(elegida === l.numero ? 'Elegida' : 'Elegir') + ' la liquidación ' + l.numero}
+                              className="hov-linea"
+                              style={{
+                                border: '1px solid ' + (elegida === l.numero ? 'var(--accent)' : 'var(--line-2)'),
+                                borderRadius: 6,
+                                padding: '6px 12px',
+                                background: elegida === l.numero ? 'var(--accent-soft)' : 'var(--bg-elev)',
+                                color: elegida === l.numero ? 'var(--accent-ink)' : 'var(--ink-2)',
+                                fontSize: 12,
+                                cursor: 'pointer',
+                              }}
+                            >
+                              {elegida === l.numero ? 'Elegida' : 'Elegir'}
+                            </button>
                           </td>
                         </tr>
                       ))}
@@ -3509,9 +4098,16 @@ export default function Fiscalizacion({ dest, onDest, sujeto }: PantallaProps) {
                   <p style={{ ...PIE, borderTop: '1px solid var(--line)' }}>Consultando los resultados…</p>
                 ) : resultados.error === null && (resultados.datos?.contenido.length ?? 0) === 0 ? (
                   <div style={{ padding: '11px 16px', borderTop: '1px solid var(--line)' }}>
+                    {/* Decia «`liquidacion_fiscalizacion` no tiene una sola fila
+                        en ninguna de las dos municipalidades (#546)», y eso era
+                        cierto el dia que se escribio y hoy no: la municipalidad 1
+                        tiene `LIQ-2026-000001`, medido. Una afirmacion sobre el
+                        estado de una tabla envejece sola y nadie la mira; la que
+                        queda habla de esta consulta, que es lo que la pantalla
+                        si puede saber, y dice por donde se llena. */}
                     <Aviso tono="neutro" titulo="Sin resultados">
-                      Ninguna acta ha llegado a liquidarse. <code>liquidacion_fiscalizacion</code> no tiene una sola fila en ninguna de las
-                      dos municipalidades (#546).
+                      Ninguna acta con liquidación en esta municipalidad. Se llena liquidando un acta levantada, en «Liquidar un acta», aquí
+                      abajo: la liquidación es lo que convierte lo que el fiscalizador vio en un contraste por ejercicio con su número.
                     </Aviso>
                   </div>
                 ) : null}
@@ -3524,6 +4120,316 @@ export default function Fiscalizacion({ dest, onDest, sujeto }: PantallaProps) {
                   «Deuda omitida» sale «—» en todas las filas: la liquidación no publica ni un importe hasta D-02a (#198). Las columnas son
                   las que <code>LiquidacionResource</code> publica; «Acta» era un número del artboard y lo que hay es el de la liquidación.
                 </p>
+              </section>
+            )}
+
+            {/* ══════════ Liquidar un acta (`POST /fiscalizacion/liquidaciones`) ══════════
+
+                Es el acto que convierte lo que el fiscalizador vio en un
+                contraste por ejercicio con su numero. Vive aqui y no en la
+                pantalla del acta porque son dos actos con dos privilegios: el
+                acta pide `fisc_predial` con REGISTRO y esto pide
+                `fisc_resultados` con REGISTRO, y ademas se liquida un periodo
+                —varios ejercicios— que en el acta no se pregunta. */}
+            {resTab === 0 && (
+              <section style={TARJETA}>
+                <div style={{ ...CABECERA, flexWrap: 'wrap' }}>
+                  <h2 style={H2}>Liquidar un acta</h2>
+                  <span style={META}>
+                    {actasLevantadas.datos === null
+                      ? SIN_DATO
+                      : `${actasDeLaPagina.length} de ${actasLevantadas.datos.totalElementos} actas`}
+                  </span>
+                </div>
+
+                {actasLevantadas.error !== null && (
+                  <div style={{ padding: '12px 16px' }}>
+                    <FalloDeLectura error={actasLevantadas.error} que="las actas levantadas" acceso="fisc_predial" alReintentar={actasLevantadas.reintentar} />
+                  </div>
+                )}
+
+                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit,minmax(190px,1fr))', gap: 12, padding: '14px 16px', borderBottom: '1px solid var(--line)' }}>
+                  <label style={{ display: 'flex', flexDirection: 'column', gap: 5, minWidth: 0, gridColumn: 'span 2' }}>
+                    <span style={ROTULO}>Acta · obligatoria</span>
+                    {/* Sin ninguna acta que ofrecer, el desplegable se apaga y
+                        dice CUAL de las tres cosas pasa. Un desplegable con solo
+                        «— sin elegir —» dentro se lee como «esta municipalidad no
+                        ha levantado ninguna acta», y eso puede ser falso: puede
+                        estar leyendose o puede haber fallado la lectura. Lo caza
+                        `desplegables.mjs`, y lo cazo aqui —el aviso de fallo que
+                        hay arriba habla de la misma lectura, y aun asi un aviso
+                        encima no explica el control de abajo—. */}
+                    <select
+                      value={actaALiquidar}
+                      onChange={(e) => setActaALiquidar(e.target.value)}
+                      disabled={actasDeLaPagina.length === 0}
+                      title={
+                        actasDeLaPagina.length > 0
+                          ? undefined
+                          : actasLevantadas.cargando
+                            ? 'Leyendo las actas levantadas en esta municipalidad…'
+                            : actasLevantadas.error !== null
+                              ? 'No se pudieron leer las actas levantadas, así que no hay ninguna de la que elegir'
+                              : 'Esta municipalidad no tiene ningún acta levantada: se levanta desde la muestra de un programa, en «Programas»'
+                      }
+                      style={CAMPO}
+                    >
+                      {/* La opcion vacia va primera y no es adorno: sin ella el
+                          desplegable abre en la primera acta de la lista y eso
+                          se lee como una eleccion de quien liquida (#331). */}
+                      <option value="">— sin elegir —</option>
+                      {actasDeLaPagina.map((a) => {
+                        const suya = yaLiquidadas.get(a.id);
+                        return (
+                          <option key={a.id} value={String(a.id)} disabled={suya !== undefined}>
+                            {'#' + String(a.id) + ' · ' + a.fechaVisita + ' · ' + (a.hallazgo === null ? 'sin hallazgo' : etiquetaDelHallazgo(a.hallazgo)) + (suya === undefined ? '' : ' · ya liquidada (' + suya + ')')}
+                          </option>
+                        );
+                      })}
+                    </select>
+                  </label>
+                  <label style={{ display: 'flex', flexDirection: 'column', gap: 5, minWidth: 0 }}>
+                    <span style={ROTULO}>Periodo — desde · obligatorio</span>
+                    <input value={campoDeLiq('periodoDesde')} onChange={(e) => fijarLiq('periodoDesde', e.target.value)} placeholder="2024" style={CAMPO} />
+                  </label>
+                  <label style={{ display: 'flex', flexDirection: 'column', gap: 5, minWidth: 0 }}>
+                    <span style={ROTULO}>Periodo — hasta · obligatorio</span>
+                    <input value={campoDeLiq('periodoHasta')} onChange={(e) => fijarLiq('periodoHasta', e.target.value)} placeholder="2026" style={CAMPO} />
+                  </label>
+                  <label style={{ display: 'flex', flexDirection: 'column', gap: 5, minWidth: 0 }}>
+                    <span style={ROTULO}>Tipo de fiscalización · obligatorio</span>
+                    {/* Los CUATRO de `TipoDeFiscalizacion`, sin traducir. Aqui
+                        el artboard y el enumerado dicen lo mismo —el enumerado
+                        salio de esa lista—, y la unica diferencia es el espacio
+                        de «DE OFICIO»: se manda el nombre, que es el que la fila
+                        de la grilla publica. `vocabularios.mjs` compara las dos
+                        listas en las dos direcciones. */}
+                    <select value={campoDeLiq('tipoDeFiscalizacion')} onChange={(e) => fijarLiq('tipoDeFiscalizacion', e.target.value)} style={CAMPO}>
+                      <option value="">— sin elegir —</option>
+                      {TIPOS_DE_FISCALIZACION.map((v) => (
+                        <option key={v} value={v}>
+                          {v}
+                        </option>
+                      ))}
+                    </select>
+                  </label>
+                  <label style={{ display: 'flex', flexDirection: 'column', gap: 5, minWidth: 0 }}>
+                    <span style={ROTULO}>Fecha de la liquidación · opcional</span>
+                    <input type="date" value={campoDeLiq('fecha')} onChange={(e) => fijarLiq('fecha', e.target.value)} style={CAMPO} />
+                  </label>
+                  <label style={{ display: 'flex', flexDirection: 'column', gap: 5, minWidth: 0, gridColumn: 'span 2' }}>
+                    <span style={ROTULO}>Motivo determinante · obligatorio</span>
+                    <textarea
+                      value={campoDeLiq('motivoDeterminante')}
+                      onChange={(e) => fijarLiq('motivoDeterminante', e.target.value)}
+                      rows={2}
+                      maxLength={1000}
+                      placeholder="Por qué se fiscalizó"
+                      style={{ ...CAMPO, resize: 'vertical' }}
+                    />
+                  </label>
+                </div>
+
+                {actasLevantadas.datos !== null && actasLevantadas.datos.totalPaginas > 1 && (
+                  <Paginador
+                    pagina={actasLevantadas.datos.pagina}
+                    totalPaginas={actasLevantadas.datos.totalPaginas}
+                    hayMas={actasLevantadas.datos.hayMas}
+                    ir={setPaginaActasLiq}
+                  />
+                )}
+
+                <p style={{ ...PIE, borderTop: '1px solid var(--line)' }}>
+                  El desplegable ofrece las actas de <strong>esta</strong> página, de la más reciente a la más antigua. «Ya liquidada» sólo
+                  marca las que aparecen en la página de la grilla de arriba: <code>GET /fiscalizacion/resultados</code> publica el{' '}
+                  <code>actaId</code> de la última versión de cada acta, así que lo que dice es cierto y lo que calla puede estar en otra
+                  página; la última palabra es el 409 del servidor, que nombra la liquidación que ya hay. La columna «Estado» de un acta{' '}
+                  <strong>no sirve para esto</strong>: <code>acta_fiscalizacion.estado</code> nace ABIERTA y no la mueve nadie, de modo que
+                  un acta ya liquidada sigue diciendo «Abierta».
+                  {' '}
+                  {/* Se dice porque el `record` SI declara ese campo y quien lo
+                      lea esperara teclearlo aqui: `PeticionDeLiquidacion` lleva
+                      un octavo componente, `usoHallado`, y el controlador no lo
+                      llama nunca —lo comprobo `grep` sobre el archivo entero—.
+                      Es lo que #599 dejo detras al mudar el uso al acta. No se
+                      manda: el cuerpo descarta en silencio lo que no lee, asi
+                      que un campo aqui seria una caja que se teclea y no llega
+                      (#331). */}
+                  Y el <strong>uso observado no se teclea aquí</strong>: lo manda el acta, desde #599. Corregirlo después es reliquidar, que
+                  es donde ese dato sí se lee, línea a línea.
+                </p>
+
+                <QueFalta titulo="Qué falta para poder liquidarla" filas={faltaDeLaLiquidacion} />
+
+                <CampoDeObservacion
+                  valor={observacionDeLiq}
+                  onCambio={setObservacionDeLiq}
+                  placeholder="Por qué se liquida esta acta y con qué documento"
+                />
+
+                <FalloDelActo que="No se liquidó" fallo={falloDeLiq} />
+
+                <BarraDelActo
+                  id={MOTIVO_DE_LA_LIQUIDACION}
+                  motivo={motivoParaNoLiquidar}
+                  cuandoSePuede="Emitir la liquidación es irreversible: no se edita ni se borra, se corrige reliquidando —otra versión que referencia a ésta—. El número lo pone el servidor con el año de la fecha, y las cifras de la determinación siguen en blanco hasta D-02a."
+                  etiqueta="Liquidar el acta"
+                  etiquetaOcupado="Liquidando…"
+                  ocupado={liquidando}
+                  onClick={() => void liquidarElActa()}
+                />
+              </section>
+            )}
+
+            {/* ══════════ Reliquidar (`POST …/{numero}/reliquidaciones`) ══════════
+
+                Corregir una liquidacion es emitir OTRA que la referencia: la
+                anterior no cambia ni una columna, y ni siquiera se marca como
+                sustituida —eso se lee de que exista otra que la referencia—.
+                Por eso el formulario nace del contraste de la elegida y solo
+                viajan las lineas que alguien toca. */}
+            {resTab === 0 && (
+              <section style={TARJETA}>
+                <div style={{ ...CABECERA, flexWrap: 'wrap' }}>
+                  <h2 style={H2}>Reliquidar</h2>
+                  <span style={META}>{liquidacionElegida === null ? SIN_DATO : liquidacionElegida.numero + ' · v' + String(liquidacionElegida.version)}</span>
+                </div>
+
+                {/* Sin liquidacion elegida no se dibuja NINGUN campo, y eso es
+                    la decision: un formulario relleno sin sujeto invita a
+                    teclear un contraste que no se sabe de quien es. */}
+                {liquidacionElegida === null ? (
+                  <div style={{ padding: '12px 16px' }}>
+                    <Aviso tono="neutro" titulo="Sin liquidación elegida">
+                      Se reliquida una liquidación concreta. Elígela con «Elegir» en su fila de la grilla de arriba y el formulario aparece
+                      con su periodo, su tipo y su contraste ya puestos. La grilla lista sólo la última versión de cada acta, así que
+                      eligiendo de ella no se puede pedir una que ya esté sustituida.
+                    </Aviso>
+                  </div>
+                ) : (
+                  <>
+                    <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit,minmax(190px,1fr))', gap: 12, padding: '14px 16px', borderBottom: '1px solid var(--line)' }}>
+                      <label style={{ display: 'flex', flexDirection: 'column', gap: 5, minWidth: 0 }}>
+                        <span style={ROTULO}>Periodo — desde · obligatorio</span>
+                        <input value={campoDeRel('periodoDesde')} onChange={(e) => fijarRel('periodoDesde', e.target.value)} style={CAMPO} />
+                      </label>
+                      <label style={{ display: 'flex', flexDirection: 'column', gap: 5, minWidth: 0 }}>
+                        <span style={ROTULO}>Periodo — hasta · obligatorio</span>
+                        <input value={campoDeRel('periodoHasta')} onChange={(e) => fijarRel('periodoHasta', e.target.value)} style={CAMPO} />
+                      </label>
+                      <label style={{ display: 'flex', flexDirection: 'column', gap: 5, minWidth: 0 }}>
+                        <span style={ROTULO}>Tipo de fiscalización · obligatorio</span>
+                        <select value={campoDeRel('tipoDeFiscalizacion')} onChange={(e) => fijarRel('tipoDeFiscalizacion', e.target.value)} style={CAMPO}>
+                          <option value="">— sin elegir —</option>
+                          {TIPOS_DE_FISCALIZACION.map((v) => (
+                            <option key={v} value={v}>
+                              {v}
+                            </option>
+                          ))}
+                        </select>
+                      </label>
+                      <label style={{ display: 'flex', flexDirection: 'column', gap: 5, minWidth: 0 }}>
+                        <span style={ROTULO}>Fecha de la reliquidación · opcional</span>
+                        <input type="date" value={campoDeRel('fecha')} onChange={(e) => fijarRel('fecha', e.target.value)} style={CAMPO} />
+                      </label>
+                      <label style={{ display: 'flex', flexDirection: 'column', gap: 5, minWidth: 0, gridColumn: 'span 2' }}>
+                        <span style={ROTULO}>Motivo determinante · obligatorio</span>
+                        <textarea
+                          value={campoDeRel('motivoDeterminante')}
+                          onChange={(e) => fijarRel('motivoDeterminante', e.target.value)}
+                          rows={2}
+                          maxLength={1000}
+                          style={{ ...CAMPO, resize: 'vertical' }}
+                        />
+                      </label>
+                    </div>
+
+                    <div style={{ padding: '12px 16px 4px' }}>
+                      <p style={{ margin: 0, fontSize: 12, fontWeight: 600, color: 'var(--ink-2)' }}>Qué se corrige del contraste</p>
+                      <p style={{ margin: '4px 0 0', fontSize: 11.5, lineHeight: 1.5, color: 'var(--ink-4)', textWrap: 'pretty' }}>
+                        Una línea por ejercicio, con lo que la versión anterior dice. <strong>Lo que se deja en blanco se conserva</strong>:
+                        sólo viaja lo que se escribe, porque repetir el contraste entero para corregir un área lo cambiaría entero si algo se
+                        transcribiera distinto. La <strong>condición</strong> no se teclea y no puede: la recalcula el servidor sobre los
+                        datos nuevos, para que una reliquidación no pueda declarar CONFORME un predio con quinientos metros de diferencia.
+                      </p>
+                    </div>
+
+                    <div style={{ overflowX: 'auto' }}>
+                      <table style={{ width: '100%', borderCollapse: 'collapse', minWidth: 720 }}>
+                        <thead>
+                          <tr>
+                            <Cabeceras cols={sinOrden([['Ejercicio', 0], ['Área declarada m²', 0], ['Área hallada m²', 0], ['Uso declarado', 0], ['Uso hallado', 0]])} />
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {liquidacionElegida.lineas.map((linea) => (
+                            <tr key={linea.ejercicio} style={{ borderTop: '1px solid var(--line)' }}>
+                              <td style={TD1}>{linea.ejercicio}</td>
+                              {(
+                                [
+                                  ['areaDeclarada', linea.areaDeclarada],
+                                  ['areaHallada', linea.areaHallada],
+                                  ['usoDeclarado', linea.usoDeclarado],
+                                  ['usoHallado', linea.usoHallado],
+                                ] as [string, string | null][]
+                              ).map(([campo, actual]) => (
+                                <td key={campo} style={{ padding: '9px 14px' }}>
+                                  {/* El valor de la version anterior va de
+                                      marcador y NO de valor inicial: escrito
+                                      dentro viajaria tal cual y una
+                                      reliquidacion que solo cambia el motivo
+                                      mandaria el contraste entero. Vacio
+                                      significa «se conserva». */}
+                                  <input
+                                    value={correccion(linea.ejercicio, campo)}
+                                    onChange={(e) => fijarCorreccion(linea.ejercicio, campo, e.target.value)}
+                                    placeholder={actual ?? SIN_DATO}
+                                    aria-label={campo + ' del ejercicio ' + String(linea.ejercicio)}
+                                    style={{ ...CAMPO, padding: '7px 9px', fontSize: 12.5 }}
+                                  />
+                                </td>
+                              ))}
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    </div>
+
+                    <QueFalta titulo="Qué falta para poder reliquidarla" filas={faltaDeLaReliquidacion} />
+
+                    <CampoDeObservacion
+                      valor={observacionDeRel}
+                      onCambio={setObservacionDeRel}
+                      placeholder="Qué se corrige de la versión anterior y con qué documento"
+                    />
+
+                    <FalloDelActo que="No se reliquidó" fallo={falloDeRel} />
+
+                    <BarraDelActo
+                      id={MOTIVO_DE_LA_RELIQUIDACION}
+                      motivo={motivoParaNoReliquidar}
+                      cuandoSePuede={'Se emite una versión nueva de ' + liquidacionElegida.numero + '. La anterior queda: explica por qué se notificó lo que se notificó, y la nueva por qué ya no vale.'}
+                      etiqueta="Reliquidar"
+                      etiquetaOcupado="Reliquidando…"
+                      ocupado={reliquidando}
+                      onClick={() => void reliquidarLaElegida()}
+                    />
+                  </>
+                )}
+
+                {/* Lo que cambio lo dice el servidor, concepto a concepto: es lo
+                    que `DiferenciaEntreLiquidaciones` devuelve con la version
+                    nueva, y no se recompone aqui comparando las dos filas. */}
+                {ultimaVersion !== null && (
+                  <div style={{ padding: '12px 16px', borderTop: '1px solid var(--line)' }}>
+                    <Aviso tono="ok" titulo={'Emitida ' + ultimaVersion.version.numero + ' · versión ' + String(ultimaVersion.version.version)}>
+                      {ultimaVersion.cambios.length === 0
+                        ? 'El servidor no declara ningún cambio de contraste respecto de la anterior: lo que cambió es la cabecera —el periodo, el tipo o el motivo—.'
+                        : ultimaVersion.cambios.map((c) => `${c.concepto}: ${c.antes ?? SIN_DATO} → ${c.despues ?? SIN_DATO}`).join(' · ')}
+                      {ultimaVersion.importesSinCifra.length > 0 && ` · Sin cifra todavía (D-02a): ${ultimaVersion.importesSinCifra.join(', ')}.`}
+                    </Aviso>
+                  </div>
+                )}
               </section>
             )}
 
@@ -3619,6 +4525,18 @@ export default function Fiscalizacion({ dest, onDest, sujeto }: PantallaProps) {
                   </span>
                 </div>
 
+                {/* Que se esta mirando, dicho: son dos preguntas distintas al
+                    mismo endpoint y la respuesta no se parece —con numero, las
+                    versiones traen su diferencia; sin el, `cambios` sale vacio
+                    a proposito, porque componerla obligaria a leer el historial
+                    completo de cada una de las veinte filas—. Sin esta linea, un
+                    listado sin diferencias se lee como un proceso sin cambios. */}
+                <p style={{ ...PIE, borderBottom: '1px solid var(--line)' }}>
+                  {elegida === null
+                    ? 'Todas las versiones de la municipalidad, una fila por versión. Aquí no se dibuja qué cambió respecto de la anterior: eso se pide abriendo un proceso, eligiendo su liquidación en «Por acta».'
+                    : `El proceso completo del acta de ${elegida}: todas sus versiones en orden, cada una con lo que cambió respecto de la anterior.`}
+                </p>
+
                 {historico.error !== null && (
                   <div style={{ padding: '12px 16px' }}>
                     <FalloDeLectura error={historico.error} que="el histórico de fiscalización" acceso="fisc_historico" alReintentar={historico.reintentar} />
@@ -3680,14 +4598,106 @@ export default function Fiscalizacion({ dest, onDest, sujeto }: PantallaProps) {
                   <p style={PIE}>Consultando el histórico…</p>
                 ) : historico.error === null && (historico.datos?.contenido.length ?? 0) === 0 ? (
                   <div style={{ padding: '11px 16px' }}>
+                    {/* Decia «No hay ninguna liquidacion, asi que no hay proceso
+                        del que enseñar versiones» y se callaba la mitad util:
+                        **tampoco decia por donde se crea una**, de modo que la
+                        pantalla describia un vacio sin salida. Y con una elegida
+                        el vacio significa otra cosa —no que no haya ninguna, sino
+                        que esa no tiene historial—, asi que son dos frases. */}
                     <Aviso tono="neutro" titulo="Sin versiones">
-                      No hay ninguna liquidación, así que no hay proceso del que enseñar versiones (#546).
+                      {elegida === null
+                        ? 'Ninguna liquidación tiene versiones que enseñar. Una nace liquidando un acta levantada —en «Por acta», con «Liquidar un acta»—, y gana versiones al reliquidarla, que es como se corrige: la anterior no se toca.'
+                        : `${elegida} no devuelve ninguna versión. Debería tener al menos la suya: si esto se ve, la lectura del proceso no encontró su acta.`}
                     </Aviso>
                   </div>
                 ) : null}
 
-                {historico.datos !== null && (
+                {/* Con una liquidacion elegida no hay paginas que recorrer: el
+                    controlador devuelve el proceso ENTERO en un solo sobre
+                    —`new Pagina<>(proceso, 0, max(size,1), size)`—, asi que un
+                    paginador ahi ofreceria una pagina 2 que no existe. */}
+                {historico.datos !== null && elegida === null && (
                   <Paginador pagina={historico.datos.pagina} totalPaginas={historico.datos.totalPaginas} hayMas={historico.datos.hayMas} ir={setPaginaHist} />
+                )}
+
+                {/* ══════════ Mover de estado (`PATCH …/{numero}/estados`) ══════════
+
+                    Vive en esta pestaña y no en la grilla porque el privilegio
+                    es OTRO: `fisc_historico` con MODIFICACION, mientras que
+                    liquidar y reliquidar piden `fisc_resultados` con REGISTRO.
+                    Un perfil que solo tenga uno de los dos accesos ve la
+                    pestaña que puede operar.
+
+                    Y `PATCH` aqui no es una excepcion a la regla 4: no
+                    actualiza ninguna fila —`liquidacion_fiscalizacion` no admite
+                    `UPDATE` desde V39—, inserta un movimiento, y el estado es lo
+                    que se DERIVA del ultimo. */}
+                {liquidacionElegida === null ? (
+                  <div style={{ padding: '12px 16px', borderTop: '1px solid var(--line)' }}>
+                    <Aviso tono="neutro" titulo="Sin liquidación elegida">
+                      Mover una liquidación de estado es un acto sobre una concreta. Elígela con «Elegir» en su fila de «Por acta» y aquí
+                      aparecen su proceso completo y el formulario del movimiento.
+                    </Aviso>
+                  </div>
+                ) : (
+                  <>
+                    <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit,minmax(190px,1fr))', gap: 12, padding: '14px 16px', borderTop: '1px solid var(--line)' }}>
+                      <label style={{ display: 'flex', flexDirection: 'column', gap: 5, minWidth: 0 }}>
+                        <span style={ROTULO}>Pasa a · obligatorio</span>
+                        {/* Los CINCO de `EstadoDeLiquidacion` menos el que ya
+                            tiene: al suyo no hay movimiento que registrar y el
+                            servidor contesta 409, que se sabe antes de pulsar
+                            porque el estado viaja en la fila. No hay ninguna
+                            otra transicion prohibida —el caso de uso solo tiene
+                            esas dos guardas—, asi que esto no dibuja un camino
+                            que no existe. */}
+                        <select value={campoDeEst('nuevoEstado')} onChange={(e) => fijarEst('nuevoEstado', e.target.value)} style={CAMPO}>
+                          <option value="">— sin elegir —</option>
+                          {ESTADOS_DE_LIQUIDACION_DEL_BACKEND.filter((v) => v !== liquidacionElegida.estado).map((v) => (
+                            <option key={v} value={v}>
+                              {etiquetaDelEstadoDeLiquidacion(v)}
+                            </option>
+                          ))}
+                        </select>
+                      </label>
+                      <label style={{ display: 'flex', flexDirection: 'column', gap: 5, minWidth: 0 }}>
+                        <span style={ROTULO}>Fecha del movimiento · opcional</span>
+                        <input type="date" value={campoDeEst('fecha')} onChange={(e) => fijarEst('fecha', e.target.value)} style={CAMPO} />
+                      </label>
+                      <label style={{ display: 'flex', flexDirection: 'column', gap: 5, minWidth: 0, gridColumn: 'span 2' }}>
+                        <span style={ROTULO}>Motivo del movimiento · obligatorio</span>
+                        <input
+                          value={campoDeEst('motivo')}
+                          onChange={(e) => fijarEst('motivo', e.target.value)}
+                          maxLength={300}
+                          placeholder="Con qué acto se mueve"
+                          style={CAMPO}
+                        />
+                        <span style={NO_VIAJA}>
+                          No es la observación. El motivo se guarda en el movimiento y es lo que este historial enseña al lado del paso; la
+                          observación es de quien registra y va a la bitácora.
+                        </span>
+                      </label>
+                    </div>
+
+                    <CampoDeObservacion
+                      valor={observacionDeEst}
+                      onCambio={setObservacionDeEst}
+                      placeholder="Por qué se mueve y con qué documento"
+                    />
+
+                    <FalloDelActo que="No se movió" fallo={falloDeEst} />
+
+                    <BarraDelActo
+                      id={MOTIVO_DEL_ESTADO}
+                      motivo={motivoParaNoMover}
+                      cuandoSePuede={liquidacionElegida.numero + ' está ' + etiquetaDelEstadoDeLiquidacion(liquidacionElegida.estado).toLowerCase() + '. El movimiento se añade al historial y no borra el anterior: pasar a ANULADA la cierra para siempre, y desde ahí sólo se puede reliquidar.'}
+                      etiqueta="Mover de estado"
+                      etiquetaOcupado="Moviendo…"
+                      ocupado={moviendo}
+                      onClick={() => void moverDeEstado()}
+                    />
+                  </>
                 )}
 
                 <p style={PIE}>
@@ -4289,6 +5299,10 @@ const COLUMNAS_DE_RESULTADOS: ColDef[] = [
   ['Nº notificación', 0],
   ['Deuda omitida S/', 0],
   ['Estado', 0],
+  /* La novena no es un dato de la liquidacion: es con lo que se elige el sujeto
+     de los otros dos actos —reliquidarla y moverla de estado—, que sin fila
+     elegida no dibujan ningun formulario (#49). */
+  ['Elegir', 0],
 ];
 
 /** Las siete del estado de cuenta. El importe va con su fecha al lado (regla 9). */

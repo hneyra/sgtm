@@ -12,7 +12,6 @@ import {
   COLS_COSTAS,
   COLS_DEUDA,
   COLS_DILIGENCIAS,
-  COLS_HISTORIAL,
   COLS_IMPORTADOS,
   COLS_LISTA,
   COLS_OBLIGACIONES,
@@ -28,6 +27,8 @@ import {
   MODALIDADES_DE_NOTIFICACION,
   RESULTADOS_DE_NOTIFICACION,
   TIPOS_DE_ACTO,
+  cambiarDireccionReferencial,
+  cambiarEstado,
   deudaDelExpediente,
   importarValores,
   listarDeudas,
@@ -136,6 +137,34 @@ const BOTON_PRI: CSSProperties = {
 
 /** Lo que se escribe donde el backend no publica el dato. Nunca un cero. */
 const SIN_DATO = '—';
+
+/**
+ * Si la observación llega a ser una observación.
+ *
+ * **No es «que no esté vacía».** `Observacion.de` exige al menos 5 caracteres
+ * después de recortar —«La observacion debe explicar el cambio: al menos 5
+ * caracteres, y no espacios en blanco (ADR-0008)»— y la tabla de auditoría lo
+ * repite con un `CHECK (length(btrim(observacion)) >= 5)`, así que la barrera
+ * está en los dos sitios y ninguno de los dos es la pantalla.
+ *
+ * Medido contra el backend en marcha: un cuerpo con `"observacion":"abcd"`
+ * vuelve `422 VALIDACION` con ese mensaje. Con la guarda en `!== ''` la primaria
+ * se encendía, la petición salía y el motivo lo tenía que leer quien atiende en
+ * el error del servidor — que es justo lo que un botón que dice por qué está
+ * apagado existe para ahorrar (RNF-082).
+ */
+const LARGO_MINIMO_DE_OBSERVACION = 5;
+
+function observacionSuficiente(texto: string): boolean {
+  return texto.trim().length >= LARGO_MINIMO_DE_OBSERVACION;
+}
+
+/** Lo que se le dice a quien todavía no puede guardar por la observación. */
+function faltaLaObservacion(texto: string): string {
+  return texto.trim() === ''
+    ? 'Falta la observación: toda modificación de datos se guarda con el motivo de quien la hace (RNF-052).'
+    : `La observación tiene que explicar el cambio: al menos ${LARGO_MINIMO_DE_OBSERVACION} caracteres (ADR-0008), y lleva ${texto.trim().length}.`;
+}
 
 /** El tono que le corresponde a un estado del procedimiento. */
 function tono(txt: string): Tono {
@@ -373,11 +402,21 @@ function EstadoDeLectura({
   );
 }
 
+/**
+ * Una opción de un desplegable: el valor a secas cuando lo que se manda y lo
+ * que se lee coinciden, o `[valor, etiqueta]` cuando no. Lo segundo hace falta
+ * en «Nuevo estado», donde lo que viaja es el nombre del enumerado
+ * (`REC1_EMITIDA`) y lo que el manual imprime es «011 — REC 01 EMITIDO»:
+ * enseñar el nombre interno sería enseñarle al operador una palabra que no
+ * está en ninguna de sus pantallas.
+ */
+type OpcionDeCampo = string | readonly [valor: string, etiqueta: string];
+
 type CampoDef = {
   k: string;
   l: string;
   t?: 'text' | 'sel' | 'date' | 'area' | 'ro';
-  o?: string[];
+  o?: readonly OpcionDeCampo[];
   ph?: string;
   ayuda?: string;
   ancho?: boolean;
@@ -420,11 +459,15 @@ function Formulario({
             )}
             {t === 'sel' && (
               <select value={val(f.k)} onChange={(e) => set(f.k, e.target.value)} style={IN}>
-                {(f.o ?? []).map((o) => (
-                  <option key={o} value={o}>
-                    {o}
-                  </option>
-                ))}
+                {(f.o ?? []).map((o) => {
+                  const valor = typeof o === 'string' ? o : o[0];
+                  const etiqueta = typeof o === 'string' ? o : o[1];
+                  return (
+                    <option key={valor} value={valor}>
+                      {etiqueta}
+                    </option>
+                  );
+                })}
               </select>
             )}
             {t === 'area' && (
@@ -547,6 +590,51 @@ function etiquetaDelEstado(nombre: string): string {
   return ESTADOS_DEL_EXPEDIENTE.find((e) => e.nombre === nombre)?.etiqueta ?? nombre;
 }
 
+/**
+ * Los estados que el desplegable «Nuevo estado» ofrece: **seis de los siete**.
+ *
+ * `INICIADO` (`000`) queda fuera, y no es una traducción ni un recorte: es con
+ * lo que nace el expediente al importar sus valores, y el invariante de
+ * `MovimientoDelExpediente` lo dice con todas las letras —«Un expediente nace
+ * INICIADO: el estado de su apertura no se elige»—. Ofrecerlo sería dejar
+ * elegir un estado que sólo puede poner la apertura.
+ *
+ * Los otros seis **coinciden letra por letra** con lo que el prototipo de
+ * `expediente_historial` dibuja —«011 — REC 01 EMITIDO», «012 — REC 01
+ * NOTIFICADA», «021 — REC 02 EMITIDA», «031 — MEDIDA CAUTELAR», «041 —
+ * SUSPENDIDO», «051 — CONCLUIDO»—, así que aquí **no hay ningún vocabulario que
+ * traducir**: es el caso contrario al de #427 con «ACTIVA», medido cuadro
+ * contra enumerado. Por eso la lista se **computa** del enumerado en vez de
+ * escribirse a mano: un estado nuevo en el backend aparece solo, y uno que se
+ * retire desaparece, sin que nadie tenga que acordarse.
+ */
+const ESTADOS_QUE_SE_ELIGEN = ESTADOS_DEL_EXPEDIENTE.filter((e) => e.nombre !== 'INICIADO');
+
+/**
+ * Las columnas del historial del expediente.
+ *
+ * Son las de `COLS_HISTORIAL` más las **dos que `MovimientoResource` publica y
+ * la tabla no dibujaba**. Sin ellas un movimiento de tipo DIRECCION salía con
+ * «—» en «Estado» —correcto: cambiar dónde se notifica no mueve el estado— y
+ * **sin decir a qué dirección se cambió**, que es su único dato propio: la fila
+ * se leía como un movimiento vacío. Y la observación con que se firmó cada uno
+ * (regla 10, RNF-052) no se leía en ninguna parte de la interfaz.
+ *
+ * Viven aquí y no en `datos/coactiva.ts` por el aislamiento de esta rama, que
+ * no alcanza a ese fichero; a la constante de allí le corresponde absorberlas.
+ */
+const COLS_DEL_HISTORIAL: ColDef[] = [
+  ['Movimiento', 0],
+  ['Fecha', 0],
+  ['Estado', 0],
+  ['Dirección referencial', 0],
+  ['Motivo', 0],
+  ['Documento', 0],
+  ['Usuario', 0],
+  ['Vigente', 0],
+  ['Observaciones', 0],
+];
+
 /* ══════════ El módulo ══════════ */
 
 export default function Coactiva({ dest, onDest }: PantallaProps) {
@@ -572,6 +660,8 @@ export default function Coactiva({ dest, onDest }: PantallaProps) {
   const [informe, setInforme] = useState<{ texto: string; abrio: boolean } | null>(null);
   const [falloDeEscritura, setFallo] = useState<ErrorDeApi | null>(null);
   const [dictando, setDictando] = useState(false);
+  const [cambiandoEstado, setCambiandoEstado] = useState(false);
+  const [cambiandoDireccion, setCambiandoDireccion] = useState(false);
 
   const val = (k: string) => vals[k] ?? '';
   const set = (k: string, v: string) => setVals((x) => ({ ...x, [k]: v }));
@@ -691,14 +781,14 @@ export default function Coactiva({ dest, onDest }: PantallaProps) {
   /* ── Las escrituras ─────────────────────────────────────────── */
 
   const puedeImportar =
-    val('iObligado').trim() !== '' && val('iEjecutor').trim() !== '' && val('iObs').trim() !== '' && !importando;
+    val('iObligado').trim() !== '' && val('iEjecutor').trim() !== '' && observacionSuficiente(val('iObs')) && !importando;
   const motivoDeImportar =
     val('iObligado').trim() === ''
       ? 'Falta el código del obligado: el expediente se abre a su nombre.'
       : val('iEjecutor').trim() === ''
         ? 'Falta el ejecutor coactivo, que es quien se hace cargo del procedimiento.'
-        : val('iObs').trim() === ''
-          ? 'Falta la observación: toda modificación de datos se guarda con el motivo de quien la hace (RNF-052).'
+        : !observacionSuficiente(val('iObs'))
+          ? faltaLaObservacion(val('iObs'))
           : '';
 
   const importar = async () => {
@@ -743,7 +833,7 @@ export default function Coactiva({ dest, onDest }: PantallaProps) {
   const defDelActo = TIPOS_DE_ACTO.find((t) => t.nombre === tipoElegido) ?? TIPOS_DE_ACTO[0];
   const puedeDictar =
     val('aGlosa').trim() !== '' &&
-    val('aObs').trim() !== '' &&
+    observacionSuficiente(val('aObs')) &&
     (!defDelActo.llevaMedida || val('aMedida') !== '') &&
     !dictando;
   const motivoDeDictar =
@@ -751,8 +841,8 @@ export default function Coactiva({ dest, onDest }: PantallaProps) {
       ? 'Falta la glosa: es la descripción que se imprime en el documento.'
       : defDelActo.llevaMedida && val('aMedida') === ''
         ? 'La REC 02 ordena una medida cautelar y hay que decir en qué forma se traba (art. 33).'
-        : val('aObs').trim() === ''
-          ? 'Falta la observación: toda modificación de datos se guarda con el motivo de quien la hace (RNF-052).'
+        : !observacionSuficiente(val('aObs'))
+          ? faltaLaObservacion(val('aObs'))
           : '';
 
   const dictar = async () => {
@@ -774,6 +864,126 @@ export default function Coactiva({ dest, onDest }: PantallaProps) {
       setFallo(fallo instanceof ErrorDeApi ? fallo : new ErrorDeApi('ERROR_INTERNO', 'No se pudo dictar', 0));
     } finally {
       setDictando(false);
+    }
+  };
+
+  /* ── Los dos cambios del expediente ──────────────────────────
+     Ninguno de los dos edita nada: **agregan un movimiento** al historial, que
+     es lo que la pestaña «Expediente» venía diciendo sin que hubiera con qué
+     hacerlo. Calcan el patrón de `dictar`: la primaria nace apagada, dice qué
+     falta (RNF-082) y no manda nada sin observación (regla 10, RNF-052). */
+
+  const estadoElegido = ESTADOS_QUE_SE_ELIGEN.find((e) => e.nombre === val('eEstado')) ?? null;
+
+  /* `estadoCodigo` y no `estado`: `ExpedienteResource` publica en `estado` la
+     **etiqueta** —«REC 01 EMITIDO»—, y el código del manual es la única llave
+     que no depende de cómo se escriba la etiqueta. */
+  const concluido = exp?.estadoCodigo === '051';
+
+  /* El documento de respaldo va entero o no va. No es una preferencia: lo exige
+     el compacto de `MovimientoDelExpediente` —«El documento de respaldo va
+     entero o no va: fecha y numero juntos»—, así que sin esta guarda la
+     petición sale, se rechaza con 422 y el motivo lo tiene que leer el usuario
+     en el mensaje del servidor. */
+  const documentoAMedias = (val('eDocFecha') !== '') !== (val('eDocNumero').trim() !== '');
+
+  const puedeCambiarEstado =
+    !concluido &&
+    estadoElegido !== null &&
+    estadoElegido.codigo !== exp?.estadoCodigo &&
+    val('eMotivo').trim() !== '' &&
+    !documentoAMedias &&
+    observacionSuficiente(val('eObs')) &&
+    !cambiandoEstado;
+
+  /* Las dos primeras causas son las que el backend rechaza con 409
+     —`ExpedienteConcluido` y `SinCambio`—: se dicen antes de mandar porque son
+     comprobables con lo que la ficha ya trajo, no porque se adivinen. */
+  const motivoDeCambiarEstado = concluido
+    ? 'El expediente está concluido: sobre un procedimiento terminado no se registra ningún movimiento más.'
+    : estadoElegido === null
+      ? 'Falta elegir el estado al que pasa el expediente.'
+      : estadoElegido.codigo === exp?.estadoCodigo
+        ? `El expediente ya está en «${estadoElegido.etiqueta}»: un movimiento que no cambia el estado no se registra.`
+        : val('eMotivo').trim() === ''
+          ? 'Falta el motivo: es la causal del cambio, y queda escrita en el historial junto al movimiento.'
+          : documentoAMedias
+            ? 'El documento de respaldo va entero o no va: hay que poner su fecha y su número, o dejar los dos en blanco.'
+            : !observacionSuficiente(val('eObs'))
+              ? faltaLaObservacion(val('eObs'))
+              : '';
+
+  const cambiarElEstado = async () => {
+    setCambiandoEstado(true);
+    setFallo(null);
+    try {
+      const r = await cambiarEstado(expediente!, {
+        nuevoEstado: estadoElegido!.nombre,
+        fecha: val('eFecha') || undefined,
+        motivo: val('eMotivo').trim(),
+        documentoDeRespaldoFecha: val('eDocFecha') || undefined,
+        documentoDeRespaldoNumero: val('eDocNumero').trim() || undefined,
+        observacion: val('eObs').trim(),
+      });
+      toast(`El expediente ${r.numero} queda en «${r.estado}».`);
+      setVals((x) => ({ ...x, eEstado: '', eFecha: '', eMotivo: '', eDocFecha: '', eDocNumero: '', eObs: '' }));
+      ficha.reintentar();
+    } catch (fallo) {
+      setFallo(
+        fallo instanceof ErrorDeApi ? fallo : new ErrorDeApi('ERROR_INTERNO', 'No se pudo cambiar el estado', 0),
+      );
+    } finally {
+      setCambiandoEstado(false);
+    }
+  };
+
+  const direccionNueva = val('rDir').trim();
+
+  /* La misma comparación que hace `CambiarDireccionReferencial` antes de
+     rechazar con 409: `equalsIgnoreCase` contra la vigente. Y la vigente es
+     exactamente la que la ficha publica —`ExpedienteResource` la documenta como
+     «la vigente: la del ultimo cambio, o la de apertura»—, así que aquí no se
+     recompone nada: se compara contra el mismo dato. */
+  const mismaDireccion =
+    direccionNueva !== '' && direccionNueva.toLowerCase() === (exp?.direccionReferencial ?? '').toLowerCase();
+
+  const puedeCambiarDireccion =
+    direccionNueva !== '' &&
+    !mismaDireccion &&
+    val('rMotivo').trim() !== '' &&
+    observacionSuficiente(val('rObs')) &&
+    !cambiandoDireccion;
+
+  const motivoDeCambiarDireccion =
+    direccionNueva === ''
+      ? 'Falta la dirección nueva: dejar al expediente sin a dónde notificar no es un cambio, es una baja.'
+      : mismaDireccion
+        ? 'Es la misma dirección que ya está vigente en el expediente: no hay nada que cambiar.'
+        : val('rMotivo').trim() === ''
+          ? 'Falta el motivo: es por qué se cambia, y queda escrito en el historial junto al movimiento.'
+          : !observacionSuficiente(val('rObs'))
+            ? faltaLaObservacion(val('rObs'))
+            : '';
+
+  const cambiarLaDireccion = async () => {
+    setCambiandoDireccion(true);
+    setFallo(null);
+    try {
+      const r = await cambiarDireccionReferencial(expediente!, {
+        nuevaDireccionReferencial: direccionNueva,
+        fecha: val('rFecha') || undefined,
+        motivo: val('rMotivo').trim(),
+        observacion: val('rObs').trim(),
+      });
+      toast(`El expediente ${r.numero} se notifica ahora en la dirección nueva.`);
+      setVals((x) => ({ ...x, rDir: '', rFecha: '', rMotivo: '', rObs: '' }));
+      ficha.reintentar();
+    } catch (fallo) {
+      setFallo(
+        fallo instanceof ErrorDeApi ? fallo : new ErrorDeApi('ERROR_INTERNO', 'No se pudo cambiar la dirección', 0),
+      );
+    } finally {
+      setCambiandoDireccion(false);
     }
   };
 
@@ -1313,9 +1523,26 @@ export default function Coactiva({ dest, onDest }: PantallaProps) {
                       <div style={{ padding: '14px 16px', borderBottom: '1px solid var(--line)' }}>
                         <p style={{ margin: 0, fontFamily: 'var(--font-serif)', fontSize: 16, fontWeight: 600 }}>Datos del expediente</p>
                         <p style={{ margin: '3px 0 0', fontSize: 12.5, lineHeight: 1.5, color: 'var(--ink-3)', maxWidth: '76ch', textWrap: 'pretty' }}>
-                          Todo de solo lectura. Los dos datos que se pueden cambiar —el estado y la dirección referencial—
-                          no se editan: se agregan como movimiento del historial, con su motivo y su observación.
+                          Todo de solo lectura. Los dos datos que se pueden cambiar —el estado y la dirección
+                          referencial— no se editan: se agregan como movimiento del historial, con su motivo y su
+                          observación, y eso se hace en la pestaña «Historial», debajo de la tabla.
                         </p>
+                        <button
+                          onClick={() => setTab(5)}
+                          className="hov-elev"
+                          style={{
+                            marginTop: 9,
+                            border: '1px solid var(--line-2)',
+                            borderRadius: 7,
+                            background: 'var(--bg-elev)',
+                            padding: '7px 13px',
+                            cursor: 'pointer',
+                            fontSize: 12.5,
+                            color: 'var(--ink-2)',
+                          }}
+                        >
+                          Ir al historial y cambiarlos
+                        </button>
                       </div>
                       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit,minmax(220px,1fr))', gap: '14px 16px', padding: '15px 16px 17px' }}>
                         {(
@@ -1608,22 +1835,139 @@ export default function Coactiva({ dest, onDest }: PantallaProps) {
 
                 {/* — Historial — */}
                 {tab === 5 && (
-                  <Tabla
-                    titulo="Historial del expediente"
-                    meta={`${exp.historial.length} movimientos`}
-                    cols={COLS_HISTORIAL}
-                    min={980}
-                    filas={exp.historial.map((h) => [
-                      h.tipo,
-                      h.fecha,
-                      h.estado ?? SIN_DATO,
-                      h.motivo,
-                      h.numDoc ? `${h.numDoc}${h.fecDoc ? ' · ' + h.fecDoc : ''}` : SIN_DATO,
-                      h.usuario ?? SIN_DATO,
-                      h.activo ? 'Sí' : 'No',
-                    ])}
-                    nota="«Vigente» se deriva del historial —es el último movimiento que llevó estado— y no se guarda: una casilla que dejara marcar como vigente un movimiento anterior permitiría dos estados a la vez. Un movimiento no se borra ni se corrige: se agrega otro."
-                  />
+                  <>
+                    <Tabla
+                      titulo="Historial del expediente"
+                      meta={`${exp.historial.length} movimientos`}
+                      cols={COLS_DEL_HISTORIAL}
+                      min={1180}
+                      filas={exp.historial.map((h) => [
+                        h.tipo,
+                        h.fecha,
+                        h.estado ?? SIN_DATO,
+                        h.direccionReferencial ?? SIN_DATO,
+                        h.motivo,
+                        h.numDoc ? `${h.numDoc}${h.fecDoc ? ' · ' + h.fecDoc : ''}` : SIN_DATO,
+                        h.usuario ?? SIN_DATO,
+                        h.activo ? 'Sí' : 'No',
+                        h.observaciones,
+                      ])}
+                      nota="Un movimiento de estado deja «Dirección referencial» en «—» y uno de dirección deja «Estado» en «—», y las dos cosas son correctas: cambiar dónde se notifica no mueve el punto del procedimiento. «Vigente» se deriva del historial —es el último movimiento que llevó estado— y no se guarda: una casilla que dejara marcar como vigente un movimiento anterior permitiría dos estados a la vez. Un movimiento no se borra ni se corrige: se agrega otro."
+                    />
+
+                    {/* Los dos actos que agregan movimiento. Están aquí, debajo
+                        de la tabla, porque es donde se ve su efecto: la fila
+                        nueva aparece en la misma pestaña en la que se registró.
+                        Es además la pantalla del manual que los dibuja
+                        —`expediente_historial`, «Gestionar historial del
+                        expediente»—. */}
+                    <section style={TARJETA}>
+                      <div style={{ padding: '14px 16px', borderBottom: '1px solid var(--line)' }}>
+                        <p style={{ margin: 0, fontFamily: 'var(--font-serif)', fontSize: 16, fontWeight: 600 }}>
+                          Cambiar el estado del expediente
+                        </p>
+                        <p style={{ margin: '3px 0 0', fontSize: 12.5, lineHeight: 1.5, color: 'var(--ink-3)', maxWidth: '76ch', textWrap: 'pretty' }}>
+                          Hoy está en «{exp.estado}» ({exp.estadoCodigo}). El desplegable ofrece los seis estados que se
+                          eligen; «000 — INICIADO» no está porque no se elige: es con lo que nace el expediente al
+                          importar sus valores. «Activo», que el prototipo dibuja como casilla, tampoco: el movimiento
+                          que rige es el último y eso se deriva, así que marcar uno anterior permitiría dos estados a la
+                          vez.
+                        </p>
+                      </div>
+                      <Formulario
+                        val={val}
+                        set={set}
+                        defs={[
+                          {
+                            k: 'eEstado',
+                            l: 'Nuevo estado',
+                            t: 'sel',
+                            o: [
+                              ['', 'Elegir el estado nuevo…'],
+                              ...ESTADOS_QUE_SE_ELIGEN.map(
+                                (e) => [e.nombre, `${e.codigo} — ${e.etiqueta}`] as const,
+                              ),
+                            ],
+                            ayuda: 'Los seis del desplegable del manual, con su código.',
+                          },
+                          { k: 'eFecha', l: 'Fecha del movimiento', t: 'date', ayuda: 'Si se deja en blanco, el día de hoy.' },
+                          { k: 'eDocFecha', l: 'Documento de respaldo — fecha', t: 'date' },
+                          {
+                            k: 'eDocNumero',
+                            l: 'Documento de respaldo — número',
+                            ayuda: 'Va entero o no va: con su fecha, o los dos en blanco.',
+                          },
+                          { k: 'eMotivo', l: 'Motivo', t: 'area', ancho: true, ayuda: 'La causal del cambio. Obligatoria.' },
+                          { k: 'eObs', l: 'Observación', t: 'area', ancho: true, ayuda: 'Obligatoria (regla 10, RNF-052).' },
+                        ]}
+                      />
+                    </section>
+
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>
+                      <p style={{ margin: 0, flex: 1, minWidth: 180, fontSize: 12, color: 'var(--ink-3)', textWrap: 'pretty' }}>
+                        {motivoDeCambiarEstado ||
+                          `El expediente pasará a «${estadoElegido?.etiqueta ?? ''}». No se corrige nada: se agrega un movimiento al historial.`}
+                      </p>
+                      <button
+                        onClick={puedeCambiarEstado ? cambiarElEstado : () => toast(motivoDeCambiarEstado)}
+                        aria-disabled={!puedeCambiarEstado}
+                        title={motivoDeCambiarEstado || undefined}
+                        className="hov-acento-2"
+                        style={{ ...BOTON_PRI, opacity: puedeCambiarEstado ? 1 : 0.55 }}
+                      >
+                        {cambiandoEstado ? 'Registrando…' : 'Registrar el cambio de estado'}
+                      </button>
+                    </div>
+
+                    <section style={TARJETA}>
+                      <div style={{ padding: '14px 16px', borderBottom: '1px solid var(--line)' }}>
+                        <p style={{ margin: 0, fontFamily: 'var(--font-serif)', fontSize: 16, fontWeight: 600 }}>
+                          Cambiar la dirección referencial
+                        </p>
+                        <p style={{ margin: '3px 0 0', fontSize: 12.5, lineHeight: 1.5, color: 'var(--ink-3)', maxWidth: '76ch', textWrap: 'pretty' }}>
+                          Es la dirección en la que se notifica al obligado cuando difiere de su domicilio fiscal. La
+                          vigente es «{exp.direccionReferencial ?? SIN_DATO}», y no se sobrescribe: la de apertura se
+                          conserva porque es la que explica a dónde fueron las primeras notificaciones. «Motivo» y
+                          «Observación» los pide el backend y el prototipo de esta pantalla no los dibuja; van aquí
+                          porque sin ellos no se guarda (RNF-052). «Hab. urbana» y «Vía», que el prototipo sí dibuja, no
+                          están: la petición no los admite, y un campo que se teclea y no viaja es peor que no tenerlo.
+                        </p>
+                      </div>
+                      <Formulario
+                        val={val}
+                        set={set}
+                        defs={[
+                          { k: 'rDir', l: 'Nueva dirección referencial', ancho: true },
+                          { k: 'rFecha', l: 'Fecha del movimiento', t: 'date', ayuda: 'Si se deja en blanco, el día de hoy.' },
+                          { k: 'rMotivo', l: 'Motivo', t: 'area', ancho: true, ayuda: 'Por qué se cambia. Obligatorio.' },
+                          { k: 'rObs', l: 'Observación', t: 'area', ancho: true, ayuda: 'Obligatoria (regla 10, RNF-052).' },
+                        ]}
+                      />
+                    </section>
+
+                    {falloDeEscritura && (
+                      <Franja tono="bad">
+                        {falloDeEscritura.mensaje}
+                        {falloDeEscritura.incidencia ? ` · ref ${falloDeEscritura.incidencia}` : ''}
+                      </Franja>
+                    )}
+
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>
+                      <p style={{ margin: 0, flex: 1, minWidth: 180, fontSize: 12, color: 'var(--ink-3)', textWrap: 'pretty' }}>
+                        {motivoDeCambiarDireccion ||
+                          'Se agrega un movimiento de dirección al historial. El estado del procedimiento no se mueve.'}
+                      </p>
+                      <button
+                        onClick={puedeCambiarDireccion ? cambiarLaDireccion : () => toast(motivoDeCambiarDireccion)}
+                        aria-disabled={!puedeCambiarDireccion}
+                        title={motivoDeCambiarDireccion || undefined}
+                        className="hov-acento-2"
+                        style={{ ...BOTON_PRI, opacity: puedeCambiarDireccion ? 1 : 0.55 }}
+                      >
+                        {cambiandoDireccion ? 'Registrando…' : 'Registrar la dirección nueva'}
+                      </button>
+                    </div>
+                  </>
                 )}
               </>
             )}

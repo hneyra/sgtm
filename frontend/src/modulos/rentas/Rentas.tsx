@@ -1243,6 +1243,18 @@ function Cabecera({
 
 /* ══════════ El módulo ══════════ */
 
+/**
+ * Lo que `Observacion.de` exige y la tabla de auditoria repite con un
+ * `CHECK (length(btrim(observacion)) >= 5)`.
+ *
+ * Guardar con `!== ''` encendia la primaria con UN caracter, el acto salia y
+ * el servidor lo rechazaba con 422 «La observacion debe explicar el cambio: al
+ * menos 5 caracteres, y no espacios en blanco (ADR-0008)». No se pierde nada
+ * —eso lo impide el backend— pero se promete un acto que no se puede hacer.
+ * Lo caza `verificaciones/observacion.mjs`.
+ */
+const LARGO_MINIMO_DE_OBSERVACION = 5;
+
 export default function Rentas({ dest, onDest }: PantallaProps) {
   const { pref, toast } = usarPreferencias();
   const modulo = moduloDe('rentas');
@@ -1712,7 +1724,7 @@ export default function Rentas({ dest, onDest }: PantallaProps) {
         ? 'Leyendo la ficha del contribuyente…'
         : 'No se ha podido leer la ficha, así que no se sabe qué cambia: guardar mandaría campos que nadie ha comparado con lo que el padrón tiene.';
     if (cambiosDeLaCorreccion.length === 0) return 'No hay ningún cambio que guardar: lo que no cambia, no se manda.';
-    if (observacionDeLaCorreccion.trim() === '') return 'Falta la observación: sin motivo no se guarda (regla 10).';
+    if (observacionDeLaCorreccion.trim().length < LARGO_MINIMO_DE_OBSERVACION) return 'Falta la observación: sin motivo no se guarda (regla 10).';
     const nombre = tecleadoEnLaCorreccion('nombreRazonSocial');
     if (nombre === '')
       return 'El nombre o razón social no se puede dejar en blanco: es lo único que identifica a la persona en el padrón, y el dominio lo rechaza.';
@@ -2189,7 +2201,7 @@ export default function Rentas({ dest, onDest }: PantallaProps) {
    * promete lo que no puede es peor que uno apagado que dice por qué.
    */
   const impedimentoDeLaTransferencia = (): string | undefined => {
-    if (observacionDelActo.trim() === '') return 'Falta la observación: sin motivo no se guarda';
+    if (observacionDelActo.trim().length < LARGO_MINIMO_DE_OBSERVACION) return 'Falta la observación: sin motivo no se guarda';
     if (esPredio) {
       if (texto('codPredial').trim() === '') return 'Falta el código predial: es lo que se transfiere';
       if (texto('trDoc').trim() === '') return 'Falta el documento del transferente';
@@ -2409,7 +2421,7 @@ export default function Rentas({ dest, onDest }: PantallaProps) {
    */
   const impedimentoDelAlta = (): string | undefined => {
     if (sujetoDeDeuda === null) return 'Elige primero el contribuyente al que se le da de alta la deuda';
-    if (observacionDelActo.trim() === '') return 'Falta la observación: sin motivo no se guarda';
+    if (observacionDelActo.trim().length < LARGO_MINIMO_DE_OBSERVACION) return 'Falta la observación: sin motivo no se guarda';
     if (texto('altaConcepto').trim() === '') return 'Falta el concepto: es el tributo de la obligación';
     if (texto('altaAnio').trim() === '') return 'Falta el año de la obligación';
     /* La unidad es el sexto campo que identifica la obligación, y el que más
@@ -2485,7 +2497,7 @@ export default function Rentas({ dest, onDest }: PantallaProps) {
     if (cruceDeLaBaja.cargando) return 'Comprobando de quién es la unidad de esa obligación…';
     if (cruceDeLaBaja.datos !== null && cruceDeLaBaja.datos.estado === 'ajena' && !declaraTitularAnteriorEnLaBaja)
       return `La unidad de esa obligación ${cruceDeLaBaja.datos.de}, no de ${sujetoDeDeuda.nombreRazonSocial}. Si la deuda es de cuando sí era suya, márcalo en la casilla de debajo de la tabla; si no, revisa la fila marcada`;
-    if (observacionDelActo.trim() === '') return 'Falta la observación: sin motivo no se guarda';
+    if (observacionDelActo.trim().length < LARGO_MINIMO_DE_OBSERVACION) return 'Falta la observación: sin motivo no se guarda';
     /* La causal no tiene valor por omision desde #636, y por eso hace falta
        exigirla aqui: desde #684 tiene CAMPO PROPIO y el servidor la rechaza si
        falta, asi que una por omision quedaria escrita en el libro sin que nadie

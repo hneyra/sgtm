@@ -70,7 +70,14 @@ async function constantesDelEnum(rutaJava) {
   const constantes = fuente
     .slice(abre + 1, cierra)
     .split(',')
-    .map((t) => t.trim())
+    /* Una constante puede llevar argumentos de constructor —`EN_PROCESO("EN
+       PROCESO")`—, y lo que aqui interesa es el NOMBRE, que es lo que `.name()`
+       publica y lo que la pantalla manda. Sin recortar por el parentesis, un
+       enumerado con etiqueta salia con CERO constantes y el arnes reventaba con
+       «salio vacio» sobre un archivo perfectamente legible: `EstadoDeLiquidacion`
+       es el primero de este proyecto que las tiene. Los tres enumerados que ya
+       se leian aqui no las llevan, asi que para ellos no cambia nada. */
+    .map((t) => t.trim().split('(')[0].trim())
     .filter((t) => /^[A-Z][A-Z0-9_]*$/.test(t));
   if (!constantes.length) throw new Error(`el enumerado de ${rutaJava} salio vacio`);
   return constantes;
@@ -242,9 +249,60 @@ for (const valor of HALLAZGOS_DEL_BACKEND) {
   }
 }
 
+/* ── Los dos vocabularios de la liquidacion de fiscalizacion (#49) ──────────
+
+   Los estrena la conexion de las tres escrituras de la liquidacion, y los dos
+   son cerrados y **de escritura**: `nuevoEstado` decide a que estado se mueve
+   una liquidacion notificada y `tipoDeFiscalizacion` queda impreso en lo que
+   sustenta la determinacion.
+
+   Aqui, al reves que con el hallazgo, el prototipo y los enumerados coinciden
+   —el artboard de `fisc_historico` ofrece los cinco estados y los cuatro tipos,
+   y los enumerados se escribieron a partir de esa lista—, asi que tampoco hay
+   tabla de traduccion que comprobar: la lista ES la del backend. Lo que puede
+   romperse es que se desvie, y es lo que se mide, en las dos direcciones.
+
+   Y duele por los dos lados. Uno de mas: el 422 llega nombrando un valor que
+   quien atiende **acaba de elegir de una lista** —medido, «INTEGRAL» contesta
+   «Tipo de fiscalizacion desconocido»—. Uno de menos: un estado al que ninguna
+   liquidacion se puede mover, y ahi el sintoma es que la pantalla sencillamente
+   no lo ofrece — no hay ningun error que lo delate. */
+const ESTADOS_DEL_BACKEND = await constantesDelEnum(
+  'backend/sgtm-fiscalizacion/src/main/java/pe/gob/sgtm/fiscalizacion/dominio/EstadoDeLiquidacion.java',
+);
+const TIPOS_DE_FISCALIZACION_DEL_BACKEND = await constantesDelEnum(
+  'backend/sgtm-fiscalizacion/src/main/java/pe/gob/sgtm/fiscalizacion/dominio/TipoDeFiscalizacion.java',
+);
+const { ESTADOS_DE_LIQUIDACION_DEL_BACKEND, TIPOS_DE_FISCALIZACION } = await cargar(
+  'src/datos/fiscalizacion.ts',
+  'datos-fiscalizacion-liquidacion',
+);
+
+for (const [que, deLaPantalla, deJava, java] of [
+  ['estado de liquidación', ESTADOS_DE_LIQUIDACION_DEL_BACKEND, ESTADOS_DEL_BACKEND, 'EstadoDeLiquidacion'],
+  ['tipo de fiscalización', TIPOS_DE_FISCALIZACION, TIPOS_DE_FISCALIZACION_DEL_BACKEND, 'TipoDeFiscalizacion'],
+]) {
+  if (!Array.isArray(deLaPantalla) || deLaPantalla.length === 0) {
+    fallos.push(`la liquidación de fiscalización no ofrece ningún ${que}: el desplegable desapareció`);
+    continue;
+  }
+  for (const valor of deLaPantalla) {
+    comprobados++;
+    if (!deJava.includes(valor)) {
+      fallos.push(`liquidación · ofrece el ${que} «${valor}» y ${java} no lo declara: 422 tras rellenar el formulario`);
+    }
+  }
+  for (const valor of deJava) {
+    if (!deLaPantalla.includes(valor)) {
+      fallos.push(`${java} declara «${valor}» y la liquidación no lo ofrece: un ${que} al que nadie puede llegar`);
+    }
+  }
+}
+
 if (!fallos.length) {
   console.log(
-    `${comprobados} opciones de «Tipo de acto», «Causal» y «Hallazgo», todas con su traducción o su constante y ninguna que sobre · ` +
+    `${comprobados} opciones de «Tipo de acto», «Causal», «Hallazgo», «Estado de liquidación» y «Tipo de fiscalización», ` +
+      `todas con su traducción o su constante y ninguna que sobre · ` +
       `${tributos.length} tributos del alta, los ${DEL_LIBRO.size} del libro leídos del enumerado`,
   );
   process.exit(0);

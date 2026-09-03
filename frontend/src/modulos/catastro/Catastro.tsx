@@ -19,6 +19,7 @@ import {
   fichaDelContribuyente,
   listarAranceles,
   listarDepreciacion,
+  listarFichasConciliadas,
   listarManzanasDelSector,
   listarSectores,
   listarValoresUnitarios,
@@ -46,6 +47,9 @@ import {
   type GeometriaDelLote,
   type LoteDelPlano,
   type MarcoDelPlano,
+  TIPOS_DE_FICHA,
+  type ConciliadaConRentas,
+  type TipoDeFicha,
   type PoligonoGeoJson,
   type PredioDelCatastro,
   type TipoDePredio,
@@ -57,6 +61,7 @@ import { FalloDeLectura } from '../../api/Fallo';
 import { Descargas } from '../../api/descarga';
 import { hayPuerta } from '../../api/sesion';
 import { Aviso, Paginador, PasoAtras, filaPulsable } from '../../ds/componentes';
+import { dia } from '../../ds/fechas';
 import {
   CAPAS,
   DEFECTOS_DE_FICHA_NUEVA,
@@ -392,6 +397,15 @@ function escalaDelPlano(anchoEnGrados: number, latitudMedia: number): string {
 const COLORES_DE_GRUPO = ['#6f8cb0', '#9db3cd', '#c4d2e2', '#a8b89a', '#d4bfa0', '#b9a8c4', '#8fa8a0', '#cbb8a8'];
 
 
+/**
+ * Lo que `Observacion.de` exige y la tabla de auditoria repite con un
+ * `CHECK (length(btrim(observacion)) >= 5)`.
+ *
+ * Guardar con `!== ''` encendia la primaria con UN caracter, el acto salia y
+ * el servidor lo rechazaba con 422. Lo caza `verificaciones/observacion.mjs`.
+ */
+const LARGO_MINIMO_DE_OBSERVACION = 5;
+
 export default function Catastro({ dest, onDest, sujeto, onSujeto, filtros, onFiltros }: PantallaProps) {
   const { pref, toast } = usarPreferencias();
   const m = moduloDe('catastro');
@@ -422,12 +436,75 @@ export default function Catastro({ dest, onDest, sujeto, onSujeto, filtros, onFi
      obligaría a pulsar «Atrás» una vez por letra—. */
   const q = filtros.q ?? '';
   const setQ = (v: string) => onFiltros({ ...filtros, q: v });
+  /**
+   * Qué se está mirando en «Predios»: el padrón, o la consulta de fichas con su
+   * conciliación con rentas.
+   *
+   * **No son la misma tabla con una columna más, y por eso hay conmutador y no
+   * un filtro.** `GET /catastro/predios` lista PREDIOS —tengan ficha o no, con
+   * su estado y su titularidad— y `GET /catastro/fichas/conciliacion` lista las
+   * FICHAS vigentes a una fecha, que es una población distinta y con otros
+   * filtros. Sobre la municipalidad de demostración: 24 predios y 23 fichas
+   * vigentes.
+   *
+   * Vive en la CONSULTA de la ruta y no en un `useState` por lo mismo que `q`
+   * (#685): es lo que se está mirando, así que la URL tiene que poder decirlo
+   * —se comparte y sobrevive a recargar—, y es lo único que permite que la
+   * tarjeta del panel lleve **a la lista** y no a la búsqueda de al lado.
+   */
+  const vista: 'padron' | 'conciliacion' = filtros.vista === 'conciliacion' ? 'conciliacion' : 'padron';
+  /**
+   * «Todas», «Sí» o «No», también en la consulta de la ruta.
+   *
+   * Está en la URL —y no en un `useState` como los otros cuatro de esta grilla—
+   * porque es el que la tarjeta del panel necesita poner: lo que el panel cuenta
+   * es `noConciliados`, así que su enlace tiene que abrir **esa** lista y no la
+   * de todas.
+   *
+   * **«No» no es un valor más de un desplegable.** Es la lista de los predios
+   * que no generan deuda predial, exige además privilegio de lectura sobre
+   * `fisc_omisos` y deja fila en la bitácora con operación `ACCESO` (ADR-0015
+   * §2.3). Por eso el valor de partida es «Todas»: quien entra a la pantalla no
+   * pide esa lista sin querer, y quien la pide es porque pulsó.
+   */
+  const conciliada: ConciliadaConRentas =
+    filtros.conciliada === 'No' ? 'No' : filtros.conciliada === 'Sí' ? 'Sí' : 'Todas';
+  const irAVista = (v: 'padron' | 'conciliacion') =>
+    onFiltros({ ...filtros, vista: v === 'padron' ? '' : v });
+  const setConciliada = (v: ConciliadaConRentas) =>
+    onFiltros({ ...filtros, vista: 'conciliacion', conciliada: v === 'Todas' ? '' : v });
   /* Los cuatro filtros que `PredioController` admite, y ni uno más. */
   const [fSector, setFSector] = useState('');
   const [fEstado, setFEstado] = useState<'' | EstadoDePredio>('');
   const [fFichado, setFFichado] = useState('');
   const [fTitularidad, setFTitularidad] = useState<'' | 'SIN_TITULAR' | 'INCOMPLETA' | 'COMPLETA'>('');
   const [pagina, setPagina] = useState(0);
+  /* Los cuatro filtros de la conciliación que NO van en la ruta: los tres de
+     texto y el tipo de ficha. Van en estado local por lo mismo que los del
+     padrón —afinan una búsqueda, no dicen qué se está mirando—; lo que sí va en
+     la URL es el código, que se comparte con el buscador de arriba. */
+  const [cContribuyente, setCContribuyente] = useState('');
+  const [cManzana, setCManzana] = useState('');
+  const [cLote, setCLote] = useState('');
+  const [cTipo, setCTipo] = useState<'' | TipoDeFicha>('');
+  /* La fecha de corte a la que se resuelven la versión vigente de la ficha y su
+     titular. En blanco es «hoy», la del servidor: no se rellena con la del
+     navegador porque eso afirmaría que alguien la eligió, y además la fila no
+     publica con cuál se resolvió —así que la pantalla sólo puede nombrarla
+     cuando la ha mandado ella—. */
+  const [cFecha, setCFecha] = useState('');
+  const [paginaConc, setPaginaConc] = useState(0);
+  /**
+   * Lo que el panel pidió abrir al irse a «Predios», aplicado ya estando allí.
+   *
+   * Hace falta porque las dos formas de escribir la ruta no se pueden encadenar:
+   * `onDest` reescribe el hash **sin** consulta, y `onFiltros` cierra sobre el
+   * destino del que se viene, así que llamarlos seguidos deja
+   * `#/catastro/panel?vista=conciliacion` —la consulta puesta sobre el destino
+   * que se acaba de dejar—. Se guarda la intención y la aplica un efecto ya en
+   * `predios`, que es el único momento en que `onFiltros` escribe la ruta buena.
+   */
+  const [vistaPedida, setVistaPedida] = useState<Record<string, string> | null>(null);
   /* El tamaño del padrón, recordado: al abrir un predio la consulta se apaga y
      sin esto la nota del panel volvería a la cifra del prototipo. */
   const [totalDelPadron, setTotalDelPadron] = useState<number | null>(null);
@@ -599,6 +676,20 @@ export default function Catastro({ dest, onDest, sujeto, onSujeto, filtros, onFi
     onDest(k);
   };
 
+  /* Lo que el panel pidió, escrito cuando ya se puede escribir. Corre una vez:
+     lo primero que hace es olvidar la petición. */
+  useEffect(() => {
+    if (vistaPedida === null || dest !== 'predios') return;
+    onFiltros(vistaPedida);
+    setVistaPedida(null);
+  }, [vistaPedida, dest, onFiltros]);
+
+  /** Abre la consulta de fichas con el filtro que la tarjeta del panel nombra. */
+  const irAConciliacion = (filtro: ConciliadaConRentas) => {
+    setVistaPedida({ vista: 'conciliacion', conciliada: filtro === 'Todas' ? '' : filtro });
+    irA('predios');
+  };
+
   const abrirPredio = (fila: PredioDelCatastro | null, codigo: string) => {
     setAbierto(fila);
     setPaso(0);
@@ -766,7 +857,65 @@ export default function Catastro({ dest, onDest, sujeto, onSujeto, filtros, onFi
         senal,
       ),
     [criterio, fSector, fEstado, fFichado, fTitularidad, pagina],
-    dest === 'predios' && predio === null,
+    dest === 'predios' && predio === null && vista === 'padron',
+  );
+
+  /* ── La conciliación con rentas, contra `GET /catastro/fichas/conciliacion` ──
+
+     Es la grilla que el recuento del panel cuenta, y hasta este cambio no la
+     leía **nadie**: la interfaz pedía sólo `/resumen`, así que el panel decía
+     cuántos predios no habían declarado y no había forma de ver cuáles. Las dos
+     pantallas que deberían tenerla se señalaban entre sí —el panel remataba «la
+     lista se recorre desde Rentas» y Rentas decía que quién no concilia se
+     pregunta en Catastro—, de modo que el operador leía la cifra y no llegaba a
+     la lista por ningún camino.
+
+     Los ocho filtros que se mandan **acotan de verdad**, medido contra el
+     backend uno a uno; el censo está en el javadoc de `FiltroDeConciliacion`. Es
+     lo que hay que comprobar antes de dibujar un control, porque un filtro
+     declarado y no leído contesta 200 y devuelve la tabla entera (#544, #431,
+     #541) — y eso no se lee como «este filtro no funciona», se lee como «el
+     padrón está mal».
+
+     `ejercicio` sale del selector de la cabecera, que es el mismo con el que el
+     panel pide su recuento: sin él las dos pantallas contestarían por años
+     distintos y la cifra no cuadraría con la lista. */
+  const criterioDeContribuyente = useRebote(cContribuyente.trim());
+  const enConciliacion = dest === 'predios' && predio === null && vista === 'conciliacion';
+
+  useEffect(
+    () => setPaginaConc(0),
+    [criterio, criterioDeContribuyente, cManzana, cLote, cTipo, cFecha, conciliada, pref.ejercicio],
+  );
+
+  const conciliacionDeFichas = useRecurso(
+    (senal) =>
+      listarFichasConciliadas(
+        {
+          codRefCatastral: criterio || undefined,
+          contribuyente: criterioDeContribuyente || undefined,
+          manzana: cManzana.trim() || undefined,
+          lote: cLote.trim() || undefined,
+          tipo: cTipo || undefined,
+          conciliadaConRentas: conciliada,
+          ejercicio: pref.ejercicio,
+          fecha: cFecha || undefined,
+        },
+        { pagina: paginaConc, tamano: 20 },
+        senal,
+      ),
+    [
+      criterio,
+      criterioDeContribuyente,
+      cManzana,
+      cLote,
+      cTipo,
+      cFecha,
+      conciliada,
+      pref.ejercicio,
+      paginaConc,
+    ],
+    enConciliacion,
   );
 
   /* Los sectores. Los usan el filtro del padrón, el árbol de Territorio y —desde
@@ -902,7 +1051,7 @@ export default function Catastro({ dest, onDest, sujeto, onSujeto, filtros, onFi
     if (!titularPorElTotal && porcentajeTecleado === '') faltaDelTitular.push('el porcentaje de la cuota');
     else if (!titularPorElTotal && !porcentajeConForma) faltaDelTitular.push('un porcentaje que sea un número —«50», «33.3333»—');
     if (documentoDelTitular.trim() === '') faltaDelTitular.push('el documento que sustenta la titularidad');
-    if (observacionDelTitular.trim() === '') faltaDelTitular.push('la observación del titular, que es la suya y no la del alta');
+    if (observacionDelTitular.trim().length < LARGO_MINIMO_DE_OBSERVACION) faltaDelTitular.push('la observación del titular, que es la suya y no la del alta');
   }
   /* Se puede mandar el titular solo: el predio ya existe y lo unico que falta es
      su cuota. Es lo que sostiene el reintento del alta a medias. */
@@ -914,14 +1063,14 @@ export default function Catastro({ dest, onDest, sujeto, onSujeto, filtros, onFi
   const faltaDelAlta: string[] = [];
   if (!codigoListo) faltaDelAlta.push('los ocho tramos del código de referencia catastral');
   if (direccionDelAlta === '') faltaDelAlta.push('la dirección del predio');
-  if (observacion.trim() === '') faltaDelAlta.push('la observación');
+  if (observacion.trim().length < LARGO_MINIMO_DE_OBSERVACION) faltaDelAlta.push('la observación');
   faltaDelAlta.push(...faltaDelTitular);
 
   const puedeRegistrar =
     codigoListo &&
     !codigoDuplicado &&
     direccionDelAlta !== '' &&
-    observacion.trim() !== '' &&
+    observacion.trim().length >= LARGO_MINIMO_DE_OBSERVACION &&
     faltaDelTitular.length === 0 &&
     !inscribiendo;
   const motivoBloqueo = codigoDuplicado
@@ -1188,6 +1337,26 @@ export default function Catastro({ dest, onDest, sujeto, onSujeto, filtros, onFi
   const sinResultados = !cargando && !caido && padron.datos !== null && filas.length === 0;
   const hayResultados = !cargando && !caido && filas.length > 0;
   const filtrosPuestos = [criterio, fSector, fEstado, fFichado, fTitularidad].filter((x) => x !== '').length;
+
+  const fichasConciliadas = conciliacionDeFichas.datos?.contenido ?? [];
+  /* Los seis de la otra lista. «Todas» no cuenta: es la forma de decir «no he
+     elegido», igual que la opción vacía de los demás. */
+  /* El de la conciliación se cuenta aparte de los otros seis porque la respuesta
+     vacía se explica distinta según cuáles haya puestos: con «Sí» a solas, cero
+     filas es una afirmación sobre TODAS las fichas vigentes —nadie declaró— y no
+     el resultado de una búsqueda mal afinada. */
+  const otrosCriteriosDeConciliacion = [
+    criterio,
+    criterioDeContribuyente,
+    cManzana.trim(),
+    cLote.trim(),
+    cTipo,
+    cFecha,
+  ].filter((x) => x !== '').length;
+  const criteriosDeConciliacion = otrosCriteriosDeConciliacion + (conciliada === 'Todas' ? 0 : 1);
+  /* El recuento del plegado es el de la lista que se está mirando: con el del
+     padrón puesto siempre, afinar la conciliación decía «ninguno aplicado». */
+  const criteriosPuestos = vista === 'padron' ? filtrosPuestos : criteriosDeConciliacion;
 
   useEffect(() => {
     if (padron.datos && filtrosPuestos === 0) setTotalDelPadron(padron.datos.totalElementos);
@@ -1607,8 +1776,8 @@ export default function Catastro({ dest, onDest, sujeto, onSujeto, filtros, onFi
           : conciliacion.datos
             ? `${conciliacion.datos.noConciliados.toLocaleString('es-PE')} de ${conciliacion.datos.total.toLocaleString('es-PE')} predios con ficha vigente al ` +
               `${conciliacion.datos.aLaFecha} no declararon ${conciliacion.datos.ejercicio}. ` +
-              `Tienen ficha catastral y no generan deuda predial; la lista se recorre desde Rentas.`
-            : 'Tienen ficha catastral y no generan deuda predial. La lista se recorre desde Rentas.',
+              `Tienen ficha catastral y no generan deuda predial: aquí se abre la lista, predio a predio.`
+            : 'Tienen ficha catastral y no generan deuda predial. Aquí se abre la lista, predio a predio.',
       conteo: conciliacion.cargando
         ? '…'
         : conciliacion.datos
@@ -1616,6 +1785,18 @@ export default function Catastro({ dest, onDest, sujeto, onSujeto, filtros, onFi
           : SIN_DATO,
       tono: (conciliacion.datos && conciliacion.datos.noConciliados === 0 ? 'ok' : 'warn') as Tono,
       dest: 'predios',
+      /* La tarjeta lleva **a la lista** y no a la búsqueda de al lado: abre la
+         consulta de fichas con `conciliadaConRentas=No`, que es exactamente la
+         población que la cifra de arriba cuenta.
+
+         Y con «No» puesto a propósito, sabiendo lo que cuesta: esa lectura pide
+         además lectura sobre `fisc_omisos` y deja fila en la bitácora (ADR-0015
+         §2.3). Es lo que tiene que pasar —pedir la lista de a quién no le va a
+         llegar recibo es un acto y se registra como tal—, y por eso lo dispara
+         una pulsación y no la carga del panel: el recuento de arriba sale de
+         `/resumen`, que ni pide ese permiso ni deja rastro, justo para que
+         mirar el panel no sea consultar la lista. */
+      ir: () => irAConciliacion('No'),
     },
     {
       tipo: 'Valores',
@@ -2919,7 +3100,7 @@ export default function Catastro({ dest, onDest, sujeto, onSujeto, filtros, onFi
               {pendientesDelPanel.map((p) => (
                 <button
                   key={p.titulo}
-                  onClick={() => irA(p.dest)}
+                  onClick={() => ('ir' in p && p.ir !== undefined ? p.ir() : irA(p.dest))}
                   className="hov-acento"
                   style={{
                     display: 'flex',
@@ -2965,9 +3146,45 @@ export default function Catastro({ dest, onDest, sujeto, onSujeto, filtros, onFi
         {dest === 'predios' && predio === null && (
           <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
             <p style={ENTRADILLA}>
-              Empieza por encontrar el predio. Se busca por su código de referencia catastral, entero o por el principio: el padrón no
-              indexa por titular ni por dirección. Los filtros de abajo solo hacen falta cuando la búsqueda devuelve demasiado.
+              {vista === 'padron'
+                ? 'Empieza por encontrar el predio. Se busca por su código de referencia catastral, entero o por el principio: el padrón no indexa por titular ni por dirección. Los filtros de abajo solo hacen falta cuando la búsqueda devuelve demasiado.'
+                : 'Las fichas catastrales vigentes, con la columna que dice si ese predio declaró el ejercicio en rentas. Un predio está conciliado cuando existe una declaración jurada de ese año sobre él; los que no, tienen ficha y no generan deuda predial. Es la lista que cuenta la tarjeta del panel.'}
             </p>
+
+            {/* Las dos listas de este destino, con su conmutador.
+
+                Son dos poblaciones y no una tabla con una columna más: el padrón
+                lista predios —con ficha o sin ella— y la consulta de fichas
+                lista las fichas vigentes a una fecha. Sus filtros tampoco son
+                los mismos, así que juntarlas dejaría media caja de búsqueda sin
+                acotar nada según lo que se estuviera mirando.
+
+                Con `aria-pressed`, que es como este producto declara un
+                conmutador de vista —y lo que `sin-red` sabe recorrer para mirar
+                los dos lados—; `role="tab"` no lo usa ninguna pantalla. */}
+            <div role="group" aria-label="Qué se lista" style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
+              {LISTAS_DE_PREDIOS.map(([k, etiqueta, nota]) => (
+                <button
+                  key={k}
+                  onClick={() => irAVista(k)}
+                  aria-pressed={vista === k}
+                  title={nota}
+                  className={vista === k ? undefined : 'hov-linea'}
+                  style={{
+                    border: '1px solid ' + (vista === k ? 'var(--accent)' : 'var(--line-2)'),
+                    borderRadius: 6,
+                    padding: '8px 15px',
+                    background: vista === k ? 'var(--accent)' : 'var(--bg-card)',
+                    color: vista === k ? 'var(--accent-contraste)' : 'var(--ink-2)',
+                    fontSize: 13,
+                    fontWeight: vista === k ? 500 : 400,
+                    cursor: 'pointer',
+                  }}
+                >
+                  {etiqueta}
+                </button>
+              ))}
+            </div>
 
             <section style={TARJETA}>
               <div style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '14px 16px' }}>
@@ -3011,10 +3228,10 @@ export default function Catastro({ dest, onDest, sujeto, onSujeto, filtros, onFi
                   </span>
                   <span style={{ fontSize: 12, color: 'var(--ink-3)' }}>Búsqueda avanzada</span>
                   <span style={{ marginLeft: 'auto', fontFamily: 'var(--font-mono)', fontSize: 11, color: 'var(--ink-4)' }}>
-                    {filtrosPuestos === 0 ? 'ninguno aplicado' : filtrosPuestos + (filtrosPuestos === 1 ? ' criterio' : ' criterios')}
+                    {criteriosPuestos === 0 ? 'ninguno aplicado' : criteriosPuestos + (criteriosPuestos === 1 ? ' criterio' : ' criterios')}
                   </span>
                 </button>
-                {filtrosAbiertos && (
+                {filtrosAbiertos && vista === 'padron' && (
                   <div style={{ padding: '4px 16px 16px', display: 'flex', flexDirection: 'column', gap: 12 }}>
                     <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit,minmax(184px,1fr))', gap: '14px 16px' }}>
                       <label style={{ display: 'flex', flexDirection: 'column', gap: 5, minWidth: 0 }}>
@@ -3080,19 +3297,102 @@ export default function Catastro({ dest, onDest, sujeto, onSujeto, filtros, onFi
                         </select>
                       </label>
                     </div>
-                    {/* Los otros tres criterios del manual no se dibujan apagados: se
-                        dice dónde se filtran, porque un desplegable que no filtra se
-                        teclea igual y no lo delata nada. */}
+                    {/* Los criterios del manual que ESTA lectura no acota no se
+                        dibujan apagados: se dice dónde se filtran, porque un
+                        desplegable que no filtra se teclea igual y no lo delata
+                        nada. La conciliación ya no está en la lista: la acota
+                        «Fichas y conciliación», que es la otra pestaña. */}
                     <p style={{ margin: 0, fontSize: 11.5, lineHeight: 1.5, color: 'var(--ink-4)', textWrap: 'pretty' }}>
                       Manzana y lote salen en la tabla pero el padrón no acota por ellos: para eso está el mapa, que busca por manzana y
-                      lote. El uso y la conciliación con rentas no son datos del predio —viven en su ficha y en el padrón de rentas—, así
-                      que tampoco se filtran aquí.
+                      lote. El uso tampoco: no es un dato del predio, sino de su ficha. Por manzana, lote, tipo de ficha y conciliación
+                      con rentas se filtra en «Fichas y conciliación», que lista las fichas y no los predios.
+                    </p>
+                  </div>
+                )}
+                {/* Los seis criterios de la consulta de fichas. Los seis LLEGAN al
+                    servidor y los seis acotan, medido uno a uno contra el backend
+                    (el censo, con sus cifras, está en `FiltroDeConciliacion`).
+                    Aquí no hay ninguno dibujado que no filtre: el que no acotara
+                    iría bloqueado con su motivo, como los del mapa. */}
+                {filtrosAbiertos && vista === 'conciliacion' && (
+                  <div style={{ padding: '4px 16px 16px', display: 'flex', flexDirection: 'column', gap: 12 }}>
+                    <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit,minmax(184px,1fr))', gap: '14px 16px' }}>
+                      <label style={{ display: 'flex', flexDirection: 'column', gap: 5, minWidth: 0 }}>
+                        <span style={{ fontSize: 11.5, fontWeight: 500, color: 'var(--ink-3)' }}>Conciliada con rentas</span>
+                        {/* Las tres palabras que `ConciliacionController` lee, tal
+                            cual: cualquier otra es 422. No es un desplegable de
+                            lectura —sale igual con el servidor caído—, así que no
+                            necesita apagarse. */}
+                        <select
+                          value={conciliada}
+                          onChange={(e) => setConciliada(e.target.value as ConciliadaConRentas)}
+                          style={SELECT_FILTRO}
+                        >
+                          <option value="Todas">Todas</option>
+                          <option value="Sí">Sí — declararon el ejercicio</option>
+                          <option value="No">No — no declararon</option>
+                        </select>
+                      </label>
+                      <label style={{ display: 'flex', flexDirection: 'column', gap: 5, minWidth: 0 }}>
+                        <span style={{ fontSize: 11.5, fontWeight: 500, color: 'var(--ink-3)' }}>Tipo de ficha</span>
+                        <select value={cTipo} onChange={(e) => setCTipo(e.target.value as '' | TipoDeFicha)} style={SELECT_FILTRO}>
+                          <option value="">Todos</option>
+                          {TIPOS_DE_FICHA.map((t) => (
+                            <option key={t} value={t}>
+                              Ficha {rotuloDeModalidad(t)}
+                            </option>
+                          ))}
+                        </select>
+                      </label>
+                      <label style={{ display: 'flex', flexDirection: 'column', gap: 5, minWidth: 0 }}>
+                        <span style={{ fontSize: 11.5, fontWeight: 500, color: 'var(--ink-3)' }}>Titular</span>
+                        <input
+                          value={cContribuyente}
+                          onChange={(e) => setCContribuyente(e.target.value)}
+                          placeholder="Ramirez Chulle"
+                          style={SELECT_FILTRO}
+                        />
+                      </label>
+                      <label style={{ display: 'flex', flexDirection: 'column', gap: 5, minWidth: 0 }}>
+                        <span style={{ fontSize: 11.5, fontWeight: 500, color: 'var(--ink-3)' }}>Manzana</span>
+                        <input value={cManzana} onChange={(e) => setCManzana(e.target.value)} placeholder="001" style={SELECT_FILTRO} />
+                      </label>
+                      <label style={{ display: 'flex', flexDirection: 'column', gap: 5, minWidth: 0 }}>
+                        <span style={{ fontSize: 11.5, fontWeight: 500, color: 'var(--ink-3)' }}>Lote</span>
+                        <input value={cLote} onChange={(e) => setCLote(e.target.value)} placeholder="001" style={SELECT_FILTRO} />
+                      </label>
+                      <label style={{ display: 'flex', flexDirection: 'column', gap: 5, minWidth: 0 }}>
+                        <span style={{ fontSize: 11.5, fontWeight: 500, color: 'var(--ink-3)' }}>Fecha de corte</span>
+                        <input
+                          type="date"
+                          value={cFecha}
+                          onChange={(e) => setCFecha(e.target.value)}
+                          aria-describedby="corte-de-la-conciliacion"
+                          style={SELECT_FILTRO}
+                        />
+                      </label>
+                    </div>
+                    <p
+                      id="corte-de-la-conciliacion"
+                      style={{ margin: 0, fontSize: 11.5, lineHeight: 1.5, color: 'var(--ink-4)', textWrap: 'pretty' }}
+                    >
+                      El titular se busca <strong>por parecido</strong> contra el padrón, no por trozo del nombre: «Ramirez Chulle»
+                      encuentra a «DEMO Ramirez Chulle Marina» y «Ramirez» a solas no llega al umbral. En blanco, la fecha de corte es
+                      hoy; puesta, decide qué versión de cada ficha y qué titular rigen. El ejercicio al que responde la conciliación es
+                      el de la cabecera, {pref.ejercicio}, y cada fila lo dice.
                     </p>
                   </div>
                 )}
               </div>
             </section>
 
+            {/* Los cuatro estados del padrón. Van en un fragmento y no
+                condicionados uno a uno porque los cuatro son de la MISMA lectura:
+                al cambiar de pestaña `useRecurso` deja de pedir y `padron.datos`
+                conserva lo último que trajo, así que sin esta guarda la tabla de
+                predios seguiría dibujada debajo de la de fichas. */}
+            {vista === 'padron' && (
+              <>
             {/* Cargando: el esqueleto tiene la forma de la tabla que va a llegar */}
             {cargando && (
               <section style={{ background: 'var(--bg-card)', border: '1px solid var(--line)', borderRadius: 10, overflow: 'hidden' }}>
@@ -3303,6 +3603,208 @@ export default function Catastro({ dest, onDest, sujeto, onSujeto, filtros, onFi
                 </div>
               </section>
             )}
+              </>
+            )}
+
+            {/* La misma constante que decide si se PIDE decide si se dibuja.
+
+                Lo que eso compra es que las dos condiciones no puedan separarse
+                escribiéndolas dos veces; **no** hace ruidoso desconectar la
+                lectura, y conviene tenerlo medido: cambiando el tercer argumento
+                de `useRecurso` a `false`, la pantalla se queda con la caja de
+                búsqueda y **nada debajo** —sin tabla, sin aviso y sin una sola
+                petición—, que es el defecto de #363 exacto. Los cuatro estados de
+                abajo son los de una lectura que se pidió, y el quinto —«no se
+                pidió»— no se dibuja porque con esta guarda **no se puede
+                alcanzar**: cuando la sección existe, `useRecurso` nace
+                `cargando`. Una rama para un estado imposible sería código que no
+                puede fallar, que es lo que este repositorio no escribe. */}
+            {enConciliacion && (
+              <>
+                {conciliacionDeFichas.cargando && (
+                  <section style={{ background: 'var(--bg-card)', border: '1px solid var(--line)', borderRadius: 10, overflow: 'hidden' }}>
+                    <div style={{ padding: '13px 16px', borderBottom: '1px solid var(--line)' }}>
+                      <div data-esq="1" style={{ width: 200, height: 15 }} />
+                    </div>
+                    {[1, 2, 3, 4, 5].map((s2) => (
+                      <div key={s2} style={{ display: 'flex', gap: 16, padding: '14px 16px', borderBottom: '1px solid var(--line)' }}>
+                        <div data-esq="1" style={{ width: 118, height: 13 }} />
+                        <div data-esq="1" style={{ flex: 1, height: 13 }} />
+                        <div data-esq="1" style={{ width: 88, height: 13 }} />
+                      </div>
+                    ))}
+                  </section>
+                )}
+
+                {/* Cero filas dicho por su motivo. «No» sin ninguna es la buena
+                    noticia —todas declararon— y «Sí» sin ninguna es la contraria;
+                    escribir «ninguna ficha con esos datos» para las tres dejaría
+                    la respuesta más importante de esta pantalla sin decir. */}
+                {!conciliacionDeFichas.cargando &&
+                  conciliacionDeFichas.error === null &&
+                  conciliacionDeFichas.datos !== null &&
+                  fichasConciliadas.length === 0 && (
+                    <section style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 8, padding: '44px 24px', border: '1px solid var(--line)', borderRadius: 10, background: 'var(--bg-card)' }}>
+                      <Icono d={LUPA} tam={26} grosor={1.5} style={{ color: 'var(--ink-4)' }} />
+                      <p style={{ margin: 0, fontFamily: 'var(--font-serif)', fontSize: 16, fontWeight: 600 }}>
+                        {conciliada === 'No'
+                          ? 'Ninguna ficha se quedó sin declarar ' + pref.ejercicio
+                          : conciliada === 'Sí'
+                            ? 'Ninguna ficha declaró ' + pref.ejercicio
+                            : 'Ninguna ficha vigente con esos datos'}
+                      </p>
+                      <p style={{ margin: 0, maxWidth: '54ch', fontSize: 13, lineHeight: 1.55, color: 'var(--ink-3)', textAlign: 'center', textWrap: 'pretty' }}>
+                        {otrosCriteriosDeConciliacion > 0
+                          ? 'Es la respuesta a los criterios puestos arriba, no al padrón entero: quítalos para ver todas las fichas vigentes.'
+                          : conciliada === 'Todas'
+                            ? 'A esta fecha de corte no hay ninguna ficha catastral vigente. Un predio sin ficha está en el padrón y no aparece aquí: se busca en «Padrón de predios».'
+                            : 'Es la respuesta sobre TODAS las fichas vigentes a la fecha de corte: no hay ningún otro criterio puesto que la esté acotando.'}
+                      </p>
+                    </section>
+                  )}
+
+                {conciliacionDeFichas.error !== null && !conciliacionDeFichas.cargando && (
+                  <section style={{ display: 'flex', flexDirection: 'column', gap: 12, padding: '20px', border: '1px solid var(--line)', borderRadius: 10, background: 'var(--bg-card)' }}>
+                    <FalloDeLectura
+                      error={conciliacionDeFichas.error}
+                      que="la conciliación de las fichas con el padrón de rentas"
+                      /* El 403 puede venir por DOS accesos distintos y no por
+                         uno: la pantalla pide `consulta_fichas`, y «No» exige
+                         ADEMÁS lectura sobre `fisc_omisos`. Nombrar sólo el
+                         primero mandaría a pedir el permiso equivocado. */
+                      acceso={conciliada === 'No' ? 'fisc_omisos' : 'consulta_fichas'}
+                      alReintentar={conciliacionDeFichas.reintentar}
+                    />
+                    <p style={{ margin: 0, fontFamily: 'var(--font-mono)', fontSize: 10.5, color: 'var(--ink-3)' }}>
+                      GET /api/v1/catastro/fichas/conciliacion · {conciliacionDeFichas.error.estado || 'sin respuesta'}
+                    </p>
+                    {conciliada === 'No' && conciliacionDeFichas.error.codigo === 'SIN_PRIVILEGIO' && (
+                      <>
+                        <p style={{ margin: 0, fontSize: 12.5, lineHeight: 1.5, color: 'var(--ink-3)', textWrap: 'pretty' }}>
+                          La lista de los que <strong>no</strong> declararon es el producto de trabajo de la fiscalización de omisos —en
+                          manos equivocadas, el mapa de a quién no le va a llegar recibo—, así que pide además lectura sobre{' '}
+                          <span style={{ fontFamily: 'var(--font-mono)' }}>fisc_omisos</span> y queda registrada en la bitácora. «Todas» y
+                          «Sí» no lo piden: dicen quién está dentro, no quién falta.
+                        </p>
+                        <div>
+                          <button onClick={() => setConciliada('Todas')} className="hov-linea" style={BOTON_LINEA}>
+                            Ver todas las fichas
+                          </button>
+                        </div>
+                      </>
+                    )}
+                  </section>
+                )}
+
+                {!conciliacionDeFichas.cargando &&
+                  conciliacionDeFichas.error === null &&
+                  conciliacionDeFichas.datos !== null &&
+                  fichasConciliadas.length > 0 && (
+                    <section style={TARJETA}>
+                      <div style={{ ...CABECERA_SECCION, flexWrap: 'wrap' }}>
+                        <h2 style={H2}>
+                          {conciliada === 'No'
+                            ? 'Fichas sin declaración de ' + pref.ejercicio
+                            : conciliada === 'Sí'
+                              ? 'Fichas que declararon ' + pref.ejercicio
+                              : 'Fichas vigentes'}
+                        </h2>
+                        <span style={META}>
+                          {fichasConciliadas.length} de {conciliacionDeFichas.datos.totalElementos.toLocaleString('es-PE')}
+                        </span>
+                      </div>
+                      <div style={{ overflowX: 'auto' }}>
+                        <table style={{ width: '100%', borderCollapse: 'collapse', minWidth: 1040 }}>
+                          <thead>
+                            <tr>
+                              <th style={TH}>Cod. ref. catastral</th>
+                              {/* La conciliación va SEGUNDA y no al final, que es
+                                  donde suele ir un estado: es la columna que da
+                                  nombre a la pantalla, y con las nueve en su orden
+                                  natural quedaba fuera del ancho —medido a 1 500 px
+                                  con el carril desplegado: hay que arrastrar la
+                                  tabla para leer justo el dato que se vino a ver—. */}
+                              <th style={TH}>Conciliada</th>
+                              <th style={TH}>Dirección</th>
+                              <th style={TH}>Mz. · Lote</th>
+                              <th style={TH}>Ficha</th>
+                              <th style={TH}>Titular</th>
+                              <th style={TH}>Uso</th>
+                              {/* La unidad va en la cabecera y no en la celda: el
+                                  recurso publica la cifra sola (#607). */}
+                              <th style={THN}>Terreno (m²)</th>
+                              <th style={THN}>Construido (m²)</th>
+                            </tr>
+                          </thead>
+                          <tbody>
+                            {fichasConciliadas.map((r) => (
+                              <tr
+                                key={r.id}
+                                {...filaPulsable(
+                                  `Abrir la ficha del predio ${r.codRefCatastral}, ${r.direccion}`,
+                                  () => abrirPredio(null, r.codRefCatastral),
+                                )}
+                                className="hov-acento"
+                                style={{ borderTop: '1px solid var(--line)', cursor: 'pointer' }}
+                              >
+                                <td style={{ padding: '11px 14px', fontFamily: 'var(--font-mono)', fontSize: 12.5, color: 'var(--ink)', whiteSpace: 'nowrap' }}>
+                                  {r.codRefCatastral}
+                                </td>
+                                <td style={{ padding: '11px 14px', whiteSpace: 'nowrap' }}>
+                                  {/* Con su ejercicio dentro, y el de la FILA y no
+                                      el de la cabecera: no existe «conciliada»,
+                                      existe conciliadaA(ejercicio) —la declaración
+                                      de 2024 no concilia 2026— y es el servidor
+                                      quien dice a cuál contestó (regla 9). */}
+                                  <span style={INS[r.conciliada ? 'ok' : 'warn']}>
+                                    {(r.conciliada ? 'Declaró ' : 'No declaró ') + r.conciliadaA}
+                                  </span>
+                                </td>
+                                <td style={TD}>
+                                  {r.direccion}
+                                  <span style={{ display: 'block', fontSize: 11.5, color: 'var(--ink-4)' }}>
+                                    v{r.version} desde el {dia(r.vigenciaDesde)}
+                                  </span>
+                                </td>
+                                <td style={{ ...TD, fontFamily: 'var(--font-mono)', fontSize: 12.5, whiteSpace: 'nowrap' }}>
+                                  {(r.manzana ?? SIN_DATO) + ' · ' + (r.lote ?? SIN_DATO)}
+                                </td>
+                                <td style={TD}>{rotuloDeModalidad(r.tipo)}</td>
+                                {/* El nombre y nada más: ni su código ni su
+                                    identificador, que el recurso no publica a
+                                    propósito (ADR-0015 §2.4). Por eso no enlaza.
+                                    Nulo es el predio que no figura a nombre de
+                                    nadie a esta fecha, que es el que hay que
+                                    revisar y no un hueco del recurso. */}
+                                <td style={TD}>{r.titular ?? SIN_DATO}</td>
+                                <td style={TD}>{r.uso}</td>
+                                <td style={TDN}>{r.areaTerreno}</td>
+                                <td style={TDN}>{r.areaConstruida ?? SIN_DATO}</td>
+                              </tr>
+                            ))}
+                          </tbody>
+                        </table>
+                      </div>
+
+                      <Paginador
+                        pagina={conciliacionDeFichas.datos.pagina}
+                        totalPaginas={conciliacionDeFichas.datos.totalPaginas}
+                        hayMas={conciliacionDeFichas.datos.hayMas}
+                        ir={setPaginaConc}
+                      />
+
+                      <div style={{ padding: '11px 16px', borderTop: '1px solid var(--line)', background: 'var(--bg-elev)', fontSize: 12, lineHeight: 1.5, color: 'var(--ink-3)', textWrap: 'pretty' }}>
+                        Un predio está conciliado a un ejercicio cuando existe una declaración jurada de ese año{' '}
+                        <strong>sobre el predio</strong>, presentada u observada. Se deriva del predio y no de la ficha a propósito: la
+                        declaración que se presenta en ventanilla antes de que el predio tenga ficha no apunta a ninguna, y tomarla por
+                        no conciliada sería acusar de omiso a quien declaró. De la declaración no viaja nada más —ni su número, ni su
+                        fecha, ni sus importes—: para eso está su propia opción, con su propio acceso.
+                        {conciliada === 'No' && ' Esta consulta queda registrada en la bitácora con operación ACCESO.'}
+                      </div>
+                    </section>
+                  )}
+              </>
+            )}
           </div>
         )}
 
@@ -3507,7 +4009,7 @@ export default function Catastro({ dest, onDest, sujeto, onSujeto, filtros, onFi
                   {[
                     { que: 'El código de referencia catastral, sus ocho tramos', ok: codigoListo && !codigoDuplicado },
                     { que: 'La dirección del predio', ok: direccionDelAlta !== '' },
-                    { que: 'La observación de quien inscribe', ok: observacion.trim() !== '' },
+                    { que: 'La observación de quien inscribe', ok: observacion.trim().length >= LARGO_MINIMO_DE_OBSERVACION },
                   ].map((r) => (
                     <div key={r.que} style={{ display: 'flex', alignItems: 'center', gap: 11, padding: '11px 16px', borderTop: '1px solid var(--line)' }}>
                       <span
@@ -5289,6 +5791,23 @@ const SIN_DATO = '—';
  */
 const MOTIVO_DE_LOS_CAMPOS_QUE_NO_VIAJAN =
   'De las casillas de esta ficha sólo el número municipal y la fuente llegan al servidor; cada una de las demás dice debajo por qué no.';
+
+/**
+ * Las dos listas que aloja el destino «Predios», con lo que cada una lista.
+ *
+ * El `title` no es decoración: dicen poblaciones distintas —24 predios y 23
+ * fichas vigentes en la municipalidad de demostración— y sin decirlo el
+ * conmutador parece un filtro, de modo que la diferencia de recuento entre las
+ * dos se leería como un descuadre.
+ */
+const LISTAS_DE_PREDIOS: readonly (readonly ['padron' | 'conciliacion', string, string])[] = [
+  ['padron', 'Padrón de predios', 'Los predios inscritos, tengan ficha catastral o no.'],
+  [
+    'conciliacion',
+    'Fichas y conciliación',
+    'Las fichas catastrales vigentes a una fecha, con la columna que dice si ese predio declaró en rentas.',
+  ],
+];
 
 const SELECT_FILTRO: CSSProperties = {
   width: '100%',
