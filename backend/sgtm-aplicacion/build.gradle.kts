@@ -102,6 +102,26 @@ tasks.test {
             })
         .withPathSensitivity(PathSensitivity.RELATIVE)
 
+    // Y el flujo del escaneo de imagenes, que `VersionDeTomcatTest` lee para comprobar que
+    // el paso bloqueante sigue en CRITICAL y sigue saliendo con codigo 1 (#744 AC 4). Sin
+    // declararlo, bajar el umbral o meter un `.trivyignore` dejaria esta tarea UP-TO-DATE y
+    // la guarda del contraste pasaria en verde rancio — que es exactamente el modo de fallo
+    // contra el que existe.
+    inputs
+        .file(rootProject.file("../.github/workflows/escaneo-de-imagenes.yml"))
+        .withPathSensitivity(PathSensitivity.RELATIVE)
+
+    // Y los sitios donde podria aparecer un `.trivyignore`, aunque hoy no exista ninguno.
+    // Gradle sigue la AUSENCIA igual que la presencia, y sin esto CREAR uno no invalidaria la
+    // tarea: medido, la mutacion que anadia el archivo con los tres CVE dentro dio BUILD
+    // SUCCESSFUL en un segundo sin correr ni una prueba.
+    inputs
+        .files(
+            rootProject.file("../.trivyignore"),
+            rootProject.file("../.trivyignore.yaml"),
+            rootProject.file(".trivyignore"))
+        .withPathSensitivity(PathSensitivity.RELATIVE)
+
     // Gradle no propaga las propiedades de sistema del build al proceso de prueba
     // (lo mismo que hace `sgtm.pruebas-postgres` con las suyas). Sin esto,
     // `-Dsgtm.formas.regenerar=true` no llega y el archivo no se puede regenerar.
