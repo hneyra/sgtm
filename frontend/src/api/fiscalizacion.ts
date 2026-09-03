@@ -845,6 +845,276 @@ export function listarHistorico(
   return solicitar('/fiscalizacion/predial/historico', { parametros: { ...filtro, ...paginacion }, senal });
 }
 
+/* ══════════ Las TRES escrituras de la liquidacion (#49, RF-053, RF-056) ══════════
+ *
+ * Estaban vivas en el contrato desde #49 y **no las nombraba ni una linea de
+ * esta interfaz**: `grep -c liquidaciones src/api/fiscalizacion.ts` daba 0, y
+ * `grep -rn 'fiscalizacion/liquidaciones' src/` tambien. No es que estuvieran a
+ * medias: no estaban declaradas.
+ *
+ * Y son el eslabon del medio del procedimiento. El acta se levanta (#431), la
+ * transferencia a rentas emite la resolucion de determinacion (#52) — y entre
+ * las dos esta esto, que es lo que convierte lo que el fiscalizador vio en un
+ * contraste por ejercicio con su numero. Sin ellas, un acta levantada desde
+ * esta interfaz **no llegaba a ninguna parte**: la propia pantalla del acta
+ * mandaba a «Resultados» a liquidarla, y en «Resultados» no habia por donde.
+ *
+ * Medido contra el backend en marcha, las tres llegan a un caso de uso real y
+ * lo unico que las para es la regla 10:
+ *
+ * ```
+ * POST  /fiscalizacion/liquidaciones                        {} → 422 «Falta el campo 'observacion'»
+ * POST  /fiscalizacion/liquidaciones/{n}/reliquidaciones    {} → 422 «Falta el campo 'observacion'»
+ * PATCH /fiscalizacion/liquidaciones/{n}/estados            {} → 422 «Falta el campo 'observacion'»
+ * ```
+ *
+ * <h2>Aqui los identificadores viajan como CADENA, y no es un descuido</h2>
+ *
+ * `PeticionDeLiquidacion` declara `actaId`, `periodoDesde` y `periodoHasta`
+ * como `@Nullable String` y los lee con `exigirEntero(...)` / `ejercicioDe(...)`,
+ * al reves que `PeticionDeActaPredial`, que declara `@Nullable Long` y por eso
+ * `registrarActaPredial` manda numeros. Un numero JSON tambien entra —Jackson
+ * lo convierte, medido: `"actaId": 999999` contesta el mismo 404 que
+ * `"actaId": "999999"`—, pero lo que se declara aqui es lo que el `record`
+ * declara alli: apoyarse en la conversion seria escribir contra un detalle de
+ * Jackson y no contra la lista blanca.
+ *
+ * <h2>El cuerpo admite campos que nadie lee, y los descarta en silencio</h2>
+ *
+ * Medido: `{…, "inventado":"x"}` contesta exactamente el mismo 422 que sin el
+ * —`FAIL_ON_UNKNOWN_PROPERTIES` sigue apagado, la decision que #539 dejo
+ * abierta—. Asi que un campo de mas no da error: se pierde sin ruido, y el
+ * unico sintoma seria una liquidacion que no dice lo que alguien tecleo. Por eso
+ * estos tres tipos son listas blancas y no `Record<string, unknown>`.
+ */
+
+/**
+ * El cuerpo de una liquidacion, con los **siete** campos que el servidor lee y
+ * ni uno mas.
+ *
+ * <h2>Los seis obligatorios, medidos y en su orden</h2>
+ *
+ * No se leyeron del backend: se midieron mandando el cuerpo vacio y añadiendo
+ * de uno en uno lo que el 422 pedia, que es lo unico que descubre el ORDEN —el
+ * mensaje nombra el primero que falta y calla los demas—:
+ *
+ * ```
+ * {}                                          → 422 «Falta el campo 'observacion'»
+ * {observacion}                               → 422 «Falta el campo 'actaId'»
+ * {…,actaId}                                  → 422 «Falta el campo 'periodoDesde'»
+ * {…,periodoDesde}                            → 422 «Falta el campo 'periodoHasta'»
+ * {…,periodoHasta}                            → 422 «Falta el campo 'tipoDeFiscalizacion'»
+ * {…,tipoDeFiscalizacion}                     → 422 «Falta el campo 'motivoDeterminante'»
+ * {…,motivoDeterminante}                      → 404 «No hay ninguna acta … con identificador 999999»
+ * ```
+ *
+ * El 404 del final es el acta inventada con la que se midio: con las seis
+ * puestas, la peticion ya no se para en la forma y pasa al dominio.
+ *
+ * <h2>`usoHallado` esta en el `record` y el controlador NO lo lee</h2>
+ *
+ * `PeticionDeLiquidacion` declara un octavo componente, `usoHallado`, y
+ * `LiquidacionController.liquidar` **no lo llama nunca** —la unica lectura de
+ * ese nombre en el archivo es la de `CorreccionEnLaPeticion`, que es otra cosa—.
+ * Es lo que #599 dejo detras: el uso hallado paso a mandarse **desde el acta**
+ * y `LiquidarFiscalizacion.liquidar` perdio su argumento, para no tener dos
+ * verdades sobre lo mismo (#397, #481). El componente del `record` se quedo.
+ *
+ * Asi que **no se declara aqui**: mandarlo compilaria, pasaria la lista blanca
+ * y se perderia en silencio —el cuerpo no rechaza lo que no lee—, y quien lo
+ * tecleara creeria haber corregido el uso de una liquidacion sin haberlo hecho.
+ * El uso de una liquidacion ya emitida se corrige **reliquidando**, que es donde
+ * ese campo si se lee, linea a linea.
+ */
+export type PeticionDeLiquidacion = {
+  /** Regla 10: al menos 5 caracteres y no espacios en blanco (ADR-0008). */
+  observacion: string;
+  /** El identificador INTERNO del acta, no su version ni su programa. */
+  actaId: string;
+  /** Ejercicio de cuatro digitos. Otro: «El campo 'periodoDesde' es un ejercicio de cuatro digitos». */
+  periodoDesde: string;
+  /** Igual, y no menor que `periodoDesde`: «… que esta al reves». */
+  periodoHasta: string;
+  /** Uno de los cuatro de `TipoDeFiscalizacion`. Otro: «Tipo de fiscalizacion desconocido: 'X'». */
+  tipoDeFiscalizacion: string;
+  /** Por que se fiscalizo. De 1 a 1000 caracteres. */
+  motivoDeterminante: string;
+  /**
+   * ISO `AAAA-MM-DD`. Sin ella, el servidor pone la suya —`LocalDate.now(reloj)`—.
+   *
+   * **Decide el año del correlativo**: el numero se compone con
+   * `Ejercicio.de(fecha)`, asi que una liquidacion fechada en 2025 sale
+   * `LIQ-2025-…` y gasta el correlativo de 2025, no el de hoy.
+   */
+  fecha?: string;
+};
+
+/**
+ * Emite la liquidacion de un acta. **Es irreversible** (regla 4): una
+ * liquidacion no se edita ni se borra —`liquidacion_fiscalizacion` no admite
+ * `UPDATE` desde V39—, se reliquida emitiendo otra version.
+ *
+ * Devuelve la liquidacion ya escrita, con su numero, su contraste linea a linea
+ * y su historial; no lo que se mando.
+ *
+ * Lo que puede contestar, ademas de los seis 422 de arriba:
+ *
+ * <ul>
+ *   <li>`404` si el acta no existe.
+ *   <li>`409` si esa acta **ya se liquido**, nombrando el numero de la que hay:
+ *       una segunda liquidacion de la misma acta es una reliquidacion.
+ *   <li>`422` con `parametroQueFalta` si el ejercicio no tiene conjunto sellado
+ *       (D-02a): ahi no falta un campo del formulario, falta publicar una cifra.
+ *   <li>`403` si la sesion no tiene `fisc_resultados` con privilegio de registro.
+ * </ul>
+ */
+export function liquidarFiscalizacion(peticion: PeticionDeLiquidacion): Promise<LiquidacionDeFiscalizacion> {
+  return solicitar('/fiscalizacion/liquidaciones', { metodo: 'POST', cuerpo: peticion });
+}
+
+/**
+ * Lo que se corrige de UNA linea al reliquidar.
+ *
+ * Lo que no llega se **conserva** de la version anterior, y eso lo dice el
+ * propio caso de uso: «una correccion parcial no borra lo que no nombra». Por
+ * eso los cuatro son opcionales y solo `ejercicio` es obligatorio — es cual
+ * linea se corrige.
+ *
+ * **La condicion no viaja, y no se puede hacer que viaje.** `ReliquidarFiscalizacion`
+ * la recalcula sobre los datos nuevos, y su javadoc dice por que: «si llegara
+ * del cliente, una reliquidacion podria declarar CONFORME un predio con
+ * quinientos metros de diferencia».
+ */
+export type CorreccionDeLineaDeLiquidacion = {
+  /** Ejercicio de cuatro digitos, y tiene que tener linea en la version anterior. */
+  ejercicio: string;
+  /** Metros cuadrados, con punto decimal y sin la unidad dentro. */
+  areaDeclarada?: string;
+  areaHallada?: string;
+  usoDeclarado?: string;
+  usoHallado?: string;
+};
+
+/**
+ * El cuerpo de una reliquidacion. **Lista blanca**, y son seis campos.
+ *
+ * Medido igual que el de arriba, y la diferencia esta en el segundo: aqui **no
+ * hay `actaId`**, porque el acta la pone la version anterior —el numero va en la
+ * ruta—:
+ *
+ * ```
+ * {}                                   → 422 «Falta el campo 'observacion'»
+ * {observacion}                        → 422 «Falta el campo 'periodoDesde'»
+ * {…,periodoDesde,periodoHasta}        → 422 «Falta el campo 'tipoDeFiscalizacion'»
+ * {…,tipoDeFiscalizacion,motivo…}      → 404 «No hay ninguna liquidacion … 'LIQ-2026-999999'»
+ * ```
+ *
+ * `correcciones` puede faltar entera: una reliquidacion sin ninguna corrige el
+ * **periodo** —quitar un ejercicio de mas, o el tipo, o el motivo— y copia las
+ * lineas tal cual.
+ */
+export type PeticionDeReliquidacion = {
+  observacion: string;
+  periodoDesde: string;
+  periodoHasta: string;
+  tipoDeFiscalizacion: string;
+  motivoDeterminante: string;
+  correcciones?: CorreccionDeLineaDeLiquidacion[];
+  fecha?: string;
+};
+
+/**
+ * Reliquida: emite **otra version** que referencia la anterior y explica que
+ * cambio. La anterior no se toca ni una columna, y ni siquiera se marca como
+ * sustituida —eso se lee de que exista otra que la referencia—.
+ *
+ * Devuelve la version nueva **con su diferencia ya calculada**, que es lo que
+ * la pantalla dibuja: `cambios` concepto a concepto e `importesSinCifra` con lo
+ * que D-02a no deja valorar todavia.
+ *
+ * Lo que puede contestar:
+ *
+ * <ul>
+ *   <li>`404` si no hay ninguna liquidacion con ese numero.
+ *   <li>`409` si la que se pide **no es la ultima version** de su acta,
+ *       nombrando cual lo es. La grilla de «Resultados» solo lista la ultima de
+ *       cada acta, asi que eligiendo de ella no se puede producir.
+ *   <li>`422` si el periodo nuevo cubre un ejercicio que la version anterior no
+ *       tenia y nadie corrige: no se inventa una linea vacia, porque diria que
+ *       se fiscalizo y no se encontro nada.
+ *   <li>`403` sin `fisc_resultados` con privilegio de registro.
+ * </ul>
+ */
+export function reliquidarFiscalizacion(
+  numero: string,
+  peticion: PeticionDeReliquidacion,
+): Promise<VersionDeLiquidacion> {
+  return solicitar(`/fiscalizacion/liquidaciones/${encodeURIComponent(numero)}/reliquidaciones`, {
+    metodo: 'POST',
+    cuerpo: peticion,
+  });
+}
+
+/**
+ * El cuerpo de un cambio de estado. **Lista blanca**, cuatro campos.
+ *
+ * ```
+ * {}                              → 422 «Falta el campo 'observacion'»
+ * {observacion}                   → 422 «Falta el campo 'nuevoEstado'»
+ * {…,nuevoEstado}                 → 422 «Falta el campo 'motivo'»
+ * {…,motivo}                      → 404 «No hay ninguna liquidacion … 'LIQ-2026-999999'»
+ * {…,nuevoEstado:'DETERMINADO'}   → 422 «Estado de liquidacion desconocido: 'DETERMINADO'.
+ *                                        Se admite el nombre o la etiqueta de la pantalla»
+ * ```
+ *
+ * `motivo` **no es la observacion**: va de 1 a 300 caracteres, se guarda en el
+ * movimiento y es lo que el historial enseña al lado de cada paso. La
+ * observacion es de la regla 10 y es de quien registra.
+ */
+export type PeticionDeEstadoDeLiquidacion = {
+  observacion: string;
+  /** Uno de los cinco de `EstadoDeLiquidacion`, por su nombre. */
+  nuevoEstado: string;
+  /** Por que se mueve, de 1 a 300 caracteres. */
+  motivo: string;
+  /** ISO `AAAA-MM-DD`; sin ella, la del servidor. */
+  fecha?: string;
+};
+
+/**
+ * Mueve la liquidacion de estado. **`PATCH` y aun asi no actualiza nada**: el
+ * controlador lo dice de si mismo —inserta un movimiento en
+ * `liquidacion_movimiento`, y el estado se DERIVA del ultimo—, asi que la
+ * regla 4 no tiene excepcion aqui.
+ *
+ * El privilegio es **otro** que el de las dos de arriba: `fisc_historico` con
+ * `MODIFICACION`, no `fisc_resultados` con `REGISTRO`. Por eso este acto se
+ * opera en la pestaña del historico y no en la grilla.
+ *
+ * Los dos 409, y los dos se saben ANTES de pulsar porque
+ * `LiquidacionResource.estado` viaja en la fila:
+ *
+ * <ul>
+ *   <li>la liquidacion esta `ANULADA`: no se mueve mas, y corregir una anulada
+ *       es reliquidar. «Si volviera, el papel que el contribuyente tiene en la
+ *       mano diria una cosa y el sistema otra».
+ *   <li>el estado pedido es el que ya tiene: no hay movimiento que registrar.
+ * </ul>
+ *
+ * No hay ninguna otra transicion prohibida: de cualquiera de los cuatro
+ * restantes se puede ir a cualquiera de los otros, comprobado leyendo el caso
+ * de uso entero —solo tiene esas dos guardas—.
+ */
+export function cambiarEstadoDeLaLiquidacion(
+  numero: string,
+  peticion: PeticionDeEstadoDeLiquidacion,
+): Promise<LiquidacionDeFiscalizacion> {
+  return solicitar(`/fiscalizacion/liquidaciones/${encodeURIComponent(numero)}/estados`, {
+    metodo: 'PATCH',
+    cuerpo: peticion,
+  });
+}
+
 /** `EstadoDeCuentaResource`: la deuda de fiscalizacion de UN contribuyente. */
 export type EstadoDeCuentaDeFiscalizacion = {
   codContribuyente: string;

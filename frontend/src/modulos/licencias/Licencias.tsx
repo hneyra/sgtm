@@ -28,6 +28,7 @@ import {
   HOJAS,
   LO_QUE_NO_SE_CUENTA,
   OPCIONES,
+  REQUISITOS_DEL_FUE,
   TRAMITES,
   type ColDef,
   type TipoDeTramite,
@@ -36,11 +37,16 @@ import {
   CLASES_DE_ANUNCIO,
   ESTADOS_DEL_FUE,
   ESTADOS_DE_LICENCIA,
+  FORMATOS,
   MODALIDADES,
+  PARTIDAS_DE_EDIFICACION,
   RIESGOS_ITSE,
   SECCIONES_DEL_FUE,
   TIPOS_DE_LICENCIA,
+  TIPOS_DE_PROFESIONAL,
   TRAMITES_DE_EDIFICACION,
+  completarSeccionDelFue,
+  emitirLicenciaDeEdificacion,
   listarAnuncios,
   listarCertificados,
   listarCiiu,
@@ -51,6 +57,7 @@ import {
   presentarFue,
   registrarCiiu,
   reporteDeEdificacion,
+  revalidarLicenciaDeEdificacion,
   resumenAnualDeLicencias,
   type Anuncio,
   type Fue,
@@ -524,6 +531,73 @@ function Formulario({
   );
 }
 
+/**
+ * Un acto de la ficha: su formulario, su motivo y su primaria.
+ *
+ * Los tres actos del FUE se dibujan igual, y por eso viven en un solo sitio.
+ * La primaria **nace apagada** y el motivo sale en dos sitios a la vez —en el
+ * `title` y en la línea de al lado— porque un dato al que sólo se llega pasando
+ * el ratón no está disponible para quien usa el teclado (RNF-082).
+ */
+function Acto({
+  titulo,
+  nota,
+  defs,
+  val,
+  set,
+  motivo,
+  listo,
+  etiqueta,
+  puede,
+  onPulsar,
+  alApagado,
+  hijos,
+}: {
+  titulo: string;
+  nota?: ReactNode;
+  defs: CampoDef[];
+  val: (k: string) => string;
+  set: (k: string, v: string) => void;
+  motivo: string;
+  listo: string;
+  etiqueta: string;
+  puede: boolean;
+  onPulsar: () => void;
+  alApagado: (motivo: string) => void;
+  hijos?: ReactNode;
+}) {
+  return (
+    <>
+      <section style={TARJETA}>
+        <div style={{ ...CABECERA, borderBottom: '1px solid var(--line)' }}>
+          <h2 style={H2}>{titulo}</h2>
+        </div>
+        {nota && (
+          <p style={{ margin: 0, padding: '13px 16px 0', fontSize: 12.5, lineHeight: 1.55, color: 'var(--ink-3)', textWrap: 'pretty' }}>
+            {nota}
+          </p>
+        )}
+        {hijos}
+        <Formulario defs={defs} val={val} set={set} />
+      </section>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>
+        <p style={{ margin: 0, flex: 1, minWidth: 180, fontSize: 12, color: 'var(--ink-3)', textWrap: 'pretty' }}>
+          {motivo || listo}
+        </p>
+        <button
+          onClick={puede ? onPulsar : () => alApagado(motivo)}
+          aria-disabled={!puede}
+          title={motivo || undefined}
+          className="hov-acento-2"
+          style={{ ...BOTON_PRI, opacity: puede ? 1 : 0.55 }}
+        >
+          {etiqueta}
+        </button>
+      </div>
+    </>
+  );
+}
+
 function Dato({ etiqueta, valor }: { etiqueta: string; valor: string }) {
   return (
     <div>
@@ -561,6 +635,18 @@ function cifraDe(r: Estado<{ totalElementos: number }>): string {
 
 /** Cierra con punto el mensaje que el backend redacta sin él, para que no se
  *  pegue a la frase siguiente. */
+/**
+ * Un entero es entero entero.
+ *
+ * `Number.parseInt` se queda con el prefijo: «3 pisos» viajaría como 3 y «1 - 4»
+ * como 1, y lo demás se perdería sin que nada lo dijera (#341). Aquí, o el
+ * texto son dígitos y nada más, o no hay número.
+ */
+function enteroExacto(texto: string): number | null {
+  const limpio = texto.trim();
+  return /^\d+$/.test(limpio) ? Number(limpio) : null;
+}
+
 function puntoFinal(texto: string): string {
   const t = texto.trim();
   return t === '' || /[.:!?]$/.test(t) ? t : t + '.';
@@ -604,6 +690,15 @@ export default function Licencias({ dest, onDest }: PantallaProps) {
     setFallo(null);
     setHecho(null);
   }, [dest, tipo]);
+
+  /* El resultado de un acto es de UN expediente y de UNA pestaña: al cambiar de
+     cualquiera de los dos deja de significar lo que decía. No se puede meter en
+     el efecto de arriba porque aquél cierra el expediente, y `abierto` en sus
+     dependencias lo cerraría en cuanto se abriera. */
+  useEffect(() => {
+    setFallo(null);
+    setHecho(null);
+  }, [abierto, tab]);
 
   const enPanel = dest === 'panel';
   const enLista = dest === 'lista';
@@ -822,6 +917,251 @@ export default function Licencias({ dest, onDest }: PantallaProps) {
     }
   };
 
+
+  /* ── Los tres actos del FUE, en la ficha del expediente ─────── */
+
+  /* Cuál de las cinco secciones se está completando. Cuatro, en realidad, y la
+     lista se COMPUTA del enumerado quitándole la excepción en vez de escribirse
+     a mano: así una sección sexta aparece sola, y lo único declarado aquí es lo
+     que se deja fuera —que es lo que hay que poder justificar—. */
+  const SIN_FORMULARIO_EN_EL_MANUAL = 'VALORIZACION';
+  const SECCIONES_QUE_SE_PUEDEN_COMPLETAR = SECCIONES_DEL_FUE.map((x) => x.nombre).filter(
+    (n) => n !== SIN_FORMULARIO_EN_EL_MANUAL,
+  );
+  const seccElegida = val('secSeccion') || 'TERRENO';
+  const rotuloDeSeccion = (nombre: string) => SECCIONES_DEL_FUE.find((s) => s.nombre === nombre)?.etiqueta ?? nombre;
+
+  /* Los profesionales, tal como el prototipo los dibuja: cuatro papeles con un
+     nombre cada uno, no una rejilla que se va llenando. Los que se quedan en
+     blanco no viajan — el backend exige `nombre` en cada uno de los que lleguen.
+     `colegio` NO se manda: el prototipo lo escribe dentro del rótulo
+     («Colegiatura (CAP)», «(CIP)»), o sea lo deduce de la especialidad, y
+     deducirlo aquí sería escribir en el expediente un dato que nadie tecleó. Es
+     opcional en la petición, así que la columna «Colegio» de la ficha sale «—»
+     para todo lo que escriba esta pantalla, y lo dice la ayuda del campo. */
+  const profesionalesDeclarados = [
+    { tipo: 'PROYECTISTA_ARQUITECTURA', nombre: val('secProfArq').trim(), colegiatura: val('secProfArqCol').trim() || undefined },
+    { tipo: 'PROYECTISTA_ESTRUCTURAS', nombre: val('secProfEst').trim(), colegiatura: val('secProfEstCol').trim() || undefined },
+    { tipo: 'PROYECTISTA_INSTALACIONES', nombre: val('secProfIns').trim(), colegiatura: undefined },
+    { tipo: 'RESPONSABLE_OBRA', nombre: val('secProfObra').trim(), colegiatura: undefined },
+  ].filter((p) => p.nombre !== '');
+
+  /* Las siete casillas del prototipo, con su `presentado`. `folios` no viaja:
+     el manual dibuja una casilla, no un contador de folios, y es opcional. */
+  const documentosDeclarados = REQUISITOS_DEL_FUE.map((requisito, i) => ({
+    requisito,
+    presentado: val(`secDoc${i}`) === 'Sí',
+  }));
+
+  const pisosDeclarados = enteroExacto(val('secPisos'));
+
+  /* Lo que le falta a la sección elegida, dicho con el nombre del campo que el
+     backend nombra en su 422: así el motivo de la pantalla y el del servidor
+     son la misma frase, y no dos que hay que emparejar a mano. */
+  const faltaEnLaSeccion =
+    seccElegida === 'TERRENO'
+      ? val('secDireccion').trim() === ''
+        ? 'Falta la dirección del terreno. Es el único dato del terreno que el backend exige junto al área: contesta «Falta el campo obligatorio ‹direccion›».'
+        : val('secArea').trim() === ''
+          ? 'Falta el área del terreno en metros cuadrados («Falta el campo obligatorio ‹areaDelTerrenoM›»).'
+          : ''
+      : seccElegida === 'PROYECTO'
+        ? val('secUso').trim() === ''
+          ? 'Falta el uso de la edificación («Falta el campo obligatorio ‹usoDeLaEdificacion›»).'
+          : pisosDeclarados === null
+            ? 'Falta el nº de pisos, y tiene que ser un entero sin nada más: «3 pisos» viajaría como 3 y el resto se perdería en silencio.'
+            : val('secAreaTechada').trim() === ''
+              ? 'Falta el área techada total («Falta el campo obligatorio ‹areaTechadaTotalM›»).'
+              : ''
+        : seccElegida === 'PROFESIONALES'
+          ? profesionalesDeclarados.length === 0
+            ? 'No hay ningún profesional declarado: el FUE lo firman los proyectistas y el responsable de obra, y el backend rechaza la sección vacía.'
+            : ''
+          : '';
+
+  const puedeSeccion = fue !== null && faltaEnLaSeccion === '' && val('secObs').trim() !== '' && !guardando;
+  const motivoSeccion =
+    fue === null
+      ? 'Todavía no hay expediente abierto: sin él no hay a qué ruta mandar la sección.'
+      : faltaEnLaSeccion !== ''
+        ? faltaEnLaSeccion
+        : val('secObs').trim() === ''
+          ? 'Falta la observación: toda modificación de datos se guarda con el motivo de quien la hace (regla 10, RNF-052). Sin ella el backend contesta 422 antes de mirar ningún otro campo.'
+          : '';
+
+  const completarLaSeccion = async () => {
+    if (fue === null) return;
+    setGuardando(true);
+    setFallo(null);
+    try {
+      const observacion = val('secObs').trim();
+      /* El tipo va ANOTADO y no inferido, y es lo único que impide mandar un
+         campo que `PeticionDeSeccionDelFue` no declara: TypeScript sólo revisa
+         las propiedades de más en un literal que se asigna directamente a algo
+         tipado, así que con `const cuerpo =` a secas un `valorDeObra: '148200'`
+         compila, viaja y el backend lo ignora en silencio. Medido: con la
+         anotación da TS2353 nombrando el campo; sin ella, cero errores. */
+      const cuerpo: Parameters<typeof completarSeccionDelFue>[1] =
+        seccElegida === 'TERRENO'
+          ? {
+              seccion: 'TERRENO',
+              codCatastral: val('secCodCatastral').trim() || undefined,
+              direccion: val('secDireccion').trim(),
+              mz: val('secMz').trim() || undefined,
+              lt: val('secLt').trim() || undefined,
+              areaDelTerrenoM: val('secArea').trim(),
+              zonificacion: val('secZonificacion').trim() || undefined,
+              partidaRegistral: val('secPartida').trim() || undefined,
+              frenteM: val('secFrente').trim() || undefined,
+              fondoM: val('secFondo').trim() || undefined,
+              observacion,
+            }
+          : seccElegida === 'PROYECTO'
+            ? {
+                seccion: 'PROYECTO',
+                usoDeLaEdificacion: val('secUso').trim(),
+                nDePisos: pisosDeclarados ?? undefined,
+                areaTechadaTotalM: val('secAreaTechada').trim(),
+                areaLibreM: val('secAreaLibre').trim() || undefined,
+                nDeEstacionamientos: enteroExacto(val('secEstac')) ?? undefined,
+                plazoDeEjecucionMeses: enteroExacto(val('secPlazo')) ?? undefined,
+                observacion,
+              }
+            : seccElegida === 'PROFESIONALES'
+              ? { seccion: 'PROFESIONALES', profesionales: profesionalesDeclarados, observacion }
+              : { seccion: 'DOCUMENTOS', documentos: documentosDeclarados, observacion };
+
+      const r = await completarSeccionDelFue(fue.nroExpediente, cuerpo);
+      setHecho(
+        r.seccionesFaltantes.length === 0
+          ? `Sección «${rotuloDeSeccion(seccElegida)}» guardada. El expediente ya no tiene ninguna sección pendiente.`
+          : `Sección «${rotuloDeSeccion(seccElegida)}» guardada. Al expediente le siguen faltando ${r.seccionesFaltantes.length}: ${r.seccionesFaltantes
+              .map(rotuloDeSeccion)
+              .join(', ')}.`,
+      );
+      setVals((x) => ({ ...x, secObs: '' }));
+      fichaFue.reintentar();
+      toast(`Sección «${rotuloDeSeccion(seccElegida)}» guardada.`);
+    } catch (f) {
+      setFallo(f instanceof ErrorDeApi ? f : new ErrorDeApi('ERROR_INTERNO', 'No se pudo guardar la sección', 0));
+    } finally {
+      setGuardando(false);
+    }
+  };
+
+  /* El trámite del expediente decide los dos actos que quedan, y no una
+     preferencia: `emiteLicencia` es falso en el anteproyecto en consulta y en la
+     revalidación, y `revalidar` exige que el expediente SEA una revalidación. */
+  const tramiteDelFue = TRAMITES_DE_EDIFICACION.find((t) => t.nombre === fue?.tipoTramite);
+  const faltanSecciones = fue?.seccionesFaltantes ?? [];
+
+  const puedeEmitir =
+    fue !== null &&
+    tramiteDelFue?.emiteLicencia === true &&
+    fue.nroLicencia === null &&
+    faltanSecciones.length === 0 &&
+    val('emiVigencia') !== '' &&
+    val('emiRecibo').trim() !== '' &&
+    val('emiObs').trim() !== '' &&
+    !guardando;
+  const motivoEmitir =
+    fue === null
+      ? 'Todavía no hay expediente abierto: sin él no hay licencia que emitir.'
+      : tramiteDelFue?.emiteLicencia !== true
+        ? `De un trámite de ${(tramiteDelFue?.etiqueta ?? fue.tipoTramite).toLowerCase()} no sale ninguna licencia: ${
+            fue.tipoTramite === 'REVALIDACION_DE_LICENCIA'
+              ? 'una revalidación prorroga la que ya existe, y se registra con «Revalidar» aquí abajo.'
+              : fue.tipoTramite === 'ANTEPROYECTO_EN_CONSULTA'
+                ? 'un anteproyecto en consulta se resuelve con una conformidad.'
+                : 'este trámite se resuelve sin numerar ninguna licencia.'
+          }`
+        : fue.nroLicencia !== null
+          ? `Este expediente ya tiene la licencia ${fue.nroLicencia} emitida, y una licencia no se emite dos veces: repetir el acto contesta 409.`
+          : faltanSecciones.length > 0
+            ? `Al expediente le faltan ${faltanSecciones.length} de las cinco secciones del FUE: ${faltanSecciones
+                .map(rotuloDeSeccion)
+                .join(', ')}. La licencia sólo sale cuando están las cinco.`
+            : val('emiVigencia') === ''
+              ? 'Falta la vigencia hasta cuándo. Viaja como dato del acto —lo que la resolución dice— porque el plazo lo fija la Ley 29090 con una cifra, y ninguna cifra normativa se compila (regla 5).'
+              : val('emiRecibo').trim() === ''
+                ? 'Falta el nº de recibo del derecho de trámite. El backend lo exige («Falta el campo obligatorio ‹nDeRecibo›») y el manual sólo dibuja una casilla de «presentado», así que aquí se pregunta el número.'
+                : val('emiObs').trim() === ''
+                  ? 'Falta la observación: toda modificación de datos se guarda con el motivo de quien la hace (regla 10, RNF-052).'
+                  : '';
+
+  const emitirLaLicencia = async () => {
+    if (fue === null) return;
+    setGuardando(true);
+    setFallo(null);
+    try {
+      const r = await emitirLicenciaDeEdificacion(fue.nroExpediente, {
+        fechaDeEmision: val('emiFecha') || undefined,
+        vigenciaHasta: val('emiVigencia'),
+        nDeRecibo: val('emiRecibo').trim(),
+        formato: val('emiFormato') || undefined,
+        observacion: val('emiObs').trim(),
+      });
+      setHecho(`Licencia ${r.nroLicencia} emitida el ${r.fecha}, con la resolución ${r.resolucion.numero}.`);
+      setVals((x) => ({ ...x, emiObs: '', emiRecibo: '' }));
+      fichaFue.reintentar();
+      fues.reintentar();
+      toast(`Licencia ${r.nroLicencia} emitida.`);
+    } catch (f) {
+      setFallo(f instanceof ErrorDeApi ? f : new ErrorDeApi('ERROR_INTERNO', 'No se pudo emitir la licencia', 0));
+    } finally {
+      setGuardando(false);
+    }
+  };
+
+  const esRevalidacion = fue?.tipoTramite === 'REVALIDACION_DE_LICENCIA';
+  const puedeRevalidar =
+    fue !== null &&
+    esRevalidacion &&
+    val('revVigencia') !== '' &&
+    val('revRecibo').trim() !== '' &&
+    val('revObs').trim() !== '' &&
+    !guardando;
+  const motivoRevalidar =
+    fue === null
+      ? 'Todavía no hay expediente abierto: sin él no hay licencia que prorrogar.'
+      : !esRevalidacion
+        ? `El expediente ${fue.nroExpediente} es un trámite de ${(tramiteDelFue?.etiqueta ?? fue.tipoTramite).toLowerCase()}, no una revalidación. La revalidación es su propio trámite, con su expediente, su recibo y su resolución: se presenta como un FUE nuevo que nombra la licencia que prorroga, y es ese expediente el que se revalida aquí.`
+        : val('revVigencia') === ''
+          ? 'Falta hasta cuándo llega la prórroga. Un tramo que no pase del ya concedido se rechaza: no prorroga nada y cobrar un derecho por él sería cobrar por nada.'
+          : val('revRecibo').trim() === ''
+            ? 'Falta el nº de recibo del derecho de la revalidación. Es su propio recibo, no el de la licencia original.'
+            : val('revObs').trim() === ''
+              ? 'Falta la observación: toda modificación de datos se guarda con el motivo de quien la hace (regla 10, RNF-052).'
+              : '';
+
+  const revalidarLaLicencia = async () => {
+    if (fue === null) return;
+    setGuardando(true);
+    setFallo(null);
+    try {
+      const r = await revalidarLicenciaDeEdificacion(fue.nroExpediente, {
+        fecha: val('revFecha') || undefined,
+        nuevaVigenciaHasta: val('revVigencia'),
+        nDeRecibo: val('revRecibo').trim(),
+        formato: val('revFormato') || undefined,
+        observacion: val('revObs').trim(),
+      });
+      const ultimo = r.vigencias[r.vigencias.length - 1];
+      setHecho(
+        `Licencia ${r.nroLicencia} revalidada con la resolución ${r.resolucion.numero}. ${
+          ultimo ? `Va por el tramo ${ultimo.tramo}, del ${ultimo.desde} al ${ultimo.hasta}.` : ''
+        }`,
+      );
+      setVals((x) => ({ ...x, revObs: '', revRecibo: '' }));
+      fichaFue.reintentar();
+      toast(`Licencia ${r.nroLicencia} revalidada.`);
+    } catch (f) {
+      setFallo(f instanceof ErrorDeApi ? f : new ErrorDeApi('ERROR_INTERNO', 'No se pudo revalidar', 0));
+    } finally {
+      setGuardando(false);
+    }
+  };
+
   /* ── Ruta, contexto y paleta ────────────────────────────────── */
 
   const rotulo: Record<string, string> = {
@@ -867,7 +1207,7 @@ export default function Licencias({ dest, onDest }: PantallaProps) {
     tipo === 'funcionamiento'
       ? ['Licencia', 'Giros', 'Historial', 'Duplicados']
       : tipo === 'edificacion'
-        ? ['Expediente', 'Requisitos', 'Valorización', 'Profesionales', 'Historial']
+        ? ['Expediente', 'Requisitos', 'Valorización', 'Profesionales', 'Historial', 'Actos']
         : ['Autorización', 'Movimientos'];
   const tabIdx = Math.min(tab, TABS.length - 1);
 
@@ -1344,7 +1684,8 @@ export default function Licencias({ dest, onDest }: PantallaProps) {
                     {fue.seccionesFaltantes
                       .map((s) => SECCIONES_DEL_FUE.find((x) => x.nombre === s)?.etiqueta ?? s)
                       .join(', ')}
-                    . Es la compuerta: sin ellas no se puede emitir la licencia.
+                    . Es la compuerta: sin ellas no se puede emitir la licencia. Cuatro de las cinco se completan en
+                    «Actos»; la valorización no, y ese mismo bloque dice por qué.
                   </Franja>
                 )}
                 {tabIdx === 0 && (
@@ -1413,7 +1754,7 @@ export default function Licencias({ dest, onDest }: PantallaProps) {
                       min={420}
                       insignia={1}
                       filas={SECCIONES_DEL_FUE.map((s) => [s.etiqueta, fue.seccionesFaltantes.includes(s.nombre) ? 'No' : 'Sí'])}
-                      nota="Las cinco se completan por partes, cada una cuando el administrado la trae. Exigirlas al presentar haría imposible el trámite tal como el manual lo dibuja."
+                      nota="Las cinco se completan por partes, cada una cuando el administrado la trae —exigirlas al presentar haría imposible el trámite tal como el manual lo dibuja—, y cuatro de ellas se completan en la pestaña «Actos». La valorización no: el manual no dibuja ningún formulario para ella, y «Actos» lo dice."
                     />
                   </>
                 )}
@@ -1468,6 +1809,241 @@ export default function Licencias({ dest, onDest }: PantallaProps) {
                     min={860}
                     filas={fue.historial.map((h) => [h.tipo, h.fecha, h.nroLicencia ?? SIN_DATO, h.motivo ?? SIN_DATO, h.resolucion ?? SIN_DATO])}
                   />
+                )}
+                {tabIdx === 5 && (
+                  <>
+                    <p style={{ ...ENTRADILLA, textWrap: undefined }}>
+                      Los tres actos del expediente: completar sus secciones, emitir la licencia y prorrogarla. El FUE se
+                      completa por partes —cada sección cuando el administrado la trae— y la licencia sólo sale cuando
+                      están las cinco.
+                    </p>
+
+                    <Acto
+                      titulo="Completar una sección del FUE"
+                      nota={
+                        <>
+                          Una sola ruta para las cinco, discriminada por la sección elegida:{' '}
+                          <code>{'POST /api/v1/licencias/edificacion/{expediente}/secciones'}</code>. Lo que no
+                          corresponde a la sección elegida el backend lo ignora, así que aquí sólo viajan sus campos y no
+                          el formulario entero.
+                        </>
+                      }
+                      val={val}
+                      set={set}
+                      defs={[
+                        {
+                          k: 'secSeccion',
+                          l: 'Sección',
+                          t: 'sel',
+                          o: SECCIONES_QUE_SE_PUEDEN_COMPLETAR,
+                          ancho: true,
+                          ayuda: `Cuatro de las cinco de SeccionDelFue; la valorización no está, y el aviso de abajo dice por qué. Se está completando «${rotuloDeSeccion(seccElegida)}».`,
+                        },
+                        ...(seccElegida === 'TERRENO'
+                          ? ([
+                              { k: 'secCodCatastral', l: 'Cód. catastral', ayuda: 'Opcional.' },
+                              { k: 'secDireccion', l: 'Dirección', ancho: true, ayuda: 'Obligatoria.' },
+                              { k: 'secMz', l: 'Mz.' },
+                              { k: 'secLt', l: 'Lt.' },
+                              {
+                                k: 'secArea',
+                                l: 'Área del terreno (m²)',
+                                ph: '210.00',
+                                ayuda: 'Obligatoria, en metros cuadrados. Es la que midió el técnico: no se deriva de ninguna geometría (ADR-0021).',
+                              },
+                              {
+                                k: 'secZonificacion',
+                                l: 'Zonificación',
+                                ph: 'RDM',
+                                ayuda: 'Opcional, y es texto libre por municipalidad: no hay ningún enumerado del que computar una lista, así que no se ofrece un desplegable cerrado con las cuatro del prototipo.',
+                              },
+                              { k: 'secPartida', l: 'Partida registral', ayuda: 'Opcional.' },
+                              { k: 'secFrente', l: 'Frente (m)', ph: '10.50', ayuda: 'Opcional, en metros lineales.' },
+                              { k: 'secFondo', l: 'Fondo (m)', ph: '20.00', ayuda: 'Opcional, en metros lineales.' },
+                            ] as CampoDef[])
+                          : []),
+                        ...(seccElegida === 'PROYECTO'
+                          ? ([
+                              {
+                                k: 'secUso',
+                                l: 'Uso de la edificación',
+                                ph: 'VIVIENDA UNIFAMILIAR',
+                                ancho: true,
+                                ayuda: 'Obligatorio, y texto libre: el prototipo ofrecía cinco usos y el backend no tiene ningún enumerado que los respalde.',
+                              },
+                              { k: 'secPisos', l: 'Nº de pisos', ph: '3', ayuda: 'Obligatorio. Sólo dígitos.' },
+                              { k: 'secAreaTechada', l: 'Área techada total (m²)', ph: '186.00', ayuda: 'Obligatoria.' },
+                              { k: 'secAreaLibre', l: 'Área libre (m²)', ph: '84.00', ayuda: 'Opcional.' },
+                              { k: 'secEstac', l: 'Nº de estacionamientos', ph: '1', ayuda: 'Opcional. Sólo dígitos.' },
+                              { k: 'secPlazo', l: 'Plazo de ejecución (meses)', ph: '36', ayuda: 'Opcional. Sólo dígitos.' },
+                            ] as CampoDef[])
+                          : []),
+                        ...(seccElegida === 'PROFESIONALES'
+                          ? ([
+                              { k: 'secProfArq', l: 'Proyectista de arquitectura', ayuda: 'Uno de los dos que la compuerta exige.' },
+                              { k: 'secProfArqCol', l: 'Colegiatura del proyectista de arquitectura', ph: '18442' },
+                              { k: 'secProfEst', l: 'Proyectista de estructuras' },
+                              { k: 'secProfEstCol', l: 'Colegiatura del proyectista de estructuras', ph: '92118' },
+                              { k: 'secProfIns', l: 'Proyectista de instalaciones' },
+                              { k: 'secProfObra', l: 'Responsable de obra', ayuda: 'El otro que la compuerta exige.' },
+                            ] as CampoDef[])
+                          : []),
+                        ...(seccElegida === 'DOCUMENTOS'
+                          ? (REQUISITOS_DEL_FUE.map((r, i) => ({
+                              k: `secDoc${i}`,
+                              l: r,
+                              t: 'sel' as const,
+                              o: ['No', 'Sí'],
+                            })) as CampoDef[])
+                          : []),
+                        {
+                          k: 'secObs',
+                          l: 'Observación',
+                          t: 'area',
+                          ancho: true,
+                          ph: 'Por qué se registra',
+                          ayuda: 'Obligatoria (regla 10, RNF-052). Sin ella el backend contesta 422 antes de mirar ningún otro campo.',
+                        },
+                      ]}
+                      hijos={
+                        <div style={{ padding: '13px 16px 0' }}>
+                          {seccElegida === 'PROFESIONALES' && (
+                            <Franja tono="neutro">
+                              Los cuatro papeles de <code>TipoDeProfesional</code>, con un nombre cada uno: los que se
+                              queden en blanco no viajan. La compuerta no los pide los cuatro —pide{' '}
+                              {TIPOS_DE_PROFESIONAL.filter((t) => t.firmaElFue)
+                                .map((t) => t.etiqueta.toLowerCase())
+                                .join(' y ')}
+                              —, así que guardar sólo uno de los otros dos deja la sección escrita y la casilla igual de
+                              pendiente. <b>El colegio no se manda</b>: el manual lo escribe dentro del rótulo —«(CAP)»,
+                              «(CIP)»—, o sea lo deduce de la especialidad, y deducirlo aquí sería escribir en el
+                              expediente un dato que nadie tecleó; la columna «Colegio» de la ficha sale «—» para lo que
+                              escriba esta pantalla.
+                            </Franja>
+                          )}
+                          {seccElegida === 'DOCUMENTOS' && (
+                            <Franja tono="neutro">
+                              Las siete casillas que el manual dibuja, y su texto es lo que se guarda. <b>Los folios no
+                              viajan</b>: el manual dibuja una casilla, no un contador, y la petición los declara
+                              opcionales — la columna «Folios» de la ficha sale «—» para lo que escriba esta pantalla.
+                              Guardarlas todas en «No» es un registro válido, pero la sección sigue contando como
+                              pendiente: la compuerta pide que <b>al menos una</b> esté presentada.
+                            </Franja>
+                          )}
+                        </div>
+                      }
+                      motivo={motivoSeccion}
+                      listo={`Se guardará la sección «${rotuloDeSeccion(seccElegida)}» del expediente ${fue.nroExpediente}. La respuesta trae la ficha entera, así que dirá qué le sigue faltando.`}
+                      etiqueta={guardando ? 'Guardando…' : 'Guardar la sección'}
+                      puede={puedeSeccion}
+                      onPulsar={completarLaSeccion}
+                      alApagado={toast}
+                    />
+
+                    <Franja tono="warn">
+                      La quinta sección, <b>«{rotuloDeSeccion(SIN_FORMULARIO_EN_EL_MANUAL)}»</b>, no se puede completar desde aquí, y
+                      no es que le falte un campo: <b>el manual no dibuja ningún formulario para ella</b>. Su petición
+                      pide una línea por piso con su partida —{PARTIDAS_DE_EDIFICACION.join(', ')}, las tres del cuadro
+                      de valores unitarios—, su categoría constructiva y sus metros, y de eso el prototipo del FUE no
+                      tiene ni una pestaña: lo único parecido es un «Valor de obra (S/)» tecleado a mano en «Datos
+                      Proyecto», que es justo lo que la petición se niega a aceptar, porque el valor por m² sale del
+                      cuadro y admitirlo del cliente dejaría que quien teclea eligiera cuánto vale la obra. Inventarle la
+                      rejilla sería inventar una pantalla que nadie capturó, así que se dice en vez de rodearlo: mientras
+                      la valorización llegue por otra vía, <b>desde aquí la licencia no se puede emitir</b>, porque es una
+                      de las cinco que la compuerta exige.
+                    </Franja>
+
+                    {hecho && <Franja tono="ok">{hecho}</Franja>}
+                    {fallo && (
+                      <Franja tono="bad">
+                        {fallo.mensaje}
+                        {fallo.incidencia ? ` · ref ${fallo.incidencia}` : ''}
+                      </Franja>
+                    )}
+
+                    <Acto
+                      titulo="Emitir la licencia de edificación"
+                      nota={
+                        <>
+                          <code>{'POST /api/v1/licencias/edificacion/{expediente}/licencia'}</code>. Es irreversible
+                          (regla 4): numera la licencia con su correlativo, emite la resolución con su SHA-256 sellado y{' '}
+                          <code>licencia_edificacion</code> no admite <code>UPDATE</code> desde V43. El número no se
+                          teclea —lo pone el sistema— y repetir el acto contesta 409.
+                        </>
+                      }
+                      val={val}
+                      set={set}
+                      defs={[
+                        { k: 'emiFecha', l: 'Fecha de emisión', t: 'date', ayuda: 'Si se deja en blanco, hoy. No puede ser anterior a la declaración del expediente.' },
+                        {
+                          k: 'emiVigencia',
+                          l: 'Vigencia hasta',
+                          t: 'date',
+                          ayuda: 'Obligatoria. El manual la dibuja como «FECHA CADUCIDAD». Viaja como dato del acto porque el plazo lo fija la Ley 29090 con una cifra, y ninguna cifra normativa se compila (regla 5).',
+                        },
+                        {
+                          k: 'emiRecibo',
+                          l: 'Nº de recibo del derecho',
+                          ph: '001-0000123',
+                          ayuda: 'Obligatorio. El manual sólo dibuja una casilla de «Recibo de pago del derecho» presentado sí/no, y el backend pide el número: se pregunta aquí con su propio rótulo, sin ocupar el de ningún campo del manual.',
+                        },
+                        { k: 'emiFormato', l: 'Formato de la resolución', t: 'sel', o: [...FORMATOS], ayuda: 'Los tres de FormatoDeDocumento. En blanco, PDF.' },
+                        {
+                          k: 'emiObs',
+                          l: 'Observación',
+                          t: 'area',
+                          ancho: true,
+                          ph: 'Por qué se emite',
+                          ayuda: 'Obligatoria (regla 10, RNF-052).',
+                        },
+                      ]}
+                      motivo={motivoEmitir}
+                      listo={`Se emitirá la licencia del expediente ${fue.nroExpediente} con su número correlativo y su resolución. No se puede deshacer.`}
+                      etiqueta={guardando ? 'Emitiendo…' : 'Emitir la licencia'}
+                      puede={puedeEmitir}
+                      onPulsar={emitirLaLicencia}
+                      alApagado={toast}
+                    />
+
+                    <Acto
+                      titulo="Revalidar la licencia"
+                      nota={
+                        <>
+                          <code>{'POST /api/v1/licencias/edificacion/{expediente}/revalidacion'}</code>. La ruta
+                          identifica el expediente <b>de la revalidación</b>, no la licencia original: es su propio
+                          trámite, con su recibo y su resolución. No numera de nuevo —agrega un tramo de vigencia que
+                          empieza el día después del anterior, y los dos quedan—.
+                        </>
+                      }
+                      val={val}
+                      set={set}
+                      defs={[
+                        { k: 'revFecha', l: 'Fecha del acto', t: 'date', ayuda: 'Si se deja en blanco, hoy.' },
+                        {
+                          k: 'revVigencia',
+                          l: 'Nueva vigencia hasta',
+                          t: 'date',
+                          ayuda: 'Obligatoria, y tiene que pasar del tramo ya concedido: uno que no lo pase no prorroga nada, y cobrar un derecho por él sería cobrar por nada.',
+                        },
+                        { k: 'revRecibo', l: 'Nº de recibo del derecho', ph: '001-0000124', ayuda: 'Obligatorio, y es el de la revalidación: no el de la licencia original.' },
+                        { k: 'revFormato', l: 'Formato de la resolución', t: 'sel', o: [...FORMATOS], ayuda: 'En blanco, PDF.' },
+                        {
+                          k: 'revObs',
+                          l: 'Observación',
+                          t: 'area',
+                          ancho: true,
+                          ph: 'Por qué se revalida',
+                          ayuda: 'Obligatoria (regla 10, RNF-052).',
+                        },
+                      ]}
+                      motivo={motivoRevalidar}
+                      listo={`Se agregará un tramo de vigencia a la licencia que el expediente ${fue.nroExpediente} prorroga, con su propia resolución. No se puede deshacer.`}
+                      etiqueta={guardando ? 'Revalidando…' : 'Revalidar'}
+                      puede={puedeRevalidar}
+                      onPulsar={revalidarLaLicencia}
+                      alApagado={toast}
+                    />
+                  </>
                 )}
               </>
             )}

@@ -18,6 +18,7 @@
     "paleta": "node verificaciones/paleta.mjs",
     "impedimentos": "node verificaciones/impedimentos.mjs",
     "desplegables": "node verificaciones/desplegables.mjs",
+    "observacion": "node verificaciones/observacion.mjs",
     "vocabularios": "node verificaciones/vocabularios.mjs",
     "errores": "node verificaciones/errores.mjs",
     "impresion": "node verificaciones/impresion.mjs",

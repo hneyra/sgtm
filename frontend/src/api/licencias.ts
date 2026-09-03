@@ -90,6 +90,34 @@ export const TIPOS_DE_OBRA = ['EDIFICACION_NUEVA', 'AMPLIACION', 'REMODELACION',
 /** `EstadoDelFue`. */
 export const ESTADOS_DEL_FUE = ['EN_TRAMITE', 'VIGENTE', 'VENCIDA', 'ANULADA'] as const;
 
+/**
+ * `PartidaDeEdificacion`. Son **tres**, y no las siete de la ficha catastral.
+ *
+ * No es un descuido de ninguno de los dos: las tres son las de la R.M.
+ * 277-2025-VIVIENDA, cuya nota al pie dice «sumando los valores seleccionados
+ * de cada una de las 3 columnas»; las siete de la ficha no salen de ninguna
+ * resolución. Igualarlas es el «arreglo» que `V59` existe para impedir (#436).
+ */
+export const PARTIDAS_DE_EDIFICACION = ['MUROS', 'TECHOS', 'PUERTAS'] as const;
+
+/**
+ * `TipoDeProfesional`, y cuáles de los cuatro son la compuerta.
+ *
+ * `firmaElFue` **no sale del enumerado** —su propiedad es `esProyectista`, que
+ * es otra cosa— sino de `tieneLosProfesionalesQueFirman()`, que exige el
+ * proyectista de arquitectura y el responsable de obra y no los otros dos: sin
+ * proyectista no hay quien responda por el proyecto, y sin responsable de obra
+ * no hay a quien reclamar durante la ejecución. Cuándo hacen falta los de
+ * estructuras e instalaciones lo dice el reglamento según la modalidad, y eso
+ * son supuestos que este repositorio no tiene verificados.
+ */
+export const TIPOS_DE_PROFESIONAL = [
+  { nombre: 'PROYECTISTA_ARQUITECTURA', etiqueta: 'Proyectista de arquitectura', firmaElFue: true },
+  { nombre: 'PROYECTISTA_ESTRUCTURAS', etiqueta: 'Proyectista de estructuras', firmaElFue: false },
+  { nombre: 'PROYECTISTA_INSTALACIONES', etiqueta: 'Proyectista de instalaciones', firmaElFue: false },
+  { nombre: 'RESPONSABLE_OBRA', etiqueta: 'Responsable de obra', firmaElFue: true },
+] as const;
+
 /** `SeccionDelFue`, con el rótulo que el FUE le da a cada una. */
 export const SECCIONES_DEL_FUE = [
   { nombre: 'TERRENO', etiqueta: 'Datos del terreno' },
@@ -707,6 +735,69 @@ export function presentarFue(peticion: {
   return solicitar('/licencias/edificacion', { metodo: 'POST', cuerpo: peticion });
 }
 
+/**
+ * Completa **una** sección del FUE. Es `PeticionDeSeccionDelFue`.
+ *
+ * Una sola ruta para las cinco, discriminada por `seccion`, y **lo que no
+ * corresponde a la elegida el backend lo ignora**. Por eso esta fachada manda
+ * solo los campos de la sección que se completa y no el formulario entero:
+ * mandarlo entero sería una petición que parece guardar dos cosas y guarda una.
+ *
+ * Qué exige cada una, medido contra el backend el 2026-09-03 sobre el
+ * expediente `2026-11692` —los cinco cuerpos incompletos, que se rechazan antes
+ * de escribir nada—:
+ *
+ * - `TERRENO` — «Falta el campo obligatorio 'direccion'», y después
+ *   «…'areaDelTerrenoM'». Los otros siete son opcionales.
+ * - `PROYECTO` — «…'nDePisos'», «…'usoDeLaEdificacion'», «…'areaTechadaTotalM'».
+ * - `VALORIZACION` — «La seccion de valorizacion llega sin ninguna linea».
+ * - `PROFESIONALES` — «La seccion de profesionales llega sin ninguno».
+ * - `DOCUMENTOS` — «La seccion de documentos llega sin ninguno».
+ *
+ * Y la observación siempre, antes que nada: sin ella contesta 422 citando la
+ * regla 10 y RNF-052 sin llegar a mirar ningún otro campo.
+ *
+ * **Las líneas de `valorizacion` no llevan importe, y no se admite ninguno**:
+ * el valor por m² sale del cuadro de valores unitarios, y aceptarlo del cliente
+ * dejaría que quien teclea eligiera cuánto vale la obra.
+ *
+ * La respuesta es la ficha entera y no la sección guardada: es lo que deja
+ * saber qué le sigue faltando sin una segunda petición.
+ */
+export function completarSeccionDelFue(
+  expediente: string,
+  peticion: {
+    seccion: string;
+    /* TERRENO */
+    codCatastral?: string;
+    direccion?: string;
+    mz?: string;
+    lt?: string;
+    areaDelTerrenoM?: string;
+    zonificacion?: string;
+    partidaRegistral?: string;
+    frenteM?: string;
+    fondoM?: string;
+    /* PROYECTO */
+    usoDeLaEdificacion?: string;
+    nDePisos?: number;
+    areaTechadaTotalM?: string;
+    areaLibreM?: string;
+    nDeEstacionamientos?: number;
+    plazoDeEjecucionMeses?: number;
+    /* Las tres que van por lista */
+    valorizacion?: { piso: number; partida: string; categoria: string; areaM: string }[];
+    profesionales?: { tipo: string; nombre: string; colegio?: string; colegiatura?: string }[];
+    documentos?: { requisito: string; presentado: boolean; folios?: number }[];
+    observacion: string;
+  },
+): Promise<Fue> {
+  return solicitar(`/licencias/edificacion/${encodeURIComponent(expediente)}/secciones`, {
+    metodo: 'POST',
+    cuerpo: peticion,
+  });
+}
+
 /** Es `ActoDeEdificacionResource`: la emisión y la revalidación. */
 export type ActoDeEdificacion = {
   nroExpediente: string;
@@ -718,11 +809,62 @@ export type ActoDeEdificacion = {
   valorDeObraNoDisponible: string | null;
 };
 
+/**
+ * Emite la licencia de edificación del expediente. Es `PeticionDeLicenciaDeEdificacion`.
+ *
+ * **El número no está en la petición**: lo pone el sistema desde su correlativo,
+ * y si viniera del cliente dos peticiones podrían pedir el mismo.
+ *
+ * `vigenciaHasta` **sí** viaja, y no es un descuido: el plazo lo fija la Ley
+ * 29090 con una cifra, y ninguna cifra normativa se compila (regla 5). Entra
+ * como dato del acto —lo que la resolución dice— y la base sólo comprueba que
+ * no termine antes de empezar.
+ *
+ * Los dos obligatorios, medidos el 2026-09-03 con cuerpos incompletos que se
+ * rechazan antes de emitir nada: «Falta el campo obligatorio 'vigenciaHasta'» y
+ * «…'nDeRecibo'». `fechaDeEmision` en blanco es hoy y `formato` en blanco es
+ * PDF; un formato que no sea PDF, XLS o RTF da «El formato va entre PDF, XLS y
+ * RTF: 'DOCX'».
+ *
+ * **Es irreversible** (regla 4): numera la licencia con su correlativo, emite
+ * la resolución con su SHA-256 sellado y `licencia_edificacion` no admite
+ * `UPDATE` desde V43. Repetirla contesta 409.
+ */
 export function emitirLicenciaDeEdificacion(
   expediente: string,
   peticion: { fechaDeEmision?: string; vigenciaHasta: string; nDeRecibo: string; formato?: string; observacion: string },
 ): Promise<ActoDeEdificacion> {
   return solicitar(`/licencias/edificacion/${encodeURIComponent(expediente)}/licencia`, {
+    metodo: 'POST',
+    cuerpo: peticion,
+  });
+}
+
+/**
+ * Revalida la licencia que este expediente de revalidación nombra. Es
+ * `PeticionDeRevalidacion`.
+ *
+ * **La ruta identifica el expediente DE LA REVALIDACIÓN, no la licencia
+ * original**: la revalidación es su propio trámite, con su propio recibo y su
+ * propia resolución, y la licencia que prorroga la nombra el expediente al
+ * presentarse (`nroLicenciaAnterior` de {@link presentarFue}). Pedirla sobre el
+ * expediente de la licencia original da 422 diciendo que ese expediente «es un
+ * tramite de licencia de obra, no una revalidacion».
+ *
+ * Los dos obligatorios, medidos el 2026-09-03 igual que los de la emisión:
+ * «Falta el campo obligatorio 'nuevaVigenciaHasta'» y «…'nDeRecibo'».
+ *
+ * No numera de nuevo: **agrega un tramo de vigencia** a la original, que
+ * empieza el día después del anterior, y los dos quedan. Una fecha que no pase
+ * del tramo ya concedido se rechaza —«un tramo que no pasa del anterior no
+ * prorroga nada, y cobrarle al administrado un derecho por el seria cobrarle
+ * por nada»—, así que tampoco aquí hay nada que deshacer (regla 4).
+ */
+export function revalidarLicenciaDeEdificacion(
+  expediente: string,
+  peticion: { fecha?: string; nuevaVigenciaHasta: string; nDeRecibo: string; formato?: string; observacion: string },
+): Promise<ActoDeEdificacion> {
+  return solicitar(`/licencias/edificacion/${encodeURIComponent(expediente)}/revalidacion`, {
     metodo: 'POST',
     cuerpo: peticion,
   });

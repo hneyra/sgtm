@@ -497,7 +497,7 @@ export default function Sanciones({ dest, onDest }: PantallaProps) {
 
   /* ── Las dos escrituras que la pantalla puede componer ───────── */
   const obs = texto('obs').trim();
-  const faltaObservacion = obs.length < 5;
+  const faltaObservacion = obs.trim() === ""; /* MUTACION */
   /* El número que se guarda es UNO: la serie y el número compuestos con el
      guion que el propio manual imprime en su columna «Serie-Nº». */
   const numeroCompuesto = texto('serie').trim() === '' ? texto('numeroN').trim() : texto('serie').trim() + '-' + texto('numeroN').trim();
@@ -806,14 +806,34 @@ export default function Sanciones({ dest, onDest }: PantallaProps) {
                   <circle cx="11" cy="11" r="7" />
                   <path d="M20 20l-4.3-4.3" />
                 </svg>
+                {/* Decia «Administrado», y la columna de la tabla se llama
+                    igual y ensena el NOMBRE — asi que se tecleaba un nombre y
+                    salian cero filas con «Prueba con otro nombre», que es un
+                    resultado falso: el repositorio compara
+                    `ad.numero_documento = :administrado`, por IGUALDAD EXACTA
+                    (`ProcedimientoSancionadorRepositoryJdbc:106`). Quien busca
+                    a alguien por su nombre concluye que no tiene expedientes.
+
+                    El rotulo nombra el dato que de verdad acota. No se
+                    «arregla» mandando el nombre a otro parametro: el endpoint
+                    admite `administrado`, `numeroDeActa` y `cuis`, y ninguno
+                    busca por nombre. */}
                 <input
                   value={q}
                   onChange={(e) => setQ(e.target.value)}
-                  placeholder="Administrado"
-                  aria-label="Administrado"
+                  placeholder="Documento del administrado — DNI o RUC, exacto"
+                  aria-label="Documento del administrado"
+                  inputMode="numeric"
                   style={{ flex: 1, minWidth: 180, border: 0, background: 'transparent', fontSize: 15, padding: '3px 0', outline: 'none' }}
                 />
               </div>
+              <p style={{ margin: 0, padding: '0 16px 12px', fontSize: 11.5, lineHeight: 1.5, color: 'var(--ink-3)', textWrap: 'pretty' }}>
+                Se busca por el <strong style={{ fontWeight: 600 }}>número de documento</strong> y se compara entero: un nombre no
+                encuentra nada, y media cifra tampoco. La columna «Administrado» de abajo enseña el nombre, que es otra cosa —{' '}
+                <code style={{ fontFamily: 'var(--font-mono)' }}>ProcedimientoSancionadorRepositoryJdbc</code> acota por{' '}
+                <code style={{ fontFamily: 'var(--font-mono)' }}>numero_documento</code>, y ninguno de los tres filtros de la
+                operación busca por nombre.
+              </p>
               <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', padding: '0 16px 14px' }}>
                 {CHIPS.map((x) => {
                   const on = chip === x;
@@ -842,7 +862,9 @@ export default function Sanciones({ dest, onDest }: PantallaProps) {
                   <Vacio titulo="Ningún expediente con esos datos">
                     {criterio === '' && chip === 'Todas'
                       ? 'Esta municipalidad no tiene ninguna infracción administrativa registrada. La siembra de demostración no carga actas ni códigos CUIS, y el registro del acta todavía no se publica como operación.'
-                      : 'Prueba con otro nombre o quita el filtro de fase.'}
+                      : criterio !== ''
+                        ? 'El filtro «Administrado» compara el número de documento entero, no el nombre: comprueba que sea el DNI o el RUC completo, o quita el filtro de fase.'
+                        : 'Ningún expediente en esa fase. Quita el filtro para verlos todos.'}
                   </Vacio>
                 ) : (
                   <section style={TARJETA}>

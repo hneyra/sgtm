@@ -209,6 +209,18 @@ type FilaDeMatriz = {
   sensible: boolean;
 };
 
+/**
+ * Lo que `Observacion.de` exige y la tabla de auditoria repite con un
+ * `CHECK (length(btrim(observacion)) >= 5)`.
+ *
+ * Guardar con `!== ''` encendia la primaria con UN caracter, el acto salia y
+ * el servidor lo rechazaba con 422 «La observacion debe explicar el cambio: al
+ * menos 5 caracteres, y no espacios en blanco (ADR-0008)». No se pierde nada
+ * —eso lo impide el backend— pero se promete un acto que no se puede hacer.
+ * Lo caza `verificaciones/observacion.mjs`.
+ */
+const LARGO_MINIMO_DE_OBSERVACION = 5;
+
 export default function Seguridad({ dest, onDest }: PantallaProps) {
   const { pref, fijar, toast } = usarPreferencias();
 
@@ -527,7 +539,7 @@ export default function Seguridad({ dest, onDest }: PantallaProps) {
       : 'Todavía no se han leído los permisos de esta cuenta.'
     : aGuardar.length === 0
       ? 'No has cambiado ninguna casilla: no hay nada que guardar.'
-      : observacion.trim() === ''
+      : observacion.trim().length < LARGO_MINIMO_DE_OBSERVACION
         ? 'Falta la observación: toda modificación se guarda con el motivo de quien la hace (RNF-052).'
         : '';
   const puedeGuardar = impedimentoAlGuardar === '' && !guardando;
@@ -791,7 +803,7 @@ export default function Seguridad({ dest, onDest }: PantallaProps) {
         ? 'Falta el nombre: es lo que la bitácora y los listados muestran.'
         : !vigenciaBienEscrita
           ? 'La vigencia se escribe AAAA-MM-DD, o se deja en blanco para que no caduque.'
-          : altaObservacion.trim() === ''
+          : altaObservacion.trim().length < LARGO_MINIMO_DE_OBSERVACION
             ? 'Falta la observación: toda modificación se guarda con el motivo de quien la hace (RNF-052).'
             : '';
   const puedeDarDeAlta = impedimentoDelAlta === '' && !dandoDeAlta;
@@ -1211,7 +1223,7 @@ export default function Seguridad({ dest, onDest }: PantallaProps) {
         ? 'Todavía no se ha leído quién eres en esta municipalidad.'
         : cambioIniciado !== null
           ? 'El cambio ya está iniciado: la contraseña se termina de cambiar en el proveedor de identidad, con el enlace de aquí arriba.'
-          : observacionDelCambio === ''
+          : observacionDelCambio.trim().length < LARGO_MINIMO_DE_OBSERVACION
             ? 'Falta el motivo: toda modificación se registra con el motivo de quien la hace (RNF-052).'
             : '';
   /* ── El ejercicio de trabajo (#557) ──────────────────────────
@@ -1225,7 +1237,7 @@ export default function Seguridad({ dest, onDest }: PantallaProps) {
   const impedimentoDelCambioDeEjercicio =
     ejercicioFijado !== null
       ? 'El ejercicio de trabajo ya se cambió: el acto queda registrado una vez, no se repite pulsando otra vez.'
-      : observacionDelEjercicio === ''
+      : observacionDelEjercicio.trim().length < LARGO_MINIMO_DE_OBSERVACION
         ? 'Falta el motivo: toda modificación se registra con el motivo de quien la hace (RNF-052).'
         : '';
 

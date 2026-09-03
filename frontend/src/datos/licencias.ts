@@ -84,6 +84,30 @@ export const TRAMITES: Record<
 
 /* ══════════ Las columnas de cada tabla ══════════ */
 
+/**
+ * Los siete requisitos que el FUE declara adjuntos.
+ *
+ * **Son rótulos, no estado**: el estado lo lleva el backend en
+ * `FueResource.documentos[]`. Salen letra por letra de las siete casillas que
+ * el prototipo dibuja en su pestaña «Documentos Adjuntos», y no de una lista
+ * inventada aquí: `PeticionDeSeccionDelFue.DocumentoDeclarado.requisito` es
+ * texto libre —el backend sólo exige que no venga en blanco—, así que no hay
+ * ningún enumerado del que computarlos y el manual es la única fuente.
+ *
+ * Que sean texto libre es también por qué **no se traducen ni se reordenan**:
+ * lo que se guarda es la cadena, y cambiarla aquí dejaría los expedientes
+ * viejos con un requisito que ya no casa con ninguna casilla (#427).
+ */
+export const REQUISITOS_DEL_FUE: string[] = [
+  'FUE firmado por el solicitante',
+  'Copia literal de dominio',
+  'Planos de arquitectura',
+  'Planos de estructuras',
+  'Planos de instalaciones',
+  'Certificado de parámetros urbanísticos',
+  'Recibo de pago del derecho',
+];
+
 export const COLS_LICENCIAS: ColDef[] = [
   ['Nº licencia', 0],
   ['Titular', 0],

@@ -88,6 +88,12 @@ jobs:
       - name: Lo que la prosa dice del backend sigue siendo verdad
         run: yarn prosa
 
+      # Tampoco abre navegador, y se intento al reves primero: operando la
+      # pantalla NO podia fallar, porque las ocho cajas alcanzables sin sujeto
+      # estan en pantallas cuya primaria sigue apagada por otro motivo (#557).
+      - name: Una observacion de cuatro caracteres no habilita nada
+        run: yarn observacion
+
       - name: Compilar para producción
         run: yarn build
 

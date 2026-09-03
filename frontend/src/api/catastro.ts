@@ -9,6 +9,9 @@ import { buscarContribuyentes, type Contribuyente as ContribuyenteDelPadron } fr
  */
 
 /** Una fila del padrón. Es `PredioDelCatastroResource`. */
+/** Lo que `Observacion.de` exige y el `CHECK` de la auditoria repite (ADR-0008). */
+const LARGO_MINIMO_DE_OBSERVACION = 5;
+
 export type PredioDelCatastro = {
   predioId: number;
   codRefCatastral: string;
@@ -818,6 +821,170 @@ export function resumenDeConciliacion(
   return solicitar('/catastro/fichas/conciliacion/resumen', { parametros, senal });
 }
 
+/**
+ * Una fila de la grilla de fichas con su conciliacion. Es
+ * `FichaConciliadaResource`, campo por campo (ADR-0015, #344).
+ *
+ * Es la fila de `GET /catastro/fichas` con **dos campos mas y ninguno menos**:
+ * `conciliada` y el ejercicio al que ese si o ese no responde. No existe
+ * «conciliada»: existe `conciliadaA(ejercicio)` (regla 9, RNF-075), porque el
+ * padron afecto se rehace cada año y declarar 2024 no concilia 2026.
+ *
+ * **Lo que NO trae, y es el motivo de que el recurso exista** (ADR-0015 §2.2):
+ * ni el numero de la declaracion jurada, ni su tipo, ni su fecha, ni sus
+ * importes, ni quien la presento. Quien puede mirar el catastro no adquiere con
+ * eso permiso de mirar las declaraciones de nadie.
+ *
+ * `titular` es **el nombre y nada mas**: ni su codigo ni su identificador
+ * (ADR-0015 §2.4), asi que la celda no enlaza a ninguna parte. Y llega nulo
+ * cuando el predio no tiene titular vigente a la fecha —4 977 de los 14 422 de
+ * Catacaos (#690)—, que no es un hueco del recurso sino el predio que hay que
+ * revisar.
+ *
+ * Las dos areas llegan como **texto** y se dibujan como llegan: son `AreaM2`,
+ * que `ConfiguracionDeJson` serializa con la cifra sola —`"360.00"`— y sin su
+ * unidad, que la pone la cabecera de la columna (#607).
+ */
+export type FichaConciliada = {
+  /** El de la FICHA, no el del predio: una ficha nueva versiona y cambia de id. */
+  id: number;
+  predioId: number;
+  codRefCatastral: string;
+  direccion: string;
+  manzana: string | null;
+  lote: string | null;
+  /** `UNICA` | `ECONOMICA` | `BIENES_COMUNES` | `RURAL`, el `TipoFicha` del dominio. */
+  tipo: string;
+  version: number;
+  areaTerreno: string;
+  areaConstruida: string | null;
+  uso: string;
+  vigenciaDesde: string;
+  titular: string | null;
+  conciliada: boolean;
+  /** A que ejercicio responde `conciliada`. Viene siempre, se pida o no (regla 9). */
+  conciliadaA: number;
+};
+
+/**
+ * Los tres valores del desplegable «Conciliada con rentas», tal como el
+ * controlador los lee.
+ *
+ * Se escriben aqui y no como `string` libre porque `ConciliacionController`
+ * admite exactamente estos —y `Todos` y `Si` sin tilde, que no se ofrecen para
+ * no tener dos grafias de lo mismo— y **contesta 422 con cualquier otro**: con
+ * un `string` la abreviatura plausible compila y el rechazo aparece en
+ * ventanilla.
+ *
+ * **`'No'` no es un filtro mas.** Es la lista de los predios que no generan
+ * deuda predial, o sea el mapa de a quien no le va a llegar recibo: exige
+ * **ademas** privilegio de lectura sobre `fisc_omisos` y **deja fila en la
+ * bitacora** con operacion `ACCESO` (ADR-0015 §2.3). Las otras dos no, porque
+ * dicen quien esta dentro y no quien falta.
+ */
+export type ConciliadaConRentas = 'Todas' | 'Sí' | 'No';
+
+
+/**
+ * Lo que la grilla de la conciliacion deja acotar.
+ *
+ * **Los ocho acotan de verdad, medido contra el backend** — que es lo que hay
+ * que comprobar antes de dibujar un filtro, porque uno declarado y no leido
+ * devuelve la tabla entera con un 200 encima y eso se lee como un padron que
+ * esta mal (#544, #431, #541). Sobre la municipalidad de demostracion, con 23
+ * fichas vigentes:
+ *
+ * ```
+ *   sin filtro                              23
+ *   codRefCatastral=200104010010 (prefijo)   3
+ *   contribuyente=Ramirez Chulle             2
+ *   manzana=001                              6
+ *   lote=001                                15
+ *   tipo=UNICA / ECONOMICA / RURAL      13 / 5 / 3
+ *   conciliadaConRentas=Sí / No           0 / 23
+ *   fecha=2020-01-01                         0
+ * ```
+ *
+ * `ejercicio` no cambia **cuantas** filas salen —la poblacion son las fichas
+ * vigentes a la fecha— sino **a que año** contesta la columna: con `2024` las 23
+ * salen con `conciliadaA: 2024`.
+ *
+ * `contribuyente` **se resuelve por parecido contra el padron** y no por
+ * subcadena: el umbral es 0,30 de `similarity` sobre el nombre entero, asi que
+ * «Ramirez Chulle» encuentra a «DEMO Ramirez Chulle Marina» y «Ramirez» solo
+ * **no llega** —medido: 2 filas y 0—. La pantalla lo dice, porque cero filas por
+ * quedarse corto es indistinguible de cero filas porque no hay ninguna.
+ *
+ * `uso` **no esta**, aunque `FiltroDeFichas` lo tenga: `FichasDelPadronCatastro`
+ * le pasa `null` a esta ruta, asi que no se dibuja.
+ */
+export type FiltroDeConciliacion = {
+  /** Prefijo del codigo de referencia catastral. */
+  codRefCatastral?: string;
+  contribuyente?: string;
+  manzana?: string;
+  lote?: string;
+  tipo?: TipoDeFicha;
+  conciliadaConRentas?: ConciliadaConRentas;
+  /** A que ejercicio responde la conciliacion; si falta, el de la fecha de corte. */
+  ejercicio?: string;
+  /** Fecha de corte a la que se resuelven la version vigente y el titular. */
+  fecha?: string;
+};
+
+/**
+ * Por que campo deja ordenar el servidor, **medido uno a uno**.
+ *
+ * Los otros nueve que la fila publica contestan **422 «No se puede ordenar por
+ * ese campo»**: `manzana`, `lote`, `tipo`, `areaTerreno`, `areaConstruida`,
+ * `version`, `titular`, `conciliada` y `predioId`. Se escriben como union y no
+ * como `string` por lo mismo que los tres filtros cerrados: con `string` la
+ * columna plausible compila y el 422 llega despues de pulsar la cabecera.
+ *
+ * **`conciliada` no esta, y es la que se echaria en falta**: ordenar por la
+ * columna de la conciliacion no se puede, y por eso la lista de los que no
+ * declararon se pide con el filtro y no con el orden.
+ */
+export type OrdenDeConciliacion = 'codRefCatastral' | 'direccion' | 'uso' | 'vigenciaDesde' | 'id';
+
+export type PaginacionDeConciliacion = Omit<Paginacion, 'ordenarPor'> & {
+  ordenarPor?: OrdenDeConciliacion;
+};
+
+/**
+ * La grilla de fichas con su conciliacion catastro↔rentas (ADR-0015, #344).
+ *
+ * **Es la lista que el recuento cuenta.** `resumenDeConciliacion` dice *cuantos*
+ * y esta dice *cuales*, y esa es toda la diferencia: aquel no pide el permiso de
+ * fiscalizacion ni deja rastro porque no nombra a nadie; esta con
+ * `conciliadaConRentas: 'No'` hace las dos cosas, porque nombrar es justo lo que
+ * hace.
+ *
+ * **Vive bajo `/catastro/fichas/…` y la sirve `rentas`**: el dato que distingue
+ * una ficha conciliada —si el predio declaro— es de rentas, y catastro no puede
+ * depender de el sin cerrar un ciclo de modulos. El acceso que exige, en cambio,
+ * es el de la **pantalla** y no el del modulo: `consulta_fichas`.
+ *
+ * El predicado, entero: un predio esta conciliado a un ejercicio cuando existe
+ * una declaracion jurada de ese ejercicio, **con su mismo `predio_id`**, en
+ * estado `PRESENTADA` u `OBSERVADA`. Que se derive del predio y no de la ficha
+ * es lo que impide acusar de omiso a quien declaro (#344): la DJ que produce
+ * ventanilla antes de que el predio tenga ficha —y **toda** fila anterior a
+ * `V19`— lleva `ficha_catastral_id` nulo.
+ *
+ * Pagina, y hace falta: son 14 422 fichas en Catacaos.
+ */
+export function listarFichasConciliadas(
+  filtro: FiltroDeConciliacion,
+  paginacion: PaginacionDeConciliacion,
+  senal?: AbortSignal,
+): Promise<RespuestaPaginada<FichaConciliada>> {
+  return solicitar('/catastro/fichas/conciliacion', {
+    parametros: { ...filtro, ...paginacion },
+    senal,
+  });
+}
+
 
 /**
  * La ficha del contribuyente. Es lo que devuelve
@@ -887,6 +1054,20 @@ export function descargarFichaDelContribuyente(
 
 /** Los cuatro valores de `TipoFicha`, tal como los publica la lectura. */
 export type TipoDeFicha = 'UNICA' | 'ECONOMICA' | 'BIENES_COMUNES' | 'RURAL';
+
+/**
+ * Los cuatro, en el orden en que `TipoFicha` los declara: es el del desplegable
+ * que filtra la consulta de fichas.
+ *
+ * El backend **no lee con tolerancia** ahí: cualquier otra palabra es 422 —«El
+ * tipo de ficha va entre UNICA, ECONOMICA, BIENES_COMUNES y RURAL»—, así que la
+ * abreviatura plausible no vale y una tilde tampoco. La lista se escribe una
+ * vez y el desplegable la recorre, para que no pueda ofrecer una quinta.
+ *
+ * El rótulo con que se dibujan es otra cosa y vive en la pantalla
+ * (`rotuloDeModalidad`): el manual llama «urbana individual» a `UNICA`.
+ */
+export const TIPOS_DE_FICHA: readonly TipoDeFicha[] = ['UNICA', 'ECONOMICA', 'BIENES_COMUNES', 'RURAL'];
 
 /** El tramo de ruta de cada tipo. No es el nombre del enumerado, y por eso hay tabla. */
 export type ModalidadDeFicha = 'urbana' | 'economica' | 'bienes-comunes' | 'rural';
@@ -1332,7 +1513,7 @@ export function impedimentoDeActualizacion(estado: {
   if (estado.ficha === null) {
     return 'La ficha de este predio no se ha podido leer, y sin leerla no se manda nada: la versión nueva se escribiría con lo que haya en pantalla y dejaría la buena cerrada debajo.';
   }
-  if (estado.observacion.trim() === '') {
+  if (estado.observacion.trim().length < LARGO_MINIMO_DE_OBSERVACION) {
     return 'Falta la observación: toda modificación exige el motivo de quien la hace, y es lo único que explica el cambio cuando esta versión pase al histórico.';
   }
   if (estado.documentoOrigen.trim() === '') {

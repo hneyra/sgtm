@@ -64,6 +64,53 @@ export type PasoDeActa = {
  */
 export const HALLAZGOS_DEL_ACTA = ['CONFORME', 'OMISO', 'SUBVALUADOR', 'USO_DISTINTO', 'NO_UBICADO'];
 
+/**
+ * Los cuatro valores de `TipoDeFiscalizacion`, **por su nombre** (#49).
+ *
+ * Aqui, al reves que con el hallazgo, el prototipo y el enumerado SI dicen lo
+ * mismo: el artboard de `fisc_historico` ofrece `['CIERTA', 'PRESUNTA', 'DE
+ * OFICIO', 'GABINETE']` y el enumerado se escribio a partir de esa lista —«el
+ * prototipo manda», dice su javadoc—. La unica diferencia es el espacio de «DE
+ * OFICIO», que `porNombre` convierte en guion bajo.
+ *
+ * Se manda el **nombre** y no la etiqueta, aunque el servidor admita las dos
+ * formas, porque es el que la lectura publica: `LiquidacionResource` compone
+ * `tipoDeFiscalizacion` con `.name()`, asi que mandar «DE OFICIO» dejaria la
+ * fila enseñando `DE_OFICIO` justo debajo del desplegable que dice otra cosa.
+ *
+ * Medido contra el backend: «DE OFICIO» y «DE_OFICIO» pasan las dos; «INTEGRAL»
+ * —el rotulo que uno esperaria de un manual de fiscalizacion— contesta 422
+ * «Tipo de fiscalizacion desconocido: 'INTEGRAL'».
+ */
+export const TIPOS_DE_FISCALIZACION = ['CIERTA', 'PRESUNTA', 'DE_OFICIO', 'GABINETE'];
+
+/**
+ * Los cinco valores de `EstadoDeLiquidacion`, **por su nombre** (#49, RF-056).
+ *
+ * El artboard de `fisc_historico` ofrece exactamente estos cinco escritos como
+ * etiqueta —`['ABIERTA', 'EN PROCESO', 'LIQUIDADA', 'NOTIFICADA', 'ANULADA']`—,
+ * asi que aqui tampoco hay nada que traducir. Lo que se manda es el nombre
+ * (`EN_PROCESO`), por lo mismo que en el tipo: es el que la fila publica.
+ *
+ * **No confundirlos con los de `EstadoDeActa`**, que comparte cuatro nombres y
+ * no es el mismo vocabulario: un acta pasa a `RELIQUIDADA` y `TRANSFERIDA`, que
+ * una liquidacion no tiene, y una liquidacion pasa a `EN_PROCESO`, que un acta
+ * no tiene. Atarlos seria hacer que renombrar un estado de acta cambiara en
+ * silencio a que estado se mueve una liquidacion.
+ *
+ * Las dos direcciones las comprueba `vocabularios.mjs` leyendo
+ * `EstadoDeLiquidacion.java`: un valor de mas es un 422 que nombra lo que quien
+ * atiende acaba de elegir de una lista, y uno de menos es un estado al que
+ * ninguna liquidacion se puede mover.
+ */
+export const ESTADOS_DE_LIQUIDACION_DEL_BACKEND = [
+  'ABIERTA',
+  'EN_PROCESO',
+  'LIQUIDADA',
+  'NOTIFICADA',
+  'ANULADA',
+];
+
 /** Lo que los seis rotulos del manual son en el vocabulario del enumerado, para poder decirlo. */
 export const HALLAZGOS_DEL_MANUAL_QUE_NO_EXISTEN =
   '«SIN OBSERVACIONES» es CONFORME; «OMISO A LA DECLARACIÓN» es OMISO; «PREDIO SUBVALUADO» y ' +

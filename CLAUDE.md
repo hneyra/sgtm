@@ -118,7 +118,7 @@ Lo que sujeta al `frontend/` de hoy es `tsc -b --noEmit`, que caza el tipo que m
 **catorce** arneses en `frontend/verificaciones/`: nueve **operan un navegador de verdad** contra
 la compilación —`mirar`, `sin-red`, `paleta`, `impedimentos`, `impresion`, `errores`,
 `ficha-catastral`, `desplegables` y `filas`—, `flujos` además pulsa contra el backend real,
-`vocabularios` compila las dos fuentes reales y las compara, y `fechas`, `node` y `prosa` no abren
+`vocabularios` compila las dos fuentes reales y las compara, y `fechas`, `node`, `prosa` y `observacion` no abren
 navegador. `errores` (#625) hace las dos cosas a la vez, porque
 las dos mitades fallan por separado: compara el catálogo de `cliente.ts` con el enumerado
 `CodigoDeError` del backend, mide `solicitar()` contra respuestas fabricadas —el 405 pelado de
@@ -402,6 +402,7 @@ yarn errores                      # el catalogo de errores, la puerta y las pant
 yarn impresion                    # las hojas imprimibles: ninguna lleva el shell delante, ninguna sale en blanco
 yarn ficha-catastral              # los 123 campos de la ficha: cual sale de una lectura y cual lleva su motivo
 yarn desplegables                 # con las lecturas rotas, ningun desplegable se queda sin nada que ofrecer y mudo
+yarn observacion                  # ninguna guarda habilita un acto con la observacion que el servidor rechaza. Sin navegador
 yarn fechas                       # la fecha sin zona no se convierte, y el instante si. Sin navegador
 yarn node                         # `.nvmrc`, `engines` y lo que vite pide, los tres de acuerdo. Sin navegador
 yarn prosa                        # la prosa que habla del backend, contra el contrato: lo que nombra existe y lo que dice que falta sigue faltando. Sin navegador
