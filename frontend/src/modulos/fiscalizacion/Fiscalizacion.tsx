@@ -9,6 +9,7 @@ import {
   registrarPrograma,
   sortearMuestra,
   listarActas,
+  registrarActaPredial,
   listarResultados,
   listarHistorico,
   leerEstadoDeCuenta,
@@ -35,6 +36,7 @@ import {
   DET_PREDIAL,
   DET_VEHICULAR,
   DIFF,
+  HALLAZGOS_DEL_MANUAL_QUE_NO_EXISTEN,
   OPCIONES,
   PASOS_ACTA,
   REP_COLS,
@@ -466,6 +468,7 @@ const CAMPO: CSSProperties = {
  */
 const MOTIVO_DEL_ALTA = 'fisc-motivo-del-alta';
 const MOTIVO_DEL_SORTEO = 'fisc-motivo-del-sorteo';
+const MOTIVO_DEL_ACTA = 'fisc-motivo-del-acta';
 
 /** El rotulo de un control del alta. */
 const ROTULO: CSSProperties = { fontSize: 11.5, fontWeight: 500, color: 'var(--ink-3)' };
@@ -474,6 +477,23 @@ const ROTULO: CSSProperties = { fontSize: 11.5, fontWeight: 500, color: 'var(--i
 function observacionBastante(texto: string): boolean {
   return texto.trim().length >= OBSERVACION_MINIMA;
 }
+
+/**
+ * La nota que dice si un control del acta llega al servidor.
+ *
+ * Va **junto al control** y no en un pie de tabla: quien levanta un acta rellena
+ * campo a campo, de pie y con una tablet, y una advertencia a seis controles de
+ * distancia no la lee nadie. Es la misma decision que RNF-082 obliga a tomar con
+ * el motivo de un boton apagado.
+ */
+const NO_VIAJA: CSSProperties = {
+  display: 'block',
+  marginTop: 5,
+  fontSize: 11,
+  lineHeight: 1.4,
+  color: 'var(--ink-4)',
+  textWrap: 'pretty',
+};
 
 /** Lo que se dibuja en un boton apagado: se ve, no se pulsa, y dice por que. */
 const BOTON_APAGADO: CSSProperties = {
@@ -564,7 +584,9 @@ function CampoDelActa({
       <span style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 11.5, fontWeight: 500, color: 'var(--ink-3)' }}>
         <span>{f.l}</span>
       </span>
-      {(f.t === undefined || f.t === 'text') && <input value={texto} onChange={(e) => onCambio(e.target.value)} placeholder={f.ph} style={base} />}
+      {(f.t === undefined || f.t === 'text') && (
+        <input value={texto} onChange={(e) => onCambio(e.target.value)} placeholder={f.ph} maxLength={f.max} style={base} />
+      )}
       {f.t === 'date' && <input type="date" value={texto} onChange={(e) => onCambio(e.target.value)} style={base} />}
       {f.t === 'sel' && (
         <select value={texto} onChange={(e) => onCambio(e.target.value)} style={base}>
@@ -580,7 +602,9 @@ function CampoDelActa({
           ))}
         </select>
       )}
-      {f.t === 'area' && <textarea value={texto} onChange={(e) => onCambio(e.target.value)} rows={3} placeholder={f.ph} style={areaStyle} />}
+      {f.t === 'area' && (
+        <textarea value={texto} onChange={(e) => onCambio(e.target.value)} rows={3} placeholder={f.ph} maxLength={f.max} style={areaStyle} />
+      )}
       {f.t === 'chk' && (
         <span style={chkStyle}>
           <input
@@ -606,21 +630,41 @@ function CampoDelActa({
             color: texto === '' ? 'var(--ink-4)' : 'var(--ink-2)',
           }}
         >
-          {/* Vacio significa que no hay acta abierta de la que sacarlo, y eso se
-              dice con el guion largo. Una caja de solo lectura EN BLANCO se lee
-              como un dato que todavia no se ha cargado; el guion dice que no lo
-              hay (#702). El motivo entero esta en el aviso de la barra. */}
+          {/* Vacio significa que no se ha podido leer de la fila de la muestra
+              —porque no hay ninguna elegida, o porque la lectura fallo—, y eso
+              se dice con el guion largo. Una caja de solo lectura EN BLANCO se
+              lee como un dato que todavia no se ha cargado; el guion dice que
+              no lo hay (#702). El motivo entero esta en la barra del paso 4. */}
           {texto === '' ? SIN_DATO : texto}
         </span>
       )}
       {f.ayuda && <span style={{ fontSize: 11.5, lineHeight: 1.4, color: 'var(--ink-4)', textWrap: 'pretty' }}>{f.ayuda}</span>}
+      {/* Cual de los veintitres controles llega al servidor, dicho donde se
+          teclea. Hasta #431 daba igual —no viajaba ninguno, y el formulario
+          entero lo decia (#702)—; desde que el acta se manda, un control mudo
+          es perdida silenciosa de lo que alguien anoto en campo. */}
+      {f.noViaja !== undefined && <span style={NO_VIAJA}>No viaja al acta. {f.noViaja}</span>}
     </label>
   );
 }
 
 /* ══════════ El módulo ══════════ */
-export default function Fiscalizacion({ dest, onDest }: PantallaProps) {
-  const { pref, toast } = usarPreferencias();
+/**
+ * <h2>El sujeto se LEE de `PantallaProps` y se ESCRIBE con `ir` (#431)</h2>
+ *
+ * `sujeto` es el mecanismo de #685 y es el que se usa. Lo que no se usa es su
+ * pareja `onSujeto`, y no por descuido: el salto que abre un acta va de la
+ * muestra —destino `programas`— al formulario —destino `acta`— **y** lleva un
+ * sujeto, y ninguno de los dos ayudantes de `PantallaProps` hace las dos cosas
+ * a la vez. `onDest` borra el sujeto a proposito («el predio abierto no
+ * significa nada en Territorio») y `onSujeto` conserva el destino, de modo que
+ * usarlos en cadena escribiria el hash dos veces y dejaria dos entradas de
+ * historial por cada acta abierta — «Atras» habria que pulsarlo dos veces para
+ * volver a la muestra, que es justo el defecto que #685 cerro en Catastro.
+ * `ir(modulo, dest, sujeto)` es una sola escritura.
+ */
+export default function Fiscalizacion({ dest, onDest, sujeto }: PantallaProps) {
+  const { pref, toast, ir } = usarPreferencias();
   const m = moduloDe('fiscalizacion');
 
   const [vals, setVals] = useState<Record<string, string | boolean>>({});
@@ -651,14 +695,19 @@ export default function Fiscalizacion({ dest, onDest }: PantallaProps) {
   const val = (k: string): string | boolean => (vals[k] === undefined ? DEFECTOS[k] : vals[k]);
 
   /* «Levantar acta» del panel es un acta nueva: cuatro pasos desde el primero
-     y sin borrador previo. El shell la manda por su propio destino. */
+     y sin nada escrito. El shell la manda por su propio destino.
+
+     El aviso decia «cada uno se guarda al avanzar», y no se guarda ninguno:
+     avanzar solo cambia de paso, y lo tecleado vive en el estado de React hasta
+     que se cierra el acta (#702). Y ahora dice ademas de donde sale el sujeto,
+     porque el acta sin fila no se puede mandar y eso conviene saberlo al
+     entrar, no al llegar al ultimo paso. */
   useEffect(() => {
     if (dest === 'acta') {
       setPaso(0);
       setSucio(false);
-      toast('Acta nueva: cuatro pasos, cada uno se guarda al avanzar.');
     }
-  }, [dest, toast]);
+  }, [dest]);
 
   /* ── Detección ─────────────────────────────────────────────── */
   /* ── Deteccion predial, contra `GET /fiscalizacion/omisos` ──── */
@@ -849,7 +898,7 @@ export default function Fiscalizacion({ dest, onDest }: PantallaProps) {
   const [paginaMuestra, setPaginaMuestra] = useState(0);
   useEffect(() => setPaginaMuestra(0), [programaActivo?.id]);
   const muestra = useRecurso(
-    (senal) => listarMuestra(programaActivo?.id ?? 0, { pagina: paginaMuestra, tamano: TAMANO_DE_PAGINA }, senal),
+    (senal) => listarMuestra(programaActivo?.id ?? 0, {}, { pagina: paginaMuestra, tamano: TAMANO_DE_PAGINA }, senal),
     [programaActivo?.id, paginaMuestra],
     (dest === 'programas' || dest === 'panel') && programaActivo !== null,
   );
@@ -882,12 +931,12 @@ export default function Fiscalizacion({ dest, onDest }: PantallaProps) {
    *
    * Los cuatro primeros son los que el servidor exige. El quinto —ejercicio,
    * criterio y fiscalizador— **el servidor lo admite en blanco y esta pantalla
-   * no**, y el motivo esta medido: `POST /programas/{id}/muestra` contesta «El
-   * programa no declara 'X', y sin el no se puede sortear su muestra» por cada
-   * uno de los tres, y **no hay ninguna ruta de edicion de un programa**
-   * —«reprogramar es registrar otro»—, de modo que lo que nace sin ellos es una
-   * fila esteril que nadie puede arreglar. Dejar pasar aqui el dato que falta
-   * traslada el fallo a un acto despues y sin vuelta atras.
+   * no**, y el motivo esta medido: `POST /fiscalizacion/programas/{id}/muestra`
+   * contesta «El programa no declara 'X', y sin el no se puede sortear su
+   * muestra» por cada uno de los tres, y **no hay ninguna ruta de edicion de un
+   * programa** —«reprogramar es registrar otro»—, de modo que lo que nace sin
+   * ellos es una fila esteril que nadie puede arreglar. Dejar pasar aqui el
+   * dato que falta traslada el fallo a un acto despues y sin vuelta atras.
    *
    * Los tres se descubrieron **de uno en uno y operando la pantalla**, que es
    * lo que este orden de comprobacion obliga a hacer: el 422 nombra el primero
@@ -1059,6 +1108,285 @@ export default function Fiscalizacion({ dest, onDest }: PantallaProps) {
     dest === 'actas',
   );
 
+  /* ══════════════════════════════════════════════════════════════════════
+     EL ACTA SE LEVANTA SOBRE UNA FILA DE LA MUESTRA (#431 AC 2, #481, #506)
+     ══════════════════════════════════════════════════════════════════════
+
+     El acta no tenia sujeto: los cinco campos de solo lectura del paso 1 salian
+     con el guion largo y «Cerrar acta» estaba apagado, porque
+     `POST /fiscalizacion/predial/actas` pide tres identificadores INTERNOS
+     —`programaId`, `contribuyenteId`, `predioId`— y el formulario del manual
+     dibuja en su lugar el codigo del programa, el nombre del contribuyente y el
+     codigo predial, que no son lo mismo (#702).
+
+     <h2>El sujeto va en la RUTA, y por que con esta forma</h2>
+
+     `#/fiscalizacion/acta/‹codigo del programa›/‹predioId›`. Es el mecanismo de
+     #685 —`sujeto` de `PantallaProps`, el tercer tramo de la ruta— y no un
+     `useState`, por lo mismo que la ficha de un predio en Catastro: con estado
+     propio el acta no esta en la URL, asi que no se puede compartir —la otra
+     pestaña enseña otra cosa—, se pierde al recargar, y «Atras» no vuelve a la
+     muestra sino un nivel mas arriba, porque nunca hubo entrada de historial.
+     Un acta de campo se levanta en una tablet: recargar por perder la señal es
+     el caso normal, no el raro.
+
+     Las dos mitades del sujeto no estan escritas de la misma forma **a
+     proposito**:
+
+       - el PROGRAMA va por su codigo —`PF-550-UI0681`, lo que se lee en el
+         papel— porque **identifica**: `programa_codigo_uq` es UNIQUE
+         (municipalidad, codigo) (V4), y `GET /fiscalizacion/programas?
+         nDePrograma=` casa exacto contra el —el repositorio compara `codigo =
+         :codigo` en mayusculas—, de modo que resolverlo trae uno o ninguno y no
+         depende de que el programa caiga en la primera pagina de la lista. Con
+         el identificador interno en la URL habria que buscarlo en esa pagina,
+         porque el contrato **no publica ninguna lectura de un programa suelto**
+         —`GET /fiscalizacion/programas/{id}` no existe— y la lista solo se
+         acota por codigo y por ejercicio;
+       - el PREDIO va por su identificador interno porque es lo unico que el
+         filtro de la muestra acepta: `?predio=2001…` contesta 422 «El predio de
+         la muestra es un identificador».
+
+     El separador es la barra y se parte por la ULTIMA, no por la primera: el
+     codigo de un programa es texto libre y puede llevar barras —«PF/2026/014»—,
+     y el identificador del predio son digitos y va al final, asi que la unica
+     particion posible es esa. `App` escribe el sujeto con `encodeURIComponent`,
+     asi que la barra viaja como `%2F` y no parte la ruta.
+
+     <h2>Dos lecturas encadenadas, y ninguna cifra que no venga de ellas</h2>
+
+     La segunda no puede salir hasta que la primera conteste, porque la muestra
+     se pide por el ID del programa y en la URL esta su codigo. Con la red
+     cortada no contesta ninguna: los cinco campos vuelven al guion largo y la
+     primaria se apaga nombrando lo que falta, que es lo que `sin-red` mide. */
+
+  /**
+   * Las dos mitades del sujeto, o `null` si no hay ninguno abierto.
+   *
+   * Se valida aqui y no al usarlo: un tercer tramo escrito a mano —«pegado a
+   * medias», un `%2F` perdido— tiene que quedarse en «no hay acta abierta» y no
+   * en una peticion con `NaN` dentro.
+   */
+  const sujetoDelActa = useMemo(() => {
+    if (!esActa || sujeto === '') return null;
+    const corte = sujeto.lastIndexOf('/');
+    if (corte <= 0) return null;
+    const codigo = sujeto.slice(0, corte);
+    const predio = sujeto.slice(corte + 1);
+    if (codigo === '' || !/^[1-9]\d*$/.test(predio)) return null;
+    return { codigo, predio };
+  }, [esActa, sujeto]);
+
+  /** El programa del acta, por su codigo. Casa exacto, asi que trae uno o ninguno. */
+  const programaDelActaLeido = useRecurso(
+    (senal) => listarProgramas({ nDePrograma: sujetoDelActa?.codigo }, { pagina: 0, tamano: 1 }, senal),
+    [sujetoDelActa?.codigo],
+    sujetoDelActa !== null,
+  );
+  const programaDelActa: ProgramaDeFiscalizacion | null = programaDelActaLeido.datos?.contenido[0] ?? null;
+
+  /**
+   * La fila de la muestra sobre la que se levanta el acta.
+   *
+   * `tamano: 1` porque el filtro acota a un predio y la respuesta trae una fila
+   * o ninguna. Ninguna **no** es lo mismo que el 404 del programa inexistente
+   * —que lo dice `FalloDeLaMuestra`—: es «ese predio no salio en la muestra de
+   * este programa», y se arregla eligiendo otra fila, no volviendo a la lista.
+   */
+  const filaDelActaLeida = useRecurso(
+    (senal) =>
+      listarMuestra(
+        programaDelActa?.id ?? 0,
+        { predio: sujetoDelActa?.predio },
+        { pagina: 0, tamano: 1 },
+        senal,
+      ),
+    [programaDelActa?.id, sujetoDelActa?.predio],
+    sujetoDelActa !== null && programaDelActa !== null,
+  );
+  const filaDelActa: FilaDeMuestra | null = filaDelActaLeida.datos?.contenido[0] ?? null;
+
+  /* Cambiar de predio limpia lo tecleado. Sin esto, el area medida en la casa
+     anterior se queda escrita sobre la ficha de la siguiente y se manda con
+     ella: es el defecto que `abrirPredio` de Catastro ya evita, y aqui acaba en
+     un acta firmada. */
+  useEffect(() => {
+    setVals({});
+    setSucio(false);
+    setPaso(0);
+    setObservacionDelActa('');
+    setFalloDelActa(null);
+    setActaRegistrada(null);
+  }, [sujeto]);
+
+  /**
+   * Los cinco campos de solo lectura del paso 1, **resueltos de las lecturas**.
+   *
+   * No entran en `vals`: `vals` es lo que alguien tecleo, y sembrarlo con datos
+   * leidos deja un estado que sobrevive a que la lectura falle —la pantalla
+   * seguiria enseñando el titular del predio anterior con la red caida—. Se
+   * calculan al dibujar, de modo que sin lectura no hay valor y el control cae
+   * en el guion largo por construccion.
+   */
+  const deLaFila: Record<string, string> = {
+    /* El numero del acta se queda vacio SIEMPRE, tambien con la fila leida y
+       tambien despues de registrarla: `acta_fiscalizacion` (V4) **no tiene
+       columna de numero** —el acta se identifica por su identificador interno y
+       su version dentro del programa—. Poner ahi el `id` seria lo que el pie de
+       la tabla de actas advierte: «Nº interno» no es el numero del acta. El
+       acuse del cierre lo dice con ese nombre. */
+    acta: '',
+    programa: programaDelActa?.codigo ?? '',
+    predio: filaDelActa?.codRefCatastral ?? '',
+    /* El nombre y el codigo municipal juntos, que es como los publica la fila.
+       Sin titular vigente **no se inventa uno**: es el predio que nadie reclama
+       —4 977 de los 14 422 de Catacaos (#586)— y la visita es justo lo que
+       resuelve quien lo ocupa. */
+    contribuyente:
+      filaDelActa === null
+        ? ''
+        : filaDelActa.titular === null
+          ? 'Sin titular vigente'
+          : filaDelActa.titular + (filaDelActa.codContribuyente === null ? '' : ' · ' + filaDelActa.codContribuyente),
+    /* Del PROGRAMA, que es donde el manual lo declara y donde el sorteo lo
+       exige: `POST /fiscalizacion/programas/{id}/muestra` contesta «El programa no declara
+       'fiscalizador'» sin el, asi que todo programa con muestra tiene uno. */
+    fiscalizador: programaDelActa?.fiscalizador ?? '',
+  };
+
+  /**
+   * Lo declarado de cada caracteristica, para la columna del paso 2.
+   *
+   * Solo el area de terreno tiene lado declarado publicado, y es una **foto del
+   * dia del sorteo**: `MuestraDelPrograma` copia las dos superficies y no las
+   * relee, para poder contestar «¿por que me toco a mi?». Por eso la tabla
+   * lleva su fecha al lado (regla 9).
+   */
+  const declaradoDe = (k: string): string => (k === 'terrenoV' ? (filaDelActa?.areaDeclarada ?? '') : '');
+
+  /* ── La escritura del acta (#431, regla 10) ──────────────────────────
+     Mismo camino que el alta de programa y el sorteo, y por el mismo motivo:
+     sin observacion no se guarda nada (RNF-052), y el motivo por el que no se
+     puede mandar se DIBUJA en vez de esconderse en el `title` de un boton
+     apagado, que un boton deshabilitado no recibe el foco (RNF-082). */
+  const [observacionDelActa, setObservacionDelActa] = useState('');
+  const [registrandoActa, setRegistrandoActa] = useState(false);
+  const [falloDelActa, setFalloDelActa] = useState<string | null>(null);
+  const [actaRegistrada, setActaRegistrada] = useState<ActaDeFiscalizacion | null>(null);
+
+  /**
+   * Lo que le falta al acta para poder mandarse, y **se dibuja**.
+   *
+   * El orden es el que el servidor comprueba, medido campo a campo: el 422
+   * nombra el primero que falta y calla los demas, asi que descubrirlos por
+   * ensayo cuesta seis viajes. Aqui se ven los seis a la vez.
+   *
+   * Los tres identificadores no tienen linea propia porque no se teclean: son
+   * la fila de la muestra, y si no esta resuelta lo dice la primera.
+   */
+  const faltaDelActa: { que: string; ok: boolean }[] = [
+    {
+      que: 'El predio de la muestra sobre el que se levanta: es de donde salen el programa, el contribuyente y el predio que el acta exige',
+      ok: filaDelActa !== null && filaDelActa.contribuyenteId !== null && programaDelActa !== null,
+    },
+    { que: 'La fecha de la inspección', ok: String(val('fecha')) !== '' },
+    {
+      que: 'El fiscalizador, que sale del programa y no se teclea aquí',
+      ok: deLaFila.fiscalizador !== '',
+    },
+    { que: 'El hallazgo, sin el cual el acta se liquidaría como conforme', ok: String(val('hallazgo')) !== '' },
+    {
+      que: 'El uso observado, que USO_DISTINTO exige: sin él el acta afirma un hallazgo que no puede sustentar',
+      ok: String(val('hallazgo')) !== 'USO_DISTINTO' || String(val('usoV')).trim() !== '',
+    },
+    {
+      que: 'El área de terreno medida, si se anotó, tiene que ser un número',
+      ok: String(val('terrenoV')).trim() === '' || /^\d+([.,]\d+)?$/.test(String(val('terrenoV')).trim()),
+    },
+    { que: 'La observación de quien registra, de al menos cinco caracteres', ok: observacionBastante(observacionDelActa) },
+  ];
+
+  /**
+   * Por que NO se puede cerrar el acta ahora mismo, o `null` si se puede.
+   *
+   * Las causas del sujeto se separan de las del formulario porque se arreglan
+   * de maneras distintas: sin fila hay que ir a la muestra y elegir una, y sin
+   * hallazgo hay que rellenar el paso 3. Un solo mensaje para las dos mandaria
+   * a quien atiende al sitio equivocado la mitad de las veces.
+   */
+  const motivoParaNoCerrarActa: string | null =
+    actaRegistrada !== null
+      ? `El acta ya quedó registrada con el identificador interno ${String(actaRegistrada.id)}, y un acta no se edita: para corregirla hay que anularla y levantar otra (regla 4).`
+      : sujetoDelActa === null
+        ? 'Esta acta no se levanta sobre ningún predio. Se abre desde la muestra de un programa, con «Levantar acta» en la fila del predio que toca visitar.'
+        : programaDelActaLeido.error !== null || filaDelActaLeida.error !== null
+          ? 'No se pudo leer la fila de la muestra, así que no hay de dónde sacar el programa, el contribuyente ni el predio.'
+          : programaDelActaLeido.cargando || filaDelActaLeida.cargando
+            ? 'Leyendo la fila de la muestra…'
+            : programaDelActa === null
+              ? `No hay ningún programa con el código «${sujetoDelActa.codigo}» en esta municipalidad.`
+              : filaDelActa === null
+                ? `El predio ${sujetoDelActa.predio} no salió en la muestra de ${programaDelActa.codigo}: elige una fila de esa muestra.`
+                : filaDelActa.contribuyenteId === null
+                  ? 'Ese predio no tiene titular vigente, y el acta exige el contribuyente fiscalizado. Quien lo visite averigua quién lo ocupa; hasta que el padrón lo registre, el acta no se puede levantar sobre él.'
+                  : (faltaDelActa.find((f) => !f.ok)?.que ?? null);
+
+  /**
+   * Cierra el acta: la registra y **es irreversible** (regla 4).
+   *
+   * El cuerpo lleva los diez campos que el servidor admite y ni uno mas. Los
+   * tres identificadores salen de la fila leida, no de nada tecleado: es lo
+   * unico que impide levantar un acta sobre un predio que no esta en la
+   * muestra, o cargarsela a quien no es su titular.
+   */
+  const cerrarElActa = async () => {
+    if (motivoParaNoCerrarActa !== null || filaDelActa === null || programaDelActa === null) return;
+    const contribuyenteId = filaDelActa.contribuyenteId;
+    if (contribuyenteId === null) return;
+    setRegistrandoActa(true);
+    setFalloDelActa(null);
+    try {
+      /* Los opcionales van con `|| undefined` y no con la cadena vacia: el
+         cuerpo no se filtra —solo se filtran los parametros de consulta—, asi
+         que un `""` viajaria, y `usoHallado: ""` se guardaria como un uso en
+         blanco en vez de como «no se anoto», que son cosas distintas. El area
+         se manda con el punto decimal, que es lo que `new BigDecimal(...)` lee:
+         una coma tecleada contesta «El area hallada no es un numero valido». */
+      const areaHallada = String(val('terrenoV')).trim().replace(',', '.');
+      const usoHallado = String(val('usoV')).trim();
+      const detalle = String(val('obs')).trim();
+      const registrada = await registrarActaPredial({
+        observacion: observacionDelActa.trim(),
+        programaId: filaDelActa.programaId,
+        contribuyenteId,
+        predioId: filaDelActa.predioId,
+        fechaVisita: String(val('fecha')),
+        fiscalizador: deLaFila.fiscalizador,
+        hallazgo: String(val('hallazgo')),
+        areaHallada: areaHallada === '' ? undefined : areaHallada,
+        usoHallado: usoHallado === '' ? undefined : usoHallado,
+        detalle: detalle === '' ? undefined : detalle,
+      });
+      setActaRegistrada(registrada);
+      setObservacionDelActa('');
+      setSucio(false);
+      /* La muestra de esa fila vuelve a pedirse: `visitado` acaba de cambiar, y
+         dejarla como estaba diria que el predio sigue sin inspeccionar. */
+      filaDelActaLeida.reintentar();
+      toast(`Acta registrada sobre el predio ${filaDelActa.codRefCatastral}, con el identificador interno ${String(registrada.id)}.`);
+    } catch (error) {
+      setFalloDelActa(error instanceof ErrorDeApi ? error.mensaje : 'no hubo respuesta del servidor');
+    } finally {
+      setRegistrandoActa(false);
+    }
+  };
+
+  /** Abre el acta de una fila de la muestra. El destino cambia **y** el sujeto. */
+  const levantarActaDe = (fila: FilaDeMuestra, codigoDelPrograma: string) =>
+    ir('fiscalizacion', 'acta', codigoDelPrograma + '/' + String(fila.predioId));
+
+
+
   /* ── Resultados, contra `GET /fiscalizacion/resultados` (#49) ── */
   const [paginaRes, setPaginaRes] = useState(0);
   useEffect(() => setPaginaRes(0), [resTab]);
@@ -1166,134 +1494,134 @@ export default function Fiscalizacion({ dest, onDest }: PantallaProps) {
    */
   const laResolucion = resolucion.datos;
 
-  /* ── Acta: la tabla de contraste ───────────────────────────── */
+  /* ── Acta: la tabla de contraste ─────────────────────────────
+     Lo declarado sale de la fila leida y no de una constante: la unica
+     caracteristica con lado declarado publicado es el area de terreno
+     (`MuestraResource.areaDeclarada`), y es la foto del dia del sorteo. Las
+     otras seis dicen «—» en las dos columnas de comparacion, porque decir «sin
+     cambio» seria afirmar que lo verificado coincide con lo declarado sin haber
+     leido lo declarado de ninguna parte (#702).
+
+     <h2>La resta de esta columna NO es la diferencia que se registra</h2>
+
+     Es la resta de lo que quien atiende **acaba de teclear** contra lo
+     declarado, y sirve para verla mientras se teclea: el servidor no puede
+     calcularla porque todavia no ha recibido nada. La que queda registrada la
+     deriva `ComparacionHalladoDeclarado` al liquidar, y **no es la misma
+     cuenta**: alli una diferencia negativa se recorta a cero —«declaro de mas»
+     no es un hallazgo contra el contribuyente— y la condicion sale de comparar
+     las dos superficies, no de esta casilla. Por eso la franja de abajo dice de
+     quien es cada cosa, y por eso el signo negativo se dibuja tal cual en vez de
+     recortarse aqui: esconderlo le quitaria a quien mide el unico aviso de que
+     ha apuntado menos de lo declarado, que suele ser una errata de tecleo. */
   const contraste = useMemo(() => {
     let hayDif = false;
     const filas = DIFF.map((r) => {
       const valor = String(vals[r.k] === undefined ? DEFECTOS[r.k] : vals[r.k]);
+      const decl = declaradoDe(r.k);
       let dif = '—';
       let cambio = false;
-      /* Sin nada declarado no hay diferencia, y decir «sin cambio» seria
-         afirmar que lo verificado coincide con lo declarado cuando lo declarado
-         no se ha leido de ninguna parte. Lo declarado sale de la ficha vigente
-         del predio que se inspecciona, y esta pantalla no tiene predio (#702). */
-      if (r.decl === '') {
-        return { r, valor, dif: SIN_DATO, cambio: false };
+      if (decl === '' || valor.trim() === '') {
+        return { r, decl, valor, dif: SIN_DATO, cambio: false };
       }
       if (r.n) {
-        const a = parseFloat(String(r.decl).replace(/,/g, '')) || 0;
-        const b = parseFloat(String(valor).replace(/,/g, '')) || 0;
+        const a = parseFloat(decl.replace(/,/g, '')) || 0;
+        const b = parseFloat(valor.replace(/,/g, '.')) || 0;
         const delta = b - a;
         cambio = Math.abs(delta) > 0.001;
         dif = cambio ? (delta > 0 ? '+' : '') + delta.toFixed(2) + r.u : 'sin cambio';
       } else {
-        cambio = String(valor) !== String(r.decl);
+        /* `equalsIgnoreCase` es como lo compara el backend, asi que aqui
+           tambien: decir «distinto» de «Casa habitacion» contra «CASA
+           HABITACION» seria anunciar un hallazgo que el servidor no va a
+           derivar. Las tildes SI cuentan, en los dos sitios. */
+        cambio = valor.trim().toLocaleUpperCase() !== decl.trim().toLocaleUpperCase();
         dif = cambio ? 'distinto' : 'sin cambio';
       }
       if (cambio) hayDif = true;
-      return { r, valor, dif, cambio };
+      return { r, decl, valor, dif, cambio };
     });
     return { filas, hayDif };
-  }, [vals]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [vals, filaDelActa]);
 
   const pasoIdx = Math.min(paso, PASOS_ACTA.length - 1);
   const pasoActual = PASOS_ACTA[pasoIdx];
 
   /* Lo que va a pasar al cerrar el acta se deriva de lo que el fiscalizador
-     acaba de decidir: el hallazgo del paso 3, la diferencia del paso 2 y las
-     tres marcas del paso 4. Escrito a mano prometía un acto ya apagado. */
+     acaba de decidir y de lo que el acto HACE, medido en
+     `RegistrarActaFiscalizacion`. Escrito a mano prometia dos cosas falsas: un
+     importe de determinacion de la captura del artboard (#702) y que el acta
+     «actualiza la ficha catastral del predio», que es justo lo contrario de lo
+     que el caso de uso dice de si mismo —«trabaja sobre una copia: no toca
+     ninguna fila de catastro» (AC de #45)—. */
   const ICONO_OK: CSSProperties = { display: 'grid', placeItems: 'center', width: 22, height: 22, borderRadius: '50%', flex: '0 0 auto', background: 'var(--ok-bg)', color: 'var(--ok-fg)' };
   const ICONO_NEU: CSSProperties = { display: 'grid', placeItems: 'center', width: 22, height: 22, borderRadius: '50%', flex: '0 0 auto', background: 'var(--accent-soft)', color: 'var(--accent-ink)' };
+  /* Lo que FALTA no lleva visto. Los tres estilos dibujaban el mismo icono
+     —`ICO.visto`— y solo cambiaba el color, asi que «El hallazgo queda por
+     elegir, y el acta no se manda sin el» salia con una marca de hecho al lado:
+     un acuse de exito sobre una frase que dice lo contrario, que es el defecto
+     que #547 midio con el toast del conjunto sin sellar. */
+  const ICONO_FALTA: CSSProperties = { display: 'grid', placeItems: 'center', width: 22, height: 22, borderRadius: '50%', flex: '0 0 auto', background: 'var(--warn-bg)', color: 'var(--warn-fg)' };
 
   const consecuencias = useMemo(() => {
     const hallazgo = String(vals.hallazgo === undefined ? DEFECTOS.hallazgo : vals.hallazgo);
-    const determina = (vals.determina === undefined ? DEFECTOS.determina : vals.determina) === true;
-    const multa = String(vals.multa === undefined ? DEFECTOS.multa : vals.multa);
-    const ejercicios = String(vals.ejercicios === undefined ? DEFECTOS.ejercicios : vals.ejercicios);
-    const construida = String(vals.construidaV === undefined ? DEFECTOS.construidaV : vals.construidaV);
-    const uso = String(vals.usoV === undefined ? DEFECTOS.usoV : vals.usoV);
-    /* `!contraste.hayDif` ya no puede leerse como «coincide con lo declarado»:
-       con la columna «Declarado» vacia no hay con que comparar, y decir «no hay
-       diferencia» seria afirmar que el predio esta conforme sin haber mirado su
-       ficha (#702). Se separan los dos casos. */
-    const sinContraste = DIFF.every((r) => r.decl === '');
-    const conforme = !sinContraste && (hallazgo === 'SIN OBSERVACIONES' || !contraste.hayDif);
     const out: { titulo: string; detalle: string; valor: string; iconoStyle: CSSProperties }[] = [
-      { titulo: 'Se cierra el acta', detalle: 'Deja de ser editable. Para corregirla habría que anularla y levantar otra.', valor: '', iconoStyle: ICONO_OK },
+      {
+        titulo: 'Se registra el acta, y es irreversible',
+        detalle:
+          'Un acta cerrada no se edita ni se borra: se anula y se levanta otra (regla 4). Su identificador interno lo pone el servidor.',
+        valor: '',
+        iconoStyle: ICONO_OK,
+      },
+      {
+        titulo:
+          hallazgo === ''
+            ? 'El hallazgo queda por elegir, y el acta no se manda sin él'
+            : 'El acta afirma el hallazgo ' + hallazgo,
+        detalle:
+          hallazgo === ''
+            ? 'Un acta sin hallazgo se liquidaría como conforme, que es decir que la visita no encontró nada. El servidor la rechaza y esta pantalla también.'
+            : 'Es lo que la persona anota. La CONDICIÓN la deriva después la liquidación comparando las superficies, y puede no coincidir: un acta puede decir CONFORME sobre un predio cuya área hallada supera la declarada, y la liquidación lo clasificará SUBVALUADOR igual.',
+        valor: '',
+        iconoStyle: hallazgo === '' ? ICONO_FALTA : ICONO_OK,
+      },
+      {
+        titulo: 'El predio pasa a «Inspeccionado» en la muestra',
+        detalle: 'No es una columna que se escriba: se deriva de que exista un acta de ese predio en ese programa.',
+        valor: '',
+        iconoStyle: ICONO_OK,
+      },
+      {
+        titulo: 'Queda copiada la versión de ficha que regía el día de la visita',
+        detalle:
+          'Para que comparar lo hallado contra lo declarado siga dando lo mismo dentro de diez años (RNF-075). Si el predio no tiene ficha, el acta queda sin ella y lo dice.',
+        valor: '',
+        iconoStyle: ICONO_NEU,
+      },
+      {
+        titulo: 'No se toca el padrón catastral',
+        detalle:
+          'El acta trabaja sobre una copia: no escribe ninguna fila de catastro ni versiona la ficha del predio. Corregir el padrón es otro acto, y lo hace la transferencia a rentas.',
+        valor: '',
+        iconoStyle: ICONO_NEU,
+      },
+      {
+        titulo: 'No se determina ninguna deuda todavía',
+        /* Aqui decia «S/ 1,842.60» de determinacion y «S/ 267.50» de multa, las
+           dos de la captura del artboard y presentadas como el resultado de un
+           acto que se acababa de ejecutar (#702). Los importes los calcula el
+           backend al liquidar, con los valores del ejercicio sellado; esta
+           pantalla no compone dinero (RNF-083). */
+        detalle:
+          'Liquidar y emitir la resolución de determinación es otro acto y otra pantalla: se hace en «Resultados». Los importes salen de allí, no de aquí.',
+        valor: SIN_DATO,
+        iconoStyle: ICONO_NEU,
+      },
     ];
-    if (sinContraste) {
-      out.push({
-        titulo: 'No se puede decir si hay diferencia',
-        detalle:
-          'Lo declarado sale de la ficha catastral vigente del predio, y aquí no hay predio elegido: la columna «Declarado» del paso 2 está vacía, así que ni «conforme» ni «hay diferencia» se pueden afirmar.',
-        valor: '',
-        iconoStyle: ICONO_NEU,
-      });
-    } else if (conforme) {
-      out.push({
-        titulo: 'El acta se cierra como conforme',
-        detalle: 'No hay diferencia con lo declarado: no se genera determinación ni multa, y el predio sale de la muestra.',
-        valor: '',
-        iconoStyle: ICONO_NEU,
-      });
-    } else if (determina) {
-      out.push({
-        titulo: 'Se genera la resolución de determinación',
-        detalle:
-          'Hallazgo: ' +
-          (hallazgo === '' ? 'sin elegir' : hallazgo.toLowerCase()) +
-          '. Diferencia de impuesto predial y arbitrios de los ejercicios ' +
-          (ejercicios === '' ? 'que se elijan' : ejercicios) +
-          '.',
-        /* Decia «S/ 1,842.60». Era la cifra de la captura del artboard,
-           presentada como el resultado de un acto que se acababa de ejecutar
-           (#702). El importe de una determinacion lo calcula el backend al
-           liquidar la fiscalizacion, con los valores del ejercicio sellado; esta
-           pantalla no compone dinero (RNF-083) y ademas no manda el acta. */
-        valor: SIN_DATO,
-        iconoStyle: ICONO_OK,
-      });
-    } else {
-      out.push({
-        titulo: 'No se genera determinación',
-        detalle: 'Hay diferencia, pero «Derivar a resolución de determinación» está desmarcado: la deuda omitida no entra en la cuenta corriente.',
-        valor: '',
-        iconoStyle: ICONO_NEU,
-      });
-    }
-    if (!conforme && !sinContraste && multa !== 'NO APLICA' && multa !== '') {
-      /* «Código Tributario» va con mayúsculas: es como se cita en la hoja de la
-         resolución y en la baja de deuda de Rentas. Solo baja a minúsculas la
-         descripción de la infracción, que es la parte variable. */
-      const trozos = multa.split(' — ');
-      const numero = (trozos[0] || '').replace(/^ART\.\s*/i, '');
-      const descripcion = (trozos[1] || '').toLowerCase();
-      out.push({
-        titulo: 'Se liquida la multa tributaria',
-        detalle: 'Artículo ' + numero + ' del Código Tributario: ' + descripcion + '.',
-        /* Y esta decia «S/ 267.50», por lo mismo: la multa del art. 176 se
-           calcula sobre un porcentaje de la UIT del ejercicio, que es un valor
-           normativo sellado (regla 5). */
-        valor: SIN_DATO,
-        iconoStyle: ICONO_OK,
-      });
-    }
-    if (!conforme && !sinContraste) {
-      out.push({
-        titulo: 'Se actualiza la ficha catastral del predio',
-        detalle:
-          'Área construida verificada ' +
-          (construida === '' ? SIN_DATO : construida + ' m²') +
-          ' y uso ' +
-          (uso === '' ? SIN_DATO : uso) +
-          '. Queda como versión nueva.',
-        valor: '',
-        iconoStyle: ICONO_NEU,
-      });
-    }
     return out;
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [vals, contraste.hayDif]);
+  }, [vals]);
 
   /* ── Cabecera ──────────────────────────────────────────────── */
   const destino = m.destinos.find((x) => x.k === dest);
@@ -1303,8 +1631,10 @@ export default function Fiscalizacion({ dest, onDest }: PantallaProps) {
       ? ['Fiscalización', 'Documentos']
       : ['Fiscalización', destino?.label ?? 'Fiscalización'];
   /* Decia «Acta ACT-2026-00418», un numero que no existe en ninguna
-     municipalidad. El h1 de una pantalla sin acta abierta no puede nombrar
-     ninguna (#702). */
+     municipalidad (#702). Y sigue sin nombrar ninguna aunque haya fila elegida:
+     el numero de un acta lo pone el servidor al registrarla, asi que hasta
+     entonces no hay ninguno que poner en el h1. El predio sobre el que se
+     levanta si esta, en la barra de contexto de debajo. */
   const titulo = esActa
     ? 'Acta de inspección'
     : esResolucion
@@ -1345,18 +1675,39 @@ export default function Fiscalizacion({ dest, onDest }: PantallaProps) {
       contexto={
         esActa
           ? {
-              volver: { label: 'Muestra', onClick: () => onDest('programas') },
-              /* El sujeto tambien era de la captura: el predio
-                 `02-014-D-14-01`, «MEDINA MEDINA, RUFINA (SUC.)» y «CALLE SANTA
-                 ROSA 116 · programa PF-2026-014 · riesgo alto». Un acta se
-                 levanta sobre un predio de la muestra, y a esta pantalla no
-                 llega ninguno todavia: no hay lectura de un acta abierta
-                 —`GET /fiscalizacion/actas` lista, no abre— ni la muestra
-                 enlaza aqui con su fila. Asi que la cabecera dice de que carece
-                 en vez de nombrar a alguien del artboard (#702). */
-              codigo: SIN_DATO,
-              titular: 'Sin predio elegido',
-              ubic: 'El acta se levanta sobre un predio de la muestra, y aquí todavía no llega ninguno',
+              volver: {
+                label: 'Muestra',
+                /* Vuelve a la muestra CONSERVANDO el programa que se estaba
+                   mirando: `onDest` borra el sujeto a proposito, asi que aqui se
+                   elige el programa antes de irse. Sin eso, volver desde el acta
+                   dejaba la lista en el primer programa de la pagina, que puede
+                   no ser el que la produjo. */
+                onClick: () => {
+                  if (programaDelActa !== null) setPrograma(programaDelActa.id);
+                  onDest('programas');
+                },
+              },
+              /* Los tres eran de la captura: el predio `02-014-D-14-01`,
+                 «MEDINA MEDINA, RUFINA (SUC.)» y «CALLE SANTA ROSA 116 ·
+                 programa PF-2026-014 · riesgo alto» (#702). Ahora salen de la
+                 fila de la muestra que la pantalla acaba de leer, y con la red
+                 cortada vuelven a decir que no hay ninguna. */
+              codigo: filaDelActa?.codRefCatastral ?? SIN_DATO,
+              titular:
+                filaDelActa === null
+                  ? 'Sin predio elegido'
+                  : (filaDelActa.titular ?? 'Sin titular vigente'),
+              ubic:
+                filaDelActa === null || programaDelActa === null
+                  ? 'El acta se levanta sobre un predio de la muestra: elige su fila en «Programas»'
+                  : 'Programa ' +
+                    programaDelActa.codigo +
+                    ' · sector ' +
+                    (filaDelActa.sector ?? SIN_DATO) +
+                    ' · condición del cruce ' +
+                    etiquetaDeCondicion(filaDelActa.condicion) +
+                    ' al ' +
+                    filaDelActa.fechaSorteo,
               /* Decia «Borrador guardado 10:52» EN VERDE, que es un acuse de
                  exito de algo que no ha pasado nunca: nada de esta pantalla se
                  guarda en ningun sitio —el propio boton «Guardar borrador»
@@ -1366,8 +1717,14 @@ export default function Fiscalizacion({ dest, onDest }: PantallaProps) {
                  insignia pasa a decir lo que hay: hay algo escrito y no esta
                  guardado, o no hay nada escrito y el acta no esta registrada.
                  Ni verde, ni hora. */
-              estado: sucio ? 'Borrador sin guardar' : 'Acta sin registrar',
-              estadoColor: sucio ? 'var(--warn-fg)' : 'var(--ink-3)',
+              estado:
+                actaRegistrada !== null
+                  ? 'Acta registrada · interno ' + String(actaRegistrada.id)
+                  : sucio
+                    ? 'Sin registrar, con cambios'
+                    : 'Acta sin registrar',
+              estadoColor:
+                actaRegistrada !== null ? 'var(--ok-fg)' : sucio ? 'var(--warn-fg)' : 'var(--ink-3)',
             }
           : undefined
       }
@@ -2235,6 +2592,40 @@ export default function Fiscalizacion({ dest, onDest }: PantallaProps) {
                             <td style={{ padding: '11px 14px' }}>
                               <Insignia tono={f.visitado ? 'ok' : 'neutro'}>{f.visitado ? 'Inspeccionado' : 'Programado'}</Insignia>
                             </td>
+                            {/* De aqui sale el acta, y de ningun otro sitio: los
+                                tres identificadores que `POST
+                                /fiscalizacion/predial/actas` exige —programa,
+                                contribuyente y predio— son esta fila. El boton
+                                lleva el codigo del programa y el id del predio a
+                                la ruta, y el acta los vuelve a leer de la muestra
+                                (#431 AC 2).
+
+                                Un predio SIN titular vigente no puede: el acta
+                                exige el contribuyente fiscalizado, y en la
+                                muestra ese predio entra a proposito desde #586
+                                —es el que nadie reclama— con sus tres columnas de
+                                titular nulas. El boton se apaga diciendolo en vez
+                                de mandar una peticion que ya se sabe rechazada. */}
+                            <td style={{ padding: '9px 14px', textAlign: 'right' }}>
+                              <button
+                                onClick={() => levantarActaDe(f, programaActivo?.codigo ?? '')}
+                                disabled={f.contribuyenteId === null || programaActivo === null}
+                                title={
+                                  programaActivo === null
+                                    ? 'No hay ningún programa elegido: el acta se levanta sobre la fila de la muestra de uno.'
+                                    : f.contribuyenteId === null
+                                      ? 'Este predio no tiene titular vigente, y el acta exige el contribuyente fiscalizado. Quien lo visite averigua quién lo ocupa; hasta que el padrón lo registre, el acta no se puede levantar sobre él.'
+                                      : undefined
+                                }
+                                style={
+                                  f.contribuyenteId === null || programaActivo === null
+                                    ? { ...BOTON_APAGADO, border: '1px solid var(--line-2)', padding: '6px 12px', background: 'var(--bg-card)', fontSize: 12, whiteSpace: 'nowrap' }
+                                    : { border: '1px solid var(--line-2)', borderRadius: 6, padding: '6px 12px', background: 'var(--bg-card)', fontSize: 12, cursor: 'pointer', whiteSpace: 'nowrap' }
+                                }
+                              >
+                                {f.visitado ? 'Levantar otra acta' : 'Levantar acta'}
+                              </button>
+                            </td>
                           </tr>
                         ))}
                       </tbody>
@@ -2494,8 +2885,8 @@ export default function Fiscalizacion({ dest, onDest }: PantallaProps) {
                       {programaActas === ''
                         ? 'Todavía no se ha levantado ninguna acta en esta municipalidad.'
                         : 'Ese programa no tiene ninguna acta levantada.'}{' '}
-                      Un acta se registra con <code>POST /fiscalizacion/predial/actas</code> o <code>POST /fiscalizacion/vehicular</code>, y
-                      el formulario de abajo todavía no puede mandarlas.
+                      Un acta predial se registra con <code>POST /fiscalizacion/predial/actas</code>, desde el formulario de abajo, y se
+                      levanta sobre una fila de la muestra de un programa: en «Programas», con «Levantar acta» en la fila del predio.
                     </Aviso>
                   </div>
                 ) : null}
@@ -2516,8 +2907,12 @@ export default function Fiscalizacion({ dest, onDest }: PantallaProps) {
 
             <div style={{ display: 'flex', alignItems: 'center', gap: 12, flexWrap: 'wrap' }}>
               <p style={{ margin: 0, flex: 1, minWidth: 220, fontFamily: 'var(--font-serif)', fontSize: 17, lineHeight: 1.6, color: 'var(--ink-2)', textWrap: 'pretty' }}>
-                El acta se levanta en el predio, con una tablet y a veces de pie. Cuatro pasos, uno por pantalla, y cada uno se guarda al
-                avanzar.
+                {/* Decia «cada uno se guarda al avanzar», y avanzar no guarda
+                    nada: es la cuarta frase de esta pantalla que prometia un
+                    borrador que no existe (#702), y sobrevivio a aquel repaso
+                    porque esta en la entradilla. */}
+                El acta se levanta en el predio, con una tablet y a veces de pie. Cuatro pasos, uno por pantalla, y se registra entera al
+                cerrarla.
               </p>
               <button
                 onClick={() => setModoCampo(!grande)}
@@ -2594,7 +2989,7 @@ export default function Fiscalizacion({ dest, onDest }: PantallaProps) {
                 <div style={{ padding: '14px 16px', borderBottom: '1px solid var(--line)' }}>
                   <p style={{ margin: 0, fontFamily: 'var(--font-serif)', fontSize: 16, fontWeight: 600 }}>Declarado contra verificado</p>
                   <p style={{ margin: '3px 0 0', fontSize: 12.5, lineHeight: 1.5, color: 'var(--ink-3)', maxWidth: '76ch', textWrap: 'pretty' }}>
-                    Lo que se compara es el objeto de la fiscalización. Antes eran pares de campos suellos —«área verificada», «área
+                    Lo que se compara es el objeto de la fiscalización. Antes eran pares de campos sueltos —«área verificada», «área
                     declarada», «diferencia»— y había que restar con la vista.
                   </p>
                 </div>
@@ -2609,7 +3004,7 @@ export default function Fiscalizacion({ dest, onDest }: PantallaProps) {
                       </tr>
                     </thead>
                     <tbody>
-                      {contraste.filas.map(({ r, valor, dif, cambio }) => {
+                      {contraste.filas.map(({ r, decl, valor, dif, cambio }) => {
                         const control: CSSProperties = {
                           width: '100%',
                           boxSizing: 'border-box',
@@ -2622,12 +3017,16 @@ export default function Fiscalizacion({ dest, onDest }: PantallaProps) {
                         return (
                           <tr key={r.k} style={{ borderTop: '1px solid var(--line)', background: cambio ? 'var(--warn-bg)' : 'transparent' }}>
                             <td style={{ padding: '11px 14px', fontSize: 13, fontWeight: 500, color: 'var(--ink)', whiteSpace: 'nowrap' }}>{r.l}</td>
-                            <td style={{ padding: '11px 14px', fontSize: 13, color: r.decl === '' ? 'var(--ink-4)' : 'var(--ink-3)', whiteSpace: 'nowrap' }}>
-                              {r.decl === '' ? SIN_DATO : r.decl}
+                            <td style={{ padding: '11px 14px', fontSize: 13, color: decl === '' ? 'var(--ink-4)' : 'var(--ink-3)', whiteSpace: 'nowrap' }}>
+                              {decl === '' ? SIN_DATO : r.n === true ? areaEnMetros(decl) + (r.u ?? '') : decl}
                             </td>
                             <td style={{ padding: '9px 14px', minWidth: 190 }}>
                               {r.t === 'sel' ? (
                                 <select value={valor} onChange={(e) => set(r.k, e.target.value)} style={control}>
+                                  {/* La opcion vacia va primera, como en los campos
+                                      del acta: abrir en «01 — CONCRETO» se lee como
+                                      una eleccion que nadie hizo (#331). */}
+                                  <option value="">— sin elegir —</option>
                                   {(r.o ?? []).map((o) => (
                                     <option key={o} value={o}>
                                       {o}
@@ -2635,7 +3034,18 @@ export default function Fiscalizacion({ dest, onDest }: PantallaProps) {
                                   ))}
                                 </select>
                               ) : (
-                                <input value={valor} onChange={(e) => set(r.k, e.target.value)} style={control} />
+                                <input value={valor} onChange={(e) => set(r.k, e.target.value)} placeholder={r.ph} maxLength={r.max} style={control} />
+                              )}
+                              {/* Cual de las siete filas llega al servidor, dicho
+                                  DONDE se teclea. Desde #431 el acta se manda, asi
+                                  que una fila que no viaja es lo que alguien midio
+                                  de pie en la calle y se pierde al guardar. */}
+                              {r.noViaja !== undefined ? (
+                                <span style={NO_VIAJA}>No viaja al acta. {r.noViaja}</span>
+                              ) : (
+                                <span style={{ ...NO_VIAJA, color: 'var(--ink-3)' }}>
+                                  Viaja como «{r.viaja}»{r.k === 'terrenoV' ? ' — es el área de TERRENO, no la construida' : ''}.
+                                </span>
                               )}
                             </td>
                             <td
@@ -2658,12 +3068,21 @@ export default function Fiscalizacion({ dest, onDest }: PantallaProps) {
                   </table>
                 </div>
                 <div style={{ display: 'flex', alignItems: 'center', gap: 12, flexWrap: 'wrap', padding: '12px 16px', borderTop: '1px solid var(--line)', background: 'var(--bg-elev)' }}>
+                  {/* Decia «Sin diferencia respecto de lo declarado. El acta se
+                      cierra como conforme» siempre que no hubiera diferencia
+                      calculada, y con la columna «Declarado» vacia eso es
+                      afirmar que el predio esta conforme sin haber leido su
+                      ficha. Ahora las tres situaciones se distinguen, y la del
+                      medio —«no hay con que comparar»— es la corriente: solo el
+                      area de terreno tiene lado declarado publicado. */}
                   <span style={{ flex: 1, minWidth: 160, fontSize: 12.5, color: 'var(--ink-3)', textWrap: 'pretty' }}>
                     {contraste.hayDif
-                      ? 'Hay diferencia: el acta puede sostener una determinación. Los ejercicios y la multa se eligen en el paso 4.'
-                      : 'Sin diferencia respecto de lo declarado. El acta se cierra como conforme y no genera determinación.'}
+                      ? 'Hay diferencia con lo que se declaró. Esta resta es la de lo que acabas de teclear; la diferencia que queda registrada y la condición las deriva la liquidación, y allí declarar de más no es un hallazgo: sale conforme.'
+                      : contraste.filas.every((f) => f.dif === SIN_DATO)
+                        ? 'Todavía no hay nada que comparar: hace falta lo declarado —que aquí sólo se publica para el área de terreno— y lo verificado.'
+                        : 'Lo verificado coincide con lo declarado en lo que se ha podido comparar.'}
                   </span>
-                  <Insignia tono={contraste.hayDif ? 'warn' : 'ok'}>{contraste.hayDif ? 'Con diferencia' : 'Conforme'}</Insignia>
+                  {contraste.hayDif && <Insignia tono="warn">Con diferencia</Insignia>}
                 </div>
               </section>
             )}
@@ -2686,7 +3105,18 @@ export default function Fiscalizacion({ dest, onDest }: PantallaProps) {
                   }}
                 >
                   {pasoActual.campos.map((f) => (
-                    <CampoDelActa key={f.k} f={f} valor={val(f.k)} grande={grande} onCambio={(v) => set(f.k, v)} />
+                    <CampoDelActa
+                      key={f.k}
+                      f={f}
+                      /* Los cinco de solo lectura NO salen de `vals`: salen de
+                         las dos lecturas, de modo que sin lectura no hay valor
+                         y el control cae en el guion largo por construccion.
+                         Sembrarlos en `vals` dejaria el titular del predio
+                         anterior en pantalla cuando la lectura falla. */
+                      valor={deLaFila[f.k] ?? val(f.k)}
+                      grande={grande}
+                      onCambio={(v) => set(f.k, v)}
+                    />
                   ))}
                 </div>
               </section>
@@ -2704,7 +3134,7 @@ export default function Fiscalizacion({ dest, onDest }: PantallaProps) {
                 {consecuencias.map((c) => (
                   <div key={c.titulo} style={{ display: 'flex', alignItems: 'flex-start', gap: 12, padding: '12px 16px', borderBottom: '1px solid var(--line)' }}>
                     <span style={c.iconoStyle}>
-                      <Icono d={ICO.visto} tam={13} grosor={2.4} />
+                      <Icono d={c.iconoStyle === ICONO_FALTA ? ICO.aviso : ICO.visto} tam={13} grosor={2.4} />
                     </span>
                     <span style={{ flex: 1, minWidth: 0 }}>
                       <span style={{ display: 'block', fontSize: 13, color: 'var(--ink)' }}>{c.titulo}</span>
@@ -2716,34 +3146,138 @@ export default function Fiscalizacion({ dest, onDest }: PantallaProps) {
               </section>
             )}
 
-            {/* Lo que le falta al acta para poder mandarse, escrito y no sólo
-                en el `title` de un botón apagado: un botón deshabilitado no
-                recibe el foco, así que su `title` no lo lee un lector de
-                pantalla (RNF-082). Y las tres cifras están medidas, no
-                supuestas. */}
-            <div id="acta-por-que-no">
-              <Aviso tono="warn" titulo="Esta acta todavía no se puede mandar, y ya no es por el hallazgo">
-                <code>POST /fiscalizacion/predial/actas</code> admite <strong>diez</strong> campos desde <code>V76</code> —el décimo es{' '}
-                <code>usoHallado</code>, que es lo que #599 construyó— y esta pantalla dibuja veintitrés controles y siete filas de
-                contraste. De esos diez, <strong>tres son identificadores internos</strong> —<code>programaId</code>,{' '}
-                <code>contribuyenteId</code> y <code>predioId</code>— y el formulario dibuja en su lugar el código del programa, el nombre
-                del contribuyente y el código predial, que no son lo mismo.
+            {/* Lo que el acta manda y lo que no, escrito y no sólo en el
+                `title` de un botón: hasta #431 este aviso decía que el acta
+                entera no se podía mandar —era cierto: no tenía predio, y sus
+                tres identificadores son internos—. Ahora se manda, así que lo
+                que queda por decir es otra cosa: cuáles de los veintitrés
+                controles llegan al servidor.
+
+                Los valores del acta de la maqueta no se citan al explicarlo:
+                citarlos para explicarlos volvería a ponerlos en la pantalla, y
+                `sin-red` los caza (#702). */}
+            <div id="acta-que-viaja">
+              <Aviso tono="neutro" titulo="Qué de esta acta llega al servidor, y qué no">
+                <code>POST /fiscalizacion/predial/actas</code> admite <strong>diez</strong> campos y esta pantalla dibuja veintitrés
+                controles y siete filas de contraste. Los que llegan son <strong>seis</strong>: la fecha de la inspección, el hallazgo, el
+                área de terreno medida, el uso observado, las observaciones del fiscalizador —que viajan como <code>detalle</code>— y la
+                observación de quien registra, que la regla 10 exige. Los otros <strong>tres</strong> no se teclean:{' '}
+                <code>programaId</code>, <code>contribuyenteId</code> y <code>predioId</code> son identificadores internos y salen de la
+                fila de la muestra sobre la que se levanta el acta —el formulario dibuja en su lugar el código del programa, el nombre del
+                contribuyente y el código predial, que no son lo mismo—. El décimo, <code>fiscalizador</code>, sale del programa.
                 <br />
                 <br />
-                Por eso los cinco campos de solo lectura del paso 1 salen con el guion largo, y con él la columna «Declarado» del paso 2:
-                un acta se levanta sobre un predio de la muestra, y a esta pantalla no llega ninguno —<code>GET /fiscalizacion/actas</code>{' '}
-                lista actas, no abre una, y la muestra no enlaza aquí con su fila—. Hasta #702 los cinco traían un acta entera copiada del
-                artboard, con su número, su programa y su contribuyente, y «Cerrar acta» anunciaba un importe de determinación que no
-                existía. Ninguno de esos valores se repite aquí: citarlos para explicarlos volvería a ponerlos en la pantalla.
+                Lo demás <strong>no viaja, y cada control lo dice donde se teclea</strong>: la hora, quién atendió, el vínculo y el
+                resultado de la visita no tienen columna en <code>acta_fiscalizacion</code>; las fotos, el croquis y la firma no tienen
+                adjunto ni operación que los reciba; y las tres marcas del cierre —determinar, ejercicios y multa— son decisiones de la
+                liquidación, que es otro acto y otra pantalla. De las siete filas de contraste llegan dos, el área de terreno y el uso;
+                las otras cinco son estructura del predio y ninguna existe todavía en ninguna columna del acta.
                 <br />
                 <br />
-                El desplegable «Hallazgo principal» ofrece seis rótulos y <strong>los seis contestan 422</strong> «Hallazgo
-                desconocido», medido uno a uno contra el backend: el enumerado publica <code>CONFORME</code>, <code>OMISO</code>,{' '}
-                <code>SUBVALUADOR</code>, <code>USO_DISTINTO</code> y <code>NO_UBICADO</code>, y ninguno coincide letra por letra con
-                ninguno de los seis. No se traduce ninguno —parecerse no es serlo (#427, #546)—, así que lo que se elija aquí no viajaría
-                aunque hubiera dónde mandarlo. Lo que <code>V76</code> desbloqueó es la lectura de arriba, no esta escritura.
+                El desplegable «Hallazgo principal» ofrece <strong>los cinco valores del enumerado</strong>, sin traducir: los seis rótulos
+                del manual contestan los seis <code>422 «Hallazgo desconocido»</code>, medido uno a uno contra el backend, y parecerse no
+                es serlo (#427, #546). {HALLAZGOS_DEL_MANUAL_QUE_NO_EXISTEN} Y <code>USO_DISTINTO</code> exige el uso observado del paso 2:
+                sin él, el acta afirmaría un hallazgo que no puede sustentar.
               </Aviso>
             </div>
+
+            {/* El acta VEHICULAR no se conecta, y el motivo no es el heredado
+                —«le falta un identificador interno»—: es que **no hay de dónde
+                sacarlo**.
+
+                Medido: `programa_muestra` (V60) tiene `predio_id NOT NULL` y
+                ninguna columna de vehículo; `GenerarMuestra` sortea predios y
+                nada más —su javadoc empieza «los predios que se van a
+                inspeccionar»—; `MuestraResource` publica `predioId` y no
+                `vehiculoId`; el cruce del padrón vehicular contra SUNARP, SUNAT
+                y MTC no existe como operación (#546, y sus tres filtros se
+                retiraron del contrato por eso); y `GET /rentas/vehiculos` exige
+                el contribuyente —«Hay que decir de quién son los vehículos»—,
+                así que tampoco hay un padrón vehicular que listar sin saber ya
+                a quién se fiscaliza.
+
+                O sea que la mitad que falta no es de interfaz: es que la
+                fiscalización vehicular no tiene detección ni muestra, y un acta
+                que se abre eligiendo el vehículo a mano contesta «porque alguien
+                te marcó», que es exactamente lo que ADR-0023 §1 se negó a hacer
+                con los predios. */}
+            <Aviso tono="neutro" titulo="El acta vehicular no se levanta desde aquí, y no por falta de un campo">
+              <code>POST /fiscalizacion/vehicular</code> existe y pide <code>vehiculoId</code>. Lo que no existe es de dónde sacarlo: la
+              muestra de un programa es <strong>de predios</strong> —<code>programa_muestra</code> no tiene columna de vehículo y el sorteo
+              recorre el padrón predial—, el cruce del padrón vehicular contra SUNARP, SUNAT y MTC no es ninguna operación del contrato, y
+              el listado de vehículos exige saber ya de quién son. Elegir el vehículo a mano haría que el acta contestara «porque alguien lo
+              marcó» a la pregunta de por qué se fiscaliza a alguien, que es lo que ADR-0023 decidió no hacer. Hasta que la detección
+              vehicular exista, esta pantalla levanta actas prediales.
+            </Aviso>
+
+            {/* ── La observación de quien registra, y lo que falta ──
+                Regla 10 / RNF-052: sin observación no se guarda. No la dibuja el
+                manual —como no la dibuja para el alta de programa ni para el
+                sorteo—, y va aquí, en el paso del cierre, que es donde está el
+                botón que la exige.
+
+                Y lo que le falta al acta se DIBUJA, no se esconde en el `title`
+                de un botón apagado: un botón deshabilitado no recibe el foco, así
+                que su `title` no lo lee un lector de pantalla ni lo descubre
+                quien no pasa el ratón (RNF-082). */}
+            {pasoActual.cierre === true && (
+              <section style={TARJETA}>
+                <div style={{ padding: '14px 16px', borderBottom: '1px solid var(--line)' }}>
+                  <p style={{ margin: 0, fontFamily: 'var(--font-serif)', fontSize: 16, fontWeight: 600 }}>Cerrar el acta</p>
+                  <p style={{ margin: '3px 0 0', fontSize: 12.5, lineHeight: 1.5, color: 'var(--ink-3)', maxWidth: '76ch', textWrap: 'pretty' }}>
+                    Registrar el acta es <strong>irreversible</strong>: no se edita ni se borra, se anula y se levanta otra (regla 4).
+                  </p>
+                </div>
+
+                <div style={{ padding: '14px 16px' }}>
+                  <label style={{ display: 'block' }}>
+                    <span style={{ display: 'block', ...ROTULO, marginBottom: 5 }}>Observación · obligatoria</span>
+                    <textarea
+                      value={observacionDelActa}
+                      onChange={(e) => setObservacionDelActa(e.target.value)}
+                      rows={2}
+                      /* `Observacion` admite de 5 a 500 caracteres (ADR-0008).
+                         El minimo lo comprueba la lista de lo que falta; el
+                         maximo se corta aqui, para no descubrirlo en el 422
+                         despues de haber escrito el relato entero. */
+                      maxLength={500}
+                      placeholder="Por qué se registra ahora y con qué documento"
+                      style={{ ...CAMPO, background: 'var(--bg-card)', resize: 'vertical' }}
+                    />
+                  </label>
+
+                  <ul style={{ margin: '12px 0 0', padding: 0, listStyle: 'none', display: 'flex', flexDirection: 'column', gap: 6 }}>
+                    {faltaDelActa.map((f) => (
+                      <li key={f.que} style={{ display: 'flex', alignItems: 'flex-start', gap: 8, fontSize: 12, lineHeight: 1.5, color: f.ok ? 'var(--ink-4)' : 'var(--warn-fg)', textWrap: 'pretty' }}>
+                        <span style={{ flex: '0 0 auto', fontFamily: 'var(--font-mono)' }}>{f.ok ? '✓' : '·'}</span>
+                        <span>{f.que}</span>
+                      </li>
+                    ))}
+                  </ul>
+
+                  {falloDelActa !== null && (
+                    <p style={{ margin: '12px 0 0', padding: '10px 12px', borderRadius: 6, background: 'var(--bad-bg)', color: 'var(--bad-fg)', fontSize: 12.5, lineHeight: 1.5, textWrap: 'pretty' }}>
+                      No se registró: {falloDelActa}
+                    </p>
+                  )}
+
+                  {/* El acuse dice el número que el servidor puso y nada más: no
+                      anuncia ninguna determinación ni ningún importe, que es lo
+                      que este mismo botón hacía con dos cifras de la maqueta
+                      (#702). */}
+                  {actaRegistrada !== null && (
+                    <p style={{ margin: '12px 0 0', padding: '10px 12px', borderRadius: 6, background: 'var(--ok-bg)', color: 'var(--ok-fg)', fontSize: 12.5, lineHeight: 1.5, textWrap: 'pretty' }}>
+                      Acta registrada con el identificador interno {actaRegistrada.id}, versión {actaRegistrada.version}, en estado{' '}
+                      {etiquetaDelEstadoDelActa(actaRegistrada.estado)}, con hallazgo {actaRegistrada.hallazgo ?? SIN_DATO}.{' '}
+                      {actaRegistrada.fichaId === null
+                        ? 'El predio no tenía ninguna versión de ficha vigente el día de la visita, así que el acta queda sin ella.'
+                        : 'Queda copiada la versión de ficha que regía el día de la visita.'}{' '}
+                      Liquidarla y emitir la determinación se hace en «Resultados».
+                    </p>
+                  )}
+                </div>
+              </section>
+            )}
 
             <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>
               <PasoAtras
@@ -2755,53 +3289,73 @@ export default function Fiscalizacion({ dest, onDest }: PantallaProps) {
                   senal», y no se guarda nada en ningun sitio: el asistente solo
                   cambia de paso, y lo tecleado vive en el estado de React hasta
                   que se recargue la pagina (#702). */}
-              <p style={{ margin: 0, flex: 1, minWidth: 170, fontSize: 12, color: 'var(--ink-3)', textWrap: 'pretty' }}>
+              <p id={MOTIVO_DEL_ACTA} style={{ margin: 0, flex: 1, minWidth: 200, fontSize: 12, lineHeight: 1.5, color: motivoParaNoCerrarActa === null ? 'var(--ink-3)' : 'var(--warn-fg)', textWrap: 'pretty' }}>
                 {pasoIdx >= PASOS_ACTA.length - 1
-                  ? 'Cerrar el acta sería el punto sin retorno del procedimiento, y todavía no se puede.'
-                  : 'Continuar solo cambia de paso: lo tecleado no se guarda en ningún sitio.'}
+                  ? (motivoParaNoCerrarActa ??
+                    'Al cerrarla, el acta queda registrada sobre ese predio y ese contribuyente. No se puede deshacer.')
+                  : 'Continuar solo cambia de paso: lo tecleado no se guarda en ningún sitio hasta cerrar el acta.'}
               </p>
-              {/* Decia «Borrador guardado en el dispositivo» y no guardaba en
-                  ninguna parte, que es el acto deshonesto de esta revision en
-                  su forma mas barata: un aviso de exito sin nada detras. Y aqui
-                  no basta con implementarlo, porque el acta entera no se puede
-                  mandar todavia: un borrador de algo que no tiene a donde ir es
-                  papel guardado que nadie va a recoger. El motivo entero esta
-                  en el aviso de arriba, que si lo lee un lector de pantalla. */}
+              {/* «Guardar borrador» decia «Borrador guardado en el dispositivo»
+                  y no guardaba en ninguna parte, que es el acto deshonesto de
+                  esta revision en su forma mas barata: un aviso de exito sin
+                  nada detras (#702). Sigue apagado, y ahora su motivo es otro:
+                  no hay ninguna operacion de borrador —el acta se registra
+                  entera o no se registra—, asi que guardarlo exigiria decidir
+                  donde, y un borrador en el navegador se pierde con el
+                  dispositivo que se llevo a la calle. */}
               <button
                 disabled
-                title="El acta todavía no se puede enviar, así que no hay borrador que guardar: la operación de registro pide diez campos —tres de ellos identificadores internos— y esta pantalla dibuja veintitrés (#546, #599)."
+                title="No hay ninguna operación de borrador: el acta se registra entera con «Cerrar acta», y hasta entonces lo tecleado vive sólo en esta pestaña."
                 style={{ border: '1px solid var(--line-2)', borderRadius: 6, padding: grande ? '13px 20px' : '10px 18px', background: 'var(--bg-card)', fontSize: 13, cursor: 'not-allowed', opacity: 0.5 }}
               >
                 Guardar borrador
               </button>
-              {/* «Cerrar acta» estaba ENCENDIDO, no mandaba nada, y su acuse
-                  anunciaba una determinacion de S/ 1,842.60 que no existe
-                  (#702). Se apaga con su motivo, como sus dos vecinos: el acta
-                  entera no se puede mandar todavia, asi que cerrarla tampoco.
-                  El motivo completo esta en el aviso de arriba, que si lee un
-                  lector de pantalla; el `title` lo repite en corto para quien
-                  pase el raton (RNF-082). */}
+              {/* «Cerrar acta» estaba ENCENDIDO y no mandaba nada: su acuse
+                  anunciaba una determinacion de la maqueta (#702), y despues se
+                  apago porque el acta no tenia sujeto (#431 AC 2). Ahora manda,
+                  y se enciende SOLO cuando de verdad se puede: los tres
+                  identificadores resueltos de una fila real, la fecha, el
+                  hallazgo, el uso si el hallazgo lo exige y la observacion.
+
+                  Apunta con `aria-describedby` al parrafo de al lado, que es
+                  donde el motivo se LEE: un boton apagado no recibe el foco, asi
+                  que su `title` no lo alcanza ni el raton ni un lector de
+                  pantalla (RNF-082). */}
               {pasoIdx >= PASOS_ACTA.length - 1 ? (
                 <button
-                  disabled
-                  aria-describedby="acta-por-que-no"
-                  title="Cerrar el acta la registraría, y el registro está bloqueado: POST /fiscalizacion/predial/actas pide diez campos —tres de ellos identificadores internos que esta pantalla no dibuja— y ninguno de los seis rótulos del hallazgo está en el enumerado (#546, #599)."
-                  style={{
-                    display: 'flex',
-                    alignItems: 'center',
-                    gap: 7,
-                    border: '1px solid var(--line-2)',
-                    borderRadius: 6,
-                    padding: grande ? '14px 26px' : '11px 22px',
-                    background: 'var(--bg-card)',
-                    color: 'var(--ink-3)',
-                    fontSize: grande ? 15 : 13.5,
-                    fontWeight: 500,
-                    cursor: 'not-allowed',
-                    opacity: 0.5,
-                  }}
+                  onClick={() => void cerrarElActa()}
+                  disabled={motivoParaNoCerrarActa !== null || registrandoActa}
+                  aria-describedby={MOTIVO_DEL_ACTA}
+                  style={
+                    motivoParaNoCerrarActa === null && !registrandoActa
+                      ? {
+                          display: 'flex',
+                          alignItems: 'center',
+                          gap: 7,
+                          border: 0,
+                          borderRadius: 6,
+                          padding: grande ? '14px 26px' : '11px 22px',
+                          background: 'var(--accent)',
+                          color: '#fff',
+                          fontSize: grande ? 15 : 13.5,
+                          fontWeight: 500,
+                          cursor: 'pointer',
+                        }
+                      : {
+                          ...BOTON_APAGADO,
+                          display: 'flex',
+                          alignItems: 'center',
+                          gap: 7,
+                          border: 0,
+                          padding: grande ? '14px 26px' : '11px 22px',
+                          background: 'var(--accent)',
+                          color: '#fff',
+                          fontSize: grande ? 15 : 13.5,
+                          fontWeight: 500,
+                        }
+                  }
                 >
-                  Cerrar acta
+                  {registrandoActa ? 'Registrando…' : 'Cerrar acta'}
                 </button>
               ) : (
                 <button
@@ -3510,8 +4064,16 @@ export default function Fiscalizacion({ dest, onDest }: PantallaProps) {
               <Icono d={ICO.reloj} tam={13} grosor={2} />
               Acta sin cerrar
             </span>
+            {/* Decia «El borrador se guarda en el dispositivo: si se cae la
+                señal en el predio, lo escrito no se pierde», y no se guarda en
+                ninguna parte: lo tecleado vive en el estado de React y se va con
+                la pestaña. Es la frase gemela de las tres que #702 retiro, y
+                sobrevivio porque esta en la barra pegajosa y no en el
+                formulario. Peor aqui que en un boton: promete precisamente lo
+                que quien levanta un acta de pie en la calle necesita creer. */}
             <p style={{ margin: 0, flex: 1, minWidth: 180, fontSize: 12, color: 'var(--ink-3)', textWrap: 'pretty' }}>
-              El borrador se guarda en el dispositivo: si se cae la señal en el predio, lo escrito no se pierde.
+              Lo escrito vive sólo en esta pestaña hasta que se cierre el acta: no hay borrador guardado en ningún sitio, ni en el
+              dispositivo ni en el servidor.
             </p>
             <button
               onClick={() => {
@@ -3526,7 +4088,7 @@ export default function Fiscalizacion({ dest, onDest }: PantallaProps) {
             </button>
             <button
               disabled
-              title="El acta todavía no se puede enviar, así que no hay borrador que guardar (#546, #599)."
+              title="No hay ninguna operación de borrador: el acta se registra entera con «Cerrar acta», en el paso 4."
               style={{ border: 0, borderRadius: 6, padding: '10px 22px', background: 'var(--accent)', color: '#fff', fontSize: 13.5, fontWeight: 500, cursor: 'not-allowed', opacity: 0.5 }}
             >
               Guardar borrador
@@ -3662,6 +4224,10 @@ const COLUMNAS_DE_MUESTRA: ColDef[] = [
   ['Área declarada m²', 1],
   ['Condición del cruce', 0],
   ['Estado', 0],
+  /* La columna del acto. El artboard dibuja un boton por fila que dice que toca
+     —«Levantar acta», «Ver acta», «Reprogramar»—; de los tres solo el primero
+     tiene operacion detras, asi que es el unico que se dibuja (#431). */
+  ['', 0],
 ];
 
 /**

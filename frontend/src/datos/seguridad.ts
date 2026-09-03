@@ -58,24 +58,35 @@ export type PanelDeSistema = {
  * verificado a doble firma y se publica al conjunto sellado del ejercicio. Los
  * campos se quedan de solo lectura con un guion y dicen de donde vendrian.
  */
-export const panelesDeSistema = (ejercicio: string): PanelDeSistema[] => [
+export const panelesDeSistema = (ejercicio: string, ejercicios: readonly string[]): PanelDeSistema[] => [
   {
     label: 'Ejercicio de trabajo',
     titulo: 'Cambiar el ejercicio de trabajo',
-    nota: 'Cambiar el ejercicio de trabajo es un acto: lleva observación y exige el privilegio Especial sobre «cambiar_anio», porque decide sobre qué año escriben los doce módulos y hacerlo con una caja abierta produce recibos con el año equivocado. El selector de la cabecera NO es eso: sólo acota lo que las consultas piden, y vive en el navegador.',
+    nota: 'Cambiar el ejercicio de trabajo es un acto: lleva observación y exige el privilegio Especial sobre «cambiar_anio», porque decide sobre qué año escriben los doce módulos y hacerlo con una caja abierta produce recibos con el año equivocado. El selector de la cabecera NO es eso: sólo acota lo que las consultas piden, vive en el navegador y no queda registrado en ninguna parte.',
     campos: [
-      { k: 'ejActual', l: 'Ejercicio actual', t: 'ro', v: ejercicio },
-      { k: 'ejNuevo', l: 'Cambiar a', t: 'sel', v: ejercicio, o: ['2026', '2025', '2024', '2023'] },
-      { k: 'ejMotivo', l: 'Motivo del cambio', t: 'ro', ancho: true, v: '—', ayuda: 'Lo llevará la petición cuando el acto se conecte (#557)' },
+      { k: 'ejActual', l: 'Ejercicio de la vista', t: 'ro', v: ejercicio },
+      { k: 'ejNuevo', l: 'Fijar como ejercicio de trabajo', t: 'sel', v: ejercicio, o: [...ejercicios] },
+      {
+        k: 'ejMotivo',
+        l: 'Motivo del cambio · obligatorio',
+        t: 'text',
+        ancho: true,
+        ph: 'Por qué pasa el trabajo a ese ejercicio',
+        ayuda: 'Es lo único que la petición lleva además del año. Sin él no se puede registrar el acto (RNF-052).',
+      },
     ],
     /* El artboard avisaba aquí de «una caja abierta (C-3, turno mañana)». No hay
        ninguna lectura de turnos abiertos en el contrato, así que el aviso no
-       podía ser más que decorado — y decorado que dice que NO cambies algo. */
-    impedimento:
-      'El acto no se puede hacer desde aquí todavía: PUT /seguridad/sesion/ejercicio existe y no lo llama nadie, ' +
-      'y conectarlo tal cual daría 403 a quien no tenga el privilegio Especial sobre «cambiar_anio» cada vez ' +
-      'que cambie de año en una lista. Separar el filtro de vista del acto registrado está en el issue #557.',
-    pie: 'El cambio se anotará en la bitácora con tu usuario, la hora y el motivo.',
+       podía ser más que decorado — y decorado que dice que NO cambies algo.
+
+       Sin impedimento estructural desde #557: `PUT /seguridad/sesion/ejercicio`
+       existe y esta pantalla lo llama. Lo que puede impedir el acto es de
+       ejecución —que falte el motivo, que el envío esté en curso— y lo calcula
+       la pantalla, como el cambio de contraseña de aquí abajo. El permiso NO se
+       cuenta entre esos impedimentos: sin él esta pestaña no se dibuja, así que
+       no hay nada que apagar ni motivo que dar. */
+    impedimento: '',
+    pie: 'El cambio se anota en la bitácora con tu usuario, la hora y el motivo. El selector de la cabecera pasa además a ese año, pero eso es un efecto: lo que queda registrado es el ejercicio de trabajo de tu sesión.',
     primaria: 'Cambiar el ejercicio',
   },
   {

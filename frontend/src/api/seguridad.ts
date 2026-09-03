@@ -544,6 +544,57 @@ export function permisosDeLaSesion(senal?: AbortSignal): Promise<PermisosDeLaSes
 }
 
 /**
+ * La sesion abierta, tal como queda tras fijarle el ejercicio de trabajo (#557).
+ * Es `SesionResource`, campo por campo.
+ *
+ * `ejercicioDeTrabajo` sigue admitiendo nulo aqui —el `record` lo declara
+ * `@Nullable`— aunque la respuesta de {@link fijarEjercicioDeTrabajo} lo traiga
+ * siempre puesto: quien lee este tipo no tiene por que saber por que via llego,
+ * y prometer que nunca es nulo obligaria a un `!` en la unica linea donde el
+ * dato importa. Lo que significa el nulo esta escrito en
+ * {@link IdentidadDeLaSesion}: nadie lo ha fijado, no «el corriente».
+ */
+export type SesionDeTrabajo = {
+  id: number;
+  usuarioId: number;
+  inicio: string;
+  ejercicioDeTrabajo: number | null;
+};
+
+/**
+ * Fija el ejercicio de trabajo de ESTA sesion. Es un acto: se registra (#557).
+ *
+ * <h2>No es el selector de la cabecera, y esa es la decision</h2>
+ *
+ * El selector del shell es un **filtro de vista**: vive en el navegador, no
+ * pide permiso a nadie y no deja rastro, porque mirar otro año no es un acto
+ * —un cajero sin `cambiar_anio` tiene que poder consultar la deuda de 2024—.
+ * Este `PUT` es la otra cosa: exige el privilegio `ESPECIAL` sobre
+ * `cambiar_anio`, lleva observacion (regla 10) y queda en la bitacora, porque
+ * decide sobre que año escriben los doce modulos.
+ *
+ * Atarlas seria lo peor de las dos: cambiar de año en una lista pediria un
+ * permiso que casi nadie tiene —403 por mirar— y ademas escribiria una fila de
+ * auditoria por cada vistazo, con lo que la bitacora dejaria de distinguir
+ * quien decidio el año de trabajo de quien paso por delante de una tabla. Por
+ * eso viven en dos sitios distintos de la pantalla y no en el mismo control.
+ *
+ * <h2>El año no se valida aqui</h2>
+ *
+ * `Ejercicio` va de 1990 a 2100 y lo comprueba el dominio; uno fuera de rango
+ * vuelve como 422 nombrandolo. Repetir el rango en la interfaz seria una
+ * segunda verdad sobre lo mismo, y la que se lee en pantalla acabaria no siendo
+ * la que rechaza el servidor.
+ */
+export function fijarEjercicioDeTrabajo(
+  ejercicio: number,
+  observacion: string,
+  senal?: AbortSignal,
+): Promise<SesionDeTrabajo> {
+  return solicitar('/seguridad/sesion/ejercicio', { metodo: 'PUT', cuerpo: { ejercicio, observacion }, senal });
+}
+
+/**
  * Lo que contesta el cambio de clave: quien la gestiona y a donde hay que ir.
  *
  * `destino` es una ruta RELATIVA del proveedor —hoy `/account/password`—, no una

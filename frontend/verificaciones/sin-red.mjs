@@ -122,11 +122,27 @@ async function desplegarlo(pagina) {
  * este arnes solo miraba el paso 1. Medido sobre el arbol anterior a #702: «7
  * pantallas recorridas · ninguna ensenia una cifra».
  *
- * Las dos formas que este producto usa, y no hay una tercera:
+ * Las formas que este producto usa. **Eran «dos, y no hay una tercera», y esa
+ * frase la escribi yo y era falsa** — la tercera es la mayoritaria y llevaba
+ * dentro una pantalla entera de maqueta:
  *
  *   - el paso de un asistente, que se declara con `aria-current="step"` (los
- *     hermanos del activo son los demas pasos), y
- *   - `role="tab"`.
+ *     hermanos del activo son los demas pasos);
+ *   - `role="tab"`;
+ *   - y **`aria-pressed`**, que es como se declara un conmutador de vista.
+ *
+ * Medido sobre los 65 destinos con la red cortada: `aria-current="step"` sale
+ * **2**, `role="tab"` sale **0** —esa mitad de la regla no ha disparado nunca—
+ * y `aria-pressed` sale **27, en 7 destinos**.
+ *
+ * Y uno de esos 27 era el defecto: `#/inicio` tiene un conmutador
+ * Personal/Contribuyente, **fuera de `<main>`**, y al pulsar «Contribuyente»
+ * dibujaba la cuenta entera de una persona del artboard —doce importes, hasta
+ * «Autovaluo S/ 132 196,75», con su nombre y un boton «Pagar en linea»— con la
+ * red cortada y este arnes en verde. Es #702 un mecanismo mas alla.
+ *
+ * Un conmutador no se restaura entre destinos y da igual: cada destino se abre
+ * con `goto`, que remonta la pantalla.
  */
 async function estadosDe(pagina) {
   return pagina.evaluate(() => {
@@ -137,6 +153,9 @@ async function estadosDe(pagina) {
       for (const b of grupo.querySelectorAll('button')) fuera.add(b);
     }
     for (const t of document.querySelectorAll('[role="tab"]')) fuera.add(t);
+    /* El conmutador de vista. NO se acota a `<main>`: el de `#/inicio` vive en
+       la cabecera, fuera de `main`, y era exactamente por donde se colaba. */
+    for (const c of document.querySelectorAll('[aria-pressed]')) fuera.add(c);
     /* Se devuelve una MARCA y no el elemento: entre clic y clic la pantalla se
        vuelve a dibujar y un manejador de Playwright apuntaria a un nodo que ya
        no esta. */

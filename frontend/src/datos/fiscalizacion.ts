@@ -18,6 +18,25 @@ export type CampoDeActa = {
   ancho?: boolean;
   ph?: string;
   ayuda?: string;
+  /** El largo que el servidor admite, cuando lo tiene. Se corta al teclear. */
+  max?: number;
+  /**
+   * Por que este control **no llega al servidor**, o ausente si si llega.
+   *
+   * Desde #431 el acta se puede mandar, y eso cambia lo que significa un campo
+   * que se teclea y no viaja: hasta entonces no viajaba ninguno —el formulario
+   * entero estaba bloqueado y lo decia (#702)—, asi que daba igual. Ahora un
+   * control mudo es perdida silenciosa de lo que alguien escribio de pie en la
+   * calle, que es el defecto que #331 midio con el rotulo recordado.
+   *
+   * `PeticionDeActaPredial` es una lista blanca de diez campos y esta pantalla
+   * dibuja veintitres controles y siete filas de contraste. Los que sobran no
+   * se retiran —el manual los dibuja, y quitarlos seria reescribir su formulario
+   * (RNF-080)— y tampoco se doblan dentro de `detalle`, que seria inventarle un
+   * formato a un texto libre: se marcan, uno a uno, con el motivo de por que
+   * `acta_fiscalizacion` no tiene donde guardarlos.
+   */
+  noViaja?: string;
 };
 
 export type PasoDeActa = {
@@ -28,6 +47,30 @@ export type PasoDeActa = {
   campos: CampoDeActa[];
 };
 
+/**
+ * Los cinco valores de `Hallazgo`, **letra por letra y sin traducir** (#431).
+ *
+ * El desplegable «Hallazgo principal» del manual ofrece seis rotulos y ninguno
+ * de los seis coincide con ninguno de estos cinco: los seis contestan «Hallazgo
+ * desconocido», medido uno a uno contra el backend. No se traduce ninguno —es
+ * el criterio de #427 al negarse a leer «ACTIVA» como `VIGENTE`, y el de #546 y
+ * #431 parte B con este mismo desplegable—, asi que la lista es la del
+ * enumerado y la ayuda del campo nombra los del manual que quedan fuera.
+ *
+ * Que sigan siendo los cinco del backend lo comprueba `vocabularios.mjs`, que
+ * lee `Hallazgo.java` y esta lista y las compara en las dos direcciones: un
+ * valor de mas aqui es un 422 despues de rellenar el formulario, y uno de menos
+ * es un hallazgo que la pantalla no deja anotar.
+ */
+export const HALLAZGOS_DEL_ACTA = ['CONFORME', 'OMISO', 'SUBVALUADOR', 'USO_DISTINTO', 'NO_UBICADO'];
+
+/** Lo que los seis rotulos del manual son en el vocabulario del enumerado, para poder decirlo. */
+export const HALLAZGOS_DEL_MANUAL_QUE_NO_EXISTEN =
+  '«SIN OBSERVACIONES» es CONFORME; «OMISO A LA DECLARACIÓN» es OMISO; «PREDIO SUBVALUADO» y ' +
+  '«AMPLIACIÓN NO DECLARADA» son SUBVALUADOR —la causa va en las notas, que están para eso—; ' +
+  '«USO DISTINTO AL DECLARADO» es USO_DISTINTO; y «PREDIO INEXISTENTE» cae en NO_UBICADO, porque ' +
+  'lo que una visita puede sostener es que no se ubicó, no que el predio no exista.';
+
 /** El paso 2 no lleva campos sueltos: lleva la tabla de contraste, que es el
  *  objeto de la fiscalización. */
 export const PASOS_ACTA: PasoDeActa[] = [
@@ -35,16 +78,51 @@ export const PASOS_ACTA: PasoDeActa[] = [
     label: 'La visita',
     nota: 'Quién atendió, a qué hora y con qué resultado. Si nadie atendió, el acta se cierra aquí y el predio vuelve a la muestra.',
     campos: [
-      { k: 'acta', l: 'Nº de acta', t: 'ro' },
+      {
+        k: 'acta',
+        l: 'Nº de acta',
+        t: 'ro',
+        /* Se queda en el guion SIEMPRE, tambien despues de registrarla, y no
+           porque falte leerlo: `acta_fiscalizacion` (V4) no tiene ninguna
+           columna de numero — el acta se identifica por su identificador
+           interno y su version, y `acta_fisc_version_uq` es (programa,
+           contribuyente, version). Poner ahi el identificador interno seria
+           justo lo que el pie de la tabla de actas advierte: «Nº interno» no es
+           el numero del acta. Al registrarla, el acuse dice cual le toco. */
+        ayuda: 'El acta no lleva número: se identifica por su identificador interno y su versión dentro del programa.',
+      },
       { k: 'programa', l: 'Programa', t: 'ro' },
       { k: 'predio', l: 'Código predial', t: 'ro' },
       { k: 'contribuyente', l: 'Contribuyente', t: 'ro', ancho: true },
       { k: 'fecha', l: 'Fecha de inspección', t: 'date' },
-      { k: 'hora', l: 'Hora', t: 'text' },
-      { k: 'fiscalizador', l: 'Fiscalizador', t: 'ro' },
-      { k: 'atiende', l: 'Persona que atiende', t: 'text' },
-      { k: 'vinculo', l: 'Vínculo con el predio', t: 'sel', o: ['PROPIETARIO', 'FAMILIAR', 'INQUILINO', 'ENCARGADO', 'NADIE ATENDIÓ'] },
-      { k: 'resultado', l: 'Resultado de la visita', t: 'sel', o: ['INSPECCIÓN REALIZADA', 'PREDIO CERRADO', 'SE NEGÓ A LA INSPECCIÓN', 'DIRECCIÓN NO UBICADA'] },
+      {
+        k: 'hora',
+        l: 'Hora',
+        t: 'text',
+        noViaja: 'acta_fiscalizacion guarda la FECHA de la visita, no su hora: no hay columna donde ponerla.',
+      },
+      { k: 'fiscalizador', l: 'Fiscalizador', t: 'ro', ayuda: 'Sale del programa, que es donde el manual lo declara.' },
+      {
+        k: 'atiende',
+        l: 'Persona que atiende',
+        t: 'text',
+        noViaja: 'El acta no tiene columna para quién atendió; si hace falta que conste, va en las notas del paso 3.',
+      },
+      {
+        k: 'vinculo',
+        l: 'Vínculo con el predio',
+        t: 'sel',
+        o: ['PROPIETARIO', 'FAMILIAR', 'INQUILINO', 'ENCARGADO', 'NADIE ATENDIÓ'],
+        noViaja: 'Tampoco tiene columna, y no es un vocabulario del sistema: estos cinco rótulos son del manual.',
+      },
+      {
+        k: 'resultado',
+        l: 'Resultado de la visita',
+        t: 'sel',
+        o: ['INSPECCIÓN REALIZADA', 'PREDIO CERRADO', 'SE NEGÓ A LA INSPECCIÓN', 'DIRECCIÓN NO UBICADA'],
+        noViaja:
+          'No hay columna. Lo más cercano que sí viaja es el hallazgo del paso 3: un predio que no se pudo verificar es NO_UBICADO.',
+      },
     ],
   },
   { label: 'La verificación', diff: true, campos: [] },
@@ -52,89 +130,211 @@ export const PASOS_ACTA: PasoDeActa[] = [
     label: 'Hallazgos y evidencia',
     nota: 'El hallazgo es lo que sostiene la determinación. La evidencia es lo que la defiende cuando el contribuyente reclama.',
     campos: [
-      { k: 'hallazgo', l: 'Hallazgo principal', t: 'sel', ancho: true, o: ['SIN OBSERVACIONES', 'AMPLIACIÓN NO DECLARADA', 'USO DISTINTO AL DECLARADO', 'OMISO A LA DECLARACIÓN', 'PREDIO SUBVALUADO', 'PREDIO INEXISTENTE'] },
-      { k: 'fotos', l: 'Fotografías', t: 'ro' },
-      { k: 'croquis', l: 'Croquis / georreferencia', t: 'ro' },
-      { k: 'obs', l: 'Observaciones del fiscalizador', t: 'area', ancho: true, ph: 'Lo que la foto no dice y hay que poder leer en gabinete' },
-      { k: 'firma', l: 'Firma del administrado', t: 'ro' },
-      { k: 'sinFirma', l: 'Se negó a firmar', t: 'chk', ph: 'Dejar constancia en el acta' },
+      {
+        k: 'hallazgo',
+        l: 'Hallazgo principal',
+        t: 'sel',
+        ancho: true,
+        o: HALLAZGOS_DEL_ACTA,
+        ayuda:
+          'Son los cinco valores que el backend admite, sin traducir. De los seis rótulos del manual: ' +
+          HALLAZGOS_DEL_MANUAL_QUE_NO_EXISTEN,
+      },
+      { k: 'fotos', l: 'Fotografías', t: 'ro', noViaja: 'El acta no guarda adjuntos: no hay dónde subirlos ni operación que los reciba.' },
+      { k: 'croquis', l: 'Croquis / georreferencia', t: 'ro', noViaja: 'Lo mismo: no hay adjunto ni columna de georreferencia en el acta.' },
+      {
+        k: 'obs',
+        l: 'Observaciones del fiscalizador',
+        t: 'area',
+        ancho: true,
+        ph: 'Lo que la foto no dice y hay que poder leer en gabinete',
+        max: 1000,
+        ayuda: 'Viaja como «detalle», hasta 1000 caracteres. No es la observación de quien registra, que va en el paso 4.',
+      },
+      { k: 'firma', l: 'Firma del administrado', t: 'ro', noViaja: 'No hay captura de firma ni columna que la guarde.' },
+      {
+        k: 'sinFirma',
+        l: 'Se negó a firmar',
+        t: 'chk',
+        ph: 'Dejar constancia en el acta',
+        noViaja: 'Tampoco tiene columna. Para que conste, escríbelo en las observaciones de arriba, que sí viajan.',
+      },
     ],
   },
   {
     label: 'Cierre',
     cierre: true,
     campos: [
-      { k: 'determina', l: 'Genera determinación', t: 'chk', ancho: true, ph: 'Derivar a resolución de determinación' },
-      { k: 'ejercicios', l: 'Ejercicios a determinar', t: 'sel', o: ['2022 — 2026', '2024 — 2026', 'Solo 2026'], ayuda: 'La prescripción limita a cuatro años desde el 1 de enero siguiente' },
-      { k: 'multa', l: 'Multa tributaria', t: 'sel', o: ['NO APLICA', 'ART. 176º — NO PRESENTAR DECLARACIÓN', 'ART. 178º — DECLARAR CIFRAS FALSAS'] },
+      {
+        k: 'determina',
+        l: 'Genera determinación',
+        t: 'chk',
+        ancho: true,
+        ph: 'Derivar a resolución de determinación',
+        noViaja:
+          'Determinar es otro acto y otra pantalla: «Resultados» lo hace con POST /fiscalizacion/transferencias, sobre la liquidación del acta.',
+      },
+      {
+        k: 'ejercicios',
+        l: 'Ejercicios a determinar',
+        t: 'sel',
+        o: ['2022 — 2026', '2024 — 2026', 'Solo 2026'],
+        noViaja: 'Los elige la liquidación, no el acta: el cuerpo del acta no tiene ningún campo de ejercicio.',
+      },
+      {
+        k: 'multa',
+        l: 'Multa tributaria',
+        t: 'sel',
+        o: ['NO APLICA', 'ART. 176º — NO PRESENTAR DECLARACIÓN', 'ART. 178º — DECLARAR CIFRAS FALSAS'],
+        noViaja: 'La multa del art. 176 la decide la liquidación a partir de si la declaración se presentó fuera de plazo (D-02a, #198).',
+      },
     ],
   },
 ];
 
 /* ══════════ Declarado contra verificado ══════════ */
 
+/**
+ * Una fila de la tabla «Declarado contra verificado».
+ *
+ * <h2>Lo declarado NO vive aqui, y ese es el cambio de #431</h2>
+ *
+ * Esta constante llevaba un campo `decl` con las siete cifras de la captura del
+ * artboard —210.00 m2 de terreno, 164.50 construidos, «02 - LADRILLO»—, de modo
+ * que la columna «Diferencia» restaba contra un predio que no existe; #702 las
+ * dejo en blanco. Ahora ni siquiera hay campo donde escribirlas: **lo declarado
+ * sale de la fila de la muestra que la pantalla acaba de leer**, y con la red
+ * cortada vuelve al guion largo. Un campo aqui seria otra vez un sitio donde
+ * escribir a mano lo que tiene que salir del backend.
+ *
+ * De las siete caracteristicas, la unica con lado declarado publicado es el
+ * **area de terreno** (`MuestraResource.areaDeclarada`); las otras seis dicen
+ * «—» y por que.
+ */
 export type Contraste = {
   k: string;
   l: string;
-  /**
-   * Lo declarado por el contribuyente, contra lo que se contrasta.
-   *
-   * Va **vacia** en las siete, y no es un hueco por rellenar a mano: lo
-   * declarado sale de la ficha catastral vigente del predio que se inspecciona,
-   * y esta pantalla no tiene predio —no hay acta abierta de la que sacarlo
-   * (#702)—. Antes traia las siete cifras de la captura del artboard —210.00 m2
-   * de terreno, 164.50 construidos, «02 - LADRILLO»—, de modo que la columna
-   * «Diferencia» restaba contra un predio que no existe.
-   */
-  decl: string;
   /** `n` marca las numéricas: ahí la diferencia se calcula. */
   n?: boolean;
   u?: string;
   t?: 'sel';
   o?: string[];
+  /** El texto de guía del control cuando es libre. */
+  ph?: string;
+  /**
+   * El largo que el servidor admite, cuando el control es libre.
+   *
+   * Se corta al teclear y no se descubre en el 422: `usoHallado` es
+   * `varchar(60)` —el mismo largo que `ficha_catastral.uso`, que es el lado
+   * declarado— y pasarse devuelve «El uso hallado no puede superar 60
+   * caracteres» despues de haber rellenado los cuatro pasos.
+   */
+  max?: number;
   /** El código del manual —MEP, ECS— que acompaña al rótulo. */
   c?: string;
+  /**
+   * A que campo del cuerpo del acta llega esta fila, o ausente si no llega a
+   * ninguno.
+   *
+   * **De las siete filas viajan dos**, y hay que decirlo donde se teclea: el
+   * cuerpo del acta admite `areaHallada` y `usoHallado` y nada mas. Las otras
+   * cinco —area construida, numero de pisos, material predominante, estado de
+   * conservacion y servicios— son estructura del predio y **ninguna existe
+   * todavia en ninguna columna de `acta_fiscalizacion`**, que es el mismo
+   * criterio con que el backend se nego a declararlas en su cuerpo: aceptarlas
+   * sin tabla dejaria la peticion admitiendo datos que se pierden al guardar.
+   *
+   * Y `areaHallada` es el area de **terreno**, no la construida. La fila que
+   * viaja es «Área de terreno»; poner ahi la construida escribe el numero que
+   * no es en el acta que sustenta una determinacion, y ninguna cifra pareceria
+   * mal — `MuestraDelPrograma` lo deja escrito y `ComparacionHalladoDeclarado`
+   * compara contra el area de terreno del padron.
+   */
+  viaja?: 'areaHallada' | 'usoHallado';
+  /** Por que esta fila no llega al servidor. Va junto al control, no en un pie. */
+  noViaja?: string;
 };
 
 /** Las siete características que se contrastan. En las numéricas la diferencia
  *  se calcula; en las demás se compara texto. */
 export const DIFF: Contraste[] = [
-  { k: 'usoV', l: 'Uso del predio', decl: '', t: 'sel', o: ['CASA HABITACIÓN', 'COMERCIO', 'INDUSTRIA', 'SERVICIOS', 'TERRENO SIN CONSTRUIR'] },
-  { k: 'terrenoV', l: 'Área de terreno', decl: '', n: true, u: ' m²' },
-  { k: 'construidaV', l: 'Área construida', decl: '', n: true, u: ' m²' },
-  { k: 'pisosV', l: 'Nº de pisos', decl: '', n: true, u: '' },
-  { k: 'mepV', l: 'Material predominante', c: 'MEP', decl: '', t: 'sel', o: ['01 — CONCRETO', '02 — LADRILLO', '03 — ADOBE', '04 — QUINCHA', '05 — MADERA'] },
-  { k: 'ecsV', l: 'Estado de conservación', c: 'ECS', decl: '', t: 'sel', o: ['01 — MUY BUENO', '02 — BUENO', '03 — REGULAR', '04 — MALO'] },
-  { k: 'serviciosV', l: 'Servicios básicos', decl: '', t: 'sel', o: ['AGUA, DESAGÜE Y LUZ', 'AGUA Y LUZ', 'SOLO LUZ', 'NINGUNO'] },
+  {
+    k: 'usoV',
+    l: 'Uso del predio',
+    viaja: 'usoHallado',
+    /* Texto libre y NO desplegable, y esta medido. `usoHallado` es
+       `varchar(60)`, del mismo largo que `ficha_catastral.uso`, que es el lado
+       declarado contra el que se compara —con `equalsIgnoreCase`, asi que las
+       mayusculas dan igual y las tildes no—. No hay ningun enumerado del que
+       computar la lista: el uso es texto libre por municipalidad, y en el
+       padron de la 1 los valores son «Casa habitacion», «Panaderia y
+       pasteleria», «Taller de ceramica» y «Tienda de artesania» — ninguno de
+       los cinco rotulos que el artboard ofrecia. Con esa lista cerrada, toda
+       acta que la usara saldria USO_DISTINTO: el hallazgo plausible y
+       equivocado, cobrado a quien declaro bien. Es el hueco que #541 midio en
+       los filtros `zona` y `uso` de `GET /rentas/arbitrios`, sin la salida que
+       alli hubo —rechazar—, porque el uso observado SI es un dato del acta. */
+    ph: 'El uso que se observa en campo, como lo diría la ficha',
+    max: 60,
+  },
+  { k: 'terrenoV', l: 'Área de terreno', n: true, u: ' m²', viaja: 'areaHallada' },
+  {
+    k: 'construidaV',
+    l: 'Área construida',
+    n: true,
+    u: ' m²',
+    noViaja: 'El acta guarda UNA superficie y es la de terreno, que es contra la que se compara lo declarado.',
+  },
+  { k: 'pisosV', l: 'Nº de pisos', n: true, u: '', noViaja: 'No hay columna en el acta.' },
+  {
+    k: 'mepV',
+    l: 'Material predominante',
+    c: 'MEP',
+    t: 'sel',
+    o: ['01 — CONCRETO', '02 — LADRILLO', '03 — ADOBE', '04 — QUINCHA', '05 — MADERA'],
+    noViaja: 'No hay columna en el acta. Es estructura del predio y la corrige el catastro, no la inspección.',
+  },
+  {
+    k: 'ecsV',
+    l: 'Estado de conservación',
+    c: 'ECS',
+    t: 'sel',
+    o: ['01 — MUY BUENO', '02 — BUENO', '03 — REGULAR', '04 — MALO'],
+    noViaja: 'No hay columna en el acta.',
+  },
+  {
+    k: 'serviciosV',
+    l: 'Servicios básicos',
+    t: 'sel',
+    o: ['AGUA, DESAGÜE Y LUZ', 'AGUA Y LUZ', 'SOLO LUZ', 'NINGUNO'],
+    noViaja: 'No hay columna en el acta.',
+  },
 ];
 
 /**
- * El acta **vacia**, que es la unica que esta pantalla puede tener hoy.
+ * El acta **en blanco**, que es como abre siempre: lo que se rellena solo sale
+ * de la fila de la muestra sobre la que se levanta.
  *
  * Aqui vivia el acta `ACT-2026-00418` entera —su numero, su programa
- * `PF-2026-014`, su predio `02-014-D-14-01`, «MEDINA MEDINA, RUFINA (SUC.)»,
- * su fiscalizador, sus cuatro fotos y su croquis georreferenciado—, copiada de
- * la captura del artboard y presentada como si fuera un acta abierta. Ninguno
- * de esos valores sale de ninguna lectura: el numero no existe en ninguna
- * municipalidad, `PF-2026-014` no es ninguno de los programas del padron, el
- * codigo predial no tiene la forma de un codigo de referencia catastral de este
- * sistema —23 digitos— y la persona no esta en el padron (#702).
+ * `PF-2026-014`, su predio, su titular, su fiscalizador, sus cuatro fotos y su
+ * croquis georreferenciado—, copiada de la captura del artboard y presentada
+ * como si fuera un acta abierta. Ninguno de esos valores salia de ninguna
+ * lectura: el numero no existe en ninguna municipalidad, el programa no es
+ * ninguno del padron, el codigo predial no tiene la forma de un codigo de
+ * referencia catastral de este sistema —23 digitos— y la persona no esta en el
+ * padron (#702).
  *
- * Y desde que #599 conecto el listado de actas REALES encima, lo de abajo se
- * leia peor que antes: **una tabla real hace que lo que la acompana parezca
- * cierto**.
+ * **Lo que cambia desde #431 es de donde salen los cinco de solo lectura**: de
+ * `GET /fiscalizacion/programas` y `GET /fiscalizacion/programas/{id}/muestra`,
+ * o sea de dos lecturas de verdad. Con la red cortada vuelven al guion largo,
+ * que es la prueba de que ninguno esta escrito aqui. El numero del acta se
+ * queda en el guion siempre, y no porque falte leerlo: el acta **no tiene
+ * numero** —`acta_fiscalizacion` (V4) no declara esa columna—, se identifica
+ * por su identificador interno y su version dentro del programa.
  *
- * Asi que el formulario dice lo que le falta en vez de fingir que lo tiene, que
- * es lo que este repositorio ya decidio para las siete hojas sin superficie
- * (FRO-06) y para las once de `ACTOS_SIN_CAMPO`. Los cinco campos de solo
- * lectura salen con el guion largo —vienen de un acta abierta, y aqui no hay
- * ninguna—, y los desplegables abren en la opcion vacia: elegir la primera por
- * omision es lo mismo que dibujar un dato que nadie tecleo (#331).
- *
- * **No es una lista de valores por omision que haya que rellenar**: mientras la
- * escritura siga bloqueada —diez campos, tres de ellos identificadores internos
- * que el formulario no dibuja, y los seis rotulos del hallazgo fuera del
- * enumerado (#546, #599)— lo que se teclee aqui no viaja a ningun sitio.
+ * Los desplegables siguen abriendo en la opcion vacia: elegir la primera por
+ * omision es lo mismo que dibujar un dato que nadie tecleo (#331), y aqui ese
+ * dato seria el hallazgo que sostiene una determinacion de oficio.
  */
 export const DEFECTOS: Record<string, string | boolean> = {
   acta: '',

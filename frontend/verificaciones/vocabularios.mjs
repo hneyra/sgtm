@@ -57,7 +57,15 @@ async function constantesDelEnum(rutaJava) {
      `HERENCIA` salian como «que TipoTransferencia no declara»—. */
   const fuente = crudo.replace(/\/\*[\s\S]*?\*\//g, '').replace(/\/\/[^\n]*/g, '');
   const abre = fuente.indexOf('{', fuente.indexOf('enum '));
-  const cierra = fuente.indexOf(';', abre);
+  /* El `;` que cierra las constantes **es opcional en Java**, y sin miembros no
+     se escribe: `Hallazgo` no lo tiene, y buscarlo a secas devolvia -1 y hacia
+     reventar el arnes con «no se pudo leer el enumerado» sobre un archivo
+     perfectamente legible. Se corta por el primero de los dos —el `;` o la llave
+     que cierra el cuerpo—, que con miembros siempre es el `;` (va antes que la
+     llave de cualquier metodo) y sin ellos es la llave. */
+  const puntoYComa = fuente.indexOf(';', abre);
+  const llave = fuente.indexOf('}', abre);
+  const cierra = puntoYComa < 0 ? llave : llave < 0 ? puntoYComa : Math.min(puntoYComa, llave);
   if (abre < 0 || cierra < 0) throw new Error(`no se pudo leer el enumerado de ${rutaJava}`);
   const constantes = fuente
     .slice(abre + 1, cierra)
@@ -196,9 +204,47 @@ for (const t of tributos) {
   }
 }
 
+/* ── El hallazgo del acta de inspección, contra `Hallazgo` (#431) ───────────
+
+   Aquí **no hay tabla que comprobar, y ése es el resultado**: el desplegable
+   «Hallazgo principal» del manual ofrece seis rótulos y ninguno de los seis es
+   ninguno de los cinco del enumerado —los seis contestan 422 «Hallazgo
+   desconocido», medido uno a uno—, así que la decisión fue no traducir ninguno
+   y ofrecer los valores del backend letra por letra (#427, #546).
+
+   Una decisión así se deshace sola: basta con que a alguien le parezca poco
+   legible `USO_DISTINTO` y le ponga su rótulo del manual al lado, y el 422
+   vuelve nombrando lo que quien atiende acaba de elegir de una lista. Y aquí
+   duele más que en un filtro: `hallazgo` es **opcional** en el cuerpo del acta,
+   así que un valor que el enumerado no reconoce no deja una lista vacía sino un
+   acta registrada sin hallazgo — una inspección sin conclusión.
+
+   Las dos direcciones, contra el fuente de Java y no contra una copia: un valor
+   de más aquí es ese 422; uno de menos es un hallazgo que la pantalla no deja
+   anotar, y desde #599 el enumerado ya ganó uno (`USO_DISTINTO`) sin que nada
+   obligara a ofrecerlo. */
+const HALLAZGOS_DEL_BACKEND = await constantesDelEnum(
+  'backend/sgtm-fiscalizacion/src/main/java/pe/gob/sgtm/fiscalizacion/dominio/Hallazgo.java',
+);
+const { HALLAZGOS_DEL_ACTA } = await cargar('src/datos/fiscalizacion.ts', 'datos-fiscalizacion');
+if (!Array.isArray(HALLAZGOS_DEL_ACTA) || HALLAZGOS_DEL_ACTA.length === 0) {
+  fallos.push('el acta de inspección no ofrece ningún hallazgo: el desplegable «Hallazgo principal» desapareció');
+}
+for (const valor of HALLAZGOS_DEL_ACTA ?? []) {
+  comprobados++;
+  if (!HALLAZGOS_DEL_BACKEND.includes(valor)) {
+    fallos.push(`acta de inspección · ofrece «${valor}» y Hallazgo no lo declara: 422 «Hallazgo desconocido» tras rellenar el formulario`);
+  }
+}
+for (const valor of HALLAZGOS_DEL_BACKEND) {
+  if (!(HALLAZGOS_DEL_ACTA ?? []).includes(valor)) {
+    fallos.push(`Hallazgo declara «${valor}» y el acta de inspección no lo ofrece: un hallazgo que nadie puede anotar`);
+  }
+}
+
 if (!fallos.length) {
   console.log(
-    `${comprobados} opciones de «Tipo de acto» y «Causal», todas con su traducción y ninguna que sobre · ` +
+    `${comprobados} opciones de «Tipo de acto», «Causal» y «Hallazgo», todas con su traducción o su constante y ninguna que sobre · ` +
       `${tributos.length} tributos del alta, los ${DEL_LIBRO.size} del libro leídos del enumerado`,
   );
   process.exit(0);
