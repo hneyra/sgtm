@@ -106,7 +106,6 @@ fi
 AQUI=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
 INFRA=$(cd "$AQUI/.." && pwd)
 TRABAJO=$(mktemp -d)
-PUERTO=${SGTM_PUERTO_SIMULACRO:-55433}
 
 ALMACEN="$TRABAJO/almacen"
 RESTAURADO="$TRABAJO/restaurado"

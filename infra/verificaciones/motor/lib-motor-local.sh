@@ -6,13 +6,18 @@
 # guiones de inicializacion que se montarian en k3s, sin copiarlos. Separarla es lo que
 # evita que las dos se desincronicen la primera vez que alguien cambie como se levanta.
 #
-# Requiere, ya fijadas por quien la usa: AMBIENTE, PUERTO, TRABAJO (un directorio de
-# `mktemp -d`). Deja fijadas: PGHOST, PGPORT, MODO, CLAVE_SUPER, CLAVE_OWNER, CLAVE_APP,
-# CLAVE_CARGA, CLAVE_IDENTIDAD, CLAVE_RESPALDO, CLAVE_MONITOREO, BINARIOS. No tiene
-# `set -euo pipefail` propio: hereda el de quien la usa.
+# Requiere, ya fijadas por quien la usa: AMBIENTE y TRABAJO (un directorio de
+# `mktemp -d`). Deja fijadas: PUERTO, PGHOST, PGPORT, MODO, CLAVE_SUPER, CLAVE_OWNER,
+# CLAVE_APP, CLAVE_CARGA, CLAVE_IDENTIDAD, CLAVE_RESPALDO, CLAVE_MONITOREO, BINARIOS. No
+# tiene `set -euo pipefail` propio: hereda el de quien la usa.
+#
+# **PUERTO ya no lo fija quien la usa** (#731): lo pide esta biblioteca al sistema
+# operativo. Era una constante distinta por guion y el nombre del contenedor, en cambio,
+# lleva el PID; esa asimetria hacia chocar a dos motores del mismo trabajo con un
+# `address already in use` que no se parece a su causa. El porque largo esta en
+# `puerto.sh`. Se puede seguir imponiendo uno con `SGTM_PUERTO_MOTOR`, para depurar.
 
 : "${AMBIENTE:?lib-motor-local.sh necesita AMBIENTE}"
-: "${PUERTO:?lib-motor-local.sh necesita PUERTO}"
 : "${TRABAJO:?lib-motor-local.sh necesita TRABAJO}"
 
 LIB_MOTOR_AQUI=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
@@ -22,7 +27,6 @@ CONTENEDOR=sgtm-motor-verificacion-$$
 MODO=""
 
 export PGHOST=127.0.0.1
-export PGPORT=$PUERTO
 
 # Claves con comilla simple a proposito: `20-asignar-claves.sh` las pasa a psql como
 # variables (`:'clave'`) justamente para que una comilla no rompa —ni cambie— la
@@ -40,6 +44,13 @@ for herramienta in psql pg_isready node yarn; do
     command -v "$herramienta" >/dev/null 2>&1 \
         || { echo "FALLO: falta «${herramienta}», que lib-motor-local.sh necesita." >&2; exit 1; }
 done
+
+# El puerto, despues de comprobar las herramientas: pedirlo necesita `node`.
+# shellcheck source=infra/verificaciones/motor/puerto.sh
+. "$LIB_MOTOR_AQUI/puerto.sh"
+PUERTO=${SGTM_PUERTO_MOTOR:-$(motor_puerto_libre)}
+export PGPORT=$PUERTO
+echo "· Puerto del anfitrion: $PUERTO"
 
 echo "· Extrayendo la inicializacion del manifiesto de «${AMBIENTE}»"
 (cd "$LIB_MOTOR_INFRA" && yarn --silent manifiestos --ambiente "$AMBIENTE" --componente postgres) \
@@ -62,6 +73,19 @@ MOTOR_IMAGEN=$(cat "$TRABAJO/imagen")
 echo "· Imagen declarada en el manifiesto: $MOTOR_IMAGEN"
 
 motor_arrancar_con_docker() {
+    # Si el `docker run` falla, el motor NO arranco — y eso no es lo mismo que una
+    # comprobacion en rojo. Sin este marco los dos salen como «el trabajo esta rojo», y
+    # el mensaje del demonio («address already in use») manda a buscar donde no es.
+    if ! motor_docker_run; then
+        echo "FALLO: el motor no llego a arrancar (puerto $PUERTO, imagen $MOTOR_IMAGEN)." >&2
+        echo "       No se comprobo nada: esto es un fallo de arranque, no una verificacion" >&2
+        echo "       en rojo. Si el demonio dice «address already in use», el puerto lo" >&2
+        echo "       tiene otro proceso de esta maquina (#731)." >&2
+        exit 1
+    fi
+}
+
+motor_docker_run() {
     docker run --detach --name "$CONTENEDOR" \
         --env POSTGRES_DB=sgtm \
         --env POSTGRES_USER=postgres \
@@ -154,7 +178,13 @@ motor_detener() {
     elif [ "$MODO" = "local" ]; then
         motor_como_su_usuario "$BINARIOS/pg_ctl" --pgdata="$TRABAJO/datos" --silent stop \
             >/dev/null 2>&1 || true
+    else
+        return 0
     fi
+    # Y esperar a que el puerto quede libre de verdad: `docker rm --force` vuelve antes
+    # de que el demonio lo suelte. Lo necesita `simulacro-de-restauracion.sh`, que
+    # detiene y vuelve a arrancar sobre el mismo puerto a proposito (#155, #731).
+    motor_esperar_puerto_libre "$PUERTO" || true
 }
 
 motor_como_superusuario() {
